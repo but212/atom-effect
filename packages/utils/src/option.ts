@@ -28,6 +28,14 @@ export type None = Prettify<{
 export type Option<T> = Some<T> | None;
 
 /**
+ * Checks if a value is a valid {@link Option} instance.
+ */
+export const isOption = (val: unknown): val is Option<unknown> =>
+  val != null &&
+  typeof val === 'object' &&
+  (val as Record<symbol, unknown>)[OPTION_SYMBOL] === true;
+
+/**
  * A constant representing the absence of a value.
  */
 const NONE = Object.freeze({
@@ -75,10 +83,7 @@ export const Option = {
   /**
    * Extracts the inner value if present.
    */
-  unwrap: <T>(opt: Option<T>): T => {
-    if (!opt.ok) throw new Error('Option.unwrap() on None');
-    return opt.value;
-  },
+  unwrap: <T>(opt: Option<T>): T => Option.expect(opt, 'Option.unwrap() on None'),
 
   /**
    * Returns the inner value if present, otherwise returns a fallback value.
@@ -96,7 +101,7 @@ export const Option = {
   map: <T, U>(opt: Option<T>, fn: (val: T) => U): Option<U> => {
     if (!opt.ok) return opt as unknown as Option<U>;
     const next = fn(opt.value);
-    return (next as unknown) === opt.value ? (opt as unknown as Option<U>) : Option.some(next);
+    return Object.is(next, opt.value) ? (opt as unknown as Option<U>) : Option.some(next);
   },
 
   /**
@@ -109,7 +114,7 @@ export const Option = {
    * Creates an {@link Option} from a value that might be `null` or `undefined`.
    */
   fromNullable: <T>(value: T | null | undefined): Option<T> =>
-    value == null ? (NONE as unknown as Option<T>) : Option.some(value),
+    value == null ? NONE : Option.some(value),
 
   /**
    * Executes a branch handler based on whether the option is {@link Some} or {@link None}.
@@ -121,15 +126,16 @@ export const Option = {
    * Returns {@link None} if the inner value does not satisfy the predicate.
    */
   filter: <T>(opt: Option<T>, predicate: (val: T) => boolean): Option<T> =>
-    opt.ok && predicate(opt.value) ? opt : (NONE as unknown as Option<T>),
+    opt.ok && predicate(opt.value) ? opt : NONE,
 
   /**
    * Checks for strict equality between two options.
    */
   equals: <T>(a: Option<T>, b: Option<T>): boolean => {
+    if (!isOption(a) || !isOption(b)) return false;
     if (a === b) return true;
     if (a.ok !== b.ok) return false;
-    return !a.ok || (a as Some<T>).value === (b as Some<T>).value;
+    return !a.ok || Object.is((a as Some<T>).value, (b as Some<T>).value);
   },
 
   /**

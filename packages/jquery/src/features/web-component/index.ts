@@ -13,10 +13,9 @@
  */
 
 import { isAtom } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
-import { enableAutoCleanup, registry } from '@/core/registry';
+import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
 import { CLEANUP_MARKER, CONTEXT_REQUEST, type ContextRequestDetail } from '@/core/symbols';
 import type {
   AtomComponentController,
@@ -99,7 +98,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   const controller: AtomComponentController = {
     host: element,
     get root() {
-      return Option.toNullable(state.root);
+      return state.root;
     },
     get internals() {
       return internals;
@@ -114,13 +113,16 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (!state.attributeAtom) {
         const { atom, observer } = SetupFeatures.attributes(element);
         state.attributeAtom = atom;
-        state.attributeObserver = observer;
+        state.effects.push({ dispose: () => observer.disconnect() });
       }
       return (name: string) => {
         let lens = state.attributeLenses.get(name);
         if (!lens) {
-          lens = $.atomLens(state.attributeAtom!, name);
-          state.attributeLenses.set(name, lens);
+          const attrAtom = state.attributeAtom;
+          if (attrAtom) {
+            lens = $.atomLens(attrAtom, name);
+            state.attributeLenses.set(name, lens);
+          }
         }
         return lens;
       };
@@ -133,16 +135,21 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
      */
     get slots() {
       if (!state.slotsAtom) {
-        const sr = resolveShadowRoot(element, Option.toNullable(state.root));
+        const sr = resolveShadowRoot(element, state.root);
         const { atom, listener } = SetupFeatures.slots(sr);
         state.slotsAtom = atom;
-        if (sr) state.slotListeners.set('all', listener);
+        if (sr) {
+          state.slotListenerAttached = true;
+          state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        }
       }
       return (name: string) => {
         const key = name === 'default' ? '' : name;
         let lens = state.slotLenses.get(key);
         if (!lens) {
-          lens = $.atomLens(state.slotsAtom!, key);
+          lens = $.computed(() => state.slotsAtom?.value?.[key] ?? []) as unknown as WritableAtom<
+            Node[]
+          >;
           state.slotLenses.set(key, lens);
         }
         return lens;
@@ -150,7 +157,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     },
 
     $: ((selector, context) => {
-      const ctx = context ?? Option.toNullable(state.root) ?? element;
+      const ctx = context ?? state.root ?? element;
       if (typeof selector !== 'string') return $(selector) as unknown as JQuery;
       return ctx instanceof DocumentFragment
         ? ($(ctx.querySelectorAll(selector)) as unknown as JQuery)
@@ -168,45 +175,80 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     setup(options: Parameters<AtomComponentController['setup']>[0]) {
       if (state.isInitialized) {
         const incoming = options instanceof Node ? options : options?.shadowRoot;
-        if (incoming && incoming !== Option.toNullable(state.root))
+        if (incoming && incoming !== state.root)
           throw new Error('Call teardown() first to change the root.');
         return;
       }
 
       const config =
         options instanceof Node ? { shadowRoot: options as ShadowRoot } : (options ?? {});
-      const srOpt = Option.fromNullable(config.shadowRoot ?? element.shadowRoot);
+      const sr = config.shadowRoot ?? element.shadowRoot ?? null;
 
-      Option.map(srOpt, (sr) => {
+      if (sr) {
         registry.markHost(element);
         registry.registerShadow(element, sr);
-      });
+      }
 
-      const rootNode = Option.unwrapOr(srOpt, element) as Node & { [CLEANUP_MARKER]?: boolean };
-      state.root = Option.some(rootNode);
+      const rootNode = (sr ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
+      state.root = rootNode;
 
       if (!rootNode[CLEANUP_MARKER]) {
         enableAutoCleanup(rootNode as Element);
         rootNode[CLEANUP_MARKER] = true;
+        state.effects.push({
+          dispose: () => {
+            disableAutoCleanupFor(rootNode as Element);
+            rootNode[CLEANUP_MARKER] = false;
+          },
+        });
       }
 
       if (!state.slotsAtom) {
-        const sr = Option.toNullable(srOpt);
         const { atom, listener } = SetupFeatures.slots(sr);
         state.slotsAtom = atom;
-        if (sr) state.slotListeners.set('all', listener);
+        if (sr) {
+          state.slotListenerAttached = true;
+          state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        }
+      } else if (sr && !state.slotListenerAttached) {
+        const listener = (e: Event) => {
+          const target = e.target as HTMLSlotElement;
+          const slotsAtom = state.slotsAtom;
+          if (slotsAtom) {
+            slotsAtom.value = {
+              ...slotsAtom.peek(),
+              [target.name || '']: target.assignedNodes(),
+            };
+          }
+        };
+        sr.addEventListener('slotchange', listener);
+        state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        state.slotListenerAttached = true;
+
+        const next: Record<string, Node[]> = {};
+        for (const s of sr.querySelectorAll('slot')) {
+          next[s.name || ''] = s.assignedNodes();
+        }
+        state.slotsAtom.value = next;
       }
 
       if (config.dispatch) SetupFeatures.dispatch(element, config.dispatch, state.effects);
-      if (config.bind)
-        SetupFeatures.hydrate(rootNode as Element, config.bind, state.effects, state.hydratedNodes);
+      if (config.bind) SetupFeatures.hydrate(rootNode as Element, config.bind, state.effects);
 
       if (
         config.styles &&
         supportsConstructableStylesheets &&
         (rootNode instanceof ShadowRoot || rootNode instanceof Document)
       ) {
-        state.appliedStyles = SetupFeatures.styles(rootNode, config.styles.map(getOrCreateSheet));
+        const sheets = config.styles.map(getOrCreateSheet);
+        SetupFeatures.styles(rootNode, sheets);
+        state.effects.push({
+          dispose: () => {
+            rootNode.adoptedStyleSheets = rootNode.adoptedStyleSheets.filter(
+              (s) => !sheets.includes(s)
+            );
+          },
+        });
       }
 
       if (config.aria && internals) SetupFeatures.aria(internals, config.aria, state.effects);
@@ -228,7 +270,12 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       const s = nodeStateMap.get(element);
       if (s) {
         s.providers?.clear();
-        s.providerEffects?.forEach((e) => e.dispose());
+
+        if (s.providerEffects) {
+          for (const e of s.providerEffects.values()) {
+            e.dispose();
+          }
+        }
         s.providerEffects?.clear();
         s.injects?.clear();
       }

@@ -33,6 +33,7 @@ describe('SlotBuffer', () => {
   bench(`forEach (x${REPEATS})`, () => {
     let sum = 0;
     for (let i = 0; i < REPEATS; i++) {
+      // biome-ignore lint/complexity/noForEach: Benchmarking SlotBuffer.forEach method performance
       filledBuffer.forEach((val) => {
         sum += val;
       });

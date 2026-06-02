@@ -125,6 +125,141 @@ describe('Effect', () => {
       expect(runs).toBe(1);
       e.dispose();
     });
+
+    it('should remain reactive after the effect function throws before accessing any dependency', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      let shouldThrow = false;
+      let runs = 0;
+
+      const e = effect(
+        () => {
+          if (shouldThrow) throw new Error('boom before deps');
+          a.value;
+          runs++;
+        },
+        { onError: () => {} }
+      );
+
+      await vi.runAllTimersAsync();
+      expect(runs).toBe(1);
+
+      shouldThrow = true;
+      a.value = 1;
+      await vi.runAllTimersAsync();
+
+      shouldThrow = false;
+      a.value = 2;
+      await vi.runAllTimersAsync();
+
+      expect(runs).toBe(2);
+      e.dispose();
+      consoleSpy.mockRestore();
+    });
+
+    it('should preserve unvisited dependencies when the function throws mid-tracking', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      const b = atom(0);
+      let shouldThrow = false;
+      let runs = 0;
+
+      const e = effect(
+        () => {
+          a.value;
+          if (shouldThrow) throw new Error('boom mid-tracking');
+          b.value;
+          runs++;
+        },
+        { onError: () => {} }
+      );
+
+      await vi.runAllTimersAsync();
+      expect(runs).toBe(1);
+
+      shouldThrow = true;
+      a.value = 1;
+      await vi.runAllTimersAsync();
+
+      shouldThrow = false;
+
+      b.value = 99;
+      await vi.runAllTimersAsync();
+
+      expect(runs).toBe(2);
+      e.dispose();
+      consoleSpy.mockRestore();
+    });
+
+    it('should not truncate dependencies on the error path to preserve existing subscription counts', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      const b = atom(0);
+      const c = atom(0);
+      let throwOnRun = false;
+      const capturedValues: number[] = [];
+
+      const e = effect(
+        () => {
+          if (throwOnRun) throw new Error('kaboom');
+          capturedValues.push(a.value + b.value + c.value);
+        },
+        { onError: () => {} }
+      );
+
+      await vi.runAllTimersAsync();
+      expect(capturedValues).toEqual([0]);
+
+      const aSubsBefore = a.subscriberCount();
+      const bSubsBefore = b.subscriberCount();
+      const cSubsBefore = c.subscriberCount();
+
+      expect(aSubsBefore).toBeGreaterThanOrEqual(1);
+      expect(bSubsBefore).toBeGreaterThanOrEqual(1);
+      expect(cSubsBefore).toBeGreaterThanOrEqual(1);
+
+      throwOnRun = true;
+      a.value = 1;
+      await vi.runAllTimersAsync();
+
+      expect(a.subscriberCount()).toBe(aSubsBefore);
+      expect(b.subscriberCount()).toBe(bSubsBefore);
+      expect(c.subscriberCount()).toBe(cSubsBefore);
+
+      e.dispose();
+      consoleSpy.mockRestore();
+    });
+
+    it('should handle cases where the dependency buffer is disposed mid-execution gracefully', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      let eB: ReturnType<typeof effect> | null = null;
+
+      const eA = effect(
+        () => {
+          a.value;
+          if (eB && !eB.isDisposed) eB.dispose();
+        },
+        { sync: true }
+      );
+
+      eB = effect(
+        () => {
+          a.value;
+        },
+        { sync: true }
+      );
+
+      expect(() => {
+        a.value = 1;
+      }).not.toThrow();
+
+      await vi.runAllTimersAsync();
+      expect(eB.isDisposed).toBe(true);
+
+      eA.dispose();
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('Lifecycle & Cleanup', () => {
@@ -145,7 +280,6 @@ describe('Effect', () => {
       await vi.runAllTimersAsync();
 
       e.dispose();
-      // e[Symbol.dispose](); // Removed for ES2022 compatibility
 
       expect(order).toEqual(['run', 'cleanup', 'run', 'cleanup']);
       expect(e.isDisposed).toBe(true);
@@ -170,6 +304,41 @@ describe('Effect', () => {
       src.value = 1;
       await vi.runAllTimersAsync();
       expect(runs).toBe(1);
+    });
+
+    it('should not corrupt dependency tracking when cleanup errors occur during execution', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      let cleanupShouldThrow = true;
+      let runs = 0;
+
+      const e = effect(
+        () => {
+          a.value;
+          runs++;
+          return () => {
+            if (cleanupShouldThrow) {
+              cleanupShouldThrow = false;
+              throw new Error('cleanup boom');
+            }
+          };
+        },
+        { onError: () => {} }
+      );
+
+      await vi.runAllTimersAsync();
+      expect(runs).toBe(1);
+
+      a.value = 1;
+      await vi.runAllTimersAsync();
+      expect(runs).toBe(2);
+
+      a.value = 2;
+      await vi.runAllTimersAsync();
+      expect(runs).toBe(3);
+
+      e.dispose();
+      consoleSpy.mockRestore();
     });
   });
 
@@ -208,12 +377,47 @@ describe('Effect', () => {
       await sleep(10);
       resolvePromise(cleanup);
 
-      // Check: In the very next microtask, the cleanup should be registered.
-      // If we used double .then, the handler that sets this._cleanup wouldn't have run yet.
-      await Promise.resolve(); // Single microtask
+      await Promise.resolve();
 
       e.dispose();
       expect(cleanup).toHaveBeenCalledTimes(1);
+    });
+
+    it('should ignore async promise rejections after effect re-execution (stale session)', async () => {
+      vi.useRealTimers();
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+
+      let firstReject!: (err: Error) => void;
+      let secondResolve!: (val: undefined) => void;
+      let runIdx = 0;
+
+      const e = effect(() => {
+        a.value;
+        runIdx++;
+        if (runIdx === 1) {
+          return new Promise((_r, rej) => {
+            firstReject = rej;
+          });
+        }
+        return new Promise((r) => {
+          secondResolve = r;
+        });
+      });
+
+      await sleep(5);
+
+      a.value = 1;
+      await sleep(5);
+
+      firstReject(new Error('stale rejection'));
+      await sleep(10);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      secondResolve(undefined);
+      e.dispose();
+      consoleSpy.mockRestore();
     });
   });
 
@@ -275,13 +479,13 @@ describe('Effect', () => {
       await vi.runAllTimersAsync();
       expect(runCount).toBe(1);
 
-      a.value = 1; // triggers re-execution and cleanup error
+      a.value = 1;
       await vi.runAllTimersAsync();
 
       expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
-      expect(runCount).toBe(2); // Validates effect remained reactive
+      expect(runCount).toBe(2);
 
-      a.value = 2; // trigger again to ensure normal operation
+      a.value = 2;
       await vi.runAllTimersAsync();
       expect(runCount).toBe(3);
 
@@ -307,7 +511,7 @@ describe('Effect', () => {
 
       let resolveAsync!: (val: () => void) => void;
       const e = effect(() => new Promise<() => void>((r) => (resolveAsync = r)));
-      e.dispose(); // disposed before resolve
+      e.dispose();
       resolveAsync(() => {
         throw new Error('cleanup error');
       });
@@ -316,18 +520,78 @@ describe('Effect', () => {
       expect(consoleSpy).toHaveBeenCalledTimes(1);
       expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
     });
+
+    it('should remain reactive on subsequent runs after recovering from an error', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+      let shouldThrow = false;
+      let runs = 0;
+
+      const e = effect(
+        () => {
+          if (shouldThrow) throw new Error('boom');
+          a.value;
+          runs++;
+        },
+        { onError: () => {} }
+      );
+
+      await vi.runAllTimersAsync();
+      expect(runs).toBe(1);
+
+      shouldThrow = true;
+      a.value = 1;
+      await vi.runAllTimersAsync();
+
+      shouldThrow = false;
+      e.run();
+      expect(runs).toBe(2);
+
+      a.value = 2;
+      await vi.runAllTimersAsync();
+
+      expect(runs).toBe(3);
+      e.dispose();
+      consoleSpy.mockRestore();
+    });
+
+    it('should provide a clear error when run() is called after budget is exceeded, rather than double faulting', async () => {
+      vi.useRealTimers();
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const a = atom(0);
+
+      const e = effect(
+        () => {
+          if (a.value > 0) a.value++;
+        },
+        { sync: true, maxExecutionsPerFlush: 2 }
+      );
+
+      a.value = 1;
+      await sleep(30);
+
+      expect(e.isDisposed).toBe(true);
+
+      expect(() => e.run()).toThrow(EffectError);
+
+      consoleSpy.mockRestore();
+    });
   });
 
-  describe('Coverage Gaps', () => {
+  describe('Coverage Gaps & Edge Cases', () => {
     it('handles dependency slot overflows (index >= 4)', async () => {
       const atoms = Array.from({ length: 6 }, (_, i) => atom(i));
       const e = effect(() => {
-        atoms.forEach((a) => a.value);
+        for (const a of atoms) {
+          a.value;
+        }
       });
       await vi.runAllTimersAsync();
       expect(e.executionCount).toBe(1);
 
-      atoms[5]!.value = 100;
+      const a5 = atoms[5];
+      if (!a5) throw new Error('Setup failed');
+      a5.value = 100;
       await vi.runAllTimersAsync();
       expect(e.executionCount).toBe(2);
       e.dispose();

@@ -67,7 +67,9 @@ describe('Web Component Features', () => {
       atom.value = 'updated';
       expect(injected?.value).toBe('updated');
 
-      injected!.value = 'modified';
+      if (injected) {
+        injected.value = 'modified';
+      }
       expect(atom.value).toBe('modified');
     });
 
@@ -146,6 +148,28 @@ describe('Web Component Features', () => {
       expect(slots('default').value[0]).toBe(child);
     });
 
+    it('should track assigned nodes when slots is accessed before setup is called (late-bound)', async () => {
+      const el = defineAndCreate(
+        'slot-late-sync',
+        class extends HTMLElement {
+          connectedCallback() {
+            const slots = $.useAtomComponent(this).slots;
+            expect(slots('default').value.length).toBe(0);
+
+            const sr = this.attachShadow({ mode: 'open' });
+            sr.innerHTML = '<slot></slot>';
+            $.useAtomComponent(this).setup(sr);
+          }
+        }
+      );
+      document.body.appendChild(el);
+
+      const child = document.createElement('span');
+      el.appendChild(child);
+      await $.nextTick();
+      expect(el.aej.slots('default').value[0]).toBe(child);
+    });
+
     it('should support closed shadow roots if provided to setup', async () => {
       const el = defineAndCreate(
         'closed-sr',
@@ -164,6 +188,19 @@ describe('Web Component Features', () => {
       await $.nextTick();
       expect(el.aej.slots('default').value[0]).toBe(child);
     });
+
+    it('should handle slot access safely after teardown when slotsAtom is disposed', () => {
+      const el = document.createElement('div');
+      const ctrl = $.useAtomComponent(el);
+      const s = ctrl.slots('default');
+
+      expect(s.value).toEqual([]);
+
+      ctrl.teardown();
+
+      expect(() => s.value).not.toThrow();
+      expect(s.value).toEqual([]);
+    });
   });
 
   describe('Declarative Features (Hydration & Styles)', () => {
@@ -181,7 +218,7 @@ describe('Web Component Features', () => {
       );
       document.body.appendChild(el);
 
-      const span = el.shadowRoot!.querySelector('span');
+      const span = el.shadowRoot?.querySelector('span');
       expect(span?.textContent).toBe('Alice');
 
       name.value = 'Bob';
@@ -214,10 +251,10 @@ describe('Web Component Features', () => {
       document.body.appendChild(el1);
       document.body.appendChild(el2);
 
-      const sheets1 = el1.shadowRoot!.adoptedStyleSheets;
-      const sheets2 = el2.shadowRoot!.adoptedStyleSheets;
+      const sheets1 = el1.shadowRoot?.adoptedStyleSheets;
+      const sheets2 = el2.shadowRoot?.adoptedStyleSheets;
 
-      expect(sheets1[0]).toBe(sheets2[0]); // Reference equality
+      if (sheets1 && sheets2) expect(sheets1[0]).toBe(sheets2[0]); // Reference equality
     });
 
     it('should mark elements with HYDRATION_MARKER when bound', async () => {
@@ -234,7 +271,7 @@ describe('Web Component Features', () => {
       );
       document.body.appendChild(el);
 
-      const span = el.shadowRoot!.querySelector('span') as HTMLElement & {
+      const span = el.shadowRoot?.querySelector('span') as HTMLElement & {
         [HYDRATION_MARKER]?: boolean;
       };
       expect(span[HYDRATION_MARKER]).toBe(true);
@@ -254,7 +291,8 @@ describe('Web Component Features', () => {
       );
       document.body.appendChild(el);
 
-      const internals = el.aej.internals!;
+      const internals = el.aej.internals;
+      if (!internals) throw new Error('Expected internals to be defined');
       expect(internals.ariaExpanded).toBe('false');
 
       expanded.value = true;
@@ -299,7 +337,8 @@ describe('Web Component Features', () => {
       );
       document.body.appendChild(el);
 
-      const div = el.shadowRoot!.querySelector('div')!;
+      const div = el.shadowRoot?.querySelector('div');
+      if (!div) throw new Error('Expected div to exist in shadowRoot');
       expect(div.getAttribute('part')).toBe('active');
 
       active.value = false;
@@ -466,7 +505,8 @@ describe('Web Component Features', () => {
       document.body.appendChild(el);
       await $.nextTick();
 
-      const sheets = el.shadowRoot!.adoptedStyleSheets;
+      const sheets = el.shadowRoot?.adoptedStyleSheets;
+      if (!sheets) throw new Error('Expected adoptedStyleSheets to exist');
       expect(sheets.length).toBeGreaterThan(0);
       expect(sheets[0]?.cssRules[0]?.cssText).toContain('color: red');
     });
@@ -486,7 +526,7 @@ describe('Web Component Features', () => {
       document.body.appendChild(el);
       await $.nextTick();
 
-      const span = el.shadowRoot!.querySelector('span');
+      const span = el.shadowRoot?.querySelector('span');
       expect(span?.textContent).toBe('Alice');
 
       name.value = 'Bob';
@@ -505,7 +545,8 @@ describe('Web Component Features', () => {
       document.body.appendChild(el);
       await $.nextTick();
 
-      const internals = el.aej.internals!;
+      const internals = el.aej.internals;
+      if (!internals) throw new Error('Expected internals to be defined');
       expect(internals.ariaExpanded).toBe('false');
 
       expanded.value = true;
@@ -528,7 +569,8 @@ describe('Web Component Features', () => {
       document.body.appendChild(el);
       await $.nextTick();
 
-      const div = el.shadowRoot!.querySelector('div')!;
+      const div = el.shadowRoot?.querySelector('div');
+      if (!div) throw new Error('Expected div to exist in shadowRoot');
       expect(div.getAttribute('part')).toBe('active');
 
       active.value = false;

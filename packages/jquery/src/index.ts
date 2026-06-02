@@ -68,15 +68,15 @@ export function initAEJ(config: AEJConfig = {}): void {
   // Security: The MutationObserver safety net is the primary defense against memory
   // leaks in long-running Single Page Applications (SPAs).
   disableAutoCleanup();
-  if (autoCleanup !== false) {
+  if (autoCleanup === false) {
+    setAutoCleanupAllowed(false);
+  } else {
     setAutoCleanupAllowed(true);
     const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
     if (root) {
       enableAutoCleanup(root);
       registry.setAutoCleanupScheduled(true);
     }
-  } else {
-    setAutoCleanupAllowed(false);
   }
 }
 
@@ -121,12 +121,17 @@ export function cleanup(element: HTMLElement | JQuery): void {
 $.extend({ initAEJ });
 
 export type {
+  ComputedAtom,
+  ReadonlyAtom,
+  WritableAtom,
+} from '@but212/atom-effect';
+
+export type {
   AtomComponentController,
   AtomNav,
   AtomNavOptions,
   BindingOptions,
   ComponentFn,
-  ComputedAtom,
   CssBindings,
   CssValue,
   EffectCleanup,
@@ -138,13 +143,11 @@ export type {
   ListOptions,
   PrimitiveValue,
   ReactiveValue,
-  ReadonlyAtom,
   RouteConfig,
   RouteDefinition,
   RouteLifecycle,
   Router,
   ValOptions,
-  WritableAtom,
 } from '@/types';
 
 export default $;

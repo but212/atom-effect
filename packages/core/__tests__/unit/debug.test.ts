@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom, computed, runtimeDebug as debug, effect } from '@/index';
 
+type DebugNode = Parameters<typeof debug.registerNode>[0];
+type DependencyId = DebugNode['id'];
+
+/**
+ * Creates a mock node structure with a specific ID for debug system testing.
+ */
+const createMockNode = (id: number): DebugNode => ({
+  id: id as unknown as DependencyId,
+});
+
 describe('Debug System', () => {
   // Store original state to restore after tests to prevent cross-test contamination
   const originalState = {
@@ -56,6 +66,10 @@ describe('Debug System', () => {
     it('should fall back to "type_id" pattern for unnamed nodes', () => {
       const a = track(atom(0));
       expect(debug.getDebugName(a)).toMatch(/^atom_\d+$/);
+
+      const c = track(computed(() => 0));
+      expect(debug.getDebugName(c)).toMatch(/^calc_\d+$/);
+      expect(debug.getDebugType(c)).toBe('computed');
     });
 
     it('should remain inert when debugging is disabled or input is invalid', () => {
@@ -66,6 +80,31 @@ describe('Debug System', () => {
       debug.enabled = true;
       expect(debug.getDebugName(null)).toBeUndefined();
       expect(debug.getDebugName({})).toBeUndefined();
+    });
+
+    it('should handle registering invalid nodes without id gracefully without throwing TypeError', () => {
+      expect(() => {
+        debug.registerNode({} as unknown as DebugNode);
+      }).not.toThrow();
+    });
+
+    it('should update fallback name when attachDebugInfo updates type without customName', () => {
+      const mockNode = createMockNode(999);
+      debug.registerNode(mockNode);
+      expect(debug.getDebugName(mockNode)).toBe('unknown_999');
+
+      debug.attachDebugInfo(mockNode, 'atom', 999 as unknown as DependencyId);
+      expect(debug.getDebugName(mockNode)).toBe('atom_999');
+    });
+
+    it('should not register nodes when debug is disabled', () => {
+      debug.enabled = false;
+      const node = track(atom(1, { name: 'Ignored_Node' }));
+      const id = (node as unknown as { id: DependencyId }).id;
+      debug.registerNode(node);
+
+      debug.enabled = true;
+      expect(debug.dumpGraph().some((e) => e.id === id)).toBe(false);
     });
   });
 
@@ -136,6 +175,30 @@ describe('Debug System', () => {
       track(atom(0, { name: 'named-atom' }));
 
       expect(spy).toHaveBeenCalled();
+    });
+
+    it('should not include garbage-collected nodes in dumpGraph even when trackGraph is false', () => {
+      debug.trackGraph = false;
+      const node = track(atom(1, { name: 'GCed_Node' }));
+      debug.registerNode(node);
+
+      expect(debug.dumpGraph().some((e) => e.name === 'GCed_Node')).toBe(true);
+
+      const derefSpy = vi.spyOn(WeakRef.prototype, 'deref').mockReturnValue(undefined);
+      try {
+        const graph = debug.dumpGraph();
+        expect(graph.some((e) => e.name === 'GCed_Node')).toBe(false);
+      } finally {
+        derefSpy.mockRestore();
+      }
+    });
+
+    it('should return empty graph if debug is disabled', () => {
+      const node = track(atom(1, { name: 'Active_Node' }));
+      debug.registerNode(node);
+
+      debug.enabled = false;
+      expect(debug.dumpGraph()).toEqual([]);
     });
   });
 

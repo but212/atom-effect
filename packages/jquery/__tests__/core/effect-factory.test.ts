@@ -84,11 +84,11 @@ describe('Effect Factory', () => {
 
     // Case B: Static Promise Source
     const { promise, resolve } = (() => {
-      let r: (v: string) => void;
+      let r: (v: string) => void = () => {};
       const p = new Promise<string>((res) => {
         r = res;
       });
-      return { promise: p, resolve: r! };
+      return { promise: p, resolve: r };
     })();
 
     const el2 = document.createElement('div');

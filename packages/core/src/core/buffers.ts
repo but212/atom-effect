@@ -10,6 +10,7 @@ import { SlotBuffer } from '@but212/atom-effect-utils';
 import { BUFFER_CONFIG, COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type { DepBufferState, Dependency, DependencyLink } from '@/types';
 import { trackEvaluationFailure } from '@/utils/debug';
+import { trackingContext, untracked } from './base';
 
 /** @internal */
 export const BUFFER_FLAGS = {
@@ -61,7 +62,8 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
   const existingIndex = findExistingIndex(state, dep, trackIndex);
   if (existingIndex === -1) return false;
 
-  const link = slots.at(existingIndex)!;
+  const link = slots.at(existingIndex);
+  if (!link) return false;
   link.version = dep.version;
 
   const temp = slots.at(trackIndex);
@@ -71,11 +73,7 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
   slots.setAt(trackIndex, link);
   slots.setAt(existingIndex, temp);
 
-  const map = state.map;
-  if (map) {
-    map.set(dep, trackIndex);
-    if (temp?.unsub) map.set(temp.node, existingIndex);
-  }
+  mapSwap(state, dep, trackIndex, temp, existingIndex);
 
   return true;
 }
@@ -115,25 +113,21 @@ export function depBufferSetAt(
   item: DependencyLink | null
 ): void {
   const old = state.slots.at(index);
+  if (old === item) return;
   state.slots.setAt(index, item);
 
-  const map = state.map;
-  if (map) {
-    if (old) map.delete(old.node);
-    if (item?.unsub) map.set(item.node, index);
-  } else if (item?.unsub) {
-    ensureMap(state);
-    state.map?.set(item.node, index);
+  if (old) {
+    mapUnregister(state, old.node, index);
+  }
+  if (item) {
+    mapRegister(state, item, index);
   }
 }
 
 /** @internal */
 export function depBufferPush(state: DepBufferState, item: DependencyLink): number {
   const idx = state.slots.push(item);
-  if (item.unsub) {
-    ensureMap(state);
-    state.map?.set(item.node, idx);
-  }
+  mapRegister(state, item, idx);
   return idx;
 }
 
@@ -142,30 +136,85 @@ export function depBufferPush(state: DepBufferState, item: DependencyLink): numb
  * This saves memory for the vast majority of small/simple reactive nodes.
  */
 function ensureMap(state: DepBufferState): void {
-  if (!state.map && state.slots.length > BUFFER_CONFIG.MAP_THRESHOLD) {
-    const map = new Map<Dependency, number>();
-    const slots = state.slots;
-    for (let i = 0; i < slots.length; i++) {
-      const link = slots.at(i);
-      if (link?.unsub) map.set(link.node, i);
+  if (state.map || state.slots.length <= BUFFER_CONFIG.MAP_THRESHOLD) return;
+
+  const map = new Map<Dependency, number>();
+  const slots = state.slots;
+  for (let i = 0; i < slots.length; i++) {
+    const link = slots.at(i);
+    if (link?.unsub) map.set(link.node, i);
+  }
+  state.map = map;
+}
+
+/**
+ * Registers a dependency link in the lookup map.
+ */
+function mapRegister(state: DepBufferState, link: DependencyLink, index: number): void {
+  if (!link.unsub) return;
+  ensureMap(state);
+  state.map?.set(link.node, index);
+}
+
+/**
+ * Unregisters or updates the map index for a dependency when a slot is overwritten or truncated.
+ * Searches backwards from limitIndex - 1 to find another valid slot.
+ */
+function mapUnregister(
+  state: DepBufferState,
+  node: Dependency,
+  currentIndex: number,
+  limitIndex = currentIndex
+): void {
+  const map = state.map;
+  if (!map || map.get(node) !== currentIndex) return;
+
+  const slots = state.slots;
+  for (let i = limitIndex - 1; i >= 0; i--) {
+    const link = slots.at(i);
+    if (link?.node === node && link.unsub) {
+      map.set(node, i);
+      return;
     }
-    state.map = map;
+  }
+  map.delete(node);
+}
+
+/**
+ * Updates the map indices when two dependency slots are swapped.
+ */
+function mapSwap(
+  state: DepBufferState,
+  depA: Dependency,
+  idxA: number,
+  linkB: DependencyLink | null,
+  idxB: number
+): void {
+  const map = state.map;
+  if (!map) return;
+
+  map.set(depA, idxA);
+
+  if (linkB?.unsub && (map.get(linkB.node) ?? -1) < idxB) {
+    map.set(linkB.node, idxB);
   }
 }
 
 /**
  * Checks if any dependency in the buffer has changed.
  * Deep check will force evaluation of computed dependencies.
+ *
+ * @internal
  */
-/** @internal */
 export function isBufferDirty(state: DepBufferState): boolean {
   return checkDirty(state, true);
 }
 
 /**
  * Quick check to see if a dependency is marked dirty without triggering re-evaluation.
+ *
+ * @internal
  */
-/** @internal */
 export function isBufferShallowDirty(state: DepBufferState): boolean {
   return checkDirty(state, false);
 }
@@ -188,9 +237,14 @@ function checkDirty(state: DepBufferState, deep: boolean): boolean {
       // Logic: Accessing .value on a computed dependency triggers its internal
       // check/refresh logic. If it throws, we track it for debugging.
       try {
-        dep.value;
-      } catch {
+        if (trackingContext.current) {
+          untracked(() => dep.value);
+        } else {
+          dep.value;
+        }
+      } catch (e) {
         trackEvaluationFailure(dep.id);
+        throw e;
       }
     }
 
@@ -205,19 +259,18 @@ function checkDirty(state: DepBufferState, deep: boolean): boolean {
  *
  * Caution: This is usually called after a tracking phase to remove dependencies
  * that are no longer active in the current execution branch.
+ *
+ * @internal
  */
-/** @internal */
 export function depBufferTruncateFrom(state: DepBufferState, index: number): void {
   const slots = state.slots;
   const len = slots.length;
   if (index >= len) return;
 
-  const map = state.map;
   for (let i = index; i < len; i++) {
     const link = slots.at(i);
     if (link) {
-      // Surgical removal: delete from map before clearing the slot to maintain consistency.
-      if (map) map.delete(link.node);
+      mapUnregister(state, link.node, i, index);
       if (link.unsub) {
         try {
           link.unsub();
@@ -231,15 +284,16 @@ export function depBufferTruncateFrom(state: DepBufferState, index: number): voi
 
   // Memory cleanup: If the buffer shrinks below the threshold, discard the map
   // to free up memory on long-lived atoms.
-  if (map && index <= BUFFER_CONFIG.MAP_THRESHOLD) {
+  if (state.map && index <= BUFFER_CONFIG.MAP_THRESHOLD) {
     state.map = null;
   }
 }
 
 /**
  * Fully disposes of the buffer state, clearing all subscriptions.
+ *
+ * @internal
  */
-/** @internal */
 export function disposeAll(state: DepBufferState): void {
   depBufferTruncateFrom(state, 0);
   state.flags &= ~BUFFER_FLAGS.HAS_COMPUTEDS;

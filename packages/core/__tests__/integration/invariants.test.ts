@@ -70,7 +70,7 @@ describe('Push-Pull Propagation', () => {
     // Async default
     const asyncAtom = atom(0);
     const asyncCalls: number[] = [];
-    asyncAtom.subscribe((val) => asyncCalls.push(val!));
+    asyncAtom.subscribe((val) => asyncCalls.push(val ?? 0));
 
     asyncAtom.value = 1;
     expect(asyncCalls).toEqual([]); // not yet
@@ -81,7 +81,7 @@ describe('Push-Pull Propagation', () => {
     // Sync opt-in
     const syncAtom = atom(0, { sync: true });
     const syncCalls: number[] = [];
-    syncAtom.subscribe((val) => syncCalls.push(val!));
+    syncAtom.subscribe((val) => syncCalls.push(val ?? 0));
 
     syncAtom.value = 1;
     expect(syncCalls).toEqual([1]); // immediate
@@ -402,7 +402,7 @@ describe('Subscription Protocol', () => {
     const fnCalls: number[] = [];
     const objCalls: number[] = [];
 
-    a.subscribe((val) => fnCalls.push(val!));
+    a.subscribe((val) => fnCalls.push(val ?? 0));
     a.subscribe({ execute: () => objCalls.push(a.peek()) });
 
     a.value = 5;

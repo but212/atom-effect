@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { isResult, Option, Result } from '@/index';
 
+// Shared test value that throws during string conversion to test error-handling robustness
+const NON_STRINGIFIABLE = {
+  get toString() {
+    return null;
+  },
+};
+
 describe('Result', () => {
   describe('isResult()', () => {
     it('should identify Result instances', () => {
@@ -82,6 +89,19 @@ describe('Result', () => {
       );
     });
 
+    it('expect() should preserve the original error as the cause', () => {
+      const original = 'original error';
+      try {
+        Result.expect(Result.err(original), 'Custom message');
+        expect.fail('Should have thrown');
+      } catch (e: unknown) {
+        expect(e).toBeInstanceOf(Error);
+        const err = e as Error & { cause?: unknown };
+        expect(err.message).toBe('Custom message');
+        expect(err.cause).toBe(original);
+      }
+    });
+
     it('unwrapOr() should return fallback on error', () => {
       expect(Result.unwrapOr(Result.ok(42), 10)).toBe(42);
       expect(Result.unwrapOr(Result.err('fail'), 10)).toBe(10);
@@ -103,6 +123,12 @@ describe('Result', () => {
       expect(mapped).toMatchObject(Result.ok(4));
     });
 
+    it('map() should reuse the original instance when mapped to NaN (identity)', () => {
+      const ok = Result.ok(NaN);
+      const mapped = Result.map(ok, (n: number) => n);
+      expect(mapped).toBe(ok);
+    });
+
     it('mapErr() should transform inner error', () => {
       const err = Result.err('fail');
       const mapped = Result.mapErr(err, (s: string) => s.toUpperCase());
@@ -116,8 +142,8 @@ describe('Result', () => {
     });
   });
 
-  describe('Safety & Robustness', () => {
-    it('tryCatch should capture success and failure', () => {
+  describe('Result.tryCatch()', () => {
+    it('should capture success and failure', () => {
       const ok = Result.tryCatch(() => 42);
       expect(ok).toMatchObject(Result.ok(42));
 
@@ -128,7 +154,7 @@ describe('Result', () => {
       expect(err).toMatchObject(Result.err(error));
     });
 
-    it('tryCatch should handle non-Error throws and preserve cause', () => {
+    it('should handle non-Error throws and preserve cause', () => {
       const original = 'not an error object';
       const err = Result.tryCatch(() => {
         throw original;
@@ -141,9 +167,19 @@ describe('Result', () => {
       }
     });
 
-    it('tryCatch should reuse VOID_SUCCESS for undefined returns', () => {
+    it('should reuse VOID_SUCCESS for undefined returns', () => {
       const res = Result.tryCatch(() => {});
       expect(res).toBe(Result.ok(undefined));
+    });
+
+    it('should handle non-stringifiable thrown values gracefully', () => {
+      const res = Result.tryCatch(() => {
+        throw NON_STRINGIFIABLE;
+      });
+      expect(res.ok).toBe(false);
+      if (Result.isErr(res)) {
+        expect(res.error).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -159,12 +195,12 @@ describe('Result', () => {
       expect(err).toMatchObject(Result.err(error));
     });
 
-    it('tryAsync should reuse VOID_SUCCESS for undefined returns', async () => {
+    it('should reuse VOID_SUCCESS for undefined returns', async () => {
       const res = await Result.tryAsync(async () => {});
       expect(res).toBe(Result.ok(undefined));
     });
 
-    it('tryAsync should handle non-Error throws and preserve cause', async () => {
+    it('should handle non-Error throws and preserve cause', async () => {
       const original = 'async failure';
       const err = await Result.tryAsync(async () => {
         throw original;
@@ -174,6 +210,30 @@ describe('Result', () => {
         expect(err.error).toBeInstanceOf(Error);
         expect(err.error.message).toBe(original);
         expect(err.error.cause).toBe(original);
+      }
+    });
+
+    it('should handle non-stringifiable synchronously thrown values gracefully', async () => {
+      const promise = Result.tryAsync(() => {
+        throw NON_STRINGIFIABLE;
+      });
+      await expect(promise).resolves.toBeDefined();
+      const res = await promise;
+      expect(res.ok).toBe(false);
+      if (Result.isErr(res)) {
+        expect(res.error).toBeInstanceOf(Error);
+      }
+    });
+
+    it('should handle non-stringifiable asynchronously rejected values gracefully', async () => {
+      const promise = Result.tryAsync(async () => {
+        throw NON_STRINGIFIABLE;
+      });
+      await expect(promise).resolves.toBeDefined();
+      const res = await promise;
+      expect(res.ok).toBe(false);
+      if (Result.isErr(res)) {
+        expect(res.error).toBeInstanceOf(Error);
       }
     });
   });

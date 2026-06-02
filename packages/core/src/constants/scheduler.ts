@@ -1,23 +1,19 @@
 /**
  * @module SchedulerConstants
  *
- * Responsibility:
- * Defines the internal state machine and global execution thresholds for
+ * Defines the internal state flags and global configuration thresholds for
  * the reactive update scheduler.
  */
 
 import type { SchedulerConfig } from '../types';
 
 /**
- * Internal state flags for the Scheduler.
- *
- * Logic:
- * Uses bitwise flags to allow the scheduler to track overlapping states
- * (e.g., `PROCESSING` while also `BATCHING`) without complex boolean logic.
+ * Internal state flags for the Scheduler using bitwise flags.
+ * Allows tracking overlapping states without complex boolean logic.
  *
  * @internal
  */
-export const SCHEDULER_STATE = {
+export const SCHEDULER_STATE = Object.freeze({
   IDLE: 0,
   /** Currently executing the reactive update loop. */
   PROCESSING: 1 << 0,
@@ -25,51 +21,27 @@ export const SCHEDULER_STATE = {
   FLUSHING_SYNC: 1 << 1,
   /** Accumulating updates to be processed in a single batch. */
   BATCHING: 1 << 2,
-} as const satisfies Record<string, number>;
+} as const);
 
 /**
  * Global configuration and stability thresholds for the Scheduler.
- *
- * Caution:
- * These values are tuned for balancing UI responsiveness and library
- * stability. Modifying them can lead to main-thread freezes or memory leaks
- * in complex dependency graphs.
  */
 export const SCHEDULER_CONFIG = Object.freeze({
-  /**
-   * Why: Prevents runaway effects or infinite re-computations from
-   * permanently freezing the main thread.
-   */
+  /** Prevents runaway effects or infinite loops from freezing the main thread. */
   MAX_EXECUTIONS_PER_SECOND: 1000,
 
-  /**
-   * Why: Detects and kills circular dependency loops within a single
-   * microtask before they cause a stack overflow.
-   */
+  /** Detects circular dependency loops within a microtask to prevent stack overflow. */
   MAX_EXECUTIONS_PER_EFFECT: 100,
 
-  /**
-   * Why: Caps the total workload per microtask to maintain frame-rate
-   * stability (16.7ms window) in high-frequency update scenarios.
-   */
+  /** Caps workload per microtask to maintain frame-rate stability. */
   MAX_EXECUTIONS_PER_FLUSH: 10000,
 
-  /**
-   * Why: Provides a safety break for the drain-loop to prevent infinite
-   * flushing of perpetually dirty nodes.
-   */
+  /** Hard iterations limit for the drain-loop safety break. */
   MAX_FLUSH_ITERATIONS: 1000,
 
-  /**
-   * Why: Ensures a minimum number of iterations to allow for
-   * deep-nested batched updates to resolve.
-   */
+  /** Minimum iterations required to allow nested batches to resolve. */
   MIN_FLUSH_ITERATIONS: 10,
 
-  /**
-   * Optimization: Memory Management
-   * Why: Triggers a manual shrink of the internal batch queue when its
-   * size exceeds this threshold, releasing memory back to the heap.
-   */
+  /** Memory threshold to shrink the batch queue, releasing memory back to the heap. */
   BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
 } as const satisfies SchedulerConfig);

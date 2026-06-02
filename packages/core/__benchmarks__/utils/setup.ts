@@ -172,12 +172,12 @@ export function forceGC(): void {
   }
 }
 
-export let _sink: any;
+export let _sink: unknown;
 /**
  * Prevents Dead Code Elimination (DCE) by assigning the value to a sink.
  * Use this in benchmarks for values that aren't otherwise consumed.
  */
-export function keep(value: any): void {
+export function keep(value: unknown): void {
   _sink = value;
   if (Date.now() < 0) {
     console.log(_sink);
@@ -246,7 +246,7 @@ export function generateGridData(rows: number): DataGridRow[] {
     name: `${names[i % names.length]} ${Math.floor(i / names.length)}`,
     age: 20 + (i % 50),
     email: `user${i}@example.com`,
-    department: departments[i % departments.length]!,
+    department: departments[i % departments.length] ?? 'Engineering',
     salary: 50000 + (i % 10) * 10000,
     startDate: new Date(2020, 0, 1 + (i % 365)),
     active: i % 5 !== 0,

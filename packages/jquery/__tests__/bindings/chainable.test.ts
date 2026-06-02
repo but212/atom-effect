@@ -93,7 +93,7 @@ describe('Chainable Methods: One-Way Bindings', () => {
 
     $el.atomProp('id', id);
     await $.nextTick();
-    expect($el[0]!.id).toBe('my-id');
+    expect($el[0]?.id).toBe('my-id');
 
     $el.remove();
   });
@@ -112,7 +112,7 @@ describe('Chainable Methods: One-Way Bindings', () => {
 
     isVisible.value = false;
     await $.nextTick();
-    expect($el[0]!.style.display).toBe('none');
+    expect($el[0]?.style.display).toBe('none');
 
     isVisible.value = true;
     await $.nextTick();
@@ -190,6 +190,110 @@ describe('Chainable Methods: Two-Way Bindings', () => {
     expect(data.value.user.name).toBe('bob');
 
     $form.remove();
+  });
+
+  it('atomChecked: radio unregistration handles detached elements correctly without memory leaks', async () => {
+    const val1 = $.atom(true);
+    const val2 = $.atom(false);
+    const $form = $('<form>').appendTo(document.body);
+    const $radio1 = $('<input type="radio" name="leak-test" value="A">').appendTo($form);
+    const $radio2 = $('<input type="radio" name="leak-test" value="B">').appendTo($form);
+
+    $radio1.atomChecked(val1);
+    $radio2.atomChecked(val2);
+    await $.nextTick();
+
+    // Detach the element from the form/DOM before unbinding
+    $radio1.detach();
+
+    // Perform unbind (which triggers cleanup)
+    $radio1.atomUnbind();
+    await $.nextTick();
+
+    // Attach a spy event handler to the detached element after unbinding
+    const spy = vi.fn();
+    $radio1.on('change.atomRadioSync', spy);
+
+    // Trigger changes on the peer radio button (which triggers syncRadios internally)
+    const radio2El = $radio2[0] as HTMLInputElement;
+    radio2El.checked = true;
+    $radio2.trigger('change');
+    await $.nextTick();
+
+    // If unregistration was successful and there is no memory leak,
+    // the detached radio1 should NOT receive event synchronization.
+    expect(spy).not.toHaveBeenCalled();
+
+    $form.remove();
+  });
+
+  it('atomChecked: respects Shadow DOM encapsulation for radio buttons without enclosing form', async () => {
+    // Create two host elements for Shadow DOM
+    const $hostA = $('<div id="host-a"></div>').appendTo(document.body);
+    const $hostB = $('<div id="host-b"></div>').appendTo(document.body);
+
+    const hostA = $hostA[0];
+    const hostB = $hostB[0];
+    if (!hostA || !hostB) throw new Error('Host elements not found');
+
+    const shadowA = hostA.attachShadow({ mode: 'open' });
+    const shadowB = hostB.attachShadow({ mode: 'open' });
+
+    // Inside shadowA (no form)
+    const $divA = $(`
+      <div>
+        <input type="radio" name="option" value="A1" id="r-a1">
+        <input type="radio" name="option" value="A2" id="r-a2">
+      </div>
+    `).appendTo(shadowA);
+
+    // Inside shadowB (no form)
+    const $divB = $(`
+      <div>
+        <input type="radio" name="option" value="B1" id="r-b1">
+        <input type="radio" name="option" value="B2" id="r-b2">
+      </div>
+    `).appendTo(shadowB);
+
+    const rA1 = $.atom(true);
+    const rA2 = $.atom(false);
+    const rB1 = $.atom(true);
+    const rB2 = $.atom(false);
+
+    $divA.find('#r-a1').atomChecked(rA1);
+    $divA.find('#r-a2').atomChecked(rA2);
+    $divB.find('#r-b1').atomChecked(rB1);
+    $divB.find('#r-b2').atomChecked(rB2);
+
+    await $.nextTick();
+
+    // Verify initial states
+    expect($divA.find('#r-a1').prop('checked')).toBe(true);
+    expect($divA.find('#r-a2').prop('checked')).toBe(false);
+    expect($divB.find('#r-b1').prop('checked')).toBe(true);
+    expect($divB.find('#r-b2').prop('checked')).toBe(false);
+
+    // Act: Check rA2 (should uncheck rA1, but NOT affect shadowB radio buttons!)
+    $divA.find('#r-a2').prop('checked', true).trigger('change');
+    await $.nextTick();
+
+    expect(rA2.value).toBe(true);
+    expect(rA1.value).toBe(false);
+
+    // Verify shadowB is completely unaffected
+    expect(rB1.value).toBe(true);
+    expect(rB2.value).toBe(false);
+    expect($divB.find('#r-b1').prop('checked')).toBe(true);
+    expect($divB.find('#r-b2').prop('checked')).toBe(false);
+
+    // Cleanup
+    $divA.find('#r-a1').atomUnbind();
+    $divA.find('#r-a2').atomUnbind();
+    $divB.find('#r-b1').atomUnbind();
+    $divB.find('#r-b2').atomUnbind();
+
+    $hostA.remove();
+    $hostB.remove();
   });
 });
 

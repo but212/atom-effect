@@ -56,15 +56,18 @@ describe('Fuzz Testing (Deterministic)', () => {
 
     for (let i = 0; i < 30; i++) {
       batch(() => {
-        atoms.forEach((a) => {
+        for (const a of atoms) {
           a.value = Math.floor(rand() * 100);
-        });
+        }
       });
 
-      computeds.forEach((c, idx) => {
-        const expected = depMap[idx]!.reduce((sum, d) => sum + d.value, 0);
-        expect(c.value).toBe(expected);
-      });
+      for (let idx = 0; idx < computeds.length; idx++) {
+        const c = computeds[idx];
+        if (c) {
+          const expected = depMap[idx]?.reduce((sum, d) => sum + d.value, 0);
+          expect(c.value).toBe(expected);
+        }
+      }
     }
   });
 
@@ -77,11 +80,13 @@ describe('Fuzz Testing (Deterministic)', () => {
       if (targetAtom) targetAtom.value = Math.floor(rand() * 100);
 
       const c = computeds[Math.floor(rand() * computeds.length)];
-      const idx = computeds.indexOf(c!);
-      if (c && idx !== -1) {
-        c.invalidate();
-        const expected = depMap[idx]!.reduce((sum, d) => sum + d.value, 0);
-        expect(c.value).toBe(expected);
+      if (c) {
+        const idx = computeds.indexOf(c);
+        if (idx !== -1) {
+          c.invalidate();
+          const expected = depMap[idx]?.reduce((sum, d) => sum + d.value, 0);
+          expect(c.value).toBe(expected);
+        }
       }
     }
   });

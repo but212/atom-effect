@@ -7,7 +7,6 @@
  */
 
 import { effect, untracked } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
@@ -42,18 +41,13 @@ function toKebab(str: string): string {
  * Returns a validation result indicating if the property/attribute is safe,
  * allowing the caller to handle side effects like logging.
  */
-function checkBindingSafety(
-  name: string,
-  isProperty: boolean
-): { ok: true } | { ok: false; error: string } {
-  const lowerName = name.toLowerCase();
-  if (lowerName.startsWith('on')) {
-    return { ok: false, error: SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name) };
-  }
+function checkBindingSafety(name: string, isProperty: boolean): string | null {
+  const lower = name.toLowerCase();
+  if (lower.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
   if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
-    return { ok: false, error: SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name) };
+    return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
   }
-  return { ok: true };
+  return null;
 }
 
 /**
@@ -63,9 +57,9 @@ function checkBindingSafety(
  */
 function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string, T][] {
   return Object.entries(map).filter(([name]) => {
-    const res = checkBindingSafety(name, isProperty);
-    if (!res.ok) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${res.error}`);
+    const err = checkBindingSafety(name, isProperty);
+    if (err) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${err}`);
       return false;
     }
     return true;
@@ -88,10 +82,7 @@ export function bindText<T = unknown>(
     element,
     value,
     (val) => {
-      const textContent = Option.unwrapOr(
-        Option.map(Option.fromNullable(formatter), (fn: Function) => fn(val)),
-        String(val ?? '')
-      );
+      const textContent = formatter ? formatter(val) : String(val ?? '');
       if (element.textContent !== textContent) {
         element.textContent = textContent;
       }
@@ -145,8 +136,7 @@ export function bindClass(
 
   for (const key in classMap) {
     if (Object.hasOwn(classMap, key)) {
-      const trimmed = key.trim();
-      tokensMap.set(key, trimmed.includes(' ') ? trimmed.split(/\s+/).filter(Boolean) : [trimmed]);
+      tokensMap.set(key, key.trim().split(/\s+/).filter(Boolean));
     }
   }
 
@@ -156,9 +146,15 @@ export function bindClass(
     (states) => {
       // Logic: Aggregate all active tokens to handle overlapping definitions.
       const activeTokens = new Set<string>();
-      for (const [key, isActive] of Object.entries(states)) {
-        if (isActive) {
-          tokensMap.get(key)?.forEach((t) => activeTokens.add(t));
+      for (const key in states) {
+        if (Object.hasOwn(states, key) && states[key]) {
+          const tokens = tokensMap.get(key);
+          if (tokens) {
+            for (let i = 0; i < tokens.length; i++) {
+              const token = tokens[i];
+              if (token !== undefined) activeTokens.add(token);
+            }
+          }
         }
       }
 
@@ -167,8 +163,10 @@ export function bindClass(
       // in a single pass using the native classList API.
       for (const tokens of tokensMap.values()) {
         for (let i = 0, len = tokens.length; i < len; i++) {
-          const token = tokens[i]!;
-          element.classList.toggle(token, activeTokens.has(token));
+          const token = tokens[i];
+          if (token !== undefined) {
+            element.classList.toggle(token, activeTokens.has(token));
+          }
         }
       }
     },
@@ -189,27 +187,30 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
   const metaMap: Record<string, string> = {};
   const prev = new Map<string, string>();
 
-  Object.entries(cssMap).forEach(([property, value]) => {
+  for (const [property, value] of Object.entries(cssMap)) {
     const [source, unit] = Array.isArray(value) ? value : [value, ''];
     reactiveMap[property] = source;
     metaMap[property] = unit;
-  });
+  }
 
   registerMapEffect(
     element,
     reactiveMap,
     (states) => {
-      Object.entries(states).forEach(([property, value]) => {
-        const unit = metaMap[property] ?? '';
-        const str = unit ? `${value}${unit}` : String(value);
+      for (const property in states) {
+        if (Object.hasOwn(states, property)) {
+          const value = states[property];
+          const unit = metaMap[property] ?? '';
+          const str = unit ? `${value}${unit}` : String(value);
 
-        if (prev.get(property) !== str) {
-          if (!isDangerousCssValue(str)) {
-            style.setProperty(toKebab(property), str);
+          if (prev.get(property) !== str) {
+            if (!isDangerousCssValue(str)) {
+              style.setProperty(toKebab(property), str);
+            }
+            prev.set(property, str);
           }
-          prev.set(property, str);
         }
-      });
+      }
     },
     'css'
   );
@@ -233,11 +234,11 @@ export function bindAttr(
 ): void {
   const safeEntries = getSafeEntries(attrMap, false);
   const safeMap = Object.fromEntries(safeEntries);
-  const metaMap: Record<string, { isAria: boolean }> = {};
+  const isAriaMap: Record<string, boolean> = {};
   const prev: Record<string, string | null> = {};
 
   for (const [name] of safeEntries) {
-    metaMap[name] = { isAria: name.toLowerCase().startsWith('aria-') };
+    isAriaMap[name] = name.toLowerCase().startsWith('aria-');
     prev[name] = element.getAttribute(name);
   }
 
@@ -245,32 +246,38 @@ export function bindAttr(
     element,
     safeMap,
     (states) => {
-      for (const [name, value] of Object.entries(states)) {
-        const meta = metaMap[name];
-        if (!meta) continue;
+      for (const name in states) {
+        if (Object.hasOwn(states, name)) {
+          if (!(name in isAriaMap)) continue;
+          const isAria = isAriaMap[name];
+          if (isAria === undefined) continue;
 
-        const attrVal = Option.unwrapOr(
-          Option.map(Option.fromNullable(value), (val) => {
-            if (val === true) return meta.isAria ? 'true' : name;
-            if (val === false) return meta.isAria ? 'false' : null;
-            return String(val);
-          }),
-          null
-        );
-
-        // 2. Validate and Apply
-        if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {
-          console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
-          continue;
-        }
-
-        if (prev[name] !== attrVal) {
-          if (attrVal === null) {
-            element.removeAttribute(name);
-          } else {
-            element.setAttribute(name, attrVal as string);
+          const value = states[name];
+          let attrVal: string | null = null;
+          if (value !== null && value !== undefined) {
+            if (typeof value === 'boolean') {
+              attrVal = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
+            } else {
+              attrVal = String(value);
+            }
           }
-          prev[name] = attrVal as string | null;
+
+          // 2. Validate and Apply
+          if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {
+            console.warn(
+              `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
+            );
+            continue;
+          }
+
+          if (prev[name] !== attrVal) {
+            if (attrVal === null) {
+              element.removeAttribute(name);
+            } else {
+              element.setAttribute(name, attrVal as string);
+            }
+            prev[name] = attrVal as string | null;
+          }
         }
       }
     },
@@ -299,16 +306,21 @@ export function bindProp(
     element,
     safeMap,
     (states) => {
-      for (const [name, value] of Object.entries(states)) {
-        if (previousValues[name] === value) continue;
+      for (const name in states) {
+        if (Object.hasOwn(states, name)) {
+          const value = states[name];
+          if (previousValues[name] === value) continue;
 
-        if (typeof value === 'string' && isDangerousUrl(name, value)) {
-          console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
-          continue;
+          if (typeof value === 'string' && isDangerousUrl(name, value)) {
+            console.warn(
+              `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
+            );
+            continue;
+          }
+
+          target[name] = value;
+          previousValues[name] = value;
         }
-
-        target[name] = value;
-        previousValues[name] = value;
       }
     },
     'prop'
@@ -383,6 +395,58 @@ export function bindVal(
 }
 
 /**
+ * Global registry for tracking radio group elements context-sensitively.
+ * Encapsulates nested mappings inside a single unified structure.
+ * @internal
+ */
+class RadioRegistry {
+  readonly #groups = new WeakMap<Node, Map<string, Set<HTMLInputElement>>>();
+
+  public register(element: HTMLInputElement): Node | undefined {
+    if (element.type !== 'radio' || !element.name) return;
+    const root = element.form || element.getRootNode();
+
+    let nameMap = this.#groups.get(root);
+    if (!nameMap) {
+      nameMap = new Map();
+      this.#groups.set(root, nameMap);
+    }
+
+    let set = nameMap.get(element.name);
+    if (!set) {
+      set = new Set();
+      nameMap.set(element.name, set);
+    }
+
+    set.add(element);
+    return root;
+  }
+
+  public unregister(element: HTMLInputElement, root: Node): void {
+    if (element.type !== 'radio' || !element.name) return;
+    const nameMap = this.#groups.get(root);
+    if (!nameMap) return;
+    const set = nameMap.get(element.name);
+    if (set) {
+      set.delete(element);
+      if (set.size === 0) {
+        nameMap.delete(element.name);
+        if (nameMap.size === 0) {
+          this.#groups.delete(root);
+        }
+      }
+    }
+  }
+
+  public getGroup(element: HTMLInputElement, root?: Node): Set<HTMLInputElement> | undefined {
+    if (element.type !== 'radio' || !element.name) return;
+    return this.#groups.get(root || element.form || element.getRootNode())?.get(element.name);
+  }
+}
+
+const radioRegistry = new RadioRegistry();
+
+/**
  * Synchronizes the visual state of a radio button group.
  *
  * Logic: Native radio buttons do not fire 'change' events when they are
@@ -395,10 +459,15 @@ export function bindVal(
  */
 function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
-    (element.form ? $(element.form) : $(document))
-      .find(`input[type="radio"][name="${$.escapeSelector(element.name)}"]`)
-      .not(element)
-      .trigger('change.atomRadioSync');
+    const set = radioRegistry.getGroup(element);
+
+    if (set) {
+      for (const el of set) {
+        if (el !== element) {
+          $(el).trigger('change.atomRadioSync');
+        }
+      }
+    }
   }
 }
 
@@ -411,29 +480,36 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
     console.warn(`${SYSTEM_BINDING.PREFIX} atomChecked called on non-input element`);
     return;
   }
-  const inputElement = element;
-  const $element = $(inputElement);
+
+  const $element = $(element);
+  const isRadio = element.type === 'radio';
+  const radioRoot = isRadio ? radioRegistry.register(element) : undefined;
 
   const onChange = () => {
-    if (atom.peek() !== inputElement.checked) {
-      atom.value = inputElement.checked;
-      syncRadios(inputElement);
+    if (atom.peek() !== element.checked) {
+      atom.value = element.checked;
+      syncRadios(element);
     }
   };
   (onChange as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 
   $element.on('change change.atomRadioSync', onChange);
-  registry.onCleanup(inputElement, () => $element.off('change change.atomRadioSync', onChange));
+  registry.onCleanup(element, () => {
+    if (isRadio && radioRoot) {
+      radioRegistry.unregister(element, radioRoot);
+    }
+    $element.off('change change.atomRadioSync', onChange);
+  });
 
   registry.trackEffect(
-    inputElement,
+    element,
     effect(() => {
       const isChecked = !!atom.value;
       untracked(() => {
-        if (inputElement.checked !== isChecked) {
-          inputElement.checked = isChecked;
-          debug.domUpdated(SYSTEM_BINDING.PREFIX, inputElement, 'checked', isChecked);
-          if (isChecked) syncRadios(inputElement);
+        if (element.checked !== isChecked) {
+          element.checked = isChecked;
+          debug.domUpdated(SYSTEM_BINDING.PREFIX, element, 'checked', isChecked);
+          if (isChecked) syncRadios(element);
         }
       });
     })

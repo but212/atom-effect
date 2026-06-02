@@ -68,6 +68,12 @@ describe('Option<T>', () => {
       expect(Option.map(Option.none, (n: number) => n * n)).toBe(Option.none);
     });
 
+    it('map() should reuse the same instance when mapping NaN to NaN', () => {
+      const opt = Option.some(NaN);
+      const mapped = Option.map(opt, (x) => x);
+      expect(mapped).toBe(opt);
+    });
+
     it('andThen() should chain nested Options', () => {
       const getLength = (s: string) => Option.some(s.length);
       expect(Option.unwrap(Option.andThen(Option.some('hello'), getLength))).toBe(5);
@@ -88,11 +94,30 @@ describe('Option<T>', () => {
       expect(Option.toUndefined(Option.none)).toBe(undefined);
     });
 
-    it('equals() should perform deep equality check', () => {
-      expect(Option.equals(Option.some(42), Option.some(42))).toBe(true);
-      expect(Option.equals(Option.some(42), Option.some(43))).toBe(false);
-      expect(Option.equals(Option.some(42), Option.none)).toBe(false);
-      expect(Option.equals(Option.none, Option.none)).toBe(true);
+    describe('equals()', () => {
+      it('should perform deep equality check', () => {
+        expect(Option.equals(Option.some(42), Option.some(42))).toBe(true);
+        expect(Option.equals(Option.some(42), Option.some(43))).toBe(false);
+        expect(Option.equals(Option.some(42), Option.none)).toBe(false);
+        expect(Option.equals(Option.none, Option.none)).toBe(true);
+      });
+
+      it('should return true for two Some(NaN) options', () => {
+        expect(Option.equals(Option.some(NaN), Option.some(NaN))).toBe(true);
+      });
+
+      it('should return false for Some(-0) and Some(+0)', () => {
+        expect(Option.equals(Option.some(-0), Option.some(+0))).toBe(false);
+      });
+
+      it('should return false when comparing an Option with a non-Option shape-alike', () => {
+        expect(
+          Option.equals(Option.some(42), { ok: true, value: 42 } as unknown as Option<number>)
+        ).toBe(false);
+        expect(
+          Option.equals(Option.none, { ok: false, value: undefined } as unknown as Option<never>)
+        ).toBe(false);
+      });
     });
 
     it('match() should execute the correct branch', () => {

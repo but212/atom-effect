@@ -272,7 +272,10 @@ describe('Data Grid: Targeted Updates', () => {
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const nextRows = [...rowsAtom.peek()];
-        nextRows[targetIdx] = { ...nextRows[targetIdx]!, name: `Updated ${i}` };
+        const targetRow = nextRows[targetIdx];
+        if (targetRow) {
+          nextRows[targetIdx] = { ...targetRow, name: `Updated ${i}` };
+        }
         rowsAtom.value = nextRows;
       }
     },
@@ -324,7 +327,7 @@ describe('Dependency Graph Patterns', () => {
     computed(() => diamondSource.value * (i + 1))
   );
   const diamondLevel2 = Array.from({ length: 10 }, (_, i) =>
-    computed(() => diamondLevel1[i]!.value * 2)
+    computed(() => (diamondLevel1[i]?.value ?? 0) * 2)
   );
   const diamondSink = computed(() => diamondLevel2.reduce((sum, c) => sum + c.value, 0));
 
@@ -333,9 +336,11 @@ describe('Dependency Graph Patterns', () => {
   for (let level = 1; level < 50; level++) {
     const nextLevel: any[] = [];
     for (let i = 0; i < currentLevel.length - 1; i++) {
-      const left = currentLevel[i]!;
-      const right = currentLevel[i + 1]!;
-      nextLevel.push(computed(() => left.value + right.value));
+      const left = currentLevel[i];
+      const right = currentLevel[i + 1];
+      if (left && right) {
+        nextLevel.push(computed(() => left.value + right.value));
+      }
     }
     currentLevel = nextLevel;
     if (currentLevel.length === 0) break;
@@ -363,8 +368,10 @@ describe('Dependency Graph Patterns', () => {
   bench(
     'pyramid pattern (50 levels)',
     () => {
-      pyramidBase[0]!.value += 1;
-      keep(pyramidApex!.value);
+      if (pyramidBase[0]) {
+        pyramidBase[0].value += 1;
+      }
+      keep(pyramidApex?.value);
     },
     macroBenchOptions
   );
@@ -375,7 +382,7 @@ describe('Complex Graph Architecture', () => {
   const mixedComputeds = Array.from({ length: 200 }, (_, i) => {
     const idx1 = i % mixedAtoms.length;
     const idx2 = (i + 1) % mixedAtoms.length;
-    return computed(() => mixedAtoms[idx1]!.value + mixedAtoms[idx2]!.value);
+    return computed(() => (mixedAtoms[idx1]?.value ?? 0) + (mixedAtoms[idx2]?.value ?? 0));
   });
 
   const circA = atom(1);
@@ -389,11 +396,12 @@ describe('Complex Graph Architecture', () => {
   bench(
     'mixed dependencies (100 atoms → 200 computeds)',
     () => {
-      mixedAtoms[0]!.value += 1;
+      const first = mixedAtoms[0];
+      if (first) first.value += 1;
       let last: any;
-      mixedComputeds.forEach((c) => {
+      for (const c of mixedComputeds) {
         last = c.value;
-      });
+      }
       keep(last);
     },
     macroBenchOptions
@@ -421,7 +429,7 @@ describe('Dynamic Dependency Patterns', () => {
 
   const idxAtom = atom(0);
   const arrValues = Array.from({ length: 10 }, (_, i) => atom(i));
-  const arrSelected = computed(() => arrValues[idxAtom.value]!.value);
+  const arrSelected = computed(() => arrValues[idxAtom.value]?.value);
 
   bench(
     `conditional dependencies (x${REPEATS})`,
@@ -443,7 +451,8 @@ describe('Dynamic Dependency Patterns', () => {
       for (let i = 0; i < REPEATS; i++) {
         idxAtom.value = (idxAtom.value + 1) % 10;
         keep(arrSelected.value);
-        arrValues[idxAtom.value]!.value++;
+        const valAtom = arrValues[idxAtom.value];
+        if (valAtom) valAtom.value++;
         keep(arrSelected.value);
       }
     },
@@ -470,7 +479,11 @@ describe('Large Grid with Lenses (50x50)', () => {
       for (let i = 0; i < 10; i++) {
         const r = Math.floor(Math.random() * ROWS);
         const i_col = Math.floor(Math.random() * COLS);
-        cellLenses[r]![i_col]!.value = { v: Math.random(), color: 'blue' };
+        const rowLenses = cellLenses[r];
+        if (rowLenses) {
+          const cell = rowLenses[i_col];
+          if (cell) cell.value = { v: Math.random(), color: 'blue' };
+        }
       }
     },
     macroBenchOptions
@@ -491,7 +504,7 @@ describe('Large Grid with Lenses (50x50)', () => {
     () => {
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
-          keep(cellLenses[r]![c]!.value);
+          keep(cellLenses[r]?.[c]?.value);
         }
       }
     },
@@ -548,7 +561,9 @@ describe('Memory & GC pressure', () => {
         ...Array.from({ length: 333 }, (_, i) => computed(() => a.value + i)),
         ...Array.from({ length: 334 }, () => effect(() => keep(a.value), benchEffectOptions)),
       ];
-      units.forEach((u) => (u as any).dispose());
+      for (const u of units) {
+        (u as any).dispose();
+      }
       a.dispose();
     },
     memoryBenchOptions
@@ -621,7 +636,9 @@ describe('Large State Analysis', () => {
       const before = getMemoryUsage();
       const atoms = Array.from({ length: 1000 }, (_, i) => atom(new Array(100).fill(i)));
       const during = getMemoryUsage();
-      atoms.forEach((a) => a.dispose());
+      for (const a of atoms) {
+        a.dispose();
+      }
       forceGC();
       const after = getMemoryUsage();
       keep([before, during, after]);

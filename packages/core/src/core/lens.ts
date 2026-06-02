@@ -31,6 +31,7 @@ import type {
   Equal,
   MergedDependencyValue,
   ReactiveNode,
+  ReactiveNodeBase,
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
@@ -64,7 +65,7 @@ export type TerminalTypes =
   | Map<unknown, unknown>
   | Set<unknown>
   | Promise<unknown>
-  | Function;
+  | ((...args: never[]) => unknown);
 
 /**
  * Logic: Path Generation
@@ -90,7 +91,7 @@ export type Paths<T, D extends unknown[] = []> =
             ? HasBroadStringKey<T> extends true
               ? string
               : {
-                  [K in keyof T & (string | number)]: T[K] extends Function
+                  [K in keyof T & (string | number)]: T[K] extends (...args: never[]) => unknown
                     ? never
                     : NonNullable<T[K]> extends object
                       ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
@@ -152,21 +153,15 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
     (next as unknown as Record<string, unknown>)[key] = value;
     return next;
   }
-
   if (container instanceof Map) {
-    const next = new Map(container);
-    next.set(key, value);
-    return next;
+    return new Map(container as Map<unknown, unknown>).set(key, value);
   }
-
   const proto = Object.getPrototypeOf(container);
   if (proto === Object.prototype || proto === null) {
     return { ...container, [key]: value };
   }
-
-  const next = Object.create(proto);
-  Object.assign(next, container);
-  (next as Record<string, unknown>)[key] = value;
+  const next = Object.assign(Object.create(proto), container) as Record<string, unknown>;
+  next[key] = value;
   return next;
 }
 
@@ -176,14 +171,14 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
-  const key = keys[index]!;
-  if (obj == null || typeof obj !== 'object' || isForbiddenKey(key)) return obj;
+  const key = keys[index];
+  if (key === undefined || obj == null || typeof obj !== 'object' || isForbiddenKey(key))
+    return obj;
 
   const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  if (DEFAULT_EQUAL(oldVal, newVal)) return obj;
-  return cloneAndSet(obj as object, key, newVal);
+  return DEFAULT_EQUAL(oldVal, newVal) ? obj : cloneAndSet(obj as object, key, newVal);
 }
 
 /**
@@ -192,14 +187,9 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
  */
 export function getPathValue(source: unknown, parts: string[]): unknown {
   let res = source;
-  const len = parts.length;
-  for (let i = 0; i < len; i++) {
+  for (const part of parts) {
     if (res == null) return undefined;
-    if (res instanceof Map) {
-      res = res.get(parts[i]);
-    } else {
-      res = (res as Record<string, unknown>)[parts[i]!];
-    }
+    res = res instanceof Map ? res.get(part) : (res as Record<string, unknown>)[part];
   }
   return res;
 }
@@ -221,28 +211,42 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
  *
  * @internal
  */
+/**
+ * Base class providing common engine properties for reactive nodes to guarantee consistent
+ * hidden class shapes and monomorphic hot-path access in V8.
+ *
+ * @internal
+ */
+abstract class BaseLens implements ReactiveNodeBase {
+  flags = 0;
+  version = 0;
+  _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
+  _nextEpoch: number | undefined = undefined;
+  _trackEpoch = 0;
+  _trackCount = 0;
+  _error: Error | null = null;
+  _k = KIND.Obj;
+  readonly id = generateId() & SMI_MAX;
+  _storage: { slots: null; deps: DepBufferState | null } = { slots: null, deps: null };
+
+  get isDisposed() {
+    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
+  }
+  get isComputed() {
+    return false;
+  }
+  get isRejected() {
+    return false;
+  }
+  get hasError() {
+    return false;
+  }
+}
+
 class LensImpl<T extends object, P extends string>
+  extends BaseLens
   implements WritableAtom<PathValue<T, P>>, ReactiveNode<void>
 {
-  // Optimization: Engine Compatibility (Public JS fields)
-  public flags: number = 0;
-  public version: number = 0;
-  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  public _nextEpoch: number | undefined = undefined;
-  public _trackEpoch: number = 0;
-  public _trackCount: number = 0;
-  public _error: Error | null = null;
-  public _k: typeof KIND.Obj = KIND.Obj;
-  public readonly id: number = generateId() & SMI_MAX;
-
-  public _storage: {
-    slots: null; // Lenses manage their own listeners via #listeners
-    deps: DepBufferState | null;
-  } = {
-    slots: null,
-    deps: null,
-  };
-
   #root: WritableAtom<T>;
   #path: P;
   #parts: string[];
@@ -252,6 +256,7 @@ class LensImpl<T extends object, P extends string>
   #prevValue: PathValue<T, P> | undefined;
 
   constructor(root: WritableAtom<T>, path: P) {
+    super();
     this.#root = root;
     this.#path = path;
     this.#parts = path.split('.');
@@ -267,10 +272,7 @@ class LensImpl<T extends object, P extends string>
     if (this.#isDangerous) return;
     const cur = this.#root.peek();
     const next = setDeepValue(cur, this.#parts, 0, newVal);
-
-    if (next !== cur) {
-      this.#root.value = next as T;
-    }
+    if (next !== cur) this.#root.value = next as T;
   }
 
   peek(): PathValue<T, P> {
@@ -278,17 +280,22 @@ class LensImpl<T extends object, P extends string>
   }
 
   subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
-    if (this.#listeners.size === 0) {
+    if (!this.#listeners.size) {
       this.#prevValue = this.peek();
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
     }
     this.#listeners.add(listener);
+    let self: LensImpl<T, P> | undefined = this,
+      lis: SubscriberTarget<PathValue<T, P>> | undefined = listener;
     return () => {
-      this.#listeners.delete(listener);
-      if (this.#listeners.size === 0 && this.#sharedUnsub) {
-        this.#sharedUnsub();
-        this.#sharedUnsub = null;
+      if (!self || !lis) return;
+      self.#listeners.delete(lis);
+      if (!self.#listeners.size && self.#sharedUnsub) {
+        const unsub = self.#sharedUnsub;
+        self.#sharedUnsub = null;
+        unsub();
       }
+      self = lis = undefined;
     };
   }
 
@@ -312,29 +319,11 @@ class LensImpl<T extends object, P extends string>
       const ov = this.#prevValue as PathValue<T, P>;
       this.#prevValue = nv;
       for (const listener of this.#listeners) {
-        if (typeof listener === 'function') {
-          listener(nv, ov);
-        } else {
-          listener.execute();
-        }
+        typeof listener === 'function' ? listener(nv, ov) : listener.execute();
       }
     }
   }
 
-  get isDisposed() {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed() {
-    return false;
-  }
-  get isRejected() {
-    return false;
-  }
-  get hasError() {
-    return false;
-  }
-
-  // Path flattening metadata
   get _root() {
     return this.#root;
   }
@@ -379,13 +368,17 @@ export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
-  const brand = (atom as unknown as { [BRAND]?: number })[BRAND] || 0;
-  if ((brand & BrandFlags.Lens) !== 0) {
-    const parent = atom as unknown as { _root: WritableAtom<T>; _path: string };
-    const combined = `${parent._path}.${path as string}`;
-    return atomLens(parent._root, combined as Paths<T>) as unknown as WritableAtom<PathValue<T, P>>;
+  const brand = (atom as { [BRAND]?: number })[BRAND] || 0;
+  if (brand & BrandFlags.Lens) {
+    const parent = atom as unknown as {
+      _root: WritableAtom<Record<string, unknown>>;
+      _path: string;
+    };
+    return atomLens(
+      parent._root,
+      `${parent._path}.${path as string}` as Paths<Record<string, unknown>>
+    ) as unknown as WritableAtom<PathValue<T, P>>;
   }
-
   return new LensImpl(atom, path as string) as unknown as WritableAtom<PathValue<T, P>>;
 }
 
@@ -399,33 +392,16 @@ export function atomLens<T extends object, P extends Paths<T>>(
  * @internal
  */
 class MergedLensImpl<L extends WritableAtom<unknown>[]>
+  extends BaseLens
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<void>
 {
-  // Optimization: Engine Compatibility (Public JS fields)
-  public flags: number = 0;
-  public version: number = 0;
-  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  public _nextEpoch: number | undefined = undefined;
-  public _trackEpoch: number = 0;
-  public _trackCount: number = 0;
-  public _error: Error | null = null;
-  public _k: typeof KIND.Obj = KIND.Obj;
-  public readonly id: number = generateId() & SMI_MAX;
-
-  public _storage: {
-    slots: null;
-    deps: DepBufferState | null;
-  } = {
-    slots: null,
-    deps: null,
-  };
-
   #lenses: L;
   #listeners = new Set<SubscriberTarget<MergedDependencyValue<L>>>();
   #unsubs: (() => void)[] = [];
   #prevValue: MergedDependencyValue<L> | undefined;
 
   constructor(lenses: L) {
+    super();
     this.#lenses = lenses;
     debug.attachDebugInfo(this, 'merged-lens', this.id);
   }
@@ -436,9 +412,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
 
   set value(newVal: MergedDependencyValue<L>) {
     batch(() => {
-      for (let i = 0; i < this.#lenses.length; i++) {
-        this.#lenses[i]!.value = newVal;
-      }
+      for (const lens of this.#lenses) lens.value = newVal;
     });
   }
 
@@ -447,20 +421,25 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
-    if (this.#listeners.size === 0) {
+    if (!this.#listeners.size) {
       this.#prevValue = this.peek();
       const notify = () => this.#notify();
-      for (let i = 0; i < this.#lenses.length; i++) {
-        this.#unsubs.push(this.#lenses[i]!.subscribe(notify));
+      for (const lens of this.#lenses) {
+        this.#unsubs.push(lens.subscribe(notify));
       }
     }
     this.#listeners.add(listener);
+    let self: MergedLensImpl<L> | undefined = this,
+      lis: SubscriberTarget<MergedDependencyValue<L>> | undefined = listener;
     return () => {
-      this.#listeners.delete(listener);
-      if (this.#listeners.size === 0) {
-        for (const unsub of this.#unsubs) unsub();
-        this.#unsubs.length = 0;
+      if (!self || !lis) return;
+      self.#listeners.delete(lis);
+      if (!self.#listeners.size) {
+        const unsubs = self.#unsubs;
+        self.#unsubs = [];
+        for (const unsub of unsubs) unsub();
       }
+      self = lis = undefined;
     };
   }
 
@@ -480,26 +459,9 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
       const ov = this.#prevValue;
       this.#prevValue = nv;
       for (const listener of this.#listeners) {
-        if (typeof listener === 'function') {
-          listener(nv, ov);
-        } else {
-          listener.execute();
-        }
+        typeof listener === 'function' ? listener(nv, ov) : listener.execute();
       }
     }
-  }
-
-  get isDisposed() {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed() {
-    return false;
-  }
-  get isRejected() {
-    return false;
-  }
-  get hasError() {
-    return false;
   }
 
   get [BRAND]() {

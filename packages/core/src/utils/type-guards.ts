@@ -10,17 +10,8 @@
  */
 
 import { isPromise } from '@but212/atom-effect-utils';
-import { BRAND, BrandFlags, KIND } from '@/constants';
-import type {
-  ComputedAtom,
-  EffectObject,
-  ReadonlyAtom,
-  SchedulerJob,
-  SchedulerJobFunction,
-  SchedulerJobObject,
-  Subscription,
-  WritableAtom,
-} from '@/types';
+import { BRAND, BrandFlags } from '@/constants';
+import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
  * Role: Internal interface for reactive nodes that carry diagnostic branding.
@@ -43,7 +34,8 @@ interface Branded {
 function isBranded<T>(obj: unknown, flag: number): obj is T {
   if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return false;
 
-  return !!((obj as Branded)[BRAND]! & flag);
+  const brand = (obj as Branded)[BRAND];
+  return brand !== undefined && (brand & flag) !== 0;
 }
 
 /**
@@ -121,56 +113,6 @@ export function isComputed(obj: unknown): obj is ComputedAtom {
  */
 export function isEffect(obj: unknown): obj is EffectObject {
   return isBranded(obj, BrandFlags.Effect);
-}
-
-/**
- * Role: Internal validator for Subscription unions.
- * @internal
- */
-export function isSubscription<T>(obj: unknown): obj is Subscription<T> {
-  if (!obj || typeof obj !== 'object') return false;
-  const k = (obj as { k?: number }).k;
-  return k === KIND.Fn || k === KIND.Obj;
-}
-
-/**
- * Role: Narrowing guard for function-based subscribers.
- * @internal
- */
-export function isFnSubscriber<T>(
-  sub: Subscription<T>
-): sub is Subscription<T> & { k: typeof KIND.Fn } {
-  return sub.k === KIND.Fn;
-}
-
-/**
- * Role: Narrowing guard for object-based subscribers.
- * @internal
- */
-export function isObjSubscriber<T>(
-  sub: Subscription<T>
-): sub is Subscription<T> & { k: typeof KIND.Obj } {
-  return sub.k === KIND.Obj;
-}
-
-/**
- * Role: Narrowing guard for function-based scheduler jobs.
- * @internal
- */
-export function isSchedulerJobFunction(
-  job: SchedulerJob
-): job is SchedulerJobFunction & { _k: typeof KIND.Fn } {
-  return job._k === KIND.Fn;
-}
-
-/**
- * Role: Narrowing guard for object-based scheduler jobs.
- * @internal
- */
-export function isSchedulerJobObject(
-  job: SchedulerJob
-): job is SchedulerJobObject & { _k: typeof KIND.Obj } {
-  return job._k === KIND.Obj;
 }
 
 export { isPromise };

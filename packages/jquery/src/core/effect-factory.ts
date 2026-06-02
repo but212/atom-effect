@@ -39,6 +39,16 @@ export type BindingDebugType =
  *
  * @internal
  */
+/**
+ * Resolves the current value of a source (atom, function, or static value).
+ * @internal
+ */
+const getSourceValue = <T>(source: AsyncReactiveValue<T>): T | Promise<T> => {
+  if (isAtom(source)) return (source as ReadonlyAtom<T | Promise<T>>).value;
+  if (typeof source === 'function') return (source as () => T | Promise<T>)();
+  return source as T | Promise<T>;
+};
+
 function createAsyncRunner<T>(
   el: Element,
   debugType: BindingDebugType,
@@ -46,52 +56,51 @@ function createAsyncRunner<T>(
 ) {
   let latestId = 0;
   let isDisposed = false;
+  let cleanupRegistered = false;
 
-  registry.onCleanup(el, () => {
-    isDisposed = true;
-  });
+  const runUpdate = (value: T, isAsync: boolean) => {
+    if (isDisposed) return;
+    untracked(() => {
+      try {
+        updater(value);
+        debug.domUpdated(
+          SYSTEM_BINDING.PREFIX,
+          el,
+          isAsync ? `${debugType} (async)` : debugType,
+          value
+        );
+      } catch (error) {
+        debug.error(
+          SYSTEM_BINDING.PREFIX,
+          SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, !isAsync),
+          error
+        );
+      }
+    });
+  };
 
   return (value: T | Promise<T>) => {
     const currentId = ++latestId;
 
     if (!isPromise(value)) {
-      // Sync Path: Direct execution to minimize overhead
-      if (isDisposed || currentId !== latestId) return;
-
-      untracked(() => {
-        try {
-          updater(value);
-          debug.domUpdated(SYSTEM_BINDING.PREFIX, el, debugType, value);
-        } catch (error) {
-          debug.error(
-            SYSTEM_BINDING.PREFIX,
-            SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, true),
-            error
-          );
-        }
-      });
+      runUpdate(value, false);
       return;
     }
 
-    // Async Path
+    if (!cleanupRegistered) {
+      registry.onCleanup(el, () => {
+        isDisposed = true;
+      });
+      cleanupRegistered = true;
+    }
+
     value.then(
       (resolved) => {
-        if (isDisposed || currentId !== latestId) return;
-        untracked(() => {
-          try {
-            updater(resolved);
-            debug.domUpdated(SYSTEM_BINDING.PREFIX, el, `${debugType} (async)`, resolved);
-          } catch (error) {
-            debug.error(
-              SYSTEM_BINDING.PREFIX,
-              SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, false),
-              error
-            );
-          }
-        });
+        if (currentId === latestId) {
+          runUpdate(resolved, true);
+        }
       },
       (error) => {
-        // Caution: Network or source errors are logged if they are still relevant.
         if (currentId === latestId && !isDisposed) {
           debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType), error);
         }
@@ -118,21 +127,10 @@ export function registerReactiveEffect<T>(
 ): void {
   const runner = createAsyncRunner(el, debugType, updater);
 
-  const isReactive = isAtom(source);
-  const isFunction = typeof source === 'function';
-
-  if (isReactive || isFunction) {
+  if (isAtom(source) || typeof source === 'function') {
     registry.trackEffect(
       el,
-      effect(
-        () => {
-          const value = isReactive
-            ? (source as ReadonlyAtom<T | Promise<T>>).value
-            : (source as () => T | Promise<T>)();
-          runner(value);
-        },
-        { name: debugType }
-      )
+      effect(() => runner(getSourceValue(source)), { name: debugType })
     );
   } else {
     runner(source as T | Promise<T>);
@@ -174,19 +172,10 @@ export function registerMapEffect<T>(
     const promises: Promise<{ key: string; value: T }>[] = [];
 
     for (const key of keys) {
-      const source = sourceMap[key];
-
-      let value: T | Promise<T>;
-      if (isAtom(source)) {
-        value = (source as ReadonlyAtom<T | Promise<T>>).value;
-      } else if (typeof source === 'function') {
-        value = (source as Function)();
-      } else {
-        value = source as T | Promise<T>;
-      }
+      const value = getSourceValue(sourceMap[key]);
 
       if (isPromise(value)) {
-        promises.push(value.then((v) => ({ key, value: v })));
+        promises.push((value as Promise<T>).then((v) => ({ key, value: v })));
       } else {
         resolved[key] = value as T;
       }

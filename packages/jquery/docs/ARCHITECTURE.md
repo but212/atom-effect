@@ -59,6 +59,7 @@ The `atomBind` method acts as a centralized dispatcher for multiple declarative 
 - **Task-Based Loop**: Pre-compiles requested bindings into a task array before iterating over the jQuery collection. This prevents redundant object key enumeration inside the DOM iteration loop.
 - **Monomorphic Strategy**: Handlers (e.g., `InputBinding`) resolve their read/write strategies (like `multipleSelect` handling) at construction time, avoiding feature-detection branches in the reactive execution path.
 - **Local Caching**: Specific handlers cache the last written DOM value to bypass redundant layout thrashing during overlapping update cycles.
+- **O(1) Radio Group Indexing**: To prevent global DOM scans (`$(document).find`) during radio button updates, the engine maintains a scoped `WeakMap` cache of active radio inputs by their form or document container, enabling instantaneous state synchronization among peer radio options.
 
 ---
 
@@ -69,7 +70,7 @@ The `atomBind` method acts as a centralized dispatcher for multiple declarative 
 The `BindingRegistry` is responsible for tracking and releasing reactive resources associated with DOM nodes.
 
 - **WeakMap Storage**: Utilizes a central `WeakMap` (`nodeStateMap`) to associate DOM elements with their active `EffectObject` instances, allowing the garbage collector to reclaim resources if an element is removed externally.
-- **Static Node Snapshotting**: Bound elements are tagged with the `_aes-bound` class. The registry uses `querySelectorAll` to gather a static snapshot of elements requiring cleanup, avoiding the performance penalties of live `NodeList` collections during teardown.
+- **Static Node Snapshotting & Early-Exit**: Bound elements are tagged with the `_aes-bound` class. To optimize teardown on unmodified DOM subtrees, the registry checks for class presence (`_aes-bound`, `_aes-has-shadow`) using `getElementsByClassName` (O(1) browser-level index check) to skip expensive `querySelectorAll` queries entirely on clean trees.
 
 ### 3.2 Automated Teardown (`MutationObserver`)
 
@@ -112,7 +113,7 @@ The `ComponentState` class centralizes all reactive resources (Attribute Lenses,
 Dependency Injection (Provide/Inject) relies on the `ContextEngine` to track elements moving through the DOM.
 
 - **Just-in-Time Observation**: The global `MutationObserver` used for tracking context shifts is activated using a **Reference Counting** (`retain`/`release`) pattern. The observer is connected only when there are active injections or offline components pending setup.
-- **Event-Based Discovery**: `discover` relies on synchronous DOM event bubbling (`aej:context-request`) to locate providers across Shadow DOM boundaries.
+- **Direct-Walk Discovery**: `discover` traverses the DOM tree directly using parent-pointers (crossing Shadow DOM boundaries via `host`) for fast-path O(depth) resolution, falling back to bubbling `CustomEvent` dispatch if no local provider state is resolved.
 - **Late-Bound Proxies**: `injectAtom` returns a Proxy that tracks `ContextEngine.version`. If the DOM structure mutates, the Proxy invalidates its cache and re-discovers its provider on the next access.
 
 ### 5.3 Stylesheet Caching

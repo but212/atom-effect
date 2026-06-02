@@ -11,7 +11,7 @@
  * tracking and notification logic to ensure architectural purity.
  */
 
-import { SlotBuffer } from '@but212/atom-effect-utils';
+import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import { COMPUTED_STATE_FLAGS, ERROR_MESSAGES, IS_DEV, KIND, LOG_PREFIX } from '@/constants';
 import type {
   AtomErrorConstructor,
@@ -22,12 +22,12 @@ import type {
   Prettify,
   ReactiveNode,
   Subscriber,
-  SubscriberKind,
   SubscriberTarget,
   Subscription,
   TrackingContext,
 } from '@/types';
-import { AtomError, wrapError } from '@/utils';
+import { AtomError, nextSmi, wrapError } from '@/utils';
+
 import {
   BUFFER_FLAGS,
   claimExisting,
@@ -37,7 +37,7 @@ import {
   isBufferShallowDirty,
 } from './buffers';
 
-import { nextEpoch, nextSmi } from './scheduler';
+import { nextEpoch } from './scheduler';
 
 /** @internal */
 export function createTrackingContext(): TrackingContext {
@@ -57,8 +57,7 @@ export function pushTrackingSubscriber(
 export function popTrackingSubscriber(context: TrackingContext): void {
   const stack = context.stack;
   stack.pop();
-  const len = stack.length;
-  context.current = len > 0 ? stack[len - 1]! : null;
+  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
 }
 
 /**
@@ -67,8 +66,8 @@ export function popTrackingSubscriber(context: TrackingContext): void {
  */
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
   const stack = context.stack;
-  stack.length = depth;
-  context.current = depth > 0 ? stack[depth - 1]! : null;
+  stack.length = Math.max(0, Math.min(depth, stack.length));
+  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
 }
 
 /**
@@ -98,29 +97,11 @@ export function resetTrackingContext(context: TrackingContext): void {
   context.current = null;
 }
 
-/** @internal */
-export function createTrackingContextObject(): TrackingContext {
-  return createTrackingContext();
-}
-
 /**
  * Role: Global singleton orchestrating the current reactive tracking state.
  * @internal
  */
 export const trackingContext = createTrackingContext();
-
-/**
- * Logic: Strategy Dispatch
- * Table-driven notification strategies to avoid branching in hot-path loops.
- * @internal
- */
-const NOTIFIER_STRATEGY: Record<
-  SubscriberKind,
-  (sub: Subscription<unknown>, newValue?: unknown, oldValue?: unknown) => void
-> = {
-  [KIND.Fn]: (sub, n, o) => (sub.t as (n?: unknown, o?: unknown) => void)(n, o),
-  [KIND.Obj]: (sub) => (sub.t as Subscriber).execute(),
-};
 
 /**
  * Executes a scope where reactive dependencies are suppressed.
@@ -181,14 +162,15 @@ export function nodeTrackDependency<T>(
   dep: Dependency,
   notifyCallback: () => void
 ): void {
+  const deps = tracker._storage.deps;
+  if (deps == null) return;
+
   const trackEpoch = tracker._trackEpoch;
 
   if (dep._lastSeenEpoch === trackEpoch) return;
   dep._lastSeenEpoch = trackEpoch;
 
-  const trackIndex = tracker._trackCount;
-  tracker._trackCount = trackIndex + 1;
-  const deps = tracker._storage.deps!;
+  const trackIndex = tracker._trackCount++;
 
   // Logic: Subscription Reconciliation
   // Attempts to reuse an existing subscription from a previous run to minimize
@@ -203,20 +185,22 @@ export function nodeTrackDependency<T>(
   }
 }
 
-/** @internal */
-export function createSubscription<T, K extends SubscriberKind>(
-  k: K,
-  t: K extends typeof KIND.Fn ? (newValue?: T, oldValue?: T) => void : Subscriber
-): Subscription<T> {
-  return { k, t } as Subscription<T>;
-}
-
 /**
  * Logic: SMI-safe increment to prevent V8 hidden class de-optimization.
  * @internal
  */
 export function nextVersion(v: number): number {
   return nextSmi(v);
+}
+
+function tryCreateSubscription<T>(listener: SubscriberTarget<T>): Subscription<T> | undefined {
+  if (typeof listener === 'function') {
+    return { k: KIND.Fn, t: listener } as Subscription<T>;
+  }
+  if (listener != null && typeof (listener as Subscriber).execute === 'function') {
+    return { k: KIND.Obj, t: listener } as Subscription<T>;
+  }
+  return undefined;
 }
 
 /**
@@ -230,41 +214,49 @@ export function nextVersion(v: number): number {
  *
  * @internal
  */
-export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): () => void {
-  let link: Subscription<T> | undefined;
+export function nodeSubscribe<T>(
+  node: ReactiveNode<T>,
+  listener: SubscriberTarget<T>
+): Result<() => void, Error> {
+  let link = tryCreateSubscription(listener);
 
-  if (typeof listener === 'function') {
-    link = createSubscription(KIND.Fn, listener);
-  } else if (listener != null && typeof (listener as Subscriber).execute === 'function') {
-    link = createSubscription(KIND.Obj, listener);
-  }
-
-  if (!link)
-    throw wrapError(
-      new TypeError('Invalid subscriber'),
-      AtomError,
-      ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
+  if (!link) {
+    return Result.err(
+      wrapError(
+        new TypeError('Invalid subscriber'),
+        AtomError,
+        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
+      )
     );
+  }
 
   node._storage.slots ??= new SlotBuffer<Subscription<T>>();
   const slots = node._storage.slots;
 
   if (nodeHasSubscription(node, listener)) {
     if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
-    return () => {};
+    return Result.ok(() => {});
   }
 
   slots.push(link);
-  return () => nodeUnsubscribe(node, link as Subscription<T>);
+  let n: ReactiveNode<T> | undefined = node;
+  return Result.ok(() => {
+    if (n && link) {
+      nodeUnsubscribe(n, link);
+      n = undefined;
+      link = undefined;
+    }
+  });
 }
 
 /** @internal */
 export function nodeUnsubscribe<T>(node: ReactiveNode<T>, link: Subscription<T>): void {
   const slots = node._storage.slots;
-  if (slots === null) return;
+  if (slots == null) return;
 
-  slots.remove(link);
-  slots.compact();
+  if (slots.remove(link)) {
+    slots.compact();
+  }
 }
 
 /**
@@ -284,7 +276,7 @@ export function nodeNotifySubscribers<T>(
   oldValue: T | undefined
 ): void {
   const slots = node._storage.slots;
-  if (slots === null || slots.size === 0) return;
+  if (slots == null || slots.size === 0) return;
 
   const ctx = trackingContext;
   const prevCurrent = ctx.current;
@@ -297,22 +289,19 @@ export function nodeNotifySubscribers<T>(
   slots.lock();
   try {
     const len = slots.length;
-    const fnStrategy = NOTIFIER_STRATEGY[KIND.Fn];
-    const objStrategy = NOTIFIER_STRATEGY[KIND.Obj];
-    const fnKind = KIND.Fn;
 
     for (let i = 0; i < len; i++) {
       const sub = slots.at(i);
-      if (sub === null) continue;
-
-      try {
-        if (sub.k === fnKind) {
-          fnStrategy(sub as Subscription<unknown>, newValue, oldValue);
-        } else {
-          objStrategy(sub as Subscription<unknown>, newValue, oldValue);
+      if (sub !== null) {
+        try {
+          if (sub.k === KIND.Fn) {
+            (sub.t as (n?: unknown, o?: unknown) => void)(newValue, oldValue);
+          } else {
+            (sub.t as Subscriber).execute();
+          }
+        } catch (e) {
+          console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);
         }
-      } catch (e) {
-        console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);
       }
     }
   } finally {
@@ -326,7 +315,7 @@ export function nodeNotifySubscribers<T>(
 /** @internal */
 export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown): boolean {
   const slots = node._storage.slots;
-  if (slots === null || slots.size === 0) return false;
+  if (slots == null || slots.size === 0) return false;
 
   const len = slots.length;
   for (let i = 0; i < len; i++) {

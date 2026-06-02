@@ -47,30 +47,54 @@ export type ErrorStrategy = {
   };
 };
 
-/**
- * Data-driven strategies for extracting metadata from different error types.
- * @internal
- */
+const toStr = (val: unknown, fallback = ''): string => {
+  try {
+    return val == null ? fallback : String(val);
+  } catch {
+    return fallback;
+  }
+};
+
+const toStrOrUndef = (val: unknown): string | undefined => {
+  try {
+    return val == null ? undefined : String(val);
+  } catch {
+    return undefined;
+  }
+};
+
 export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
   {
     /** Logic: Brand-based check for system errors */
-    test: (e: unknown): boolean =>
-      typeof e === 'object' && e !== null && '_tag' in e && String(e._tag).endsWith('Error'),
-    fetch: (e: unknown) => ({
-      name: String((e as Record<string, unknown>).name),
-      message: String((e as Record<string, unknown>).message),
-      recoverable: Boolean((e as Record<string, unknown>).recoverable),
-      code: (e as Record<string, unknown>).code as string | undefined,
-    }),
+    test: (e: unknown): boolean => {
+      try {
+        const tag = (e as Record<string, unknown>)?._tag;
+        return typeof tag === 'string' && tag.endsWith('Error');
+      } catch {
+        return false;
+      }
+    },
+    fetch: (e: unknown) => {
+      const obj = e as Record<string, unknown>;
+      return {
+        name: toStr(obj.name),
+        message: toStr(obj.message),
+        recoverable: !!obj.recoverable,
+        code: toStrOrUndef(obj.code),
+      };
+    },
   },
   {
     /** Logic: Fallback for standard JavaScript Errors */
     test: (e: unknown): e is Error => e instanceof Error,
-    fetch: (e: unknown) => ({
-      name: (e as Error).name,
-      message: (e as Error).message,
-      recoverable: true,
-      code: (e as Record<string, unknown>).code as string | undefined,
-    }),
+    fetch: (e: unknown) => {
+      const err = e as Error & Record<string, unknown>;
+      return {
+        name: err.name,
+        message: err.message,
+        recoverable: typeof err.recoverable === 'boolean' ? err.recoverable : true,
+        code: toStrOrUndef(err.code),
+      };
+    },
   },
 ];

@@ -166,7 +166,7 @@ describe('$.atomFetch', () => {
 
       expect(data.hasError).toBe(true);
       expect(onError).toHaveBeenCalledTimes(1);
-      expect(onError.mock.calls[0]![0].message).toContain('Immediate failure');
+      expect(onError.mock.calls[0]?.[0].message).toContain('Immediate failure');
     });
 
     it('should capture errors thrown within the transform function', async () => {

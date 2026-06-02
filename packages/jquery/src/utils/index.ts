@@ -10,8 +10,6 @@
  * inconsistencies (e.g. SVG classNames) and normalize data for reactive state access.
  */
 
-import type { RouteDefinition } from '@/types';
-
 export { isPromise } from '@but212/atom-effect-utils';
 
 /**
@@ -29,16 +27,15 @@ export { isPromise } from '@but212/atom-effect-utils';
  * @internal
  */
 export function getSelector(el: Element): string {
-  const { localName: tag, id, className } = el;
+  const tag = el.localName;
+  const id = el.id;
+  const classStr = el.getAttribute('class');
+  const type = (el as HTMLInputElement).type;
+
   let res = tag;
   if (id) {
     res += `#${id}`;
   }
-
-  const classStr =
-    typeof className === 'string'
-      ? className
-      : (className as unknown as SVGAnimatedString)?.baseVal;
 
   if (classStr) {
     const trimmed = classStr.trim().replace(/\s+/g, '.');
@@ -47,29 +44,12 @@ export function getSelector(el: Element): string {
     }
   }
 
-  const type = (el as { type?: string }).type;
   if (type && type !== 'text') {
     res += `.${type}`;
   }
 
   return res;
 }
-
-/**
- * Logic: Template Type Guard
- * Determines if a route definition is configured to use a template selector.
- * @internal
- */
-export const isTemplateRoute = (r: RouteDefinition): boolean =>
-  r !== null && typeof r === 'object' && typeof r.template === 'string';
-
-/**
- * Logic: Render Type Guard
- * Determines if a route definition is configured with a custom render function.
- * @internal
- */
-export const isRenderRoute = (r: RouteDefinition): boolean =>
-  r !== null && typeof r === 'object' && typeof r.render === 'function';
 
 /**
  * Logic: Nested Serialization

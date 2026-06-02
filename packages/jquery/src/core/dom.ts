@@ -34,19 +34,14 @@ export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQue
  * @internal
  */
 export function unpack<T, O>(val: T | [T, O]): [T, O?] {
-  if (!Array.isArray(val) || val.length !== 2) {
-    return [val as T];
+  if (Array.isArray(val) && val.length === 2 && val[1] != null) {
+    const second = val[1];
+    if (
+      typeof second === 'function' ||
+      (typeof second === 'object' && !('value' in second) && !('then' in second))
+    ) {
+      return val as [T, O];
+    }
   }
-
-  const second = val[1];
-  if (second === null || second === undefined) {
-    return [val as T];
-  }
-
-  // Logic: Check if the second element qualifies as a configuration object or function.
-  const isTuple =
-    typeof second === 'function' ||
-    (typeof second === 'object' && !('value' in second) && !('then' in second));
-
-  return isTuple ? (val as [T, O]) : ([val as T] as [T, O?]);
+  return [val as T];
 }

@@ -1,6 +1,5 @@
-import type { Option } from './option';
 import type { Result } from './result';
-import { OPTION_SYMBOL, RESULT_SYMBOL } from './symbols';
+import { RESULT_SYMBOL } from './symbols';
 
 /**
  * Determines whether a value is a Promise or a Thenable.
@@ -31,25 +30,7 @@ export function isPromise<T = unknown>(value: unknown): value is PromiseLike<T> 
   return typeof (value as { then: unknown }).then === 'function';
 }
 
-/**
- * Checks if a value is a valid {@link Option} instance.
- *
- * When to use:
- * - When validating if an unknown object is an Option from this library.
- *
- * Logic:
- * - Uses `OPTION_SYMBOL` to distinguish Options from other objects with
- *   an `ok` property, ensuring nominal type safety.
- *
- * @example
- * if (isOption(val)) {
- *   console.log(val.ok ? "Some" : "None");
- * }
- */
-export const isOption = (val: unknown): val is Option<unknown> =>
-  val != null &&
-  typeof val === 'object' &&
-  (val as Record<symbol, unknown>)[OPTION_SYMBOL] === true;
+export { isOption } from './option';
 
 /**
  * Checks if a value is a valid {@link Result} instance.

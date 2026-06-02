@@ -10,11 +10,10 @@
  * while maintaining memory safety via automated lifecycle cleanup.
  */
 
-import { effect, untracked } from '@but212/atom-effect';
+import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
-import type { EffectObject, ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
-import { getSelector } from '@/utils';
+import type { ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import { ListContext } from './context';
 import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
@@ -59,7 +58,7 @@ export function applyListBinding<T>(
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 
-  const ctx = new ListContext<T>($c, getSelector(element), onRemove);
+  const ctx = new ListContext<T>($c, onRemove);
 
   const fx = effect(() => {
     // Accessing .value establishes the reactive dependency.
@@ -73,7 +72,16 @@ export function applyListBinding<T>(
       const isInitial = ctx.snapshots.length === 0 && ctx.removingKeys.size === 0;
 
       // Pipeline: Diff -> Render -> Cleanup -> Place
-      const diff = buildIndices(ctx, items, count, getKey, update, isEqual);
+      const diff = buildIndices(
+        ctx.snapshots,
+        ctx.removingKeys,
+        ctx.keyToIndex,
+        items,
+        count,
+        getKey,
+        update,
+        isEqual
+      );
       ctx.keyToIndex = diff.keyToIndex;
 
       const fragment = renderItems(diff, options, isInitial);
@@ -91,6 +99,13 @@ export function applyListBinding<T>(
   if (eventBindings.length > 0) {
     setupEvents(ctx, $c, eventBindings);
   }
+
+  instances.set(element, { fx, ctx });
+  registry.trackEffect(element, fx);
+  registry.onCleanup(element, () => {
+    ctx.dispose();
+    instances.delete(element);
+  });
 
   return { fx, ctx };
 }
@@ -119,15 +134,10 @@ export function applyListBinding<T>(
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    const element = this[i]!;
-    const { fx, ctx } = applyListBinding(element, source, options);
-
-    instances.set(element, { fx, ctx });
-    registry.trackEffect(element, fx);
-    registry.onCleanup(element, () => {
-      ctx.dispose();
-      instances.delete(element);
-    });
+    const el = this[i];
+    if (el) {
+      applyListBinding(el, source, options);
+    }
   }
   return this;
 }
@@ -143,22 +153,13 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
  * @internal
  */
 function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
-  return Object.entries(events || {}).map(([eventKey, callback]) => {
-    const trimmed = eventKey.trim();
+  return Object.entries(events || {}).map(([key, callback]) => {
+    const trimmed = key.trim();
     const spaceIdx = trimmed.indexOf(' ');
-
-    let type: string;
-    let selector: string;
-
-    if (spaceIdx === -1) {
-      type = trimmed;
-      selector = '> *';
-    } else {
-      type = trimmed.substring(0, spaceIdx);
-      selector = trimmed.substring(spaceIdx + 1).trim() || '> *';
-    }
-
-    return { type, selector, callback: callback as Function };
+    const type = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+    const selector = spaceIdx === -1 ? '> *' : trimmed.slice(spaceIdx + 1).trim() || '> *';
+    // biome-ignore lint/suspicious/noExplicitAny: cast to generic callback with any arguments
+    return { type, selector, callback: callback as (...args: any[]) => any };
   });
 }
 
@@ -173,23 +174,17 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
  * @internal
  */
 function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: EventBinding[]): void {
-  for (let i = 0, len = bindings.length; i < len; i++) {
-    const { type, selector, callback } = bindings[i]!;
+  const containerEl = $container[0];
+  if (!containerEl || containerEl.nodeType !== 1) return;
 
+  for (const { type, selector, callback } of bindings) {
     $container.on(
       `${type}.atomList`,
       selector,
       function (this: HTMLElement, e: JQuery.TriggeredEvent) {
-        const target = (this as HTMLElement).closest?.('[data-atom-key]') as HTMLElement | null;
-        if (!target) return;
-
-        const rawKey = target.getAttribute('data-atom-key');
-        if (rawKey === null) return;
-
-        const index = ctx.getIndex(rawKey);
-        if (index !== undefined) {
-          // Execution: 'this' is the triggered element, first arg is the reactive item.
-          callback.call(target, ctx.snapshots[index]!.item, index, e);
+        const resolved = ctx.resolveEventTarget(this, containerEl);
+        if (resolved) {
+          callback.call(resolved.target, resolved.item, resolved.index, e);
         }
       }
     );

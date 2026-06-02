@@ -9,7 +9,8 @@
  * (exit animations) to maintain visual stability and prevent memory leaks.
  */
 
-import type { EffectObject, ListKey } from '@/types';
+import type { EffectObject } from '@but212/atom-effect';
+import type { ListKey } from '@/types';
 import { setAtomKey } from './utils';
 
 /**
@@ -19,8 +20,8 @@ import { setAtomKey } from './utils';
 export interface ListSnapshot<T> {
   key: ListKey;
   item: T;
-  /** The actual DOM element or JQuery wrapper currently representing this item. */
-  node?: Element | JQuery | undefined;
+  /** The actual JQuery wrapper representing this item. */
+  node?: JQuery | undefined;
 }
 
 /**
@@ -34,84 +35,34 @@ export interface ListSnapshot<T> {
  */
 export class ListContext<T> {
   /** Sequential snapshot of the previous render state. */
-  #snapshots: ListSnapshot<T>[] = [];
+  snapshots: ListSnapshot<T>[] = [];
   /** Keys currently undergoing asynchronous exit animations. */
-  #removingKeys = new Set<ListKey>();
+  readonly removingKeys = new Set<ListKey>();
   /** Inverse lookup for O(1) index retrieval from a key. */
-  #keyToIndex = new Map<ListKey, number>();
+  keyToIndex = new Map<ListKey, number>();
   /** Cached reference to the placeholder element shown when the list is empty. */
-  #$emptyEl: JQuery | null = null;
+  $emptyEl: JQuery | null = null;
   /** The reactive effect controlling this list. Needed to check disposal state during async tasks. */
-  #fx: EffectObject | undefined = undefined;
+  fx: EffectObject | undefined = undefined;
 
   /** Target container element. */
-  readonly #$container: JQuery;
-  /** Selector for the container. */
-  readonly #containerSelector: string;
+  readonly $container: JQuery;
   /** Optional removal lifecycle hook. */
-  readonly #onRemove: (($el: JQuery) => Promise<void> | void) | undefined;
+  readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined;
 
-  constructor(
-    $container: JQuery,
-    containerSelector: string,
-    onRemove: (($el: JQuery) => Promise<void> | void) | undefined
-  ) {
-    this.#$container = $container;
-    this.#containerSelector = containerSelector;
-    this.#onRemove = onRemove;
-  }
-
-  // Getters and setters for compatibility with existing functional logic
-  get snapshots(): ListSnapshot<T>[] {
-    return this.#snapshots;
-  }
-  set snapshots(value: ListSnapshot<T>[]) {
-    this.#snapshots = value;
-  }
-  get removingKeys(): Set<ListKey> {
-    return this.#removingKeys;
-  }
-  get keyToIndex(): Map<ListKey, number> {
-    return this.#keyToIndex;
-  }
-  set keyToIndex(value: Map<ListKey, number>) {
-    this.#keyToIndex = value;
-  }
-  get $emptyEl(): JQuery | null {
-    return this.#$emptyEl;
-  }
-  set $emptyEl(value: JQuery | null) {
-    this.#$emptyEl = value;
-  }
-  get fx(): EffectObject | undefined {
-    return this.#fx;
-  }
-  set fx(value: EffectObject | undefined) {
-    this.#fx = value;
-  }
-  get $container(): JQuery {
-    return this.#$container;
-  }
-  get containerSelector(): string {
-    return this.#containerSelector;
-  }
-  get onRemove() {
-    return this.#onRemove;
+  constructor($container: JQuery, onRemove: (($el: JQuery) => Promise<void> | void) | undefined) {
+    this.$container = $container;
+    this.onRemove = onRemove;
   }
 
   /**
    * Retrieves the index of a key, handling string-to-number normalization.
    */
-  getIndex(key: ListKey | string): number | undefined {
-    const idx = this.#keyToIndex.get(key as ListKey);
+  getIndex(key: string): number | undefined {
+    const idx = this.keyToIndex.get(key as ListKey);
     if (idx !== undefined) return idx;
-
-    if (typeof key === 'string') {
-      const n = Number.parseFloat(key);
-      if (!Number.isNaN(n)) return this.#keyToIndex.get(n);
-    }
-
-    return undefined;
+    const n = Number(key);
+    return Number.isNaN(n) ? undefined : this.keyToIndex.get(n);
   }
 
   /**
@@ -119,7 +70,7 @@ export class ListContext<T> {
    */
   remove(k: ListKey, $el: JQuery): void {
     setAtomKey($el, null);
-    this.#removingKeys.add(k);
+    this.removingKeys.add(k);
     this.scheduleRemoval(k, $el);
   }
 
@@ -127,7 +78,7 @@ export class ListContext<T> {
    * Initiates the physical removal of an element.
    */
   scheduleRemoval(k: ListKey, $el: JQuery): void {
-    const res = this.#onRemove?.($el);
+    const res = this.onRemove?.($el);
 
     if (res instanceof Promise) {
       const commit = () => this.commitRemoval(k, $el);
@@ -141,7 +92,7 @@ export class ListContext<T> {
    * Finalizes DOM removal and state cleanup.
    */
   commitRemoval(k: ListKey, $el: JQuery): void {
-    if (this.#fx?.isDisposed) return;
+    if (this.fx?.isDisposed) return;
 
     const el = $el[0];
     // Check if the element was re-bound to the list while we were waiting.
@@ -150,17 +101,42 @@ export class ListContext<T> {
     if (el?.isConnected) {
       $el.remove();
     }
-    this.#removingKeys.delete(k);
+    this.removingKeys.delete(k);
+  }
+
+  /**
+   * Resolves the nearest active list item's DOM element, its index, and the corresponding item
+   * from a starting element, searching up to the container limit.
+   */
+  resolveEventTarget(
+    start: Element,
+    container: Element
+  ): { target: HTMLElement; index: number; item: T } | null {
+    let current: Element | null = start;
+    while (current && current !== container) {
+      const rawKey = current.getAttribute('data-atom-key');
+      if (rawKey !== null) {
+        const index = this.getIndex(rawKey);
+        if (index !== undefined) {
+          const snapshot = this.snapshots[index];
+          if (snapshot) {
+            return { target: current as HTMLElement, index, item: snapshot.item };
+          }
+        }
+      }
+      current = current.parentElement;
+    }
+    return null;
   }
 
   /**
    * Full cleanup of state and DOM references.
    */
   dispose(): void {
-    this.#removingKeys.clear();
-    this.#snapshots.length = 0;
-    this.#keyToIndex.clear();
-    this.#$emptyEl?.remove();
-    this.#$container.off('.atomList');
+    this.removingKeys.clear();
+    this.snapshots.length = 0;
+    this.keyToIndex.clear();
+    this.$emptyEl?.remove();
+    this.$container.off('.atomList');
   }
 }

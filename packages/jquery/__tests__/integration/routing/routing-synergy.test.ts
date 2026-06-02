@@ -76,7 +76,9 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
   });
 
   afterEach(() => {
-    activeManagers.forEach((m) => m.destroy());
+    for (const m of activeManagers) {
+      m.destroy();
+    }
     $(document.body).empty();
     $.initAEJ({ autoCleanup: false });
     window.location.hash = '';

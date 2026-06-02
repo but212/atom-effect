@@ -110,6 +110,14 @@ Asynchronous computations are treated as state machines.
 
 Lenses utilize a prototype-preserving clone-and-set mechanism. Updates to nested properties of class instances preserve `instanceof` relationships and access to class methods, ensuring structural integrity across the reactive boundary.
 
+### Error Handling with Result Propagation
+
+To maintain a pure functional core and minimize internal `try-catch` performance overhead, the reactive engine implements a hybrid error propagation model:
+
+1. **Internal Monadic Propagation**: Engine-internal checks—such as argument validation, loop budget boundaries, disposed state access, and circular dependency checks—return a monadic `Result<T, Error>` wrapper. They do not throw exceptions directly.
+2. **Synchronous Boundary Unwrapping**: At the public API boundaries (e.g., `.value` getters on Computeds, factory constructors, and public scheduler wrappers), the engine calls `Result.unwrap(result)`. This throws a standard JavaScript `Error` (e.g., `ComputedError`, `EffectError`, `SchedulerError`) when a failure is encountered, ensuring 100% backward compatibility with throwing consumer code.
+3. **Asynchronous Scheduler Isolation**: During batch updates in the microtask loop, if a scheduled job returns a failed `Result`, the scheduler intercepts the result and wraps it in a `SchedulerError` before logging it, avoiding unhandled promise rejections and preserving overall system stability.
+
 ---
 
 ## 6. Design Trade-offs

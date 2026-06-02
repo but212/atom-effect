@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import $, { cleanup } from '@/index';
+import $, { cleanup, disableAutoCleanup } from '@/index';
 
 describe('Binding Registry', () => {
   beforeEach(() => {
@@ -70,16 +70,67 @@ describe('Binding Registry', () => {
       $el.atomText(atom);
 
       // Remove and verify cleanup
-      $el[0]!.remove();
+      $el[0]?.remove();
       await vi.waitFor(() => {
         atom.value = 'v2';
         return $el.text() !== 'v2';
       });
     });
 
+    it('should remove DOMContentLoaded listener after body is ready', async () => {
+      // 1. Reset registry scheduled state
+      disableAutoCleanup();
+
+      const originalBody = document.body;
+      const bodySpy = vi
+        .spyOn(document, 'body', 'get')
+        .mockReturnValue(null as unknown as HTMLElement);
+
+      // 2. Initialize with autoCleanup allowed, but body is null so it won't schedule immediately.
+      $.initAEJ({ autoCleanup: true });
+
+      const removeListenerSpy = vi.spyOn(document, 'removeEventListener');
+      const addListenerSpy = vi.spyOn(document, 'addEventListener');
+
+      try {
+        // Trigger binding before body is ready -> registers DOMContentLoaded listener
+        const atom = $.atom('v1');
+        const earlyEl = document.createElement('div');
+        $(earlyEl).atomText(atom);
+
+        expect(addListenerSpy).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function));
+
+        // Capture the callback registered to DOMContentLoaded
+        const domContentLoadedCallback = addListenerSpy.mock.calls.find(
+          (call) => call[0] === 'DOMContentLoaded'
+        )?.[1] as (() => void) | undefined;
+
+        expect(domContentLoadedCallback).toBeDefined();
+
+        // Now restore body and trigger the callback
+        bodySpy.mockReturnValue(originalBody);
+
+        if (domContentLoadedCallback) {
+          domContentLoadedCallback();
+        }
+
+        // Verify removeEventListener was called to clean it up
+        expect(removeListenerSpy).toHaveBeenCalledWith(
+          'DOMContentLoaded',
+          domContentLoadedCallback
+        );
+      } finally {
+        // Clean up spies
+        bodySpy.mockRestore();
+        removeListenerSpy.mockRestore();
+        addListenerSpy.mockRestore();
+      }
+    });
+
     it('should support automatic cleanup within Shadow DOM boundaries', async () => {
       const $host = $('<div>').appendTo(document.body);
-      const shadow = $host[0]!.attachShadow({ mode: 'open' });
+      const shadow = $host[0]?.attachShadow({ mode: 'open' });
+      if (!shadow) throw new Error('Shadow root not available');
       $.initAEJ({ autoCleanup: { root: shadow } });
 
       const atom = $.atom('active');
@@ -94,7 +145,7 @@ describe('Binding Registry', () => {
       // 2. Mutation cleanup in shadow
       const $child2 = $('<span>').appendTo(shadow as unknown as HTMLElement);
       $child2.atomText(atom);
-      $child2[0]!.remove();
+      $child2[0]?.remove();
 
       await vi.waitFor(() => {
         atom.value = 'final';
@@ -115,7 +166,7 @@ describe('Binding Registry', () => {
       // Disable system globally
       $.initAEJ({ autoCleanup: false });
 
-      $el[0]!.remove();
+      $el[0]?.remove();
       await $.nextTick();
 
       // Should still be reactive (leaked)

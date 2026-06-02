@@ -10,10 +10,9 @@
  * dependency tracking, concurrency control, and lifecycle-bound cancellation.
  */
 
-import { computed } from '@but212/atom-effect';
-import { Result } from '@but212/atom-effect-utils';
+import { type ComputedAtom, computed } from '@but212/atom-effect';
 import $ from 'jquery';
-import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
+import type { FetchError, FetchOptions } from '@/types';
 
 /**
  * Logic: Priority Resolution
@@ -28,15 +27,13 @@ import type { ComputedAtom, FetchError, FetchOptions } from '@/types';
  */
 function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettings {
   const { ajaxOptions, method, headers } = options;
-  const base = typeof ajaxOptions === 'object' ? ajaxOptions : {};
-  const dynamic = typeof ajaxOptions === 'function' ? ajaxOptions() : {};
+  const optObj = typeof ajaxOptions === 'function' ? ajaxOptions() : ajaxOptions || {};
 
   return {
-    ...base,
-    ...dynamic,
+    ...optObj,
     url,
-    method: method || dynamic.method || base.method,
-    headers: { ...base.headers, ...dynamic.headers, ...headers },
+    method: method || optObj.method,
+    headers: { ...optObj.headers, ...headers },
     success: undefined,
     error: undefined,
     complete: undefined,
@@ -63,6 +60,11 @@ function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err ?? 'Unknown error'), { cause: err });
 }
 
+interface FetchSession {
+  xhr: JQuery.jqXHR | null;
+  aborted: boolean;
+}
+
 /**
  * Creates a computed atom that synchronizes with a network request.
  *
@@ -80,91 +82,65 @@ function toError(err: unknown): Error {
  * ```
  *
  * Logic: Concurrency Control
- * Uses AbortController and jqXHR.abort() to enforce a "latest-only"
- * resolution strategy. Older requests are canceled to prevent stale data
- * from overwriting newer updates.
+ * Uses a FetchSession data structure to abort the previous request and discard
+ * its result, enforcing a "latest-only" resolution strategy.
  */
 function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>): ComputedAtom<T> {
   const getUrl = typeof source === 'string' ? () => source : source;
-  let active: AbortController | null = null;
+  let activeSession: FetchSession | null = null;
+
+  const abortSession = (session: FetchSession | null) => {
+    if (session) {
+      session.aborted = true;
+      if (session.xhr && typeof session.xhr.abort === 'function') {
+        session.xhr.abort();
+      }
+    }
+  };
 
   const execute = async (): Promise<T> => {
     // Why: Abort the previous request if a new execution cycle starts to prevent race conditions.
-    active?.abort();
-    const controller = new AbortController();
-    active = controller;
-
-    let xhr: JQuery.jqXHR | undefined;
-    const cleanup = () => {
-      if (xhr && typeof xhr.abort === 'function') {
-        xhr.abort();
-      }
-    };
-
-    controller.signal.addEventListener('abort', cleanup);
-    if (controller.signal.aborted) {
-      cleanup();
-    }
+    abortSession(activeSession);
+    const session: FetchSession = { xhr: null, aborted: false };
+    activeSession = session;
 
     try {
-      /**
-       * Reason: Manual Error Handling
-       * Uses manual try-catch blocks to ensure compatibility with jqXHR's
-       * unique 'await' behavior and capture synchronous initialization errors
-       * for the `onError` hook.
-       */
-      let ajaxResult: Result<unknown, Error>;
-      try {
-        // Constraint: Dependency tracking must occur synchronously before the first 'await'.
-        const url = getUrl();
-        const settings = toSettings(url, options);
-        xhr = $.ajax(settings);
-        const data = await xhr;
-        ajaxResult = Result.ok(data);
-      } catch (err) {
-        ajaxResult = Result.err(toError(err));
+      // Constraint: Dependency tracking must occur synchronously before the first 'await'.
+      const url = getUrl();
+      const settings = toSettings(url, options);
+      const xhr = $.ajax(settings);
+      session.xhr = xhr;
+
+      if (session.aborted) {
+        abortSession(session);
       }
 
-      // Logic: Railway Transformation Pipeline
-      if (!ajaxResult.ok) {
-        const error = ajaxResult.error;
-        if (controller.signal.aborted) {
-          const abortErr = new Error('AbortError');
-          abortErr.name = 'AbortError';
-          throw abortErr;
-        }
+      const data = await xhr;
 
-        if (options.onError) {
-          const hookResult = Result.tryCatch(() => options.onError!(error));
-          if (!hookResult.ok) {
-            console.error('atomFetch: onError hook threw an error', hookResult.error);
-          }
-        }
-        throw error;
+      const transformedResult = options.transform
+        ? options.transform(data as unknown, xhr)
+        : (data as T);
+
+      return transformedResult instanceof Promise ? await transformedResult : transformedResult;
+    } catch (err) {
+      if (session.aborted) {
+        const abortErr = new Error('AbortError');
+        abortErr.name = 'AbortError';
+        throw abortErr;
       }
 
-      // Handle transformation (supports both sync and async)
-      const data = ajaxResult.value;
-      try {
-        const transformedResult = options.transform
-          ? options.transform(data as unknown, xhr!)
-          : (data as T);
-
-        const transformed =
-          transformedResult instanceof Promise ? await transformedResult : transformedResult;
-        return transformed as T;
-      } catch (err) {
-        const error = toError(err);
-        if (options.onError) {
-          Result.tryCatch(() => options.onError!(error));
+      const error = toError(err);
+      if (options.onError) {
+        try {
+          options.onError(error);
+        } catch (hookErr) {
+          console.error('atomFetch: onError hook threw an error', hookErr);
         }
-        throw error;
       }
+      throw error;
     } finally {
-      controller.signal.removeEventListener('abort', cleanup);
-      // Logic: Only clear the reference if this execution is the latest.
-      if (active === controller) {
-        active = null;
+      if (activeSession === session) {
+        activeSession = null;
       }
     }
   };
@@ -172,18 +148,18 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
   const atom = computed(execute, {
     defaultValue: options.defaultValue,
     lazy: options.eager === false,
-    ...(options.name !== undefined ? { name: options.name } : {}),
+    ...(options.name === undefined ? {} : { name: options.name }),
   });
 
   // Constraint: Pending network requests MUST be canceled when the atom is disposed.
   const originalDispose = atom.dispose.bind(atom);
   atom.dispose = () => {
-    active?.abort();
+    abortSession(activeSession);
     originalDispose();
   };
 
   return Object.assign(atom, {
-    abort: () => active?.abort(),
+    abort: () => abortSession(activeSession),
   }) as ComputedAtom<T> & { abort: () => void };
 }
 
