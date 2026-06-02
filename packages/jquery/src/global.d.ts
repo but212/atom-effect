@@ -26,6 +26,7 @@ import type {
 import type {
   AEJConfig,
   AsyncReactiveValue,
+  AtomComponentController,
   AtomNav,
   AtomNavOptions,
   AtomOptions,

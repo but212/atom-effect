@@ -39,6 +39,19 @@ describe('Atom Mount (Component Lifecycle)', () => {
     expect(cleanup2).toHaveBeenCalled();
   });
 
+  it('should support mounting components that return a teardown object ({ unmount })', () => {
+    const $el = $('<div>').appendTo(document.body);
+    const cleanup = vi.fn();
+
+    $el.atomMount(() => {
+      return { unmount: cleanup };
+    });
+
+    $el.atomUnmount();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    $el.remove();
+  });
+
   it('should recursively cleanup descendants', () => {
     const $parent = $('<div>').appendTo(document.body);
     const $child = $('<div>').appendTo($parent);

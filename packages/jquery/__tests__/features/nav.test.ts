@@ -276,6 +276,24 @@ describe('$.atomNav', () => {
 
       scrollSpy.mockRestore();
     });
+
+    it('should perform scroll when navigating to same path with a hash', async () => {
+      const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+      const scrollIntoViewSpy = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoViewSpy;
+
+      const nav = await harness.create();
+      // Initially navigate to /same-path
+      harness.mockAjax({ data: '<div id="sec">Section</div>' });
+      await nav.navigate('/same-path');
+      await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/same-path'));
+
+      // Navigate to /same-path#sec
+      await nav.navigate('/same-path#sec');
+      await vi.waitFor(() => expect(scrollIntoViewSpy).toHaveBeenCalled());
+
+      scrollSpy.mockRestore();
+    });
   });
 
   describe('PJAX Optimizations & Header Support', () => {
@@ -426,17 +444,30 @@ describe('$.atomNav', () => {
   describe('Edge Cases', () => {
     it('should prevent infinite loops when onMount triggers navigation', async () => {
       harness.mockAjax({ data: 'Content' });
-      let count = 0;
-      const nav = await harness.create({
+      let mountCount = 0;
+      let scheduledNavigation = Promise.resolve();
+      let nav: AtomNav | undefined;
+
+      nav = await harness.create({
         onMount: () => {
-          count++;
-          if (count === 1) nav.navigate('/');
+          mountCount++;
+          if (mountCount === 1) {
+            scheduledNavigation = new Promise<void>((resolve) => {
+              setTimeout(async () => {
+                await nav?.navigate('/');
+                resolve();
+              }, 0);
+            });
+          }
         },
       });
 
-      await nav.navigate('/');
+      const navigateSpy = vi.spyOn(nav, 'navigate');
+      await scheduledNavigation;
       await $.nextTick();
-      expect(count).toBe(1);
+
+      expect(navigateSpy).toHaveBeenCalledWith('/');
+      expect(mountCount).toBe(1);
     });
 
     it('should correctly intercept cross-page hash links', async () => {
@@ -450,6 +481,45 @@ describe('$.atomNav', () => {
       const $cross = $('<a href="/other#s" class="nav-link"></a>').appendTo('body');
       harness.simulateClick($cross[0]);
       await vi.waitFor(() => expect(ajaxSpy).toHaveBeenCalled());
+    });
+
+    it('should ignore click interception if data-target does not match target id', async () => {
+      const ajaxSpy = harness.mockAjax();
+      await harness.create({ selector: '.nav-link' });
+
+      const $link = $(
+        '<a class="nav-link" data-target="#other-target" href="/other"></a>'
+      ).appendTo('body');
+
+      let intercepted = false;
+      const checkIntercept = (e: Event) => {
+        intercepted = e.defaultPrevented;
+        e.preventDefault(); // Prevent Vitest browser iframe navigation!
+      };
+      document.addEventListener('click', checkIntercept, { once: true });
+
+      harness.simulateClick($link[0]);
+      await $.nextTick();
+
+      expect(intercepted).toBe(false);
+      expect(ajaxSpy).not.toHaveBeenCalled();
+      $link.remove();
+    });
+
+    it('should assign location when navigating to a different origin', async () => {
+      const assignSpy = vi.fn();
+      const mockWin = {
+        location: { ...window.location, assign: assignSpy, href: 'http://localhost/' },
+        history: window.history,
+        document: window.document,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as Window & typeof globalThis;
+
+      const nav = await harness.create({ window: mockWin });
+      await nav.navigate('https://google.com');
+
+      expect(assignSpy).toHaveBeenCalledWith('https://google.com');
     });
   });
 });

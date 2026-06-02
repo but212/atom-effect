@@ -525,8 +525,9 @@ export interface AtomComponentController {
   setup(
     options?:
       | ShadowRoot
+      | DocumentFragment
       | {
-          shadowRoot?: ShadowRoot;
+          shadowRoot?: ShadowRoot | DocumentFragment;
           /** Maps event names to atoms or getter functions for automatic dispatching. */
           dispatch?: Record<string, ReactiveValue<unknown>>;
           /** Maps data-bind keys to atoms for declarative DOM hydration. */
@@ -545,7 +546,7 @@ export interface AtomComponentController {
            * Reactive CSS Part bindings.
            * Maps element selectors or data-aej-part keys to atoms for dynamic part names.
            */
-          parts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean>>>;
+          parts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean> | null>>;
           /**
            * Reactive value for Form-Associated Custom Elements (FACE).
            * Automatically synchronized with the native <form> via internals.setFormValue().
@@ -591,7 +592,7 @@ export interface AtomComponentStatic {
   aejStyles?: (string | CSSStyleSheet)[];
   aejBind?: Record<string, ReadonlyAtom<unknown>>;
   aejAria?: Record<string, ReadonlyAtom<unknown>>;
-  aejParts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean>>>;
+  aejParts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean> | null>>;
   aejDispatch?: Record<string, ReactiveValue<unknown>>;
   aejValue?: ReadonlyAtom<unknown> | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
   aejValidation?:

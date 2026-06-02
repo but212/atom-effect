@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
+import { disableAutoCleanup } from '@/core/registry';
 import $ from '@/index';
 
 describe('jQuery Patch (Lifecycle & Events)', () => {
@@ -25,6 +27,38 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
       atom.value = 'removed';
       await $.nextTick();
       expect($target.text()).not.toBe('removed');
+    });
+
+    it('should support remove and detach with custom jQuery selector arguments', async () => {
+      const $root = $(
+        '<div id="root"><span class="target filter-me"></span><span class="target keep-me"></span></div>'
+      ).appendTo(document.body);
+      const $targets = $root.find('.target');
+      const atom1 = $.atom('v1');
+      const atom2 = $.atom('v2');
+
+      $targets.eq(0).atomText(atom1);
+      $targets.eq(1).atomText(atom2);
+      await $.nextTick();
+
+      // 1. detach with selector filter
+      $targets.detach('.filter-me');
+      atom1.value = 'detached1';
+      atom2.value = 'updated2';
+      await $.nextTick();
+
+      // target 0 is kept, target 1 is not detached so it's updated normally
+      expect($targets.eq(0).text()).toBe('detached1');
+      expect($targets.eq(1).text()).toBe('updated2');
+
+      // 2. remove with selector filter
+      $targets.eq(0).appendTo($root);
+      $targets.remove('.filter-me');
+      atom1.value = 'removed1';
+      await $.nextTick();
+      expect($targets.eq(0).text()).not.toBe('removed1');
+
+      $root.remove();
     });
   });
 
@@ -126,6 +160,56 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
 
       form.remove();
       $el.remove();
+    });
+  });
+
+  describe('Configuration Overrides & Edge Cases', () => {
+    it('should exit early on double initialization of jQuery overrides (idempotence)', () => {
+      // Calling enablejQueryOverrides() when already active should be a no-op
+      enablejQueryOverrides();
+    });
+
+    it('should handle lifecycle = false options gracefully without override', async () => {
+      // Re-initialize AEJ with patch lifecycle disabled and autoCleanup disabled
+      disablejQueryOverrides();
+      disableAutoCleanup();
+
+      $.initAEJ({
+        patch: { lifecycle: false },
+        autoCleanup: false,
+      });
+
+      const $root = $('<div id="root"><span class="target"></span></div>').appendTo(document.body);
+      const $target = $root.find('.target');
+      const atom = $.atom('initial');
+      $target.atomText(atom);
+      await $.nextTick();
+
+      // Because lifecycle overrides are disabled, removing the element should NOT clean up registry bindings
+      $target.remove();
+      atom.value = 'updated-post-remove';
+      await $.nextTick();
+
+      // Binding registry should still sync because cleanup did not occur on remove
+      expect($target.text()).toBe('updated-post-remove');
+
+      // Restore state
+      disablejQueryOverrides();
+      $.initAEJ({ patch: true, autoCleanup: true });
+    });
+
+    it('should handle null/undefined nodes in target collections during remove/detach without throwing', () => {
+      const $el = $('<span>').appendTo(document.body);
+      const $mixed = $el.add(null as unknown as Element);
+
+      expect(() => $mixed.remove()).not.toThrow();
+
+      const $el2 = $('<span>').appendTo(document.body);
+      const $mixed2 = $el2.add(undefined as unknown as Element);
+      expect(() => $mixed2.detach()).not.toThrow();
+
+      $el.remove();
+      $el2.remove();
     });
   });
 });

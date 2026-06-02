@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { registry } from '@/core/registry';
 import $, { cleanup, disableAutoCleanup } from '@/index';
 
 describe('Binding Registry', () => {
@@ -44,6 +45,63 @@ describe('Binding Registry', () => {
       expect(errorSpy).toHaveBeenCalled();
       expect($el.hasClass('_aes-bound')).toBe(false);
       errorSpy.mockRestore();
+    });
+
+    it('should support manual cleanup with raw HTMLElement', async () => {
+      const el = document.createElement('div');
+      const atom = $.atom('initial');
+      $(el).atomText(atom);
+      await $.nextTick();
+      expect(el.textContent).toBe('initial');
+
+      // Call cleanup with raw HTMLElement
+      cleanup(el);
+      atom.value = 'updated';
+      await $.nextTick();
+      expect(el.textContent).not.toBe('updated');
+    });
+
+    it('should log registry.trackEffect throws', () => {
+      const errorSpy = vi.spyOn($.debug, 'error').mockImplementation(() => {});
+      $.debug.enabled = true;
+      const el = document.createElement('div');
+      const mockEffect = {
+        dispose: () => {
+          throw new Error('dispose failed');
+        },
+      } as unknown as Parameters<typeof registry.trackEffect>[1];
+      registry.trackEffect(el, mockEffect);
+      registry.cleanup(el);
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('should log registry.onCleanup throws', () => {
+      const errorSpy = vi.spyOn($.debug, 'error').mockImplementation(() => {});
+      $.debug.enabled = true;
+      const el = document.createElement('div');
+      registry.onCleanup(el, () => {
+        throw new Error('cleanup failed');
+      });
+      registry.cleanup(el);
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('should correctly support registry.hasBind check', () => {
+      const el = document.createElement('div');
+      expect(registry.hasBind(el)).toBe(false);
+      $(el).atomText($.atom('test'));
+      expect(registry.hasBind(el)).toBe(true);
+      registry.cleanup(el);
+    });
+
+    it('should support markIgnored and unmarkIgnored', () => {
+      const el = document.createElement('div');
+      registry.markIgnored(el);
+      expect(registry.isIgnored(el)).toBe(true);
+      registry.unmarkIgnored(el);
+      expect(registry.isIgnored(el)).toBe(false);
     });
   });
 
@@ -211,6 +269,44 @@ describe('Binding Registry', () => {
       // Cleanup
       unsub();
       expect(rootObserversMap.has(root)).toBe(false);
+    });
+
+    it('should schedule auto-cleanup when binding triggers and document.body is present', () => {
+      disableAutoCleanup();
+      expect(registry.isAutoCleanupScheduled()).toBe(false);
+
+      const $el = $('<div>');
+      const atom = $.atom('test');
+      $el.atomText(atom);
+
+      expect(registry.isAutoCleanupScheduled()).toBe(true);
+    });
+
+    it('should clean up shadow DOM hosts that are descendants of the cleaned element', async () => {
+      const $parent = $('<div>').appendTo(document.body);
+      const $host = $('<div>').appendTo($parent);
+      const hostEl = $host[0];
+      if (!hostEl) throw new Error('Host element not found');
+      const shadow = hostEl.attachShadow({ mode: 'open' });
+      if (!shadow) throw new Error('Shadow root not available');
+
+      // Register shadow DOM host
+      registry.registerShadow(hostEl, shadow);
+      registry.markHost(hostEl);
+
+      const $child = $('<span>').appendTo(shadow as unknown as DocumentFragment);
+      const atom = $.atom('v1');
+      $child.atomText(atom);
+      await $.nextTick();
+      expect($child.text()).toBe('v1');
+
+      // Clean up parent
+      cleanup($parent);
+
+      atom.value = 'v2';
+      await $.nextTick();
+      expect($child.text()).not.toBe('v2');
+      $parent.remove();
     });
   });
 });

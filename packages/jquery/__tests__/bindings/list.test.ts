@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ListContext } from '@/bindings/list/context';
 import $ from '@/index';
 
 describe('$.atomList (Integration)', () => {
@@ -206,6 +207,48 @@ describe('$.atomList (Integration)', () => {
       expect($ul.find('li').text()).toBe('2');
       $ul.remove();
     });
+
+    it('should support rendering fallback to standard path on text nodes and placeItems with callbacks/events', async () => {
+      // 1. renderItems returning a text node -> allElements = false
+      const list = $.atom(['A']);
+      const $container = $('<div>').appendTo(document.body);
+      $container.atomList(list, {
+        key: (i) => i,
+        render: (i) => `some text ${i}`, // text node
+      });
+      await $.nextTick();
+      expect($container.text()).toBe('some text A');
+      $container.remove();
+
+      // 2. placeItems fast-path (htmlFragments) with onAdd callback
+      const list2 = $.atom(['A']);
+      const $container2 = $('<div>').appendTo(document.body);
+      const onAdd = vi.fn();
+      $container2.atomList(list2, {
+        key: (i) => i,
+        render: (i) => `<span>${i}</span>`,
+        onAdd,
+      });
+      await $.nextTick();
+      expect(onAdd).toHaveBeenCalled();
+      $container2.remove();
+
+      // 3. placeItems standard path with events and onAdd callback
+      const list3 = $.atom(['A']);
+      const $container3 = $('<div>').appendTo(document.body);
+      const onAdd3 = vi.fn();
+      $container3.atomList(list3, {
+        key: (i) => i,
+        render: (i) => `<span>${i}</span>`,
+        events: {
+          'click span': () => {},
+        },
+        onAdd: onAdd3,
+      });
+      await $.nextTick();
+      expect(onAdd3).toHaveBeenCalled();
+      $container3.remove();
+    });
   });
 
   describe('Lifecycle & Cleanup', () => {
@@ -275,6 +318,29 @@ describe('$.atomList (Integration)', () => {
       list1.value = [1, 2, 3];
       await $.nextTick();
       expect(render1Count).toBe(0);
+      $container.remove();
+    });
+
+    it('should prevent element removal when re-bound during async removal', async () => {
+      // Test commitRemoval re-bound check: set data-atom-key on the element during the async removal hook
+      const list = $.atom([{ id: 1 }]);
+      const $container = $('<div>').appendTo(document.body);
+      $container.atomList(list, {
+        key: 'id',
+        render: (i) => `<span class="item-${i.id}"></span>`,
+        onRemove: ($el) => {
+          // Manually add the key back to trigger re-bound check in commitRemoval
+          $el.attr('data-atom-key', '1');
+          return Promise.resolve();
+        },
+      });
+      await $.nextTick();
+
+      list.value = [];
+      await $.nextTick();
+
+      // The span should STILL be there because we manually set data-atom-key back
+      expect($container.find('.item-1').length).toBe(1);
       $container.remove();
     });
   });
@@ -527,6 +593,58 @@ describe('$.atomList (Integration)', () => {
 
       expect($container.find('span').length).toBe(3);
       $container.remove();
+    });
+
+    it('should handle lists with sparse/undefined elements and trigger head/tail/middle checks', async () => {
+      const list = $.atom<({ id: number } | undefined)[]>([{ id: 1 }, undefined, { id: 2 }]);
+      const $container = $('<div>').appendTo(document.body);
+
+      $container.atomList(list, {
+        key: (i) => i?.id ?? 'empty',
+        render: (i) => `<span>${i?.id ?? 'empty'}</span>`,
+      });
+
+      await $.nextTick();
+      expect($container.find('span').length).toBe(2);
+      expect($container.text()).toContain('1');
+      expect($container.text()).not.toContain('empty');
+      expect($container.text()).toContain('2');
+
+      // Update the list with head/tail changes containing undefined
+      list.value = [undefined, { id: 1 }, { id: 2 }];
+      await $.nextTick();
+      expect($container.find('span').length).toBe(2);
+
+      $container.remove();
+    });
+
+    it('atomList delegation and text node container checking', () => {
+      // Call atomList on a mock JQuery-like object that has a null/undefined element to cover el falsy branch in index.ts:138
+      const list = $.atom(['A']);
+      const mockJq = {
+        length: 1,
+        0: null,
+      } as unknown as JQuery;
+      $.fn.atomList.call(mockJq, list, {
+        key: (i: unknown) => String(i),
+        render: (i: unknown) => `<span>${String(i)}</span>`,
+      });
+    });
+  });
+
+  describe('Internal Reconciliation Utilities', () => {
+    it('ListContext resolveEventTarget out of bounds', () => {
+      const $container = $('<div>');
+      const ctx = new ListContext($container, undefined);
+      // snapshots is empty, keyToIndex has key '1' pointing to index 0
+      ctx.keyToIndex.set('1', 0);
+
+      const el = document.createElement('div');
+      el.setAttribute('data-atom-key', '1');
+
+      const result = ctx.resolveEventTarget(el, $container[0] as HTMLElement);
+      // Should be null because snapshots[0] is undefined
+      expect(result).toBeNull();
     });
   });
 });

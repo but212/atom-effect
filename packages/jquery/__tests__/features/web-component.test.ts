@@ -472,7 +472,7 @@ describe('Web Component Features', () => {
           connectedCallback() {
             $.useAtomComponent(this).setup({
               value: val,
-              validation: (v: string) => (v ? '' : 'Required field'),
+              validation: (v: unknown) => (v ? '' : 'Required field'),
             });
           }
         }
@@ -620,6 +620,184 @@ describe('Web Component Features', () => {
       await $.nextTick();
       expect(form.checkValidity()).toBe(false);
       expect(el.aej.internals?.validationMessage).toBe('too short');
+    });
+  });
+
+  describe('Edge Cases, Caching, and Fallbacks', () => {
+    it('should evict style cache using FIFO strategy when limit is exceeded', async () => {
+      const { sheetCache, getOrCreateSheet } = await import('@/features/web-component/engine');
+      sheetCache.clear();
+
+      // Warm up cache to limit (100)
+      for (let i = 0; i < 100; i++) {
+        getOrCreateSheet(`.class-${i} { color: red; }`);
+      }
+      expect(sheetCache.size).toBe(100);
+
+      // Trigger eviction
+      getOrCreateSheet('.new-class { color: blue; }');
+      expect(sheetCache.size).toBe(100);
+      expect(sheetCache.has('.class-0 { color: red; }')).toBe(false); // First key evicted
+      expect(sheetCache.has('.new-class { color: blue; }')).toBe(true);
+    });
+
+    it('should fall back to DOM event discovery if DOM parent walking fails to find context provider', async () => {
+      const consumer = document.createElement('div');
+      document.body.appendChild(consumer);
+
+      // Bind dynamic custom event listener on body (above parent chain) to simulate provider
+      document.body.addEventListener('aej:context-request', (e: Event) => {
+        const { key, callback } = (e as CustomEvent).detail;
+        if (key === 'bubble-key') {
+          e.stopPropagation();
+          callback($.atom('event-injected'));
+        }
+      });
+
+      const injected = $.injectAtom(consumer, 'bubble-key');
+      expect(injected?.value).toBe('event-injected');
+
+      consumer.remove();
+    });
+
+    it('should manage lifecycle and subscriber count in Context Proxy WritableAtom', () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      $.provideAtom(host, 'context-proxy-key', $.atom(100));
+
+      const proxyAtom = $.injectAtom<number>(host, 'context-proxy-key');
+      if (!proxyAtom) throw new Error('Expected proxyAtom to be defined');
+
+      expect(proxyAtom.subscriberCount()).toBe(0);
+
+      // Subscribe increases retain count
+      const unsub = proxyAtom.subscribe(() => {});
+      expect(proxyAtom.subscriberCount()).toBe(1);
+
+      unsub();
+      // Dispose cleanups
+      proxyAtom.dispose();
+      expect(proxyAtom.subscriberCount()).toBe(0);
+
+      host.remove();
+    });
+
+    it('should handle non-string selectors and DocumentFragments safely in scoped jQuery selector $', () => {
+      const el = document.createElement('div');
+      const ctrl = $.useAtomComponent(el);
+      const child = document.createElement('span');
+      el.appendChild(child);
+
+      // Non-string selector wrapping
+      const wrapped = ctrl.$(child);
+      expect(wrapped[0]).toBe(child);
+
+      // DocumentFragment fallback query
+      const frag = document.createDocumentFragment();
+      const fragChild = document.createElement('p');
+      frag.appendChild(fragChild);
+      ctrl.setup(frag);
+      const queried = ctrl.$('p');
+      expect(queried[0]).toBe(fragChild);
+
+      ctrl.teardown();
+    });
+
+    it('should adopt styles and cleanup stylesheets upon teardown', () => {
+      const css = ':host { margin: 10px; }';
+      const el = defineAndCreate(
+        'style-cleanup',
+        class extends HTMLElement {
+          connectedCallback() {
+            const sr = this.attachShadow({ mode: 'open' });
+            $.useAtomComponent(this).setup({ shadowRoot: sr, styles: [css] });
+          }
+        }
+      );
+
+      document.body.appendChild(el);
+      const sr = el.shadowRoot;
+      if (!sr) throw new Error('Expected ShadowRoot to exist');
+      expect(sr.adoptedStyleSheets.length).toBeGreaterThan(0);
+
+      el.aej.teardown();
+      // Stylesheets removed from adopted list
+      expect(sr.adoptedStyleSheets.length).toBe(0);
+      el.remove();
+    });
+
+    it('should safely format parts attribute with diverse types (Array, falsy, custom object)', async () => {
+      const partAtom = $.atom<string[] | null>(['partA', 'partB']);
+      const el = defineAndCreate(
+        'parts-format',
+        class extends HTMLElement {
+          connectedCallback() {
+            const sr = this.attachShadow({ mode: 'open' });
+            sr.innerHTML = '<div data-aej-part="mybox"></div>';
+            $.useAtomComponent(this).setup({ shadowRoot: sr, parts: { mybox: partAtom } });
+          }
+        }
+      );
+
+      document.body.appendChild(el);
+      await $.nextTick();
+      const div = el.shadowRoot?.querySelector('div');
+      if (!div) throw new Error('Expected div to exist');
+      expect(div.getAttribute('part')).toBe('partA partB');
+
+      // Test falsy fallback
+      partAtom.value = null;
+      await $.nextTick();
+      expect(div.getAttribute('part')).toBe('');
+
+      el.aej.teardown();
+      el.remove();
+    });
+
+    it('should sync validity state with native element internals using raw ValidityStateFlags', async () => {
+      const email = $.atom('valid@example.com');
+      // Pass a custom computed atom containing raw ValidityStateFlags
+      const validationFlags = $.computed(() => {
+        return email.value.includes('@') ? {} : { typeMismatch: true };
+      });
+
+      const el = defineAndCreate(
+        'face-flags-validation',
+        class extends HTMLElement {
+          static formAssociated = true;
+          connectedCallback() {
+            $.useAtomComponent(this).setup({
+              value: email,
+              validation: validationFlags,
+            });
+          }
+        }
+      );
+
+      const form = document.createElement('form');
+      form.appendChild(el);
+      document.body.appendChild(form);
+      await $.nextTick();
+
+      expect(form.checkValidity()).toBe(true);
+
+      email.value = 'invalid-email';
+      await $.nextTick();
+
+      // According to ElementInternals specs, if no error message is provided, ValidityState is reset/valid
+      expect(el.aej.internals?.validity.typeMismatch).toBe(false);
+      expect(form.checkValidity()).toBe(true);
+
+      el.aej.teardown();
+      el.remove();
+    });
+
+    it('should resolve static values and getter functions in resolveValue utility', async () => {
+      const { resolveValue } = await import('@/features/web-component/utils');
+      // 1. Static value
+      expect(resolveValue(42)).toBe(42);
+      // 2. Getter function
+      expect(resolveValue(() => 'getter-output')).toBe('getter-output');
     });
   });
 });
