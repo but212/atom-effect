@@ -404,7 +404,7 @@ class RadioRegistry {
 
   public register(element: HTMLInputElement): Node | undefined {
     if (element.type !== 'radio' || !element.name) return;
-    const root = element.form || element.ownerDocument || document;
+    const root = element.form || element.getRootNode();
 
     let nameMap = this.#groups.get(root);
     if (!nameMap) {
@@ -440,9 +440,7 @@ class RadioRegistry {
 
   public getGroup(element: HTMLInputElement, root?: Node): Set<HTMLInputElement> | undefined {
     if (element.type !== 'radio' || !element.name) return;
-    return this.#groups
-      .get(root || element.form || element.ownerDocument || document)
-      ?.get(element.name);
+    return this.#groups.get(root || element.form || element.getRootNode())?.get(element.name);
   }
 }
 

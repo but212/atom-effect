@@ -206,6 +206,37 @@ describe('Computed', () => {
       expect((secondError as Error).message).not.toContain('Circular dependency');
     });
 
+    it('should recover from system error (ReferenceError) and maintain tracking context integrity', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const c1 = computed(() => {
+        throw new ReferenceError('Mock ReferenceError');
+      });
+
+      // When we access c1, it should throw ReferenceError
+      expect(() => c1.value).toThrow(ReferenceError);
+
+      // Verify that subsequent reactive evaluations are tracked correctly under their own context
+      const src = atom(0);
+      const c2 = computed(() => src.value * 2);
+      expect(c2.value).toBe(0);
+
+      const spy = vi.fn();
+      const sub = effect(() => {
+        c2.value;
+        spy();
+      });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      src.value = 1;
+      await aeNextTick();
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      sub.dispose();
+      consoleError.mockRestore();
+    });
+
     it('should surface error state when lazy:false computation throws', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const c = computed(

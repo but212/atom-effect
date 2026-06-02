@@ -417,6 +417,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
         val = runInTrackingContext(trackingContext, this, this.#computation);
       } catch (e) {
         if (e instanceof RangeError || e instanceof ReferenceError || e instanceof SyntaxError) {
+          rollbackTrackingSubscriber(trackingContext, prevDepth);
           throw e;
         }
         // Impact: Preserves tracking context integrity if the computation fails.
