@@ -96,12 +96,12 @@ export function renderRoute(
   // Security & DX: Validate that all components in the new view are registered.
   // Prevents "silent failures" where custom elements appear as empty tags.
   if (debug.enabled && typeof customElements !== 'undefined') {
-    container.querySelectorAll(':not(:defined)').forEach((el) => {
+    for (const el of container.querySelectorAll(':not(:defined)')) {
       const tagName = el.tagName.toLowerCase();
       if (tagName.includes('-')) {
         debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
       }
-    });
+    }
   }
 
   untracked(() => renderer.config.afterTransition(renderer.previousPath, routeName));
@@ -140,6 +140,7 @@ export function renderRoute(
  * Disposes of all resources and effects bound to the current route view.
  */
 export function runRendererCleanups(renderer: RouteRenderer) {
+  // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
   renderer.cleanups.forEach((fn) => Result.tryCatch(fn));
   renderer.cleanups.clear();
 }
@@ -196,20 +197,26 @@ export function setupRouteScanner(
     });
   };
 
-  const scan = () => document.querySelectorAll<HTMLElement>(NAV_SPEC.selectors).forEach(trackLink);
+  const scan = () => {
+    for (const el of document.querySelectorAll<HTMLElement>(NAV_SPEC.selectors)) {
+      trackLink(el);
+    }
+  };
 
   // Logic: Dynamic Content Support
   // Handles scenarios where links are added dynamically (e.g., list rendering or async components).
   const linkObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       if (m.type === 'childList') {
-        m.addedNodes.forEach((node) => {
+        for (const node of m.addedNodes) {
           if (node.nodeType === 1) {
             const el = node as Element;
             if (el.matches(NAV_SPEC.selectors)) trackLink(el);
-            el.querySelectorAll(NAV_SPEC.selectors).forEach((c) => trackLink(c));
+            for (const c of el.querySelectorAll(NAV_SPEC.selectors)) {
+              trackLink(c);
+            }
           }
-        });
+        }
       } else if (m.type === 'attributes') trackLink(m.target as Element);
     }
   });
@@ -240,7 +247,7 @@ export function discoverRoutes(): {
   const routes: Record<string, RouteDefinition> = {};
   let defaultPath: string | undefined;
 
-  document.querySelectorAll<HTMLTemplateElement>('template[data-path]').forEach((tmpl) => {
+  for (const tmpl of document.querySelectorAll<HTMLTemplateElement>('template[data-path]')) {
     const path = normalizePath(tmpl.getAttribute('data-path') ?? '');
     const title = tmpl.getAttribute('title') ?? tmpl.getAttribute('data-title');
     if (!routes[path]) {
@@ -253,7 +260,7 @@ export function discoverRoutes(): {
     if (tmpl.hasAttribute('data-default')) {
       defaultPath = path;
     }
-  });
+  }
 
   return { routes, default: defaultPath };
 }

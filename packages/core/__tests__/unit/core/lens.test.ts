@@ -147,7 +147,7 @@ describe('Lens System', () => {
         expect(lens.value).toBe('B');
         lens.value = 'C';
         expect(Array.isArray(store.value.items)).toBe(true);
-        expect(store.value.items[1]!.text).toBe('C');
+        expect(store.value.items[1]?.text).toBe('C');
       });
 
       it('should handle Map instances via dot-notation keys', () => {

@@ -127,7 +127,7 @@ describe('Core - Error Handling and Propagation', () => {
 
       expect(goodWorker).toHaveBeenCalledTimes(1);
       expect(errHandler).toHaveBeenCalledTimes(1);
-      expect(errHandler.mock.calls[0]![0]).toBeInstanceOf(Error);
+      expect(errHandler.mock.calls[0]?.[0]).toBeInstanceOf(Error);
       expect(consoleSpy).toHaveBeenCalled();
 
       expect(e.isDisposed).toBe(false);

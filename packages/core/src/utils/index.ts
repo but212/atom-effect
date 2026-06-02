@@ -39,7 +39,7 @@ export function mergeAtomValues<T extends Dependency<unknown>[]>(
   const result = {} as MergedDependencyValue<T>;
 
   for (let i = 0; i < atoms.length; i++) {
-    const val = peek ? atoms[i]!.peek() : atoms[i]!.value;
+    const val = peek ? atoms[i]?.peek() : atoms[i]?.value;
     if (val != null && typeof val === 'object') {
       Object.assign(result as object, val);
     } else if (val != null) {

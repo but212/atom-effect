@@ -148,7 +148,7 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
   const atom = computed(execute, {
     defaultValue: options.defaultValue,
     lazy: options.eager === false,
-    ...(options.name !== undefined ? { name: options.name } : {}),
+    ...(options.name === undefined ? {} : { name: options.name }),
   });
 
   // Constraint: Pending network requests MUST be canceled when the atom is disposed.

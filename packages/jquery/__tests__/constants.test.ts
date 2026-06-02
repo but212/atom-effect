@@ -22,9 +22,9 @@ describe('Constants', () => {
         [SYSTEM_BINDING.ERRORS.MISSING_CONDITION('atomClass'), 'atomClass'],
       ];
 
-      cases.forEach(([result, expected]) => {
+      for (const [result, expected] of cases) {
         expect(result).toContain(expected);
-      });
+      }
     });
 
     it('should return a non-empty string for zero-argument messages', () => {

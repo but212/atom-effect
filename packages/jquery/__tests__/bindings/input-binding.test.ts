@@ -41,12 +41,13 @@ describe('Input Bindings (Two-way)', () => {
     const el = $el[0] as HTMLInputElement;
 
     // Track atom setter calls to detect redundant syncs
-    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(val), 'value')!;
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(val), 'value');
+    if (!descriptor) throw new Error('Expected descriptor to exist');
     Object.defineProperty(val, 'value', {
       get: () => val.peek(),
       set: (v) => {
         syncCount++;
-        descriptor.set!.call(val, v);
+        descriptor.set?.call(val, v);
       },
       configurable: true,
     });

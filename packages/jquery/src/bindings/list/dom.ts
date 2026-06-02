@@ -31,7 +31,8 @@ export function insertOrAppend(
 ): void {
   if (!$el) return;
   for (let i = 0; i < $el.length; i++) {
-    if ($el[i]) container.insertBefore($el[i]!, nextNode);
+    const element = $el[i];
+    if (element) container.insertBefore(element, nextNode);
   }
 }
 
@@ -53,12 +54,12 @@ export function handleEmpty<T>(
 
   const { onRemove, snapshots } = ctx;
 
-  if (!onRemove) {
-    $container.empty();
-  } else {
+  if (onRemove) {
     for (const row of snapshots) {
       if (row.node) ctx.remove(row.key, row.node);
     }
+  } else {
+    $container.empty();
   }
 
   if (empty && !ctx.$emptyEl) {
@@ -98,7 +99,7 @@ export function renderItems<T>(
     if (allNodes && allNodes.length === renderCount) {
       let allElements = true;
       for (let i = 0; i < renderCount; i++) {
-        if (allNodes[i]!.nodeType !== 1) {
+        if (allNodes[i]?.nodeType !== 1) {
           allElements = false;
           break;
         }
@@ -110,8 +111,9 @@ export function renderItems<T>(
   }
 
   for (let i = 0; i < renderCount; i++) {
-    const slot = toRender[i]!;
-    const raw = sanitized[i]!;
+    const slot = toRender[i];
+    const raw = sanitized[i];
+    if (!slot || raw === undefined) continue;
 
     const $el = $(
       (typeof raw === 'string' ? $.parseHTML(raw) : raw) as Element | DocumentFragment | JQuery
@@ -139,8 +141,8 @@ export function renderItems<T>(
 export function cleanupRemoved<T>(ctx: ListContext<T>): void {
   const { snapshots, keyToIndex } = ctx;
   for (let i = 0; i < snapshots.length; i++) {
-    const row = snapshots[i]!;
-    if (row.node && !keyToIndex.has(row.key)) {
+    const row = snapshots[i];
+    if (row?.node && !keyToIndex.has(row.key)) {
       ctx.remove(row.key, row.node);
     }
   }
@@ -167,7 +169,8 @@ export function placeItems<T>(
 
     for (let i = 0; i < count; i++) {
       if (!el) break;
-      const slot = slots[i]!;
+      const slot = slots[i];
+      if (!slot) continue;
       const { key, item } = slot;
 
       el.setAttribute('data-atom-key', String(key));
@@ -191,7 +194,8 @@ export function placeItems<T>(
     for (const slot of slots) {
       if (slot.node) {
         for (let j = 0; j < slot.node.length; j++) {
-          if (slot.node[j]) frag.appendChild(slot.node[j]!);
+          const element = slot.node[j];
+          if (element) frag.appendChild(element);
         }
       }
     }
@@ -201,7 +205,8 @@ export function placeItems<T>(
     let next: Node | null = null;
     let min = Infinity;
     for (let i = count - 1; i >= 0; i--) {
-      const slot = slots[i]!;
+      const slot = slots[i];
+      if (!slot) continue;
       const idx = slot.oldIndex;
       const node = slot.node;
       if (!node) continue;
@@ -221,7 +226,8 @@ export function placeItems<T>(
   const { onAdd, bind, update } = callbacks;
 
   for (let i = 0; i < count; i++) {
-    const slot = slots[i]!;
+    const slot = slots[i];
+    if (!slot) continue;
     const { state, node, item, key } = slot;
     if (state === ItemState.Unchanged || !node) continue;
 

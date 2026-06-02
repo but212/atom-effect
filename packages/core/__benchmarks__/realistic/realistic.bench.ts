@@ -28,9 +28,12 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
   bench(
     '[Batch] form reset (20 fields)',
     () => {
-      const nextVal = formFields[0]!.value === '' ? 'initial' : '';
+      const nextVal = formFields[0]?.value === '' ? 'initial' : '';
       batch(() => {
-        for (let i = 0; i < 20; i++) formFields[i]!.value = nextVal;
+        for (let i = 0; i < 20; i++) {
+          const field = formFields[i];
+          if (field) field.value = nextVal;
+        }
       });
       keep(_formRuns);
     },
@@ -40,8 +43,12 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
   bench(
     '[Manual] form reset (20 fields)',
     () => {
-      const nextVal = formFields[0]!.value === '' ? 'initial' : '';
-      for (let i = 0; i < 20; i++) formFields[i]!.value = nextVal;
+      const nextVal = formFields[0]?.value === '' ? 'initial' : '';
+
+      for (let i = 0; i < 20; i++) {
+        const field = formFields[i];
+        if (field) field.value = nextVal;
+      }
       keep(_formRuns);
     },
     macroBenchOptions
@@ -59,7 +66,10 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
     '[Batch] state sync (100 atoms)',
     () => {
       batch(() => {
-        for (let i = 0; i < 100; i++) syncAtoms[i]!.value++;
+        for (let i = 0; i < 100; i++) {
+          const a = syncAtoms[i];
+          if (a) a.value++;
+        }
       });
       keep(_syncSink);
     },
@@ -69,7 +79,10 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
   bench(
     '[Manual] state sync (100 atoms)',
     () => {
-      for (let i = 0; i < 100; i++) syncAtoms[i]!.value++;
+      for (let i = 0; i < 100; i++) {
+        const a = syncAtoms[i];
+        if (a) a.value++;
+      }
       keep(_syncSink);
     },
     macroBenchOptions
@@ -92,8 +105,14 @@ describe('Stability: Component Churn & Memory', () => {
       const components: any[] = [];
       // Reduce internal count to let framework handle overall iterations
       for (let i = 0; i < 10; i++) components.push(createComponent(i));
-      for (let i = 0; i < 10; i++) components[i]!.state.value = { id: i, data: 'updated' };
-      for (let i = 0; i < 10; i++) components[i]!.stop.dispose();
+      for (let i = 0; i < 10; i++) {
+        const comp = components[i];
+        if (comp) comp.state.value = { id: i, data: 'updated' };
+      }
+      for (let i = 0; i < 10; i++) {
+        const comp = components[i];
+        if (comp) comp.stop.dispose();
+      }
 
       keep(components.length);
     },
@@ -193,23 +212,52 @@ describe('Dashboard KPI Pipeline (10 sources → 5 KPIs → 1 summary)', () => {
   bench(
     '[Vanilla] update source → recalc all KPIs',
     () => {
-      vanillaSources[0] = (vanillaSources[0]! + 1) % 10000;
-      const kpi1 = (vanillaSources[0]! + vanillaSources[1]!) / 2;
-      const kpi2 = Math.max(vanillaSources[2]!, vanillaSources[3]!);
-      const kpi3 = vanillaSources[4]! + vanillaSources[5]!;
-      const kpi4 = vanillaSources[6]! * vanillaSources[7]!;
-      const kpi5 = vanillaSources[8]! - vanillaSources[9]!;
+      const v0 = vanillaSources[0];
+      if (v0 !== undefined) {
+        vanillaSources[0] = (v0 + 1) % 10000;
+      }
+      const val0 = vanillaSources[0] ?? 0;
+      const val1 = vanillaSources[1] ?? 0;
+      const val2 = vanillaSources[2] ?? 0;
+      const val3 = vanillaSources[3] ?? 0;
+      const val4 = vanillaSources[4] ?? 0;
+      const val5 = vanillaSources[5] ?? 0;
+      const val6 = vanillaSources[6] ?? 0;
+      const val7 = vanillaSources[7] ?? 0;
+      const val8 = vanillaSources[8] ?? 0;
+      const val9 = vanillaSources[9] ?? 0;
+
+      const kpi1 = (val0 + val1) / 2;
+      const kpi2 = Math.max(val2, val3);
+      const kpi3 = val4 + val5;
+      const kpi4 = val6 * val7;
+      const kpi5 = val8 - val9;
       keep(kpi1 + kpi2 + kpi3 + kpi4 + kpi5);
     },
     macroBenchOptions
   );
 
   const dataSources = Array.from({ length: 10 }, (_, i) => atom(i * 100));
-  const kpi1 = computed(() => (dataSources[0]!.value + dataSources[1]!.value) / 2);
-  const kpi2 = computed(() => Math.max(dataSources[2]!.value, dataSources[3]!.value));
-  const kpi3 = computed(() => dataSources[4]!.value + dataSources[5]!.value);
-  const kpi4 = computed(() => dataSources[6]!.value * dataSources[7]!.value);
-  const kpi5 = computed(() => dataSources[8]!.value - dataSources[9]!.value);
+  const ds0 = dataSources[0];
+  const ds1 = dataSources[1];
+  const ds2 = dataSources[2];
+  const ds3 = dataSources[3];
+  const ds4 = dataSources[4];
+  const ds5 = dataSources[5];
+  const ds6 = dataSources[6];
+  const ds7 = dataSources[7];
+  const ds8 = dataSources[8];
+  const ds9 = dataSources[9];
+
+  if (!ds0 || !ds1 || !ds2 || !ds3 || !ds4 || !ds5 || !ds6 || !ds7 || !ds8 || !ds9) {
+    throw new Error('dataSources initialization failed');
+  }
+
+  const kpi1 = computed(() => (ds0.value + ds1.value) / 2);
+  const kpi2 = computed(() => Math.max(ds2.value, ds3.value));
+  const kpi3 = computed(() => ds4.value + ds5.value);
+  const kpi4 = computed(() => ds6.value * ds7.value);
+  const kpi5 = computed(() => ds8.value - ds9.value);
   const summary = computed(() => kpi1.value + kpi2.value + kpi3.value + kpi4.value + kpi5.value);
 
   effect(() => {
@@ -219,7 +267,7 @@ describe('Dashboard KPI Pipeline (10 sources → 5 KPIs → 1 summary)', () => {
   bench(
     '[Atom] update source → reactive KPI pipeline',
     () => {
-      dataSources[0]!.value = (dataSources[0]!.value + 1) % 10000;
+      ds0.value = (ds0.value + 1) % 10000;
       // Force sync re-calc to measure the dependency graph cost
       keep(summary.value);
     },

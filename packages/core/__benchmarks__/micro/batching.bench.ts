@@ -9,14 +9,17 @@ import { benchEffectOptions, keep, microBenchOptions, REPEATS } from '../utils/s
 
 describe('Batching: Basic Operations', () => {
   const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
-  atoms.forEach((a) => effect(() => keep(a.value), benchEffectOptions));
+  for (const atom of atoms) {
+    effect(() => keep(atom.value), benchEffectOptions);
+  }
 
   bench(
     `batch update ${REPEATS} atoms: active (x${REPEATS})`,
     () => {
       batch(() => {
         for (let i = 0; i < REPEATS; i++) {
-          atoms[i]!.value++;
+          const at = atoms[i];
+          if (at) at.value++;
         }
       });
     },
@@ -45,13 +48,16 @@ describe('Batching: Basic Operations', () => {
 
 describe('Batching: Nesting Overhead', () => {
   const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
-  atoms.forEach((a) => effect(() => keep(a.value), benchEffectOptions));
+  for (const a of atoms) {
+    effect(() => keep(a.value), benchEffectOptions);
+  }
 
   bench(
     `unbatched ${REPEATS} writes`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        atoms[i]!.value++;
+        const at = atoms[i];
+        if (at) at.value++;
       }
     },
     microBenchOptions
@@ -62,7 +68,8 @@ describe('Batching: Nesting Overhead', () => {
     () => {
       batch(() => {
         for (let i = 0; i < REPEATS; i++) {
-          atoms[i]!.value++;
+          const at = atoms[i];
+          if (at) at.value++;
         }
       });
     },
@@ -76,7 +83,8 @@ describe('Batching: Nesting Overhead', () => {
         batch(() =>
           batch(() => {
             for (let i = 0; i < REPEATS; i++) {
-              atoms[i]!.value++;
+              const at = atoms[i];
+              if (at) at.value++;
             }
           })
         )

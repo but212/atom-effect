@@ -15,11 +15,13 @@ describe('Bindings: One-way (Creation)', () => {
     'Native: create 100 text nodes',
     () => {
       const $c = createContainer();
-      const container = $c[0]!;
-      for (let i = 0; i < 100; i++) {
-        const span = document.createElement('span');
-        span.textContent = 'hello';
-        container.appendChild(span);
+      const container = $c[0];
+      if (container) {
+        for (let i = 0; i < 100; i++) {
+          const span = document.createElement('span');
+          span.textContent = 'hello';
+          container.appendChild(span);
+        }
       }
       cleanupContainer($c);
     },
@@ -70,17 +72,20 @@ describe('Bindings: One-way (Updates)', () => {
     'Native: update text (100 elements x 50 updates)',
     () => {
       const $c = createContainer();
-      const container = $c[0]!;
-      const elements: HTMLElement[] = [];
-      for (let i = 0; i < 100; i++) {
-        const span = document.createElement('span');
-        container.appendChild(span);
-        elements.push(span);
-      }
-      for (let i = 0; i < 50; i++) {
-        const val = `update-${i}`;
-        for (let j = 0; j < 100; j++) {
-          elements[j]!.textContent = val;
+      const container = $c[0];
+      if (container) {
+        const elements: HTMLElement[] = [];
+        for (let i = 0; i < 100; i++) {
+          const span = document.createElement('span');
+          container.appendChild(span);
+          elements.push(span);
+        }
+        for (let i = 0; i < 50; i++) {
+          const val = `update-${i}`;
+          for (let j = 0; j < 100; j++) {
+            const el = elements[j];
+            if (el) el.textContent = val;
+          }
         }
       }
       cleanupContainer($c);
@@ -99,7 +104,7 @@ describe('Bindings: One-way (Updates)', () => {
       for (let i = 0; i < 50; i++) {
         const val = `update-${i}`;
         for (let j = 0; j < 100; j++) {
-          $elements[j]!.text(val);
+          $elements[j]?.text(val);
         }
       }
       cleanupContainer($c);
@@ -457,7 +462,7 @@ describe('Bindings: Form (atomForm)', () => {
       for (let i = 0; i < 50; i++) {
         const nextVal = `Typed-${i}`;
         for (let j = 0; j < 10; j++) {
-          inputs[j]!.val(nextVal).trigger('input');
+          inputs[j]?.val(nextVal).trigger('input');
         }
       }
 

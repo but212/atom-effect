@@ -35,7 +35,9 @@ describe('SlotBuffer', () => {
 
     it('should reset state on clear()', () => {
       const buf = new SlotBuffer<number>();
-      [1, 2, 3, 4, 5].forEach((i) => buf.push(i));
+      for (const i of [1, 2, 3, 4, 5]) {
+        buf.push(i);
+      }
 
       expect(buf.size).toBe(5);
 
@@ -51,7 +53,9 @@ describe('SlotBuffer', () => {
   describe('Structural Integrity & Hole Management', () => {
     it('should create and reuse holes correctly', () => {
       const buf = new SlotBuffer<number>();
-      [0, 1, 2].forEach((i) => buf.push(i));
+      for (const i of [0, 1, 2]) {
+        buf.push(i);
+      }
 
       // Create a hole in the "fast lane"
       buf.remove(1); // [0, null, 2]
@@ -213,6 +217,7 @@ describe('SlotBuffer', () => {
       expect(buf.length).toBe(1);
 
       const items: string[] = [];
+      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => items.push(item));
       expect(items).toEqual(['b']);
       expect(buf.has('b')).toBe(true);
@@ -222,11 +227,14 @@ describe('SlotBuffer', () => {
   describe('Search & Iteration', () => {
     it('should iterate through non-null items with forEach()', () => {
       const buf = new SlotBuffer<number>();
-      [0, 1, 2, 3, 4].forEach((i) => buf.push(i));
+      for (const i of [0, 1, 2, 3, 4]) {
+        buf.push(i);
+      }
       buf.remove(1);
       buf.remove(3);
 
       const collected: number[] = [];
+      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => collected.push(item));
 
       expect(collected).toEqual([0, 2, 4]);
@@ -238,6 +246,7 @@ describe('SlotBuffer', () => {
       buf.push(20);
 
       const items: number[] = [];
+      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => {
         items.push(item);
         if (item === 10) {
@@ -256,6 +265,7 @@ describe('SlotBuffer', () => {
       buf.remove(20); // [10, null, 30]
 
       const items: number[] = [];
+      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => {
         items.push(item);
         if (item === 10) {

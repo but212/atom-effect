@@ -39,6 +39,7 @@ export function setAtomKey($el: JQuery, key: string | null): void {
  */
 export function cleanupNodes($el: JQuery): void {
   for (let i = 0; i < $el.length; i++) {
-    if ($el[i]) registry.cleanupTree($el[i]!);
+    const el = $el[i];
+    if (el) registry.cleanupTree(el);
   }
 }

@@ -93,7 +93,7 @@ describe('Chainable Methods: One-Way Bindings', () => {
 
     $el.atomProp('id', id);
     await $.nextTick();
-    expect($el[0]!.id).toBe('my-id');
+    expect($el[0]?.id).toBe('my-id');
 
     $el.remove();
   });
@@ -112,7 +112,7 @@ describe('Chainable Methods: One-Way Bindings', () => {
 
     isVisible.value = false;
     await $.nextTick();
-    expect($el[0]!.style.display).toBe('none');
+    expect($el[0]?.style.display).toBe('none');
 
     isVisible.value = true;
     await $.nextTick();

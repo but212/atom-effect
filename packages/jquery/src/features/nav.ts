@@ -367,7 +367,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         isPending,
         hasError,
       ];
-      atoms.forEach((a) => (a as ReadonlyAtom).dispose?.());
+      for (const a of atoms) {
+        (a as ReadonlyAtom).dispose?.();
+      }
     },
   };
 

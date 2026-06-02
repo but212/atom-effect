@@ -10,7 +10,9 @@ describe('Debug Module (Black-box)', () => {
     vi.spyOn(console, 'log').mockImplementation(logSpy);
     vi.spyOn(console, 'warn').mockImplementation(warnSpy);
     vi.spyOn(console, 'error').mockImplementation(errorSpy);
-    [logSpy, warnSpy, errorSpy].forEach((s) => s.mockClear());
+    for (const s of [logSpy, warnSpy, errorSpy]) {
+      s.mockClear();
+    }
 
     // Ensure we start with a clean state
     $.debug.enabled = false;
@@ -21,7 +23,9 @@ describe('Debug Module (Black-box)', () => {
     $.debug.enabled = false;
 
     // Clean up any styles or elements created during tests
-    document.querySelectorAll('style[data-atom-debug]').forEach((s) => s.remove());
+    for (const s of document.querySelectorAll('style[data-atom-debug]')) {
+      s.remove();
+    }
     if ('adoptedStyleSheets' in document) {
       document.adoptedStyleSheets = [];
     }
@@ -86,7 +90,9 @@ describe('Debug Module (Black-box)', () => {
       // Note: We don't check duration (implementation detail), just that an animation started.
       expect(htmlEl.getAnimations().length).toBeGreaterThan(0);
 
-      [htmlEl, svgEl, jqElement].forEach((el) => el.remove());
+      for (const el of [htmlEl, svgEl, jqElement]) {
+        el.remove();
+      }
     });
 
     it('should ignore disconnected elements and non-element nodes', () => {

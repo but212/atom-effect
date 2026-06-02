@@ -42,7 +42,9 @@ describe('$.route() - SPA Routing System', () => {
   });
 
   afterEach(() => {
-    routers.forEach((r) => r.destroy());
+    for (const r of routers) {
+      r.destroy();
+    }
     document.body.innerHTML = '';
     window.location.hash = '';
     vi.restoreAllMocks();

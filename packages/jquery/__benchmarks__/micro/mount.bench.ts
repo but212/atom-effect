@@ -32,7 +32,7 @@ describe('Mounting: Component Initialization', () => {
       }
 
       for (let i = 0; i < 100; i++) {
-        elements[i]!.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
+        elements[i]?.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
       }
 
       cleanupContainer($c);
@@ -69,7 +69,7 @@ describe('Mounting: Component Teardown', () => {
       }
 
       for (let i = 0; i < 100; i++) {
-        elements[i]!.atomUnmount();
+        elements[i]?.atomUnmount();
       }
 
       cleanupContainer($c);
@@ -98,7 +98,10 @@ describe('Mounting: Deep Tree Operations', () => {
     'mount and deep unmount (depth 4, breadth 3 ~ 120 nodes)',
     () => {
       const $c = createContainer();
-      buildDeepDivTree($c[0]!, 4, 3);
+      const containerEl = $c[0];
+      if (containerEl) {
+        buildDeepDivTree(containerEl, 4, 3);
+      }
 
       const leaf = $c.find('div').last();
       leaf.atomMount(CounterComponent, { initialCount: 0, label: 'Deep' });

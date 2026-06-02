@@ -118,8 +118,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       return (name: string) => {
         let lens = state.attributeLenses.get(name);
         if (!lens) {
-          lens = $.atomLens(state.attributeAtom!, name);
-          state.attributeLenses.set(name, lens);
+          const attrAtom = state.attributeAtom;
+          if (attrAtom) {
+            lens = $.atomLens(attrAtom, name);
+            state.attributeLenses.set(name, lens);
+          }
         }
         return lens;
       };
@@ -144,7 +147,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         const key = name === 'default' ? '' : name;
         let lens = state.slotLenses.get(key);
         if (!lens) {
-          lens = $.computed(() => state.slotsAtom!.value[key] ?? []) as unknown as WritableAtom<
+          lens = $.computed(() => state.slotsAtom?.value[key] ?? []) as unknown as WritableAtom<
             Node[]
           >;
           state.slotLenses.set(key, lens);
@@ -210,10 +213,13 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       } else if (sr && !state.slotListenerAttached) {
         const listener = (e: Event) => {
           const target = e.target as HTMLSlotElement;
-          state.slotsAtom!.value = {
-            ...state.slotsAtom!.peek(),
-            [target.name || '']: target.assignedNodes(),
-          };
+          const slotsAtom = state.slotsAtom;
+          if (slotsAtom) {
+            slotsAtom.value = {
+              ...slotsAtom.peek(),
+              [target.name || '']: target.assignedNodes(),
+            };
+          }
         };
         sr.addEventListener('slotchange', listener);
         state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
@@ -264,7 +270,12 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       const s = nodeStateMap.get(element);
       if (s) {
         s.providers?.clear();
-        s.providerEffects?.forEach((e) => e.dispose());
+
+        if (s.providerEffects) {
+          for (const e of s.providerEffects.values()) {
+            e.dispose();
+          }
+        }
         s.providerEffects?.clear();
         s.injects?.clear();
       }

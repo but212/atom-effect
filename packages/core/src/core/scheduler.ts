@@ -136,7 +136,8 @@ class ReactiveScheduler implements SchedulerState {
     const fnKind = KIND.Fn;
 
     for (let i = 0; i < count; i++) {
-      const job = jobs[i]!;
+      const job = jobs[i];
+      if (job === undefined) continue;
       jobs[i] = undefined;
 
       try {

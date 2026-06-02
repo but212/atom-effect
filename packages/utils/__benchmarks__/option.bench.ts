@@ -77,7 +77,7 @@ describe('Option', () => {
 
     bench(`Inline ternary map (x${REPEATS})`, () => {
       for (let i = 0; i < REPEATS; i++) {
-        keep(rawVal != null ? rawVal + 1 : null);
+        keep(rawVal == null ? null : rawVal + 1);
       }
     });
 
@@ -85,10 +85,10 @@ describe('Option', () => {
       const vals = [rawVal, rawNull];
       for (let i = 0; i < REPEATS; i++) {
         const val = vals[nextRandomInt(2)];
-        if (val != null) {
-          keep(val);
-        } else {
+        if (val == null) {
           keep(0);
+        } else {
+          keep(val);
         }
       }
     });

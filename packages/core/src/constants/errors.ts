@@ -49,7 +49,7 @@ export type ErrorStrategy = {
 
 const toStr = (val: unknown, fallback = ''): string => {
   try {
-    return val != null ? String(val) : fallback;
+    return val == null ? fallback : String(val);
   } catch {
     return fallback;
   }
@@ -57,7 +57,7 @@ const toStr = (val: unknown, fallback = ''): string => {
 
 const toStrOrUndef = (val: unknown): string | undefined => {
   try {
-    return val != null ? String(val) : undefined;
+    return val == null ? undefined : String(val);
   } catch {
     return undefined;
   }

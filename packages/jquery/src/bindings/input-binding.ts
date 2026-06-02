@@ -29,7 +29,7 @@ type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
  * Prevents redundant update cycles by skipping the `$.fn.on` batching
  * wrapper. Synchronization is already managed via internal `BindingFlags`.
  */
-const markInternal = (fn: Function): void => {
+const markInternal = (fn: (...args: never[]) => unknown): void => {
   (fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
 };
 

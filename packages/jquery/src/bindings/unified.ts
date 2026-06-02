@@ -151,7 +151,8 @@ export function bindClass(
           const tokens = tokensMap.get(key);
           if (tokens) {
             for (let i = 0; i < tokens.length; i++) {
-              activeTokens.add(tokens[i]!);
+              const token = tokens[i];
+              if (token !== undefined) activeTokens.add(token);
             }
           }
         }
@@ -162,8 +163,10 @@ export function bindClass(
       // in a single pass using the native classList API.
       for (const tokens of tokensMap.values()) {
         for (let i = 0, len = tokens.length; i < len; i++) {
-          const token = tokens[i]!;
-          element.classList.toggle(token, activeTokens.has(token));
+          const token = tokens[i];
+          if (token !== undefined) {
+            element.classList.toggle(token, activeTokens.has(token));
+          }
         }
       }
     },
@@ -242,7 +245,8 @@ export function bindAttr(
     (states) => {
       for (const [name, value] of Object.entries(states)) {
         if (!(name in isAriaMap)) continue;
-        const isAria = isAriaMap[name]!;
+        const isAria = isAriaMap[name];
+        if (isAria === undefined) continue;
 
         let attrVal: string | null = null;
         if (value !== null && value !== undefined) {

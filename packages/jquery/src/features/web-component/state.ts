@@ -52,8 +52,11 @@ export class ComponentState {
    * Deterministically releases all reactive resources, observers, and event listeners.
    */
   dispose() {
-    // 1. Release all reactive effects, observers, and event listeners registered during lifecycle
-    this.effects.forEach((e) => e.dispose());
+    const len = this.effects.length;
+    for (let i = 0; i < len; i++) {
+      const e = this.effects.at(i);
+      if (e) e.dispose();
+    }
     this.effects.dispose();
 
     // 2. Attribute Reset

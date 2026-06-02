@@ -197,7 +197,8 @@ describe('$.atomList (Integration)', () => {
       await $.nextTick();
       expect($ul.find('li').text()).toBe('1');
 
-      const item = items.value[0]!;
+      const item = items.value[0];
+      if (!item) throw new Error('Expected item to be defined');
       item.nested.val = 2;
       items.value = [{ ...item }];
       await $.nextTick();
@@ -297,9 +298,13 @@ describe('$.atomList (Integration)', () => {
 
       // 1. Child selector delegation and context (item, index, event)
       const $btn = $container.find('.btn').eq(1);
-      click($btn[0]!);
+      const btnEl = $btn[0];
+      if (!btnEl) throw new Error('Expected button element to be defined');
+      click(btnEl);
       expect(handler).toHaveBeenCalledTimes(2); // btn click + li bubble
-      const [item, index, e] = handler.mock.calls[0]!;
+      const call = handler.mock.calls[0];
+      if (!call) throw new Error('Expected call to be defined');
+      const [item, index, e] = call;
       expect(item).toEqual({ id: 2 });
       expect(index).toBe(1);
       expect(e).toBeDefined();
@@ -308,8 +313,10 @@ describe('$.atomList (Integration)', () => {
       items.value = [{ id: 2 }, { id: 1 }];
       await $.nextTick();
       handler.mockClear();
-      click($container.find('.btn').eq(0)[0]!); // Item 2 is now at index 0
-      expect(handler.mock.calls[0]![1]).toBe(0);
+      const btnEl2 = $container.find('.btn').eq(0)[0];
+      if (!btnEl2) throw new Error('Expected button element to be defined');
+      click(btnEl2); // Item 2 is now at index 0
+      expect(handler.mock.calls[0]?.[1]).toBe(0);
 
       // 3. Child selector scoping (must not escape item root)
       const $outer = $('<div class="outside-btn">').appendTo(document.body);
@@ -320,13 +327,16 @@ describe('$.atomList (Integration)', () => {
         events: { 'click .outside-btn': handler2 },
       });
       await $.nextTick();
-      click($container.find('li')[0]!);
+      const liEl = $container.find('li')[0];
+      if (!liEl) throw new Error('Expected li element to be defined');
+      click(liEl);
       expect(handler2).not.toHaveBeenCalled();
 
       // 4. Unbind cleanup
       $container.atomUnbind();
       handler.mockClear();
-      click($container.find('.btn').eq(0)[0]!);
+      const btnEl3 = $container.find('.btn').eq(0)[0];
+      if (btnEl3) click(btnEl3);
       expect(handler).not.toHaveBeenCalled();
 
       $outer.remove();
@@ -356,7 +366,9 @@ describe('$.atomList (Integration)', () => {
       items.value = [{ id: 2 }];
       await $.nextTick();
 
-      click($btn1[0]!);
+      const btnEl4 = $btn1[0];
+      if (!btnEl4) throw new Error('Expected button element to be defined');
+      click(btnEl4);
       expect(handler).not.toHaveBeenCalled();
 
       resolveRemove();
@@ -391,7 +403,9 @@ describe('$.atomList (Integration)', () => {
       await $.nextTick();
 
       const $btn = $container.find('.child-btn').eq(0);
-      click($btn[0]!);
+      const btnEl5 = $btn[0];
+      if (!btnEl5) throw new Error('Expected button element to be defined');
+      click(btnEl5);
 
       expect(childHandler).toHaveBeenCalledTimes(1);
       expect(parentHandler).toHaveBeenCalledTimes(1);

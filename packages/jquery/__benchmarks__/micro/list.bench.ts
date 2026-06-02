@@ -34,7 +34,7 @@ describe('List Rendering: Initial Render (1000 items)', () => {
       const items = makeItems(1000);
       let html = '';
       for (let i = 0; i < 1000; i++) {
-        html += `<div class="item">${items[i]!.text}</div>`;
+        html += `<div class="item">${items[i]?.text}</div>`;
       }
       $c.html(html);
       cleanupContainer($c);
