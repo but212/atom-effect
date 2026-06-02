@@ -12,8 +12,7 @@
  * teardown mechanism for side-effects.
  */
 
-import type { SlotBuffer } from '@but212/atom-effect-utils';
-import { Result } from '@but212/atom-effect-utils';
+import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import {
   BRAND,
   BrandFlags,
@@ -37,23 +36,31 @@ import {
   trackingContext,
 } from '@/core/base';
 import type {
-  DepBufferState,
   Dependency,
   DependencyId,
+  DependencyLink,
   DependencyTracker,
   EffectFunction,
   EffectObject,
   EffectOptions,
+  ReactiveDependencyTracker,
   ReactiveNode,
   Subscriber,
-  Subscription,
+  SubscriberTarget,
 } from '@/types';
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { createDepBuffer, disposeAll, prepareTracking } from './buffers';
+import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
 import { currentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
 
-class EffectImpl implements EffectObject, DependencyTracker, Subscriber, ReactiveNode<void> {
+class EffectImpl
+  implements
+    EffectObject,
+    DependencyTracker,
+    Subscriber,
+    ReactiveNode<void>,
+    ReactiveDependencyTracker
+{
   // Optimization: Engine-exposed state (JS fields)
   flags: number = 0;
   version: number = 0;
@@ -65,13 +72,10 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
   _k: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
 
-  _storage: {
-    slots: SlotBuffer<Subscription<void>> | null;
-    deps: DepBufferState | null;
-  } = {
-    slots: null,
-    deps: createDepBuffer(),
-  };
+  _slots: SlotBuffer<SubscriberTarget<void>> | null = null;
+  _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
+  _depMap: Map<Dependency, number> | null = null;
+  _depFlags: number = BUFFER_FLAGS.NONE;
 
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
@@ -132,7 +136,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this.#execCleanup();
-    if (this._storage.deps) disposeAll(this._storage.deps);
+    disposeAll(this);
   }
 
   /** Total executions since initialization. */
@@ -161,10 +165,8 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
     this.#execCleanup();
 
-    const deps = this._storage.deps;
-    if (!deps) return Result.ok(undefined);
     nodeStartTracking(this);
-    prepareTracking(deps);
+    prepareTracking(this);
     const prevDepth = trackingContext.stack.length;
 
     try {
@@ -191,9 +193,7 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     // Execution is skipped if the effect is not 'forced', has no dependencies
     // yet, and its dependencies haven't changed (dirty check). This minimizes
     // redundant computations during the flush cycle.
-    const deps = this._storage.deps;
-    if (!deps) return Result.ok(false);
-    if (!(force || deps.slots.length === 0 || nodeIsDirty(this))) return Result.ok(false);
+    if (!(force || this._depSlots.length === 0 || nodeIsDirty(this))) return Result.ok(false);
 
     const budgetRes = this.#validateBudget();
     if (Result.isErr(budgetRes)) return budgetRes as unknown as Result<boolean, Error>;
