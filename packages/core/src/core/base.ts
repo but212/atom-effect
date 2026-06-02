@@ -281,7 +281,7 @@ export function nodeNotifySubscribers<T>(
 
     for (let i = 0; i < len; i++) {
       const sub = slots.at(i);
-      if (sub !== null) {
+      if (sub) {
         try {
           if (typeof sub === 'function') {
             (sub as (n?: unknown, o?: unknown) => void)(newValue, oldValue);

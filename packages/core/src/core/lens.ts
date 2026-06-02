@@ -247,7 +247,6 @@ class LensImpl<T extends object, P extends string>
   extends BaseLens<PathValue<T, P>>
   implements WritableAtom<PathValue<T, P>>, ReactiveNode<PathValue<T, P>>
 {
-  _slots: SlotBuffer<SubscriberTarget<PathValue<T, P>>> | null = null;
   #root: WritableAtom<T>;
   #path: P;
   #parts: string[];
@@ -396,7 +395,6 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   extends BaseLens<MergedDependencyValue<L>>
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<MergedDependencyValue<L>>
 {
-  _slots: SlotBuffer<SubscriberTarget<MergedDependencyValue<L>>> | null = null;
   #lenses: L;
   #listeners = new Set<SubscriberTarget<MergedDependencyValue<L>>>();
   #unsubs: (() => void)[] = [];
