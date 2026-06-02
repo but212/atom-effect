@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import $ from '@/index';
-import { sanitizeCache, sanitizeHtml } from '@/utils/sanitize';
+import {
+  isDangerousCssValue,
+  type SanitizationPolicy,
+  sanitizeCache,
+  sanitizeHtml,
+} from '@/utils/sanitize';
 
 // ─── Security Test Kit ───────────────────────────────────────────────────────
 
@@ -197,6 +202,22 @@ describe('Atom-Effect: Security Specification', () => {
       const result = (await TestKit.sanitize(payload)).toLowerCase();
       expect(result).not.toContain('javascript');
     });
+
+    it('should handle srcset attribute sanitization', async () => {
+      // Safe srcset
+      const safe = await TestKit.sanitize('<img srcset="safe.png 1x, safe2.png 2x">');
+      expect(safe).toContain('srcset="safe.png 1x, safe2.png 2x"');
+
+      // Dangerous srcset
+      const dangerous = await TestKit.sanitize(
+        '<img srcset="javascript:alert(1) 1x, safe.png 2x">'
+      );
+      expect(dangerous).toContain('srcset="data-unsafe-protocol: 1x, safe.png 2x"');
+
+      // Empty and multiple spaces
+      const spacey = await TestKit.sanitize('<img srcset="  safe.png   1x , , safe2.png 2x ">');
+      expect(spacey).toContain('srcset="safe.png 1x,  , safe2.png 2x"');
+    });
   });
 
   describe('Style Hardening: CSS-based Attack Prevention', () => {
@@ -225,6 +246,33 @@ describe('Atom-Effect: Security Specification', () => {
       const payload = '<div style="font-family: \'url("javascript:alert(1)")\'"></div>';
       const result = (await TestKit.sanitize(payload)).toLowerCase();
       expect(result).not.toContain('javascript');
+    });
+
+    it('should set style to data-unsafe-css when no safe styles remain', async () => {
+      const result = await TestKit.sanitize(
+        '<div style="background: url(javascript:alert(1))"></div>'
+      );
+      expect(result).toContain('style="data-unsafe-css:"');
+    });
+
+    it('should neutralize dangerous CSS inside style element', async () => {
+      const payload = '<style>body { background: url(javascript:alert(1)); }</style>';
+      const result = await TestKit.sanitize(payload);
+      expect(result).toContain('<span>/* blocked */</span>');
+    });
+
+    it('should handle empty style element', async () => {
+      const payload = '<style></style>';
+      const result = await TestKit.sanitize(payload);
+      expect(result).toContain('<span></span>');
+    });
+
+    it('should return false for isDangerousCssValue with invalid input', () => {
+      expect(isDangerousCssValue(null as unknown as string)).toBe(false);
+    });
+
+    it('should resolve out of range numeric entities to empty string in CSS validation', () => {
+      expect(isDangerousCssValue('&#x120000;color:red')).toBe(false);
     });
   });
 
@@ -262,6 +310,39 @@ describe('Atom-Effect: Security Specification', () => {
       const result = await TestKit.sanitizeUpdate('<b>Safe</b>', '<img src=x onerror=alert(1)>');
       expect(result).not.toContain('onerror=');
       expect(result).toContain('data-unsafe-attr="onerror"');
+    });
+
+    it('should return empty string for falsy HTML inputs', () => {
+      expect(sanitizeHtml(null)).toBe('');
+      expect(sanitizeHtml(undefined)).toBe('');
+      expect(sanitizeHtml('')).toBe('');
+    });
+
+    it('should sanitizeHtml with custom policy', () => {
+      const customPolicy: SanitizationPolicy = {
+        urlAttributes: ['src'],
+        blacklistedTags: ['script'],
+      };
+      const html =
+        '<iframe src="javascript:alert(1)"></iframe><a href="javascript:alert(2)"></a><script>alert(3)</script>';
+      const result = sanitizeHtml(html, customPolicy);
+      expect(result).toContain('<iframe src="data-unsafe-protocol:"></iframe>');
+      expect(result).toContain('<a></a>');
+      expect(result).toContain('<span>alert(3)</span>');
+    });
+
+    it('should handle SVG sensitive SMIL/animation attributes', async () => {
+      const payload1 =
+        '<animate attributeName="onmouseover" from="javascript:alert(1)" to="safe" />';
+      const result1 = await TestKit.sanitize(payload1);
+      expect(result1).not.toContain('attributeName');
+      expect(result1).not.toContain('from');
+
+      const payload2 = '<animate attributeName="href" from="onclick" to="javascript:alert(2)" />';
+      const result2 = await TestKit.sanitize(payload2);
+      expect(result2).not.toContain('attributeName');
+      expect(result2).not.toContain('from');
+      expect(result2).not.toContain('to');
     });
   });
 
