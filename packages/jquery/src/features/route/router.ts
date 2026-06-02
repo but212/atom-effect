@@ -128,9 +128,9 @@ export class RouterImpl implements Router {
       : { path: this.#config.default, query: {}, params: {} };
 
     this.#locationAtom = createAtom({
-      path: initial.path!,
-      query: initial.query!,
-      params: initial.params!,
+      path: initial.path ?? this.#config.default,
+      query: initial.query ?? {},
+      params: initial.params ?? {},
     });
 
     this.location = computed(() => this.#locationAtom.value);
@@ -254,7 +254,7 @@ export class RouterImpl implements Router {
         this
       );
       if (resolved.success) {
-        this.#updateState(resolved.path!, resolved.query!, resolved.params!);
+        this.#updateState(resolved.path ?? '', resolved.query ?? {}, resolved.params ?? {});
       } else {
         // Revert: Navigation rejected by an 'onEnter' guard.
         this.#urlAdapter.revert(state.previousUrl);
@@ -302,7 +302,7 @@ export class RouterImpl implements Router {
     );
 
     if (resolved.success) {
-      this.#updateState(resolved.path!, resolved.query!, resolved.params!);
+      this.#updateState(resolved.path ?? '', resolved.query ?? {}, resolved.params ?? {});
     } else {
       // Guard failure on browser-initiated navigation (Back/Forward).
       this.#revertUrl(state.previousUrl);
@@ -341,7 +341,7 @@ export class RouterImpl implements Router {
   #canLeave(): boolean {
     const state = this.#stateAtom.peek();
     const def = state.currentDef || this.#config.routes[this.#config.notFound];
-    return def?.onLeave ? untracked(() => def.onLeave!(this)) !== false : true;
+    return def?.onLeave ? untracked(() => def.onLeave?.(this)) !== false : true;
   }
 
   /**
@@ -354,6 +354,7 @@ export class RouterImpl implements Router {
     if (state.isDestroyed) return;
     this.#stateAtom.value = { ...state, isDestroyed: true };
     runRendererCleanups(this.#renderer);
+    // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
     this.#cleanups.forEach((fn: () => void) => Result.tryCatch(fn));
     this.#cleanups.dispose();
   }

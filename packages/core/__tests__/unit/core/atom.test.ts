@@ -33,9 +33,9 @@ describe('Atom', () => {
       expect(a.value).toBe(42);
       expect(atom(null).value).toBeNull();
 
-      ['invalid', null, {}].forEach((sub) => {
+      for (const sub of ['invalid', null, {}]) {
         expect(() => a.subscribe(sub as unknown as () => void)).toThrow(AtomError);
-      });
+      }
 
       // Valid subscriber with execute method should not throw
       expect(() => a.subscribe({ execute: vi.fn() })).not.toThrow();
@@ -158,10 +158,10 @@ describe('Atom', () => {
       const log: number[] = [];
 
       unsub = a.subscribe((nv) => {
-        log.push(nv!);
+        log.push(nv ?? 0);
         if (nv === 1) unsub?.();
       });
-      a.subscribe((nv) => log.push(nv!));
+      a.subscribe((nv) => log.push(nv ?? 0));
 
       expect(a.subscriberCount()).toBe(2);
       a.value = 1;

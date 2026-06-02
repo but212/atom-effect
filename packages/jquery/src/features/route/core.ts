@@ -140,21 +140,24 @@ export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
     return Option.some({ route: { pattern: path, def: exactDef }, params: {} });
   }
   for (let i = 0, len = matcher.dynamic.length; i < len; i++) {
-    const item = matcher.dynamic[i]!;
+    const item = matcher.dynamic[i];
+    if (item === undefined) continue;
     const match = path.match(item.regex);
     if (match) {
       const params: Record<string, string> = {};
       for (let j = 0, pLen = item.paramNames.length; j < pLen; j++) {
+        const name = item.paramNames[j];
+        if (name === undefined) continue;
         const val = match[j + 1] || '';
         if (val.indexOf('%') !== -1) {
           try {
-            params[item.paramNames[j]!] = decodeURIComponent(val);
+            params[name] = decodeURIComponent(val);
             continue;
           } catch {
             /* fallback to raw value if decoding fails */
           }
         }
-        params[item.paramNames[j]!] = val;
+        params[name] = val;
       }
       return Option.some({ route: { pattern: item.pattern, def: item.def }, params });
     }
@@ -225,7 +228,7 @@ export function resolveNavigation(
     // Logic: Guard Execution
     // Guards are executed 'untracked' to prevent the router from becoming a dependency
     // of whatever reactive state the guard happens to read.
-    const res = untracked(() => def.onEnter!(params, router));
+    const res = untracked(() => def.onEnter?.(params, router));
     if (res === false) return { success: false };
     if (res) Object.assign(params, res);
   }

@@ -35,9 +35,9 @@ const publishablePackages = packageDetails.filter((pkg) => !pkg.private);
 const mismatches = publishablePackages.filter((pkg) => pkg.version !== version);
 
 if (mismatches.length > 0) {
-  mismatches.forEach((m) =>
-    console.error(`x Version mismatch: ${m.path} (${m.version}) != ${version}`)
-  );
+  for (const m of mismatches) {
+    console.error(`x Version mismatch: ${m.path} (${m.version}) != ${version}`);
+  }
   process.exit(1);
 }
 

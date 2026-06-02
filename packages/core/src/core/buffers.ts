@@ -62,7 +62,8 @@ export function claimExisting(state: DepBufferState, dep: Dependency, trackIndex
   const existingIndex = findExistingIndex(state, dep, trackIndex);
   if (existingIndex === -1) return false;
 
-  const link = slots.at(existingIndex)!;
+  const link = slots.at(existingIndex);
+  if (!link) return false;
   link.version = dep.version;
 
   const temp = slots.at(trackIndex);

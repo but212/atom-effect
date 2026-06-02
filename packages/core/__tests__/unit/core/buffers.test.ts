@@ -37,11 +37,15 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     it('claimExisting: should swap and relocate dependencies correctly', () => {
       const buf = createDepBuffer();
       const deps = [0, 1, 2].map((id) => createMockDep(id));
+      const [d0, d1, d2] = deps;
+      if (!d0 || !d1 || !d2) throw new Error('Setup failed');
       const links = deps.map((d) => createLink(d, 1, vi.fn()));
-      links.forEach((l) => depBufferPush(buf, l));
+      for (const l of links) {
+        depBufferPush(buf, l);
+      }
 
       // Case 1: Search ahead and swap (index 2 -> index 0)
-      expect(claimExisting(buf, deps[2]!, 0)).toBe(true);
+      expect(claimExisting(buf, d2, 0)).toBe(true);
       expect(buf.slots.at(0)).toBe(links[2]);
       expect(buf.slots.at(2)).toBe(links[0]);
 
@@ -104,11 +108,15 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
       const buf = createDepBuffer();
       const count = 40; // Beyond threshold (8)
       const deps = Array.from({ length: count }, (_, i) => createMockDep(i));
-      deps.forEach((d) => depBufferPush(buf, createLink(d, 1, vi.fn())));
+      for (const d of deps) {
+        depBufferPush(buf, createLink(d, 1, vi.fn()));
+      }
 
       // Verify index accuracy and swapping after Map creation
-      expect(claimExisting(buf, deps[39]!, 0)).toBe(true);
-      expect(buf.slots.at(0)?.node).toBe(deps[39]);
+      const dep39 = deps[39];
+      if (!dep39) throw new Error('Setup failed');
+      expect(claimExisting(buf, dep39, 0)).toBe(true);
+      expect(buf.slots.at(0)?.node).toBe(dep39);
 
       // Regression test: Map index synchronization during hole reuse
       depBufferSetAt(buf, 1, null);
@@ -128,7 +136,9 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
         const dep = i === 5 || i === 35 ? d0 : createMockDep(i + 100);
         return createLink(dep, 1, vi.fn());
       });
-      links.forEach((l) => depBufferPush(buf, l));
+      for (const l of links) {
+        depBufferPush(buf, l);
+      }
       claimExisting(buf, createMockDep(999), 0); // Trigger Map
 
       // Search for d0 from trackIndex 10.
@@ -156,7 +166,9 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
         depB,
         depA,
       ];
-      deps.forEach((d) => depBufferPush(buf, createLink(d, 1, vi.fn())));
+      for (const d of deps) {
+        depBufferPush(buf, createLink(d, 1, vi.fn()));
+      }
 
       expect(buf.map).not.toBeNull();
       expect(buf.map?.get(depA)).toBe(8);
@@ -189,7 +201,9 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
         createMockDep(10), // 10
         depA, // 11
       ];
-      deps.forEach((d) => depBufferPush(buf, createLink(d, 1, vi.fn())));
+      for (const d of deps) {
+        depBufferPush(buf, createLink(d, 1, vi.fn()));
+      }
 
       expect(buf.map?.get(depA)).toBe(11);
 
@@ -219,7 +233,9 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
         createMockDep(7), // 7
         createMockDep(8), // 8
       ];
-      deps.forEach((d) => depBufferPush(buf, createLink(d, 1, vi.fn())));
+      for (const d of deps) {
+        depBufferPush(buf, createLink(d, 1, vi.fn()));
+      }
 
       expect(buf.map?.get(depB)).toBe(2);
 
@@ -246,7 +262,12 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     it('Lifecycle: truncateFrom & disposeAll must trigger unsubscriptions', () => {
       const buf = createDepBuffer();
       const unsubs = [vi.fn(), vi.fn(), vi.fn()];
-      unsubs.forEach((u, i) => depBufferPush(buf, createLink(createMockDep(i), 1, u)));
+      for (let i = 0; i < unsubs.length; i++) {
+        const u = unsubs[i];
+        if (u) {
+          depBufferPush(buf, createLink(createMockDep(i), 1, u));
+        }
+      }
 
       depBufferTruncateFrom(buf, 1); // Removes index 1, 2
       expect(unsubs[0]).not.toHaveBeenCalled();

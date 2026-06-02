@@ -134,7 +134,10 @@ export function applyListBinding<T>(
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   for (let i = 0, len = this.length; i < len; i++) {
-    applyListBinding(this[i]!, source, options);
+    const el = this[i];
+    if (el) {
+      applyListBinding(el, source, options);
+    }
   }
   return this;
 }
@@ -155,7 +158,8 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
     const spaceIdx = trimmed.indexOf(' ');
     const type = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
     const selector = spaceIdx === -1 ? '> *' : trimmed.slice(spaceIdx + 1).trim() || '> *';
-    return { type, selector, callback: callback as Function };
+    // biome-ignore lint/suspicious/noExplicitAny: cast to generic callback with any arguments
+    return { type, selector, callback: callback as (...args: any[]) => any };
   });
 }
 

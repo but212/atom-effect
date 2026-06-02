@@ -30,7 +30,7 @@ const noop = () => {};
 /** Helper to resolve fallback node identity structurally. @internal */
 const getFallbackIdentity = (obj: object, id: DependencyId): { name: string; type: string } => {
   const brand = (obj as { [BRAND]?: number })[BRAND];
-  const info = brand !== undefined ? BRAND_IDENTITY_MAP[brand & BRAND_MASK] : undefined;
+  const info = brand === undefined ? undefined : BRAND_IDENTITY_MAP[brand & BRAND_MASK];
   const type = info?.type ?? 'unknown';
   const prefix = info?.prefix ?? `${type}_`;
   return { name: `${prefix}${id}`, type };
@@ -140,16 +140,16 @@ class DevDebugEngine implements DebugConfig {
     if (obj === null || typeof obj !== 'object' || id === undefined) return;
 
     let entry = this.#registry.get(id);
-    if (!entry) {
-      entry = { name: customName ?? `${type}_${id}`, type };
-      this.#registry.set(id, entry);
-    } else {
+    if (entry) {
       if (customName !== undefined) {
         entry.name = customName;
       } else if (isFallbackName(entry.name, entry.type, id)) {
         entry.name = `${type}_${id}`;
       }
       entry.type = type;
+    } else {
+      entry = { name: customName ?? `${type}_${id}`, type };
+      this.#registry.set(id, entry);
     }
 
     this.registerNode(obj as object & { id: DependencyId });

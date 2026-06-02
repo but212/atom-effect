@@ -43,21 +43,21 @@ describe('Async Binding Integration', () => {
 
     // P1 resolves late, P2 resolves early.
     // P2 should win because it was the LATEST promise assigned to the atom.
-    let resolve1: (v: string) => void;
+    let resolve1: ((v: string) => void) | undefined;
     const p1 = new Promise<string>((r) => (resolve1 = r));
 
-    let resolve2: (v: string) => void;
+    let resolve2: ((v: string) => void) | undefined;
     const p2 = new Promise<string>((r) => (resolve2 = r));
 
     atom.value = p1; // Assigned first
     atom.value = p2; // Assigned second (Latest)
 
-    resolve2!('P2 (Fast)');
+    resolve2?.('P2 (Fast)');
     await p2;
     await $.nextTick();
     expect($el.text()).toBe('P2 (Fast)');
 
-    resolve1!('P1 (Slow)');
+    resolve1?.('P1 (Slow)');
     await p1;
     await $.nextTick();
 

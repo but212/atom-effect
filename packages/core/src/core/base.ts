@@ -57,7 +57,7 @@ export function pushTrackingSubscriber(
 export function popTrackingSubscriber(context: TrackingContext): void {
   const stack = context.stack;
   stack.pop();
-  context.current = stack.length > 0 ? stack[stack.length - 1]! : null;
+  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
 }
 
 /**
@@ -67,7 +67,7 @@ export function popTrackingSubscriber(context: TrackingContext): void {
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
   const stack = context.stack;
   stack.length = Math.max(0, Math.min(depth, stack.length));
-  context.current = stack.length > 0 ? stack[stack.length - 1]! : null;
+  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
 }
 
 /**

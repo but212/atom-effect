@@ -55,9 +55,9 @@ function resolveArgs<V>(
   value: V | undefined
 ): Record<string, V> | null {
   return typeof keyOrMap === 'string'
-    ? value !== undefined
-      ? { [keyOrMap]: value }
-      : null
+    ? value === undefined
+      ? null
+      : { [keyOrMap]: value }
     : keyOrMap || null;
 }
 
@@ -412,8 +412,10 @@ $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
 
   return atomEachElement(this, (el) => {
     for (let i = 0; i < activeTasks.length; i++) {
-      const task = activeTasks[i]!;
-      task.run(el, opt[task.key]);
+      const task = activeTasks[i];
+      if (task !== undefined) {
+        task.run(el, opt[task.key]);
+      }
     }
   });
 };

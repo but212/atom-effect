@@ -57,10 +57,11 @@ export function buildIndices<T>(
 
   // Logic: PASS 1 — Head Fast-Forward
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
-    const item = items[startIndex]!;
+    const item = items[startIndex];
+    if (item === undefined) break;
     const k = getKey(item, startIndex);
-    const oldRow = snapshots[startIndex]!;
-    if (oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
+    const oldRow = snapshots[startIndex];
+    if (!oldRow || oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
 
     slots[startIndex] = {
       key: k,
@@ -75,10 +76,11 @@ export function buildIndices<T>(
 
   // Logic: PASS 2 — Tail Fast-Forward
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
-    const item = items[newEndIndex]!;
+    const item = items[newEndIndex];
+    if (item === undefined) break;
     const k = getKey(item, newEndIndex);
-    const oldRow = snapshots[oldEndIndex]!;
-    if (oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
+    const oldRow = snapshots[oldEndIndex];
+    if (!oldRow || oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
 
     slots[newEndIndex] = {
       key: k,
@@ -95,7 +97,8 @@ export function buildIndices<T>(
   // Logic: PASS 3 — Middle-Range Reconciliation
   const hasRemoving = removingKeys.size > 0;
   for (let i = startIndex; i <= newEndIndex; i++) {
-    const item = items[i]!;
+    const item = items[i];
+    if (item === undefined) continue;
     const k = getKey(item, i);
 
     if (newIndexMap.has(k)) {
@@ -128,7 +131,8 @@ export function buildIndices<T>(
       slots[i] = slot;
       toRender.push(slot);
     } else {
-      const oldRow = snapshots[oldIdx]!;
+      const oldRow = snapshots[oldIdx];
+      if (!oldRow) continue;
       const needsForceReplace = !update && !eq(oldRow.item, item);
       const slot: DiffSlot<T> = {
         key: k,
@@ -136,7 +140,7 @@ export function buildIndices<T>(
         state: needsForceReplace ? ItemState.ForceReplace : ItemState.Existing,
         oldIndex: oldIdx,
         targetIndex: i,
-        node: oldRow.node!,
+        node: oldRow.node,
       };
       slots[i] = slot;
       if (needsForceReplace) toRender.push(slot);

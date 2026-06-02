@@ -30,7 +30,8 @@ describe('Web Components: Controller Lifecycle', () => {
     'setup and teardown 100 components',
     () => {
       const $c = createContainer();
-      const container = $c[0]!;
+      const container = $c[0];
+      if (!container) throw new Error('Container not found');
       for (let i = 0; i < 100; i++) {
         const el = document.createElement('benchmark-comp') as BenchmarkComp;
         container.appendChild(el);
@@ -51,7 +52,8 @@ describe('Web Components: Controller Lifecycle', () => {
 describe('Web Components: Context Lookup Depth', () => {
   const runDepthLookup = (depth: number) => {
     const $c = createContainer();
-    const root = $c[0]!;
+    const root = $c[0];
+    if (!root) throw new Error('Container not found');
 
     // Register provider on root
     $.provideAtom(root, 'context-key', 'context-value');
@@ -100,7 +102,8 @@ describe('Web Components: Shadow DOM Boundary Traversal', () => {
     'context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)',
     () => {
       const $c = createContainer();
-      const container = $c[0]!;
+      const container = $c[0];
+      if (!container) throw new Error('Container not found');
 
       // Register provider
       $.provideAtom(container, 'theme-context', 'dark-theme');

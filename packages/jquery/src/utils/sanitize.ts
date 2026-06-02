@@ -291,9 +291,10 @@ const SPECIAL_ATTRIBUTES: Record<
       const trimmed = part.trim();
       if (!trimmed) return part;
       const [url, ...meta] = trimmed.split(/\s+/);
-      return Guard.isDangerousUri(url!)
+      if (url === undefined) return part;
+      return Guard.isDangerousUri(url)
         ? ['data-unsafe-protocol:', ...meta].join(' ')
-        : [Guard.normalize(url!), ...meta].join(' ');
+        : [Guard.normalize(url), ...meta].join(' ');
     });
     DOM.setAttribute(el, name, parts.join(', '));
   },
@@ -408,7 +409,9 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
   if (policy.blacklistedTags.includes(tag)) {
     const span = DOM.createElement('span');
     // Simplified attribute mirroring.
-    DOM.getAttributes(el).forEach((a) => span.setAttribute(a.name, a.value));
+    for (const a of DOM.getAttributes(el)) {
+      span.setAttribute(a.name, a.value);
+    }
     scrubElement(span, policy);
 
     // Security: Recursive Style Protection

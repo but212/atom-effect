@@ -26,16 +26,20 @@ describe('Atoms: Core Operations', () => {
 
   const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
   // Force active subscriptions to bypass 'size === 0' optimization
-  atoms.forEach((a) => effect(() => keep(a.value), benchEffectOptions));
+  for (const a of atoms) {
+    effect(() => keep(a.value), benchEffectOptions);
+  }
 
   bench(
     `read/write performance: active (x${REPEATS})`,
     () => {
       let sum = 0;
       for (let i = 0; i < REPEATS; i++) {
-        const at = atoms[i]!;
-        at.value++;
-        sum += at.value;
+        const at = atoms[i];
+        if (at) {
+          at.value++;
+          sum += at.value;
+        }
       }
       keep(sum);
     },
@@ -48,7 +52,8 @@ describe('Atoms: Core Operations', () => {
       untracked(() => {
         let sum = 0;
         for (let i = 0; i < REPEATS; i++) {
-          sum += atoms[i]!.value;
+          const at = atoms[i];
+          if (at) sum += at.value;
         }
         keep(sum);
       });

@@ -232,7 +232,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
     try {
-      if (shouldRecompute(this.flags, this._storage.deps!)) {
+      const deps = this._storage.deps;
+      if (deps && shouldRecompute(this.flags, deps)) {
         this.#recompute();
       } else {
         this.flags &= ~COMPUTED_STATE_FLAGS.DIRTY;
@@ -298,7 +299,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     trackingContext.current?.addDependency(this);
 
     if ((this.flags & STATE_MASKS.ERROR_MASK) !== 0) return true;
-    if (!(this._storage.deps!.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
+    const deps = this._storage.deps;
+    if (!deps || !(deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
 
     return untracked(() => collectErrorsRecursive(this, true).length > 0);
   }
@@ -313,7 +315,8 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
   get errors(): readonly Error[] {
     trackingContext.current?.addDependency(this);
 
-    if (!(this._storage.deps!.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
+    const deps = this._storage.deps;
+    if (!deps || !(deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
       return this._error ? Object.freeze([this._error]) : EMPTY_ERROR_ARRAY;
     }
 
@@ -364,7 +367,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
     const flags = this.flags;
     if ((flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) return;
 
-    disposeAll(this._storage.deps!);
+    if (this._storage.deps) {
+      disposeAll(this._storage.deps);
+    }
 
     this._storage.slots?.clear();
     this.flags =
@@ -397,7 +402,9 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
     try {
       nodeStartTracking(this);
-      prepareTracking(this._storage.deps!);
+      if (this._storage.deps) {
+        prepareTracking(this._storage.deps);
+      }
 
       let val: T | Promise<T> | undefined;
       let hasError = false;
@@ -419,7 +426,7 @@ class ComputedAtomImpl<T> implements ComputedAtom<T>, Subscriber, ReactiveNode<T
 
       if (hasError) {
         this.#handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
-      } else if (isPromise(val!)) {
+      } else if (isPromise(val)) {
         this.#handleAsyncComputation(val as Promise<T>);
       } else {
         this.#finalizeResolution(val as T);

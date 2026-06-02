@@ -144,7 +144,7 @@ describe('Navigation: Anchor Click Interception', () => {
         frag.appendChild(a);
         anchors.push(a);
       }
-      $c[0]!.appendChild(frag);
+      $c[0]?.appendChild(frag);
 
       // Trigger standard click event simulation
       for (let i = 0; i < 100; i++) {
@@ -153,7 +153,7 @@ describe('Navigation: Anchor Click Interception', () => {
           cancelable: true,
           view: window,
         });
-        anchors[i]!.dispatchEvent(event);
+        anchors[i]?.dispatchEvent(event);
       }
 
       nav.destroy();

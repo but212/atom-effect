@@ -246,7 +246,7 @@ export function generateGridData(rows: number): DataGridRow[] {
     name: `${names[i % names.length]} ${Math.floor(i / names.length)}`,
     age: 20 + (i % 50),
     email: `user${i}@example.com`,
-    department: departments[i % departments.length]!,
+    department: departments[i % departments.length] ?? 'Engineering',
     salary: 50000 + (i % 10) * 10000,
     startDate: new Date(2020, 0, 1 + (i % 365)),
     active: i % 5 !== 0,

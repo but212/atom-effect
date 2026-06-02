@@ -38,7 +38,10 @@ describe('Registry: Deep Tree Cleanup', () => {
     'cleanup() - non-reactive 1000 elements tree scan',
     () => {
       const $c = createContainer();
-      buildDeepTree($c[0]!, 5, 4, false); // ~1024 elements
+      const containerEl = $c[0];
+      if (containerEl) {
+        buildDeepTree(containerEl, 5, 4, false); // ~1024 elements
+      }
       cleanup($c);
       $c.remove();
     },
@@ -49,7 +52,10 @@ describe('Registry: Deep Tree Cleanup', () => {
     'cleanup() - reactive 1000 elements tree (mixed bindings)',
     () => {
       const $c = createContainer();
-      buildDeepTree($c[0]!, 5, 4, true); // ~1024 elements, mixed reactive bindings
+      const containerEl = $c[0];
+      if (containerEl) {
+        buildDeepTree(containerEl, 5, 4, true); // ~1024 elements, mixed reactive bindings
+      }
       cleanup($c);
       $c.remove();
     },

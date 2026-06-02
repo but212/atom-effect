@@ -105,8 +105,8 @@ describe('SVG Support', () => {
     expect(children.length).toBe(3);
 
     // Check namespace of first child
-    expect(children[0]!.namespaceURI).toBe(SVG_NS);
-    expect(children[0]!.tagName).toMatch(/circle/i);
+    expect(children[0]?.namespaceURI).toBe(SVG_NS);
+    expect(children[0]?.tagName).toMatch(/circle/i);
 
     $(svg).remove();
   });

@@ -45,7 +45,7 @@ export type BindingDebugType =
  */
 const getSourceValue = <T>(source: AsyncReactiveValue<T>): T | Promise<T> => {
   if (isAtom(source)) return (source as ReadonlyAtom<T | Promise<T>>).value;
-  if (typeof source === 'function') return (source as Function)();
+  if (typeof source === 'function') return (source as () => T | Promise<T>)();
   return source as T | Promise<T>;
 };
 

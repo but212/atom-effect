@@ -26,7 +26,9 @@ class NavTestHarness {
   }
 
   teardown() {
-    this.activeNavs.forEach((nav) => nav.destroy());
+    for (const nav of this.activeNavs) {
+      nav.destroy();
+    }
     this.$target.remove();
     $('.nav-link, base, meta[name="description"], meta[name="keywords"]').remove();
     vi.restoreAllMocks();

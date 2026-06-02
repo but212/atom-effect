@@ -161,7 +161,8 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
 
     this.#execCleanup();
 
-    const deps = this._storage.deps!;
+    const deps = this._storage.deps;
+    if (!deps) return Result.ok(undefined);
     nodeStartTracking(this);
     prepareTracking(deps);
     const prevDepth = trackingContext.stack.length;
@@ -190,7 +191,8 @@ class EffectImpl implements EffectObject, DependencyTracker, Subscriber, Reactiv
     // Execution is skipped if the effect is not 'forced', has no dependencies
     // yet, and its dependencies haven't changed (dirty check). This minimizes
     // redundant computations during the flush cycle.
-    const deps = this._storage.deps!;
+    const deps = this._storage.deps;
+    if (!deps) return Result.ok(false);
     if (!(force || deps.slots.length === 0 || nodeIsDirty(this))) return Result.ok(false);
 
     const budgetRes = this.#validateBudget();

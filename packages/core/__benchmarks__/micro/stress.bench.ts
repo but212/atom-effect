@@ -52,7 +52,8 @@ describe('Stress Tests: Extreme Scale (1000)', () => {
   bench(
     'N to 1 propagation (Fan In 1000)',
     () => {
-      fanIn1000Sources[0]!.value++;
+      const firstSource = fanIn1000Sources[0];
+      if (firstSource) firstSource.value++;
       keep(fanIn1000Target.value);
     },
     microBenchOptions

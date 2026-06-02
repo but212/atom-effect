@@ -71,12 +71,12 @@ describe('DOM Integration', () => {
     // 3. Select
     const selection = atom('B');
     const select = document.createElement('select');
-    ['A', 'B'].forEach((v) => {
+    for (const v of ['A', 'B']) {
       const opt = document.createElement('option');
       opt.value = v;
       opt.text = v;
       select.appendChild(opt);
-    });
+    }
     select.addEventListener('change', (e) => {
       selection.value = (e.target as HTMLSelectElement).value;
     });
@@ -118,11 +118,11 @@ describe('DOM Integration', () => {
     effect(() => {
       if (show.value) {
         ul.innerHTML = '';
-        items.value.forEach((item) => {
+        for (const item of items.value) {
           const li = document.createElement('li');
           li.textContent = item;
           ul.appendChild(li);
-        });
+        }
         if (!ul.parentNode) container.appendChild(ul);
       } else if (ul.parentNode) {
         container.removeChild(ul);

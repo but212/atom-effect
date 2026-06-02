@@ -26,7 +26,8 @@ describe('Web Components Synergy (useAtomComponent)', () => {
     const $el = $(document.createElement(tagName));
     for (const [key, val] of Object.entries(attrs)) $el.attr(key, val);
     $el.appendTo(document.body);
-    createdElements.push($el[0]!);
+    const el = $el[0];
+    if (el) createdElements.push(el);
     return $el;
   };
 
@@ -106,7 +107,8 @@ describe('Web Components Synergy (useAtomComponent)', () => {
     const $el = renderTestComponent(tagName);
     await $.nextTick();
 
-    const shadow = $el[0]!.shadowRoot!;
+    const shadow = $el[0]?.shadowRoot;
+    if (!shadow) throw new Error('Expected shadowRoot to be defined');
     const nameInput = shadow.querySelector('#name-input') as HTMLInputElement;
     const themeInput = shadow.querySelector('#theme-input') as HTMLInputElement;
 

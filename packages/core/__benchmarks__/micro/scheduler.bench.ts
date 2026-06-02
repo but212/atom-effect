@@ -69,12 +69,17 @@ describe('Scheduler: untracked context', () => {
 
 describe('Scheduler: batch nesting', () => {
   const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
-  atoms.forEach((a) => effect(() => keep(a.value), benchEffectOptions));
+  for (const a of atoms) {
+    effect(() => keep(a.value), benchEffectOptions);
+  }
 
   bench(
     `unbatched ${REPEATS} writes`,
     () => {
-      for (let i = 0; i < REPEATS; i++) atoms[i]!.value++;
+      for (let i = 0; i < REPEATS; i++) {
+        const at = atoms[i];
+        if (at) at.value++;
+      }
     },
     microBenchOptions
   );
@@ -83,7 +88,10 @@ describe('Scheduler: batch nesting', () => {
     `flat batch (${REPEATS} writes)`,
     () => {
       batch(() => {
-        for (let i = 0; i < REPEATS; i++) atoms[i]!.value++;
+        for (let i = 0; i < REPEATS; i++) {
+          const at = atoms[i];
+          if (at) at.value++;
+        }
       });
     },
     microBenchOptions
@@ -95,7 +103,10 @@ describe('Scheduler: batch nesting', () => {
       batch(() =>
         batch(() =>
           batch(() => {
-            for (let i = 0; i < REPEATS; i++) atoms[i]!.value++;
+            for (let i = 0; i < REPEATS; i++) {
+              const at = atoms[i];
+              if (at) at.value++;
+            }
           })
         )
       );

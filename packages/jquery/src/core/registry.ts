@@ -278,6 +278,7 @@ class BindingRegistry {
       // Logic: Atomic Cleanup Tasks
       // Disposes of individual effects and low-level reactive bindings.
       if (record.tasks) {
+        // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
         record.tasks.forEach((cleanupFunction: () => void) => cleanupFunction());
         record.tasks.dispose();
       }
@@ -393,7 +394,9 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
  * @internal
  */
 export function disableAutoCleanup(): void {
-  observerMap.forEach((observer) => observer.disconnect());
+  for (const observer of observerMap.values()) {
+    observer.disconnect();
+  }
   observerMap.clear();
   registry.setAutoCleanupScheduled(false);
 }

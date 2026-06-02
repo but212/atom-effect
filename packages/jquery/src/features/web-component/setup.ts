@@ -89,7 +89,7 @@ export const SetupFeatures = {
           const val = atom.value;
           // ElementInternals properties typically expect strings or null to remove the attribute
           (internals as unknown as Record<string, unknown>)[prop] =
-            val != null ? String(val) : null;
+            val == null ? null : String(val);
           return undefined;
         })
       );

@@ -361,9 +361,11 @@ export class SlotBuffer<T> {
     this.#count--;
 
     if (this.#count > FAST_CAPACITY) {
-      const ov = this.#overflow!;
-      while (this.#count > FAST_CAPACITY && ov[this.#count - (FAST_CAPACITY + 1)] == null) {
-        this.#count--;
+      const ov = this.#overflow;
+      if (ov) {
+        while (this.#count > FAST_CAPACITY && ov[this.#count - (FAST_CAPACITY + 1)] == null) {
+          this.#count--;
+        }
       }
     }
 

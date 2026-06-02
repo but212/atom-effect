@@ -122,5 +122,6 @@ export interface PlaceCallbacks<T> {
 export interface EventBinding {
   type: string;
   selector: string;
-  callback: Function;
+  // biome-ignore lint/suspicious/noExplicitAny: generic callback with arbitrary signature
+  callback: (...args: any[]) => any;
 }

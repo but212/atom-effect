@@ -70,7 +70,7 @@ describe('Binding Registry', () => {
       $el.atomText(atom);
 
       // Remove and verify cleanup
-      $el[0]!.remove();
+      $el[0]?.remove();
       await vi.waitFor(() => {
         atom.value = 'v2';
         return $el.text() !== 'v2';
@@ -79,7 +79,8 @@ describe('Binding Registry', () => {
 
     it('should support automatic cleanup within Shadow DOM boundaries', async () => {
       const $host = $('<div>').appendTo(document.body);
-      const shadow = $host[0]!.attachShadow({ mode: 'open' });
+      const shadow = $host[0]?.attachShadow({ mode: 'open' });
+      if (!shadow) throw new Error('Shadow root not available');
       $.initAEJ({ autoCleanup: { root: shadow } });
 
       const atom = $.atom('active');
@@ -94,7 +95,7 @@ describe('Binding Registry', () => {
       // 2. Mutation cleanup in shadow
       const $child2 = $('<span>').appendTo(shadow as unknown as HTMLElement);
       $child2.atomText(atom);
-      $child2[0]!.remove();
+      $child2[0]?.remove();
 
       await vi.waitFor(() => {
         atom.value = 'final';
@@ -115,7 +116,7 @@ describe('Binding Registry', () => {
       // Disable system globally
       $.initAEJ({ autoCleanup: false });
 
-      $el[0]!.remove();
+      $el[0]?.remove();
       await $.nextTick();
 
       // Should still be reactive (leaked)

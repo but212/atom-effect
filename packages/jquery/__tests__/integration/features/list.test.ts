@@ -49,7 +49,7 @@ describe('Atom List Edge Cases', () => {
     const items = $.atom([{ id: 1, text: 'A' }]);
     const $container = $('<div>').appendTo(document.body);
 
-    let resolveRemove: () => void;
+    let resolveRemove: (() => void) | undefined;
     const removePromise = new Promise<void>((r) => {
       resolveRemove = r;
     });
@@ -85,7 +85,7 @@ describe('Atom List Edge Cases', () => {
     expect($container.children(':not(.removing)').text()).toBe('A New');
 
     // Finish removal
-    resolveRemove!();
+    resolveRemove?.();
     await $.nextTick(); // wait for promise resolution in onRemove wrapper
 
     // Old one gone, new one remains

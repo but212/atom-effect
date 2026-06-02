@@ -41,7 +41,7 @@ const TestKit = {
   async isCssBlocked(prop: string, val: string): Promise<boolean> {
     const $el = $('<div>').atomCss(prop, $.atom(val));
     await $.nextTick();
-    const style = $el[0]!.style.getPropertyValue(prop);
+    const style = $el[0]?.style.getPropertyValue(prop);
     $el.atomUnbind();
     return style === '' || style === 'data-unsafe-css:';
   },

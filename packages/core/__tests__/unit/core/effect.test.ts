@@ -582,12 +582,16 @@ describe('Effect', () => {
     it('handles dependency slot overflows (index >= 4)', async () => {
       const atoms = Array.from({ length: 6 }, (_, i) => atom(i));
       const e = effect(() => {
-        atoms.forEach((a) => a.value);
+        for (const a of atoms) {
+          a.value;
+        }
       });
       await vi.runAllTimersAsync();
       expect(e.executionCount).toBe(1);
 
-      atoms[5]!.value = 100;
+      const a5 = atoms[5];
+      if (!a5) throw new Error('Setup failed');
+      a5.value = 100;
       await vi.runAllTimersAsync();
       expect(e.executionCount).toBe(2);
       e.dispose();

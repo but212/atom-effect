@@ -25,7 +25,7 @@ describe('Dependency Graph Safety', () => {
       // This means the cycle resolves to a finite value rather than a stack overflow.
       const box = { c2: null as ReturnType<typeof computed<number>> | null };
 
-      const c1 = computed(() => box.c2!.value + 1, { defaultValue: 0 });
+      const c1 = computed(() => (box.c2?.value ?? 0) + 1, { defaultValue: 0 });
       box.c2 = computed(() => c1.value + 1);
 
       // No throw — cycle terminates via defaultValue base case
@@ -40,11 +40,13 @@ describe('Dependency Graph Safety', () => {
       ];
 
       for (let i = 1; i <= depth; i++) {
-        const prev = atoms[i - 1]!;
+        const prev = atoms[i - 1];
+        if (!prev) throw new Error('Setup failed');
         atoms.push(computed(() => prev.value + 1));
       }
 
-      const last = atoms[depth]!;
+      const last = atoms[depth];
+      if (!last) throw new Error('Setup failed');
       expect(last.value).toBe(depth);
 
       start.value = 1;

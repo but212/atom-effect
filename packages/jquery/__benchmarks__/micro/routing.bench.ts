@@ -35,7 +35,8 @@ describe('Routing: Router Setup Overhead', () => {
     'setup router with 5 routes',
     () => {
       const $c = createContainer();
-      const container = $c[0]!;
+      const container = $c[0];
+      if (!container) throw new Error('Container not found');
       const config = createRouteConfig(container, 5);
       const r = $.route(config);
       r.destroy();
@@ -48,7 +49,8 @@ describe('Routing: Router Setup Overhead', () => {
     'setup router with 50 routes',
     () => {
       const $c = createContainer();
-      const container = $c[0]!;
+      const container = $c[0];
+      if (!container) throw new Error('Container not found');
       const config = createRouteConfig(container, 50);
       const r = $.route(config);
       r.destroy();
@@ -64,7 +66,8 @@ describe('Routing: Router Setup Overhead', () => {
 
 describe('Routing: Path Matching Compile and Lookup', () => {
   const $c = createContainer();
-  const container = $c[0]!;
+  const container = $c[0];
+  if (!container) throw new Error('Container not found');
   const config = {
     target: container,
     routes: {
@@ -119,7 +122,8 @@ describe('Routing: View Transitions rendering', () => {
     'navigate and swap simple render views (50 times)',
     async () => {
       const $c = createContainer();
-      const container = $c[0]!;
+      const container = $c[0];
+      if (!container) throw new Error('Container not found');
       const r = $.route({
         target: container,
         routes: {
@@ -154,7 +158,8 @@ describe('Routing: View Transitions rendering', () => {
     'navigate with onLeave guard and custom unmount cleanups',
     async () => {
       const $c = createContainer();
-      const container = $c[0]!;
+      const container = $c[0];
+      if (!container) throw new Error('Container not found');
       let _disposeCount = 0;
 
       const r = $.route({
@@ -203,7 +208,8 @@ describe('Routing: Navigation Link Scanning', () => {
     'scan document and bind active highlighting to 100 links',
     () => {
       const $c = createContainer();
-      const container = $c[0]!;
+      const container = $c[0];
+      if (!container) throw new Error('Container not found');
       const r = $.route({
         target: container,
         routes: {

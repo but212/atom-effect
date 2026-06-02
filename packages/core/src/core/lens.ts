@@ -65,7 +65,7 @@ export type TerminalTypes =
   | Map<unknown, unknown>
   | Set<unknown>
   | Promise<unknown>
-  | Function;
+  | ((...args: never[]) => unknown);
 
 /**
  * Logic: Path Generation
@@ -91,7 +91,7 @@ export type Paths<T, D extends unknown[] = []> =
             ? HasBroadStringKey<T> extends true
               ? string
               : {
-                  [K in keyof T & (string | number)]: T[K] extends Function
+                  [K in keyof T & (string | number)]: T[K] extends (...args: never[]) => unknown
                     ? never
                     : NonNullable<T[K]> extends object
                       ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
@@ -171,8 +171,9 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
  */
 export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
   if (index === keys.length) return value;
-  const key = keys[index]!;
-  if (obj == null || typeof obj !== 'object' || isForbiddenKey(key)) return obj;
+  const key = keys[index];
+  if (key === undefined || obj == null || typeof obj !== 'object' || isForbiddenKey(key))
+    return obj;
 
   const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);

@@ -68,15 +68,15 @@ export function initAEJ(config: AEJConfig = {}): void {
   // Security: The MutationObserver safety net is the primary defense against memory
   // leaks in long-running Single Page Applications (SPAs).
   disableAutoCleanup();
-  if (autoCleanup !== false) {
+  if (autoCleanup === false) {
+    setAutoCleanupAllowed(false);
+  } else {
     setAutoCleanupAllowed(true);
     const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
     if (root) {
       enableAutoCleanup(root);
       registry.setAutoCleanupScheduled(true);
     }
-  } else {
-    setAutoCleanupAllowed(false);
   }
 }
 
