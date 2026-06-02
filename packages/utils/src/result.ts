@@ -157,23 +157,23 @@ export const Result = {
   /**
    * Wraps a synchronous function call that might throw.
    */
-  tryCatch: <T, E = Error>(fn: () => T): Result<T, E> => {
+  tryCatch: <T>(fn: () => T): Result<T, Error> => {
     try {
       return Result.ok(fn());
     } catch (e) {
-      return Result.err(toError(e) as unknown as E);
+      return Result.err(toError(e));
     }
   },
 
   /**
    * Wraps an asynchronous operation into a Result-bearing Promise.
    */
-  tryAsync: async <T, E = Error>(fn: () => PromiseLike<T>): Promise<Result<T, E>> => {
+  tryAsync: async <T>(fn: () => PromiseLike<T>): Promise<Result<T, Error>> => {
     try {
       const value = await fn();
-      return Result.ok<T, E>(value);
+      return Result.ok<T>(value);
     } catch (e) {
-      return Result.err<T, E>(toError(e) as unknown as E);
+      return Result.err(toError(e));
     }
   },
 
