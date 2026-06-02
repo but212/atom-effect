@@ -103,14 +103,17 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
 
     const deps = node._storage.deps;
     if (deps && (deps.flags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
-      if (
-        deps.slots.some(
-          (link) =>
-            (link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0 &&
-            walk(link.node as unknown as ReactiveNodeBase)
-        )
-      ) {
-        return true;
+      const slots = deps.slots;
+      const len = slots.length;
+      for (let i = 0; i < len; i++) {
+        const link = slots.at(i);
+        if (
+          link &&
+          (link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0 &&
+          walk(link.node as unknown as ReactiveNodeBase)
+        ) {
+          return true;
+        }
       }
     }
     return false;

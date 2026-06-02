@@ -146,8 +146,8 @@ export function bindClass(
     (states) => {
       // Logic: Aggregate all active tokens to handle overlapping definitions.
       const activeTokens = new Set<string>();
-      for (const [key, isActive] of Object.entries(states)) {
-        if (isActive) {
+      for (const key in states) {
+        if (Object.hasOwn(states, key) && states[key]) {
           const tokens = tokensMap.get(key);
           if (tokens) {
             for (let i = 0; i < tokens.length; i++) {
@@ -197,15 +197,18 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
     element,
     reactiveMap,
     (states) => {
-      for (const [property, value] of Object.entries(states)) {
-        const unit = metaMap[property] ?? '';
-        const str = unit ? `${value}${unit}` : String(value);
+      for (const property in states) {
+        if (Object.hasOwn(states, property)) {
+          const value = states[property];
+          const unit = metaMap[property] ?? '';
+          const str = unit ? `${value}${unit}` : String(value);
 
-        if (prev.get(property) !== str) {
-          if (!isDangerousCssValue(str)) {
-            style.setProperty(toKebab(property), str);
+          if (prev.get(property) !== str) {
+            if (!isDangerousCssValue(str)) {
+              style.setProperty(toKebab(property), str);
+            }
+            prev.set(property, str);
           }
-          prev.set(property, str);
         }
       }
     },
@@ -243,33 +246,38 @@ export function bindAttr(
     element,
     safeMap,
     (states) => {
-      for (const [name, value] of Object.entries(states)) {
-        if (!(name in isAriaMap)) continue;
-        const isAria = isAriaMap[name];
-        if (isAria === undefined) continue;
+      for (const name in states) {
+        if (Object.hasOwn(states, name)) {
+          if (!(name in isAriaMap)) continue;
+          const isAria = isAriaMap[name];
+          if (isAria === undefined) continue;
 
-        let attrVal: string | null = null;
-        if (value !== null && value !== undefined) {
-          if (typeof value === 'boolean') {
-            attrVal = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
-          } else {
-            attrVal = String(value);
+          const value = states[name];
+          let attrVal: string | null = null;
+          if (value !== null && value !== undefined) {
+            if (typeof value === 'boolean') {
+              attrVal = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
+            } else {
+              attrVal = String(value);
+            }
           }
-        }
 
-        // 2. Validate and Apply
-        if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {
-          console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
-          continue;
-        }
-
-        if (prev[name] !== attrVal) {
-          if (attrVal === null) {
-            element.removeAttribute(name);
-          } else {
-            element.setAttribute(name, attrVal as string);
+          // 2. Validate and Apply
+          if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {
+            console.warn(
+              `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
+            );
+            continue;
           }
-          prev[name] = attrVal as string | null;
+
+          if (prev[name] !== attrVal) {
+            if (attrVal === null) {
+              element.removeAttribute(name);
+            } else {
+              element.setAttribute(name, attrVal as string);
+            }
+            prev[name] = attrVal as string | null;
+          }
         }
       }
     },
@@ -298,16 +306,21 @@ export function bindProp(
     element,
     safeMap,
     (states) => {
-      for (const [name, value] of Object.entries(states)) {
-        if (previousValues[name] === value) continue;
+      for (const name in states) {
+        if (Object.hasOwn(states, name)) {
+          const value = states[name];
+          if (previousValues[name] === value) continue;
 
-        if (typeof value === 'string' && isDangerousUrl(name, value)) {
-          console.warn(`${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`);
-          continue;
+          if (typeof value === 'string' && isDangerousUrl(name, value)) {
+            console.warn(
+              `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
+            );
+            continue;
+          }
+
+          target[name] = value;
+          previousValues[name] = value;
         }
-
-        target[name] = value;
-        previousValues[name] = value;
       }
     },
     'prop'
