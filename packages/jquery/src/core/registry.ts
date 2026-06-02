@@ -181,6 +181,9 @@ class BindingRegistry {
             this.#autoCleanupScheduled = true;
             enableAutoCleanup(document.body);
           }
+          if (this.#autoCleanupScheduled) {
+            document.removeEventListener('DOMContentLoaded', initCleanup);
+          }
         };
         document.addEventListener('DOMContentLoaded', initCleanup);
         queueMicrotask(initCleanup);

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import $, { cleanup } from '@/index';
+import $, { cleanup, disableAutoCleanup } from '@/index';
 
 describe('Binding Registry', () => {
   beforeEach(() => {
@@ -75,6 +75,56 @@ describe('Binding Registry', () => {
         atom.value = 'v2';
         return $el.text() !== 'v2';
       });
+    });
+
+    it('should remove DOMContentLoaded listener after body is ready', async () => {
+      // 1. Reset registry scheduled state
+      disableAutoCleanup();
+
+      const originalBody = document.body;
+      const bodySpy = vi
+        .spyOn(document, 'body', 'get')
+        .mockReturnValue(null as unknown as HTMLElement);
+
+      // 2. Initialize with autoCleanup allowed, but body is null so it won't schedule immediately.
+      $.initAEJ({ autoCleanup: true });
+
+      const removeListenerSpy = vi.spyOn(document, 'removeEventListener');
+      const addListenerSpy = vi.spyOn(document, 'addEventListener');
+
+      try {
+        // Trigger binding before body is ready -> registers DOMContentLoaded listener
+        const atom = $.atom('v1');
+        const earlyEl = document.createElement('div');
+        $(earlyEl).atomText(atom);
+
+        expect(addListenerSpy).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function));
+
+        // Capture the callback registered to DOMContentLoaded
+        const domContentLoadedCallback = addListenerSpy.mock.calls.find(
+          (call) => call[0] === 'DOMContentLoaded'
+        )?.[1] as (() => void) | undefined;
+
+        expect(domContentLoadedCallback).toBeDefined();
+
+        // Now restore body and trigger the callback
+        bodySpy.mockReturnValue(originalBody);
+
+        if (domContentLoadedCallback) {
+          domContentLoadedCallback();
+        }
+
+        // Verify removeEventListener was called to clean it up
+        expect(removeListenerSpy).toHaveBeenCalledWith(
+          'DOMContentLoaded',
+          domContentLoadedCallback
+        );
+      } finally {
+        // Clean up spies
+        bodySpy.mockRestore();
+        removeListenerSpy.mockRestore();
+        addListenerSpy.mockRestore();
+      }
     });
 
     it('should support automatic cleanup within Shadow DOM boundaries', async () => {
