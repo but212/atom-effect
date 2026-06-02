@@ -120,8 +120,9 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         if (!lens) {
           const attrAtom = state.attributeAtom;
           if (attrAtom) {
-            lens = $.atomLens(attrAtom, name);
-            state.attributeLenses.set(name, lens);
+            const nextLens = $.atomLens(attrAtom, name);
+            state.attributeLenses.set(name, nextLens);
+            lens = nextLens;
           }
         }
         return lens;
@@ -180,16 +181,16 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         return;
       }
 
-      const config =
-        options instanceof Node ? { shadowRoot: options as ShadowRoot } : (options ?? {});
-      const sr = config.shadowRoot ?? element.shadowRoot ?? null;
+      const config = options instanceof Node ? { shadowRoot: options } : (options ?? {});
+      const root = config.shadowRoot ?? element.shadowRoot ?? null;
+      const sr = root instanceof ShadowRoot ? root : null;
 
       if (sr) {
         registry.markHost(element);
         registry.registerShadow(element, sr);
       }
 
-      const rootNode = (sr ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
+      const rootNode = (root ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
       state.root = rootNode;
 
       if (!rootNode[CLEANUP_MARKER]) {
@@ -254,7 +255,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (config.aria && internals) SetupFeatures.aria(internals, config.aria, state.effects);
       if (config.parts) SetupFeatures.parts(rootNode as Element, config.parts, state.effects);
 
-      if ((config.value || config.validation) && internals) {
+      if (internals && (config.value !== undefined || config.validation !== undefined)) {
         SetupFeatures.form(element, internals, config.value, config.validation, state.effects);
       }
 

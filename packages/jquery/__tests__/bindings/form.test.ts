@@ -70,6 +70,11 @@ describe('Form Binding (atomForm)', () => {
       await $.nextTick();
       expect(data.value.hobbies).toEqual(['coding', 'music']);
 
+      // DOM -> Atom (uncheck)
+      $form.find('#cb-music').prop('checked', false).trigger('change');
+      await $.nextTick();
+      expect(data.value.hobbies).toEqual(['coding']);
+
       // Atom -> DOM
       data.value = { hobbies: ['music'] };
       await $.nextTick();
@@ -313,6 +318,26 @@ describe('Form Binding (atomForm)', () => {
 
         expect(input.validationMessage).toBe('');
         expect(($form[0] as HTMLFormElement).checkValidity()).toBe(true);
+      });
+
+      it('should handle validation exceptions gracefully', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const data = $.atom({ name: 'fail' });
+        const $form = $('<form><input name="name" id="name-input"></form>').appendTo(document.body);
+
+        $form.atomForm(data, {
+          validation: {
+            name: () => {
+              throw new Error('validate crash');
+            },
+          },
+        });
+        await $.nextTick();
+
+        const input = document.getElementById('name-input') as HTMLInputElement;
+        expect(input.validationMessage).toBe('Validation failed');
+        expect(consoleErrorSpy).toHaveBeenCalled();
+        consoleErrorSpy.mockRestore();
       });
     });
   });

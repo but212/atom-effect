@@ -65,6 +65,17 @@ describe('Chainable Methods: One-Way Bindings', () => {
     $el.remove();
   });
 
+  it('atomCss: single property with unit option', async () => {
+    const width = $.atom(120);
+    const $el = $('<div>').appendTo(document.body);
+
+    $el.atomCss('width', width, 'px');
+    await $.nextTick();
+    expect($el.css('width')).toBe('120px');
+
+    $el.remove();
+  });
+
   it('atomAttr: attribute lifecycle and ARIA boolean handling', async () => {
     const expanded = $.atom(true);
     const disabled = $.atom(false);
@@ -320,6 +331,62 @@ describe('atomBind: Integrated Binding', () => {
 
     $el.remove();
   });
+
+  it('should cover all option tasks in atomBind (html, show, hide, checked, form, on, class, css, prop)', async () => {
+    const html = $.atom('<b>html</b>');
+    const show = $.atom(true);
+    const hide = $.atom(false);
+    const checked = $.atom(true);
+    const formVal = $.atom({ name: 'test' });
+    const clicked = vi.fn();
+    const active = $.atom(true);
+    const opacity = $.atom(0.8);
+    const id = $.atom('my-id');
+
+    const $div = $('<div>').appendTo(document.body);
+    $div.atomBind({ html });
+
+    const $form = $('<form><input name="name"><input type="checkbox" id="cb"></form>').appendTo(
+      document.body
+    );
+    const $cb = $form.find('#cb');
+    $cb.atomBind({ checked });
+    $form.atomBind({
+      show,
+      hide,
+      form: formVal,
+      on: { click: clicked },
+      class: { active },
+      css: { opacity },
+      prop: { id },
+    });
+
+    await $.nextTick();
+    expect($div.html()).toContain('<b>html</b>');
+    expect($form.css('display')).not.toBe('none');
+    expect($cb.prop('checked')).toBe(true);
+    expect($form.find('input[name="name"]').val()).toBe('test');
+    expect($form.hasClass('active')).toBe(true);
+    expect($form.css('opacity')).toBe('0.8');
+    expect($form.prop('id')).toBe('my-id');
+
+    $form.trigger('click');
+    expect(clicked).toHaveBeenCalled();
+
+    $div.remove();
+    $form.remove();
+  });
+
+  it('atomBind: form task on non-form elements should not throw', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const $div = $('<div>').appendTo(document.body);
+    const data = $.atom({});
+
+    $div.atomBind({ form: data });
+    expect(warnSpy).not.toHaveBeenCalled();
+    $div.remove();
+    warnSpy.mockRestore();
+  });
 });
 
 describe('Events & Lifecycle', () => {
@@ -407,5 +474,38 @@ describe('Safety & Robustness', () => {
     expect($els.eq(0).text()).toMatch(/a,?b/);
 
     $els.remove();
+  });
+
+  it('Guards: warns when atomForm is called on non-Form element', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const $div = $('<div>');
+    $div.atomForm($.atom({}));
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('atomChecked: warns on non-input element', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const $div = $('<div>');
+    $div.atomChecked($.atom(true));
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('atomProp: blocks dangerous URL properties', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const $el = $('<img>');
+    $el.atomProp('src', $.atom('javascript:alert(1)'));
+    await $.nextTick();
+    expect(($el[0] as HTMLImageElement | undefined)?.src).toBe('');
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('resolveArgs: should handle null/falsy map gracefully', () => {
+    const $el = $('<div>');
+    // @ts-expect-error
+    $el.atomClass(null);
+    expect($el).toBeInstanceOf($);
   });
 });

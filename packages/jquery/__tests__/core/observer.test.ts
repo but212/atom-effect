@@ -168,5 +168,53 @@ describe('RootObserver Engine', () => {
       unsub2();
       consoleSpy.mockRestore();
     });
+
+    it('should isolate error when a nested child callback throws', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const observer = getOrCreateRootObserver(root);
+
+      const unsub = observer.onNodeAdded('.child-node', () => {
+        throw new Error('child callback crash');
+      });
+
+      const parent = document.createElement('div');
+      const child = document.createElement('div');
+      child.className = 'child-node';
+      parent.appendChild(child);
+      root.appendChild(parent);
+
+      await vi.waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalled();
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error in onNodeAdded callback'),
+        expect.any(Error)
+      );
+
+      unsub();
+      consoleSpy.mockRestore();
+    });
+
+    it('should isolate error when querySelector or matches throws on invalid selector', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const observer = getOrCreateRootObserver(root);
+      const unsub = observer.onNodeAdded('::invalid', () => {});
+
+      const child = document.createElement('div');
+      root.appendChild(child);
+
+      await vi.waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalled();
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error querying or processing onNodeAdded'),
+        expect.any(Error)
+      );
+
+      unsub();
+      consoleSpy.mockRestore();
+    });
   });
 });

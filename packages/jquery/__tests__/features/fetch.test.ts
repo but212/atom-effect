@@ -288,5 +288,39 @@ describe('$.atomFetch', () => {
       // Tracking does not work across await boundaries in transform.
       expect(priceEur.value).toBe(120);
     });
+
+    it('should handle synchronous abort immediately after starting fetch', async () => {
+      const abortSpy = vi.fn();
+      vi.spyOn($, 'ajax').mockReturnValue(
+        Object.assign(new Promise(() => {}), { abort: abortSpy }) as unknown as JQuery.jqXHR
+      );
+
+      const data = $.atomFetch('/api/sync-abort', { defaultValue: null });
+      // Access value to trigger execution, then abort immediately
+      void data.value;
+      data.abort();
+
+      await $.nextTick();
+      expect(abortSpy).toHaveBeenCalled();
+    });
+
+    it('should abort session immediately when aborted during URL resolution', async () => {
+      const abortSpy = vi.fn();
+      vi.spyOn($, 'ajax').mockImplementation((_settings) => {
+        return Object.assign(new Promise(() => {}), { abort: abortSpy }) as unknown as JQuery.jqXHR;
+      });
+
+      const data = $.atomFetch(
+        () => {
+          data.abort(); // Abort during getUrl() evaluation
+          return '/api/sync-abort-during-geturl';
+        },
+        { defaultValue: null, eager: false }
+      );
+
+      void data.value;
+      await $.nextTick();
+      expect(abortSpy).toHaveBeenCalled();
+    });
   });
 });
