@@ -264,6 +264,7 @@ class BindingRegistry {
   cleanup(node: Node): void {
     delete (node as RegistryNode)[KEPT_KEY];
     delete (node as RegistryNode)[IGNORED_KEY];
+    disableAutoCleanupFor(node);
 
     if (node.nodeType !== 1) return;
     const element = node as RegistryElement;

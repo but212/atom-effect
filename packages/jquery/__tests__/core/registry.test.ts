@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getOrCreateRootObserver, rootObserversMap } from '@/core/observer';
 import { registry } from '@/core/registry';
 import $, { cleanup, disableAutoCleanup } from '@/index';
 
@@ -241,7 +242,6 @@ describe('Binding Registry', () => {
       $.initAEJ({ autoCleanup: { root } });
 
       // 2. Register an unrelated addition observer on the same root
-      const { getOrCreateRootObserver } = await import('@/core/observer');
       const observer = getOrCreateRootObserver(root);
       const addedList: Element[] = [];
       const unsub = observer.onNodeAdded('.test-node', (el) => {
@@ -252,7 +252,6 @@ describe('Binding Registry', () => {
       $.initAEJ({ autoCleanup: false });
 
       // 4. Verify that the RootObserver is still alive in the map
-      const { rootObserversMap } = await import('@/core/observer');
       expect(rootObserversMap.has(root)).toBe(true);
 
       // 5. Verify that addition callback still fires when target element is added
@@ -307,6 +306,20 @@ describe('Binding Registry', () => {
       await $.nextTick();
       expect($child.text()).not.toBe('v2');
       $parent.remove();
+    });
+
+    it('should release ShadowRoot from rootObserversMap during cleanup', async () => {
+      const $host = $('<div>').appendTo(document.body);
+      const shadow = $host[0]?.attachShadow({ mode: 'open' });
+      if (!shadow) throw new Error('Shadow root not available');
+      $.initAEJ({ autoCleanup: { root: shadow } });
+
+      expect(rootObserversMap.has(shadow)).toBe(true);
+
+      cleanup($host);
+
+      expect(rootObserversMap.has(shadow)).toBe(false);
+      $host.remove();
     });
   });
 });

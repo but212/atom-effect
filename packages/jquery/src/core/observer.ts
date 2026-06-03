@@ -120,7 +120,7 @@ export class RootObserver {
 }
 
 /** Mapping of root nodes to their associated RootObserver instances. */
-export const rootObserversMap = new Map<Node, RootObserver>();
+export const rootObserversMap = new WeakMap<Node, RootObserver>();
 
 /**
  * Retrieves an existing RootObserver or creates a new one for the given root.

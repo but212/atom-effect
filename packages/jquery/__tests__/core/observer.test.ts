@@ -8,7 +8,6 @@ describe('RootObserver Engine', () => {
     document.body.innerHTML = '';
     root = document.createElement('div');
     document.body.appendChild(root);
-    rootObserversMap.clear();
   });
 
   describe('Initialization & Retrieval', () => {
@@ -19,6 +18,10 @@ describe('RootObserver Engine', () => {
       expect(obs1).toBeInstanceOf(RootObserver);
       expect(obs1).toBe(obs2);
       expect(rootObserversMap.has(root)).toBe(true);
+    });
+
+    it('should use WeakMap for rootObserversMap to allow garbage collection', () => {
+      expect(rootObserversMap).toBeInstanceOf(WeakMap);
     });
   });
 
