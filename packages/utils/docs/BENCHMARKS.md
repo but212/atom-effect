@@ -36,7 +36,7 @@ pnpm bench:all
 
 ## Latest Results
 
-**Version**: v0.33.1
+**Version**: v0.33.0
 **Last Updated**: 2026-06-02
 **Environment**:
 

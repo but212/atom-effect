@@ -1,7 +1,7 @@
 # Benchmark Results - Detailed (jQuery Bindings)
 
 **Last Updated**: 2026-06-02
-**Version**: v0.33.1
+**Version**: v0.33.0
 
 - **Node.js**: v22.x
 - **Browser**: Chromium (via Vitest browser mode)

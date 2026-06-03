@@ -3,7 +3,7 @@
 This document provides raw data and detailed breakdowns for the `@but212/atom-effect` performance suite. These measurements quantify internal engine throughput and latency across various operational scenarios.
 
 **Last Updated**: 2026-06-02
-**Version**: v0.33.1
+**Version**: v0.33.0
 
 - **Runtime**: Node.js v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)
