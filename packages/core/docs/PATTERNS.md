@@ -41,7 +41,7 @@ Handling asynchronous data requires managing loading and error states. `computed
 ### Example: Async Computed with Defaults
 
 ```typescript
-import { atom, computed } from '@but212/atom-effect';
+import { atom, computed, effect } from '@but212/atom-effect';
 
 const userId = atom(1);
 

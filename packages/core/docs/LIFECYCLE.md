@@ -67,5 +67,5 @@ Async computations manage internal states (`pending`, `resolved`, `rejected`) an
 ## Best Practices
 
 1. **Always Dispose Terminal Nodes**: Effects are "sinks" that keep the graph alive. If an effect is tied to a temporary UI component, dispose of it when the component unmounts.
-2. **Avoid Circular Dependencies**: Modifying an atom inside an effect that reads the same atom triggers infinite loops. The scheduler guards against this with `maxExecutionsPerFlush`, throwing a `SchedulerError` if the budget is exhausted.
+2. **Avoid Circular Dependencies**: Modifying an atom inside an effect that reads the same atom triggers infinite loops. The effect guards against this with `maxExecutionsPerFlush`, logging and returning an `EffectError` if the budget is exhausted.
 3. **Use `aeNextTick()` in Tests**: Because state updates are scheduled in microtasks, always await the next tick before asserting changes in your test suites.

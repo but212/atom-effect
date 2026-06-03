@@ -122,8 +122,9 @@ $('#todo-list').atomList(todos, {
   key: todo => todo.id, // Critical for performance
   render: todo => `<li class="todo-item"></li>`,
   bind: ($el, todo) => {
-    // This function runs once when the element is created
-    $el.atomText($.computed(() => todo.text));
+    // This function runs once when the element is created.
+    // If 'todo' is static data, bind directly:
+    $el.atomText(todo.text);
   }
 });
 ```
