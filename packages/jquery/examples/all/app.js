@@ -8,6 +8,7 @@ $(() => {
 
     // Page Scripts Registry
     const pageScripts = {};
+    let currentPageCleanup = null;
 
     // --- BASIC COUNTER ---
     pageScripts['basic'] = () => {
@@ -95,41 +96,54 @@ $(() => {
 
             if (searchResults.hasError) {
                 const error = searchResults.lastError;
-                const isRateLimit = error?.message.includes("403");
-                $container.html(`
-                    <div class="error-message" style="color: var(--primary-red); font-weight: 900;">
-                        ${isRateLimit ? "OVERLOAD: GITHUB API RATE LIMIT EXCEEDED." : `FAILURE: ${error?.message || "UNKNOWN"}`}
-                    </div>
-                `);
+                const isRateLimit = error?.message?.includes("403");
+                const msg = isRateLimit ? "OVERLOAD: GITHUB API RATE LIMIT EXCEEDED." : "FAILURE: " + (error?.message || "UNKNOWN");
+                const $errorDiv = $('<div class="error-message" style="color: var(--primary-red); font-weight: 900;"></div>').text(msg);
+                $container.empty().append($errorDiv);
                 return;
             }
 
             if (results.length === 0 && state === "resolved") {
-                $container.html(`<div class="empty-state">NO MATCHES FOUND FOR "${query.toUpperCase()}"</div>`);
+                const $emptyDiv = $('<div class="empty-state"></div>').text("NO MATCHES FOUND FOR \"" + query.toUpperCase() + "\"");
+                $container.empty().append($emptyDiv);
                 return;
             }
 
-            const html = `
-                <div class="user-list">
-                    ${results.map(user => `
-                        <div class="user-item">
-                            <div class="user-avatar">
-                                <img src="${user.avatar_url}" alt="${user.login}"
-                                     onerror="this.style.display='none'; this.parentNode.textContent='${user.login[0].toUpperCase()}'">
-                            </div>
-                            <div class="user-info">
-                                <div class="user-name">${user.login}</div>
-                                <div class="user-email">
-                                    <a href="${user.html_url}" target="_blank">
-                                        ${new URL(user.html_url).hostname}${new URL(user.html_url).pathname}
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    `).join("")}
-                </div>
-            `;
-            $container.html(html);
+            const $userList = $('<div class="user-list"></div>');
+            results.forEach(user => {
+                const $userItem = $('<div class="user-item"></div>');
+                const $avatar = $('<div class="user-avatar"></div>');
+                const $img = $('<img>', {
+                    src: user.avatar_url,
+                    alt: user.login,
+                    onerror: function() {
+                        $(this).css('display', 'none');
+                        $(this).parent().text(user.login ? user.login[0].toUpperCase() : '');
+                    }
+                });
+                $avatar.append($img);
+
+                const $info = $('<div class="user-info"></div>');
+                const $name = $('<div class="user-name"></div>').text(user.login || '');
+
+                let displayUrl = user.html_url || '';
+                try {
+                    const urlObj = new URL(user.html_url);
+                    displayUrl = urlObj.hostname + urlObj.pathname;
+                } catch (e) {}
+
+                const $email = $('<div class="user-email"></div>');
+                const $link = $('<a>', {
+                    href: user.html_url,
+                    target: '_blank'
+                }).text(displayUrl);
+                $email.append($link);
+
+                $info.append($name, $email);
+                $userItem.append($avatar, $info);
+                $userList.append($userItem);
+            });
+            $container.empty().append($userList);
         });
 
         $.effect(() => {
@@ -148,6 +162,10 @@ $(() => {
         });
 
         setTimeout(() => $("#search-input").focus(), 0);
+
+        return () => {
+            clearTimeout(debounceTimer);
+        };
     };
 
     // --- FORM BINDING ---
@@ -202,7 +220,8 @@ $(() => {
                 $content.html(`<div class="status status-pending">SYNCRONIZING WITH CLOUD...</div>`);
             } else if (state === "rejected") {
                 $btn.prop("disabled", false).html("Retry Save");
-                $content.html(`<div class="status status-rejected" style="color:var(--primary-red)">ERROR: ${error.message}</div>`);
+                const $errorDiv = $('<div class="status status-rejected" style="color:var(--primary-red)"></div>').text("ERROR: " + error.message);
+                $content.empty().append($errorDiv);
             } else if (state === "resolved") {
                 const result = submission.value;
                 if (!result) { $status.hide(); return; }
@@ -328,10 +347,16 @@ $(() => {
             const rawTitle = document.title.split(" / ").pop() || "DASHBOARD";
             $pageTitle.text(rawTitle);
 
+            // Clean up previous page logic
+            if (currentPageCleanup) {
+                currentPageCleanup();
+                currentPageCleanup = null;
+            }
+
             // Execute Page Specific Logic
             const pageId = $("#page-wrapper").attr("data-page");
             if (pageId && pageScripts[pageId]) {
-                pageScripts[pageId]();
+                currentPageCleanup = pageScripts[pageId]();
             }
 
             $container
@@ -352,6 +377,6 @@ $(() => {
     // Initial page logic load
     const initialPage = $("#page-wrapper").attr("data-page");
     if (initialPage && pageScripts[initialPage]) {
-        pageScripts[initialPage]();
+        currentPageCleanup = pageScripts[initialPage]();
     }
 });
