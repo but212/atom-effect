@@ -20,7 +20,7 @@ This document defines the lifecycle states, transition behaviors, and resource m
 | :--- | :--- | :--- | :--- |
 | **DOM Relocation** | `ATTACHED` → `DETACHED` → `ATTACHED` | **None** | `MutationObserver` checks `isConnected` status during its microtask cycle. Synchronous moves preserve bindings. |
 | **`$.detach()`** | `ATTACHED` → `DETACHED` | **None** | The node is marked via `registry.keep()` to bypass automated cleanup cycles. |
-| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and executes `cleanupTree()` in a microtask if the node remains disconnected. |
+| **Native Removal** | `ATTACHED` → `DESTROYED` | **Deferred** | `MutationObserver` detects removal and executes `cleanupTree()` in a microtask if the node remains disconnected. This relies on the central `BindingRegistry` for tracking. |
 | **Auto-Setup** | `OFFLINE` → `ATTACHED` | **Immediate** | `ContextEngine` identifies elements with static specs upon insertion and executes `setup()` within the same microtask. |
 | **`teardown()`** | `ATTACHED` → `DESTROYED` | **Deterministic** | Synchronous disposal of internal state via `ComponentState.dispose()`, followed by `ContextEngine.release()`. |
 
