@@ -99,7 +99,7 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
     if (
       tracker._depSlots &&
       tracker._depFlags !== undefined &&
-      tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS
+      (tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0
     ) {
       const slots = tracker._depSlots;
       const len = slots.length;

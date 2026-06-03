@@ -353,7 +353,8 @@ describe('Lens System', () => {
       expect(merged.subscriberCount()).toBe(1);
 
       // Setting merged value
-      merged.value = [3, 4] as unknown as [number, number];
+      // biome-ignore lint/suspicious/noExplicitAny: need to bypass type to test runtime assignment
+      (merged as any).value = { x: 3, y: 4 };
 
       mergedUnsub();
       expect(merged.subscriberCount()).toBe(0);
