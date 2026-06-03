@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unrelesed]
+## [Unreleased]
 
 ### jQuery
 
