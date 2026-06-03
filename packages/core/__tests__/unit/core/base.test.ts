@@ -10,7 +10,13 @@ import {
 } from '@/core/base';
 import { aeNextTick, scheduler, schedulerEndBatch, schedulerIsBatching } from '@/core/scheduler';
 import { atom, computed, effect } from '@/index';
-import type { Dependency, DependencyTracker, ReactiveNode, Subscription } from '@/types';
+import type {
+  Dependency,
+  DependencyTracker,
+  ReactiveDependencyTracker,
+  ReactiveNode,
+  SubscriberTarget,
+} from '@/types';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Tracking Engine', () => {
@@ -116,10 +122,7 @@ describe('Tracking Engine', () => {
   describe('Internal Engine Robustness & Edge Cases', () => {
     function createMockNodeWithUndefinedSlots(): ReactiveNode<void> {
       return {
-        _storage: {
-          slots: undefined,
-          deps: null,
-        },
+        _slots: undefined,
       } as unknown as ReactiveNode<void>;
     }
 
@@ -146,7 +149,7 @@ describe('Tracking Engine', () => {
     });
 
     describe('Subscription robustness with undefined slots', () => {
-      const mockLink = { k: 0, t: () => {} } as unknown as Subscription<void>;
+      const mockLink = (() => {}) as unknown as SubscriberTarget<void>;
 
       it('handles undefined slots gracefully in nodeUnsubscribe without throwing TypeError', () => {
         const mockNode = createMockNodeWithUndefinedSlots();
@@ -175,11 +178,7 @@ describe('Tracking Engine', () => {
         const mockTracker = {
           _trackEpoch: 1,
           _trackCount: 0,
-          _storage: {
-            slots: null,
-            deps: null,
-          },
-        } as unknown as DependencyTracker & ReactiveNode<void>;
+        } as unknown as DependencyTracker & ReactiveDependencyTracker;
 
         const mockDep = {
           _lastSeenEpoch: 0,

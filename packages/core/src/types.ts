@@ -181,20 +181,6 @@ export interface EffectObject extends Disposable {
 }
 
 /**
- * Optimized internal handle for a single listener.
- * @internal
- */
-export type Subscription<T> =
-  | {
-      readonly k: typeof KIND.Fn;
-      readonly t: (newValue?: T, oldValue?: T) => void;
-    }
-  | {
-      readonly k: typeof KIND.Obj;
-      readonly t: Subscriber;
-    };
-
-/**
  * Represents a single directed edge in the graph (Subscriber -> Dependency).
  * @internal
  */
@@ -222,10 +208,7 @@ export interface ReactiveNodeBase {
   readonly isRejected: boolean;
   readonly id: DependencyId;
   _k?: typeof KIND.Obj | undefined;
-  _storage: {
-    slots?: unknown | null;
-    deps: DepBufferState | null;
-  };
+  _slots: unknown | null;
 }
 
 /**
@@ -234,23 +217,17 @@ export interface ReactiveNodeBase {
  * @internal
  */
 export interface ReactiveNode<T> extends ReactiveNodeBase {
-  _storage: {
-    slots: SlotBuffer<Subscription<T>> | null;
-    deps: DepBufferState | null;
-  };
+  _slots: SlotBuffer<SubscriberTarget<T>> | null;
 }
 
 /**
- * State container for managing a node's upstream links.
+ * A reactive node that also tracks dependencies.
  * @internal
  */
-export interface DepBufferState {
-  /** Flat buffer of active links. */
-  slots: SlotBuffer<DependencyLink>;
-  /** Indexer for immediate dependency retrieval during tracking sessions. */
-  map: Map<Dependency, number> | null;
-  /** Encodes buffer status into a bitmask. */
-  flags: number;
+export interface ReactiveDependencyTracker extends ReactiveNodeBase {
+  _depSlots: SlotBuffer<DependencyLink>;
+  _depMap: Map<Dependency, number> | null;
+  _depFlags: number;
 }
 
 /**

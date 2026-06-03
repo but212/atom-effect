@@ -283,9 +283,8 @@ describe('Atom', () => {
 
       // Access dependencies
       // biome-ignore lint/suspicious/noExplicitAny: Accessing internal storage for dependency validation
-      const deps = (c as any)._storage.deps;
-      if (deps) {
-        const slots = deps.slots;
+      const slots = (c as any)._depSlots;
+      if (slots) {
         for (let i = 0; i < slots.length; i++) {
           const link = slots.at(i);
           if (link && link.node === a) {

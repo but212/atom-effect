@@ -328,6 +328,39 @@ describe('Lens System', () => {
     });
   });
 
+  describe('Redundant State Verification', () => {
+    it('should not throw or leak memory due to redundant _slots declarations on subclass', () => {
+      // In TS, if a property is redeclared, it overrides the base class property at runtime
+      // if assigned to null. This can lead to bugs where the base class methods use the
+      // original property but it's shadowed, or vice-versa.
+      const store = atom({ x: 1, y: 2 });
+      const myLens = atomLens(store, 'x');
+
+      const unsub = myLens.subscribe(() => {});
+      expect(myLens.subscriberCount()).toBe(1);
+
+      // Trigger notification
+      myLens.value = 2;
+
+      unsub();
+      expect(myLens.subscriberCount()).toBe(0);
+
+      const l1 = atomLens(store, 'x');
+      const l2 = atomLens(store, 'y');
+      const merged = mergeLenses(l1, l2);
+
+      const mergedUnsub = merged.subscribe(() => {});
+      expect(merged.subscriberCount()).toBe(1);
+
+      // Setting merged value
+      // biome-ignore lint/suspicious/noExplicitAny: need to bypass type to test runtime assignment
+      (merged as any).value = { x: 3, y: 4 };
+
+      mergedUnsub();
+      expect(merged.subscriberCount()).toBe(0);
+    });
+  });
+
   describe('Robustness & Security', () => {
     it('should block prototype pollution attempts', () => {
       const store = atom({ data: {} });

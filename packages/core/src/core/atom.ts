@@ -32,11 +32,10 @@ import {
 } from '@/core/base';
 import type {
   AtomOptions,
-  DepBufferState,
   DependencyId,
   ReactiveNode,
   Subscriber,
-  Subscription,
+  SubscriberTarget,
   WritableAtom,
 } from '@/types';
 import { AtomError, debug, generateId } from '@/utils';
@@ -62,13 +61,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   _k: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
 
-  _storage: {
-    slots: SlotBuffer<Subscription<T>> | null;
-    deps: DepBufferState | null;
-  } = {
-    slots: null,
-    deps: null,
-  };
+  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
 
   #value: T;
   #pendingOldValue: T | undefined;
@@ -97,7 +90,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
   }
   get isNotifying(): boolean {
-    return this._storage.slots?.isLocked ?? false;
+    return this._slots?.isLocked ?? false;
   }
 
   /** @internal */
@@ -173,7 +166,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   #scheduleNotification(oldValue: T): void {
     const flags = this.flags;
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
-    const slots = this._storage.slots;
+    const slots = this._slots;
 
     // Optimization: Avoid redundant scheduling if already queued or no subscribers exist.
     if ((flags & SCHED) !== 0 || !slots || slots.length === 0) return;
@@ -251,7 +244,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     if ((flags & DISP) !== 0) return;
 
     this.flags |= DISP;
-    const slots = this._storage.slots;
+    const slots = this._slots;
     if (slots) slots.clear();
 
     // Reason: Release references immediately to facilitate efficient GC.

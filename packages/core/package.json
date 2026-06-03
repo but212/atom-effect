@@ -66,14 +66,14 @@
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
-    "@types/node": "^25.7.0",
-    "@vitest/browser": "^4.1.6",
-    "@vitest/browser-playwright": "^4.1.6",
-    "@vitest/coverage-v8": "^4.1.6",
-    "@vitest/ui": "^4.1.6",
+    "@types/node": "^25.9.1",
+    "@vitest/browser": "^4.1.8",
+    "@vitest/browser-playwright": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/ui": "^4.1.8",
     "playwright": "^1.60.0",
-    "tinybench": "^6.0.1",
-    "vite": "^8.0.12",
-    "vitest": "^4.1.6"
+    "tinybench": "^6.0.2",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
   }
 }
