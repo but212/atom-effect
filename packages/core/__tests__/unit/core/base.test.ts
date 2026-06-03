@@ -10,7 +10,13 @@ import {
 } from '@/core/base';
 import { aeNextTick, scheduler, schedulerEndBatch, schedulerIsBatching } from '@/core/scheduler';
 import { atom, computed, effect } from '@/index';
-import type { Dependency, DependencyTracker, ReactiveNode, SubscriberTarget, ReactiveDependencyTracker } from '@/types';
+import type {
+  Dependency,
+  DependencyTracker,
+  ReactiveDependencyTracker,
+  ReactiveNode,
+  SubscriberTarget,
+} from '@/types';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Tracking Engine', () => {

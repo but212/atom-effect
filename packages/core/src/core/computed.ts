@@ -96,7 +96,11 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
     }
 
     const tracker = node as unknown as Partial<ReactiveDependencyTracker>;
-    if (tracker._depSlots && tracker._depFlags !== undefined && (tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
+    if (
+      tracker._depSlots &&
+      tracker._depFlags !== undefined &&
+      (tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0
+    ) {
       const slots = tracker._depSlots;
       const len = slots.length;
       for (let i = 0; i < len; i++) {
