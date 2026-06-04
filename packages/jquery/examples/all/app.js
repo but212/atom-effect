@@ -15,7 +15,6 @@ $(() => {
 
   // Page Scripts Registry
   const pageScripts = {};
-  let currentPageCleanup = null;
 
   // --- BASIC COUNTER ---
   pageScripts["basic"] = () => {
@@ -148,19 +147,17 @@ $(() => {
         },
       });
 
-    const lastUpdate = $.computed(
-      (prev) => {
-        if (uiState.value === "resolved") {
-          return new Date().toLocaleTimeString([], {
-            hour12: false,
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-        }
-        return prev || "--:--";
-      },
-      { defaultValue: "--:--" },
-    );
+    let lastResolvedTime = "--:--";
+    const lastUpdate = $.computed(() => {
+      if (uiState.value === "resolved") {
+        lastResolvedTime = new Date().toLocaleTimeString([], {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+      return lastResolvedTime;
+    });
 
     $("#last-update").atomText(lastUpdate);
 

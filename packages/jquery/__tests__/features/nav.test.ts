@@ -423,6 +423,36 @@ describe('$.atomNav', () => {
       expect(harness.$target.attr('data-atom-nav-target')).toBeUndefined();
     });
 
+    it('should not crash navigation if previous curRendered.url is invalid/malformed', async () => {
+      const mockWin = {
+        location: window.location,
+        history: {
+          ...window.history,
+          replaceState: vi.fn(),
+          pushState: vi.fn(),
+        },
+        document: window.document,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        scrollTo: vi.fn(),
+      } as unknown as Window & typeof globalThis;
+
+      const nav = await harness.create({ window: mockWin });
+
+      // 1. First navigation redirects to a malformed URL (e.g., http://%)
+      harness.mockAjax({
+        data: 'Redirected Page',
+        headers: { 'X-PJAX-URL': 'http://%' },
+      });
+      await nav.navigate('/source');
+      await vi.waitFor(() => expect(nav.currentUrl.value).toBe('http://%'));
+
+      // 2. Second navigation should succeed and not throw despite the previous malformed URL
+      harness.mockAjax({ data: 'Second Page' });
+      await nav.navigate('/target');
+      await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/target'));
+    });
+
     it('should allow retrying failed same-URL navigation', async () => {
       const nav = await harness.create({ onError: () => false });
       const failSpy = harness.mockAjax({ data: 'Fail', shouldFail: true });

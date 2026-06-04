@@ -32,6 +32,7 @@ import { DEFAULT_POLICY, sanitizeHtml } from '@/utils/sanitize';
 
 const NAV_POLICY = {
   ...DEFAULT_POLICY,
+  urlAttributes: [...DEFAULT_POLICY.urlAttributes],
   blacklistedTags: DEFAULT_POLICY.blacklistedTags.filter((tag) => tag !== 'form'),
 };
 
@@ -120,12 +121,12 @@ function applyNavigationState(
       reconcileDOM($target, pjaxState, finalUrl, previousUrl, win, options);
     }
 
-    const prevUrlObj = Result.unwrap(getAbsoluteUrl(curRendered.url, win.location.href));
+    const prevHash = getUrlParts(curRendered.url, win.location.href).hash;
     const { shouldScroll, resetScroll } = getScrollDecision({
       hash,
       type,
       isNewTarget,
-      prevHash: prevUrlObj.hash.slice(1),
+      prevHash,
       scrollToTop: options.scrollToTop ?? true,
     });
 
