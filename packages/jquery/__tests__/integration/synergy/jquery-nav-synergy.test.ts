@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { registry } from '@/core/registry';
 import $ from '@/index';
 import type { AtomNav } from '@/types';
 
@@ -474,16 +473,21 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       const firstItemEl = $app.find('.list-item')[0];
       const listEl = $list[0];
       if (!firstItemEl || !listEl) throw new Error('Expected list elements to be defined');
-      expect(registry.hasBind(firstItemEl)).toBe(true);
-      expect(registry.hasBind(listEl)).toBe(true);
+      expect(firstItemEl.textContent).toBe('Item 1');
 
       // Navigate away
       await nav.navigate('/otherPage');
       await vi.waitFor(() => expect($app.text()).toContain('Other Page'));
 
-      // Verify bindings are cleaned up
-      expect(registry.hasBind(firstItemEl)).toBe(false);
-      expect(registry.hasBind(listEl)).toBe(false);
+      // Update the items array
+      itemsAtom.value = [
+        { id: 1, name: 'Item 1 Updated' },
+        { id: 2, name: 'Item 2 Updated' },
+      ];
+      await $.nextTick();
+
+      // Check that the detached element was NOT updated (bindings cleaned up)
+      expect(firstItemEl.textContent).toBe('Item 1');
     });
 
     it('should mount and render an atomList correctly when navigating to a new page', async () => {
@@ -524,23 +528,24 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
   });
 
   describe('Web Components & Navigation Synergy', () => {
+    class SynergyComponent extends HTMLElement {
+      private aej = $.useAtomComponent(this);
+      public textAtom = $.atom('initial-val');
+
+      connectedCallback() {
+        this.innerHTML = '<span data-aej-bind="text"></span>';
+        this.aej.setup({
+          bind: {
+            text: this.textAtom,
+          },
+        });
+      }
+    }
+
     let customElementDefined = false;
 
     beforeEach(() => {
       if (!customElementDefined) {
-        class SynergyComponent extends HTMLElement {
-          private aej = $.useAtomComponent(this);
-          private textAtom = $.atom('initial-val');
-
-          connectedCallback() {
-            this.innerHTML = '<span data-aej-bind="text"></span>';
-            this.aej.setup({
-              bind: {
-                text: this.textAtom,
-              },
-            });
-          }
-        }
         customElements.define('synergy-component', SynergyComponent);
         customElementDefined = true;
       }
@@ -563,19 +568,24 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       await vi.waitFor(() => expect($app.find('synergy-component').length).toBe(1));
 
       const $comp = $app.find('synergy-component');
-      const compEl = $comp[0];
+      const compEl = $comp[0] as SynergyComponent;
       if (!compEl) throw new Error('Expected custom element to be defined');
 
-      // Verify that useAtomComponent bound it (MARK_BOUND)
-      expect(registry.hasBind(compEl)).toBe(true);
       expect($comp.find('span').text()).toBe('initial-val');
+
+      // Verify updating text while mounted works
+      compEl.textAtom.value = 'updated-val';
+      await $.nextTick();
+      expect($comp.find('span').text()).toBe('updated-val');
 
       // Navigate away
       await nav.navigate('/otherPage');
       await vi.waitFor(() => expect($app.text()).toContain('Other Page'));
 
-      // Verify component was torn down
-      expect(registry.hasBind(compEl)).toBe(false);
+      // Verify component was torn down and updates to atom no longer propagate
+      compEl.textAtom.value = 'stale-val';
+      await $.nextTick();
+      expect($comp.find('span').text()).toBe('updated-val');
     });
   });
 
