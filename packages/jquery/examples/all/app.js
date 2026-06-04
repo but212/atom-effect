@@ -147,17 +147,17 @@ $(() => {
         },
       });
 
-    let lastResolvedTime = "--:--";
-    const lastUpdate = $.computed(() => {
+    const resolvedTime = $.atom("--:--");
+    const effLastUpdate = $.effect(() => {
       if (uiState.value === "resolved") {
-        lastResolvedTime = new Date().toLocaleTimeString([], {
+        resolvedTime.value = new Date().toLocaleTimeString([], {
           hour12: false,
           hour: "2-digit",
           minute: "2-digit",
         });
       }
-      return lastResolvedTime;
     });
+    const lastUpdate = $.computed(() => resolvedTime.value);
 
     $("#last-update").atomText(lastUpdate);
 
@@ -169,6 +169,7 @@ $(() => {
       isQueryTooShort.dispose();
       searchResults.dispose();
       effSearchCount.dispose();
+      effLastUpdate.dispose();
       placeholderText.dispose();
       uiState.dispose();
       lastUpdate.dispose();
