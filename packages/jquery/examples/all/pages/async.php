@@ -7,8 +7,7 @@
                 type="text"
                 id="search-input"
                 class="search-input"
-                placeholder="TYPE USERNAME..."
-            />
+                placeholder="TYPE USERNAME..." />
             <div style="margin-top: 20px">
                 <div id="status-indicator" class="status status-idle">IDLE</div>
             </div>
@@ -17,7 +16,8 @@
         <div class="card" style="text-align: left;">
             <h2 class="card-title">Results Stream</h2>
             <div id="results-container">
-                <div class="empty-state">SEARCH KEYWORD REQUIRED</div>
+                <div id="search-placeholder" class="empty-state">SEARCH KEYWORD REQUIRED</div>
+                <div id="results-list" class="user-list"></div>
             </div>
         </div>
     </section>

@@ -23,21 +23,6 @@ $pages = [
         'header_title' => 'FORMS',
         'path' => '/index.php?page=form-binding',
     ],
-    'minimalist' => [
-        'title' => 'MINIMALIST',
-        'header_title' => 'MINIMAL',
-        'path' => '/index.php?page=minimalist',
-    ],
-    'edge-cases' => [
-        'title' => 'EDGE CASES',
-        'header_title' => 'EDGE CASES',
-        'path' => '/index.php?page=edge-cases',
-    ],
-    'async-prop' => [
-        'title' => 'ASYNC PROPAGATION',
-        'header_title' => 'ASYNC PROP',
-        'path' => '/index.php?page=async-prop',
-    ],
 ];
 
 $navItems = [
@@ -45,9 +30,6 @@ $navItems = [
     'basic' => ['label' => 'Basic Counter', 'href' => '?page=basic'],
     'async' => ['label' => 'Async Computed', 'href' => '?page=async'],
     'form-binding' => ['label' => 'Form Binding', 'href' => '?page=form-binding'],
-    'minimalist' => ['label' => 'Minimalist', 'href' => '?page=minimalist'],
-    'edge-cases' => ['label' => 'Edge Cases', 'href' => '?page=edge-cases'],
-    'async-prop' => ['label' => 'Async Propagation', 'href' => '?page=async-prop'],
 ];
 
 if (!isset($pages[$page])) {
@@ -63,17 +45,17 @@ function e(string $value): string
 
 function statCard(string $value, string $label, string $borderColor = 'var(--black)'): void
 {
-    ?>
+?>
     <article class="stat-card" style="border-color: <?= e($borderColor) ?>">
         <div class="stat-value"><?= e($value) ?></div>
         <div class="stat-label"><?= e($label) ?></div>
     </article>
-    <?php
+<?php
 }
 
 function infoCard(string $title, string $body, string $class = ''): void
 {
-    ?>
+?>
     <article class="card <?= e($class) ?>" style="text-align: left;">
         <h2 class="card-title"><?= e($title) ?></h2>
         <p class="card-body-mono"><?= e($body) ?></p>
@@ -93,18 +75,9 @@ function renderPageContent(string $page): void
         case 'form-binding':
             include 'pages/form-binding.php';
             break;
-        case 'minimalist':
-            include 'pages/minimalist.php';
-            break;
-        case 'edge-cases':
-            include 'pages/edge-cases.php';
-            break;
-        case 'async-prop':
-            include 'pages/async-prop.php';
-            break;
         case 'home':
         default:
-            ?>
+    ?>
             <section aria-labelledby="dashboard-heading">
                 <div class="stats-grid">
                     <?php statCard('ALL IN ONE', 'AEJ / EXAMPLES'); ?>
@@ -117,10 +90,10 @@ function renderPageContent(string $page): void
                         ATOM-EFFECT-JQUERY IS NOT A FRAMEWORK. IT IS A BRIDGE.
                         EXPERIENCE SEAMLESS PHP NAVIGATION.
                     </p>
-                    <button class="btn-black" data-nav href="?page=basic">EXPLORE BASIC COUNTER</button>
+                    <a class="btn-black" data-nav href="?page=basic">EXPLORE BASIC COUNTER</a>
                 </article>
             </section>
-            <?php
+    <?php
             break;
     }
 }
@@ -132,7 +105,7 @@ function renderFragment(string $page, array $current): void
         data-current-path="<?= e($current['path']) ?>" id="page-wrapper" data-page="<?= e($page) ?>">
         <?php renderPageContent($page); ?>
     </div>
-    <?php
+<?php
 }
 ?>
 
@@ -144,6 +117,7 @@ function renderFragment(string $page, array $current): void
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -156,6 +130,7 @@ function renderFragment(string $page, array $current): void
         rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
     <div id="loader" class="loading-bar"></div>
 
@@ -180,8 +155,13 @@ function renderFragment(string $page, array $current): void
     <div class="main-container">
         <header>
             <h1 id="page-title"><?= e($current['header_title']) ?></h1>
-            <div id="status-chip" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.75rem;">
-                URL: <span id="current-path"><?= e($current['path']) ?></span>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <label style="font-family: var(--font-mono); font-weight: 700; font-size: 0.75rem; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="debug-toggle" style="width: 14px; height: 14px; accent-color: var(--primary-blue);" /> DEBUG MODE
+                </label>
+                <div id="status-chip" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.75rem;">
+                    URL: <span id="current-path"><?= e($current['path']) ?></span>
+                </div>
             </div>
         </header>
 
@@ -196,4 +176,5 @@ function renderFragment(string $page, array $current): void
     <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/dist/atom-effect-jquery.min.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>

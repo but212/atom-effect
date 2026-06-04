@@ -2,9 +2,9 @@
     <section class="hero-section">
         <h1 class="hero-title">Recursive<br />Two-Way Sync.</h1>
         <p class="hero-description">
-        Bind an entire form to a single object-based atom. Supports deep
-        nested objects, structural sharing for performance, and dynamic form
-        manipulation.
+            Bind an entire form to a single object-based atom. Supports deep
+            nested objects, structural sharing for performance, and dynamic form
+            manipulation.
         </p>
     </section>
 
@@ -80,7 +80,7 @@
 
                 <div id="dynamic-container" style="margin-top: 20px"></div>
 
-                <div style="display: flex; gap: 15px; margin-top: 40px">
+                <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 40px">
                     <button type="submit" id="submitBtn" class="btn btn-success" style="flex: 2">Save Profiles</button>
                     <button type="button" id="addField" class="btn" style="flex: 1">+ Field</button>
                     <button type="button" id="resetForm" class="btn" style="flex: 1">Reset</button>
