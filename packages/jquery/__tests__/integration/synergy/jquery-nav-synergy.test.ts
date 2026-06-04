@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registry } from '@/core/registry';
 import $ from '@/index';
 import type { AtomNav } from '@/types';
 
@@ -384,6 +385,243 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       await vi.waitFor(() => expect($app.find('#svg-form').length).toBe(1));
       const $animate = $app.find('animate');
       expect($animate.attr('values')).toBeUndefined();
+    });
+  });
+
+  describe('Fetch & Navigation Synergy', () => {
+    it('should abort pending atomFetch requests when a component containing it is unmounted by navigation', async () => {
+      let fetchAborted = false;
+
+      // Single unified spy to prevent mock overriding collisions
+      vi.spyOn($, 'ajax').mockImplementation((settings?: JQuery.AjaxSettings) => {
+        const url = settings?.url || '';
+        const xhr = {
+          getResponseHeader: () => null,
+          abort: () => {
+            if (url.includes('/api')) {
+              fetchAborted = true;
+            }
+          },
+          status: 200,
+          statusText: 'OK',
+        } as unknown as JQuery.jqXHR;
+
+        const deferred = $.Deferred<unknown, unknown, unknown>();
+
+        if (url.includes('home')) {
+          deferred.resolve('<div id="comp">Home</div>', 'success', xhr);
+        } else if (url.includes('other')) {
+          deferred.resolve('<div>Other</div>', 'success', xhr);
+        }
+        // If /api, do not resolve it immediately (pending state)
+
+        return Object.assign(deferred.promise(), xhr);
+      });
+
+      const nav = track($.atomNav({ target: $app }));
+      await nav.navigate('/home');
+      await vi.waitFor(() => expect($app.find('#comp').length).toBe(1));
+
+      const fetchAtom = $.atomFetch('/api', { eager: true, defaultValue: null });
+      $app.find('#comp').atomMount(($el) => {
+        $el.atomText(fetchAtom);
+        return () => {
+          fetchAtom.dispose(); // User cleans up fetch atom on unmount
+        };
+      });
+
+      await $.nextTick();
+
+      expect(fetchAborted).toBe(false);
+
+      await nav.navigate('/other');
+      await vi.waitFor(() => expect($app.text()).toContain('Other'));
+      expect(fetchAborted).toBe(true);
+    });
+  });
+
+  describe('List & Navigation Synergy', () => {
+    it('should cleanly dispose list bindings and item effects when navigating away', async () => {
+      setupMockAjax({
+        listPage: `
+          <div id="list-container">
+            <ul id="items-list"></ul>
+          </div>
+        `,
+        otherPage: '<div>Other Page</div>',
+      });
+
+      const itemsAtom = $.atom([
+        { id: 1, name: 'Item 1' },
+        { id: 2, name: 'Item 2' },
+      ]);
+      const nav = track($.atomNav({ target: $app }));
+
+      await nav.navigate('/listPage');
+      await vi.waitFor(() => expect($app.find('#items-list').length).toBe(1));
+
+      const $list = $app.find('#items-list');
+      $list.atomList(itemsAtom, {
+        key: 'id',
+        render: (item) => `<li class="list-item">${item.name}</li>`,
+        bind: ($el, item) => {
+          $el.atomText($.computed(() => item.name));
+        },
+      });
+
+      // Verify rendered and bound
+      expect($app.find('.list-item').length).toBe(2);
+      const firstItemEl = $app.find('.list-item')[0];
+      const listEl = $list[0];
+      if (!firstItemEl || !listEl) throw new Error('Expected list elements to be defined');
+      expect(registry.hasBind(firstItemEl)).toBe(true);
+      expect(registry.hasBind(listEl)).toBe(true);
+
+      // Navigate away
+      await nav.navigate('/otherPage');
+      await vi.waitFor(() => expect($app.text()).toContain('Other Page'));
+
+      // Verify bindings are cleaned up
+      expect(registry.hasBind(firstItemEl)).toBe(false);
+      expect(registry.hasBind(listEl)).toBe(false);
+    });
+
+    it('should mount and render an atomList correctly when navigating to a new page', async () => {
+      setupMockAjax({
+        home: '<div>Home</div>',
+        listPage: `
+          <div id="list-container">
+            <ul id="items-list"></ul>
+          </div>
+        `,
+      });
+
+      const itemsAtom = $.atom([
+        { id: 1, name: 'A' },
+        { id: 2, name: 'B' },
+      ]);
+      const nav = track(
+        $.atomNav({
+          target: $app,
+          onMount: ($container, url) => {
+            if (url.includes('listPage')) {
+              $container.find('#items-list').atomList(itemsAtom, {
+                key: 'id',
+                render: (item) => `<li class="list-item">${item.name}</li>`,
+              });
+            }
+          },
+        })
+      );
+
+      await nav.navigate('/home');
+      await nav.navigate('/listPage');
+
+      await vi.waitFor(() => expect($app.find('.list-item').length).toBe(2));
+      expect($app.find('.list-item').eq(0).text()).toBe('A');
+      expect($app.find('.list-item').eq(1).text()).toBe('B');
+    });
+  });
+
+  describe('Web Components & Navigation Synergy', () => {
+    let customElementDefined = false;
+
+    beforeEach(() => {
+      if (!customElementDefined) {
+        class SynergyComponent extends HTMLElement {
+          private aej = $.useAtomComponent(this);
+          private textAtom = $.atom('initial-val');
+
+          connectedCallback() {
+            this.innerHTML = '<span data-aej-bind="text"></span>';
+            this.aej.setup({
+              bind: {
+                text: this.textAtom,
+              },
+            });
+          }
+        }
+        customElements.define('synergy-component', SynergyComponent);
+        customElementDefined = true;
+      }
+    });
+
+    it('should initialize, update, and teardown custom elements correctly through navigation cycles', async () => {
+      setupMockAjax({
+        compPage: `
+          <div id="comp-wrapper">
+            <synergy-component id="my-comp"></synergy-component>
+          </div>
+        `,
+        otherPage: '<div>Other Page</div>',
+      });
+
+      const nav = track($.atomNav({ target: $app }));
+
+      // Navigate to page with component
+      await nav.navigate('/compPage');
+      await vi.waitFor(() => expect($app.find('synergy-component').length).toBe(1));
+
+      const $comp = $app.find('synergy-component');
+      const compEl = $comp[0];
+      if (!compEl) throw new Error('Expected custom element to be defined');
+
+      // Verify that useAtomComponent bound it (MARK_BOUND)
+      expect(registry.hasBind(compEl)).toBe(true);
+      expect($comp.find('span').text()).toBe('initial-val');
+
+      // Navigate away
+      await nav.navigate('/otherPage');
+      await vi.waitFor(() => expect($app.text()).toContain('Other Page'));
+
+      // Verify component was torn down
+      expect(registry.hasBind(compEl)).toBe(false);
+    });
+  });
+
+  describe('atomMount & Navigation Synergy', () => {
+    it('should trigger mount and cleanup callbacks of atomMount on PJAX navigation cycles', async () => {
+      setupMockAjax({
+        mountPage: `
+          <div id="mount-wrapper">
+            <div id="mount-el">Initial</div>
+          </div>
+        `,
+        otherPage: '<div>Other Page</div>',
+      });
+
+      let mountCalled = 0;
+      let cleanupCalled = 0;
+
+      const nav = track(
+        $.atomNav({
+          target: $app,
+          onMount: ($container, url) => {
+            if (url.includes('mountPage')) {
+              $container.find('#mount-el').atomMount(($el) => {
+                mountCalled++;
+                $el.text('Mounted');
+                return () => {
+                  cleanupCalled++;
+                };
+              });
+            }
+          },
+        })
+      );
+
+      // Navigate to mount page
+      await nav.navigate('/mountPage');
+      await vi.waitFor(() => expect($app.find('#mount-el').text()).toBe('Mounted'));
+      expect(mountCalled).toBe(1);
+      expect(cleanupCalled).toBe(0);
+
+      // Navigate away
+      await nav.navigate('/otherPage');
+      await vi.waitFor(() => expect($app.text()).toContain('Other Page'));
+
+      expect(mountCalled).toBe(1);
+      expect(cleanupCalled).toBe(1);
     });
   });
 });
