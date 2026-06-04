@@ -137,6 +137,20 @@ describe('Computed', () => {
       expect(callCount).toBe(1);
     });
 
+    it('should not pass the previous value to the computation function', async () => {
+      const src = atom(1);
+      const fn = vi.fn((...args: unknown[]) => {
+        expect(args.length).toBe(0);
+        return src.value * 2;
+      });
+      const c = computed(fn);
+      expect(c.value).toBe(2);
+      src.value = 2;
+      await aeNextTick();
+      expect(c.value).toBe(4);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
     it('should not false-positive circular dependency during diamond dependency', async () => {
       const root = atom(1);
       const left = computed(() => root.value + 1);
