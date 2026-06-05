@@ -6,10 +6,10 @@ Benchmarking suite for `@but212/atom-effect-utils` to quantify the performance o
 
 | Category | Key Metric | Value | Technical Context |
 | :--- | :--- | :--- | :--- |
-| **SlotBuffer** | push (small) | 339.4K ops/sec | Internal high-performance buffer (x100) |
-| **Option** | isSome check | 303.9K ops/sec | Reactive-compatible Option type (x100) |
-| **Result** | ok creation | 257.4K ops/sec | Error handling primitive (x100) |
-| **Type Guard** | isPromise | 292.9K ops/sec | Fast async primitive detection (x100) |
+| **SlotBuffer** | push (small) | 341.8K ops/sec | Internal high-performance buffer (x100) |
+| **Option** | isSome check | 365.0K ops/sec | Reactive-compatible Option type (x100) |
+| **Result** | ok creation | 278.7K ops/sec | Error handling primitive (x100) |
+| **Type Guard** | isPromise | 368.1K ops/sec | Fast async primitive detection (x100) |
 
 ---
 
@@ -36,8 +36,8 @@ pnpm bench:all
 
 ## Latest Results
 
-**Version**: v0.33.0
-**Last Updated**: 2026-06-02
+**Version**: v0.33.1
+**Last Updated**: 2026-06-05
 **Environment**:
 
 - **Node.js**: v22.x
