@@ -206,10 +206,15 @@ const state = mergeAtoms(settings, user);
 Unifies multiple writable lenses into a single writable atom, allowing coordinated updates.
 
 ```typescript
-import { mergeLenses, atomLens } from '@but212/atom-effect';
+import { atom, mergeLenses, atomLens } from '@but212/atom-effect';
+
+const user = atom({ profile: { name: 'Alice' } });
+const settings = atom({ config: { theme: 'dark' } });
 
 const combined = mergeLenses(atomLens(user, 'profile'), atomLens(settings, 'config'));
-combined.value = { /* updates both source atoms */ };
+combined.value = { name: 'Bob', theme: 'light' };
+// user.value.profile -> { name: 'Bob', theme: 'light' }
+// settings.value.config -> { name: 'Bob', theme: 'light' }
 ```
 
 ---

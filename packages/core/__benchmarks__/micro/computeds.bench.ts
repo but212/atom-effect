@@ -87,3 +87,57 @@ describe('Computeds: Read Methods (.value vs .peek())', () => {
     microBenchOptions
   );
 });
+
+describe('Computeds: Asynchronous Flows', () => {
+  // Pre-resolved async computed for testing read overhead
+  const resolvedAsync = computed(async () => 42, { defaultValue: 0 });
+  resolvedAsync.subscribe(() => {}); // keep active
+  resolvedAsync.value; // trigger evaluation
+
+  bench(
+    `creation: async computed (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        const c = computed(async () => 42, { defaultValue: 0 });
+        keep(c);
+        c.dispose();
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
+    `read: resolved value & state (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        keep(resolvedAsync.value);
+        keep(resolvedAsync.state);
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
+    'resolution: promise resolving lifecycle',
+    async () => {
+      let resolve!: (v: number) => void;
+      const promise = new Promise<number>((r) => {
+        resolve = r;
+      });
+      const c = computed(() => promise, { defaultValue: 0 });
+      c.subscribe(() => {}); // keep active
+
+      try {
+        keep(c.value); // trigger calculation, transitions to pending
+        resolve(42);
+
+        await promise; // wait for promise to settle
+        await Promise.resolve(); // wait for computed microtask to resolve
+        keep(c.value); // read resolved value
+      } finally {
+        c.dispose();
+      }
+    },
+    microBenchOptions
+  );
+});

@@ -63,7 +63,6 @@ describe('Lens System', () => {
       expect(user.value.settings.age).toBe(30);
       expect(user.value.city).toBe('Seoul'); // Unrelated field preserved
     });
-
     it('should maintain reactivity across all source lenses', async () => {
       const user = atom({
         profile: { name: 'Alice' },
@@ -377,6 +376,52 @@ describe('Lens System', () => {
       const store = atom({ data: 'initial' });
       const l = unsafeAtomLens(store, '__proto__');
       expect(l.value).toBeUndefined();
+    });
+  });
+
+  describe('JSDoc Examples Verification', () => {
+    it('should verify the JSDoc example for atomLens', () => {
+      const user = atom({ profile: { name: 'Alice', age: 25 } });
+
+      // Create a two-way lens for the 'name' property
+      const nameLens = atomLens(user, 'profile.name');
+
+      expect(nameLens.value).toBe('Alice');
+      nameLens.value = 'Bob'; // Updates user.value.profile.name
+      expect(user.value.profile.name).toBe('Bob');
+    });
+
+    it('should verify the JSDoc example for mergeLenses', () => {
+      const profile = atom({ name: 'Alice' });
+      const preferences = atom({ theme: 'dark' });
+
+      const formState = mergeLenses(profile, preferences);
+
+      // Verify the read behavior from the example
+      expect(formState.value).toEqual({ name: 'Alice', theme: 'dark' });
+
+      // Verify write propagation behavior (written in its entirety to each lens)
+      formState.value = { name: 'Bob', theme: 'light' };
+
+      expect(profile.value).toEqual({ name: 'Bob', theme: 'light' });
+      expect(preferences.value).toEqual({ name: 'Bob', theme: 'light' });
+    });
+
+    it('should verify the JSDoc example for lensFor', () => {
+      const user = atom({ profile: { name: 'Alice', age: 25 } });
+      const userLens = lensFor(user);
+
+      const nameLens = userLens('profile.name');
+      const ageLens = userLens('profile.age');
+
+      expect(nameLens.value).toBe('Alice');
+      expect(ageLens.value).toBe(25);
+
+      nameLens.value = 'Bob';
+      ageLens.value = 30;
+
+      expect(user.value.profile.name).toBe('Bob');
+      expect(user.value.profile.age).toBe(30);
     });
   });
 });

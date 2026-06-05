@@ -476,18 +476,26 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
  * - To synchronize multiple fields across different state trees.
  * - To create a single "form" atom from multiple disparate source atoms.
  *
+ * Constraint: Object-based Nodes Only
+ * Designed for object-based nodes. Merging primitive-valued nodes (e.g. strings, numbers)
+ * will result in a mismatch where the static TypeScript type resolves to the primitive type
+ * (e.g., `string`), but the runtime value returned is an index-keyed object (e.g., `{ '0': val1, '1': val2 }`).
+ *
  * @param lenses - A list of writable atoms/lenses to merge.
  * @returns A unified writable atom that synchronizes all input lenses.
  *
  * @example
  * ```typescript
- * const firstName = atom('Alice');
- * const lastName = atom('Smith');
+ * const profile = atom({ name: 'Alice' });
+ * const preferences = atom({ theme: 'dark' });
  *
- * const fullName = mergeLenses(firstName, lastName);
+ * const formState = mergeLenses(profile, preferences);
  *
- * // Sets both firstName and lastName to 'Bob'
- * fullName.value = 'Bob';
+ * // Reading formState.value returns: { name: 'Alice', theme: 'dark' }
+ * console.log(formState.value);
+ *
+ * // Writing updates both source atoms within a single batch
+ * formState.value = { name: 'Bob', theme: 'light' };
  * ```
  */
 export function mergeLenses<L extends WritableAtom<unknown>[]>(

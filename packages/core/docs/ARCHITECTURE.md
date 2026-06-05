@@ -63,7 +63,7 @@ sequenceDiagram
 The system employs a dual-layer encapsulation model designed for both V8 JIT optimization and API safety.
 
 - **`ReactiveNode<T>`**: The foundation interface ensuring monomorphic property access across the engine.
-- **Public Engine Fields**: Properties required for graph traversal (`flags`, `version`, `_storage`) are public. This ensures V8 generates stable **Hidden Classes** with direct property access, bypassing getter/setter overhead in hot paths.
+- **Public Engine Fields**: Properties required for graph traversal (`flags`, `version`, `_slots`) are public. This ensures V8 generates stable **Hidden Classes** with direct property access, bypassing getter/setter overhead in hot paths.
 - **Private Behavioral State**: Value storage (`#value`), computation logic (`#fn`), and budget states use **native private fields (`#`)**. This protects internal invariants and prevents external tampering.
 
 ### Node Roles
@@ -71,7 +71,7 @@ The system employs a dual-layer encapsulation model designed for both V8 JIT opt
 | Role | Implementation | Input | Output | Characteristic |
 | :--- | :--- | :--- | :--- | :--- |
 | **Source** | `AtomImpl` | Manual | State | Leaf node, non-tracking. |
-| **Transform** | `ComputedImpl` | Reactive | State | Hybrid node, lazy, cached. |
+| **Transform** | `ComputedAtomImpl` | Reactive | State | Hybrid node, lazy, cached. |
 | **Sink** | `EffectImpl` | Reactive | Void | Terminal node, side-effects. |
 
 ---

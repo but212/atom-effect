@@ -32,9 +32,7 @@ The following utilities and constants are available on the global `AtomEffectJQu
 - `enableAutoCleanup(container)`: Attaches a MutationObserver to a specific element for automated resource disposal.
 - `disableAutoCleanup()`: Removes all global observers.
 - `enablejQueryOverrides(options)`: Enables patches for native jQuery methods (e.g., `.remove()`, `.empty()`).
-- `nextTick()`: Utility for waiting until the next reactive flush.
 - `cleanup(element)`: Triggers a recursive teardown of reactive resources on an element and its Shadow DOM.
-- `debug`: Access to the runtime diagnostic controller.
 
 ### Library Configuration (`$.initAEJ`)
 
@@ -80,6 +78,14 @@ $('.user-card').atomBind({
   form: userAtom,                 // Automated form synchronization
   on: { click: handleClick }      // Event handler
 });
+```
+
+### `.atomUnbind()`
+
+Removes all reactive bindings and disposes of reactive resources (effects, subscriptions) from the selected elements and their descendants. This should be called when elements are permanently removed from the DOM if auto-cleanup is disabled.
+
+```javascript
+$('.list-item').atomUnbind().remove();
 ```
 
 ---
@@ -189,6 +195,7 @@ Renders and reconciles a list of DOM elements against an array.
 - **`bind`**: `($el, item, index) => void` — Applies reactive bindings to newly rendered elements.
 - **`update`**: `($el, item, index) => void` — Manual reconciliation logic for existing elements.
 - **`onAdd`** / **`onRemove`**: Lifecycle hooks. `onRemove` supports asynchronous execution for exit animations.
+- **`empty`**: `string | Element | DocumentFragment | JQuery` (Optional) — Custom HTML string or DOM content to display when the list array is empty.
 - **`isEqual`**: `(a, b) => boolean` — Custom equality check for item comparisons.
 - **`events`**: Delegated event handlers applied to the list container.
 
@@ -296,6 +303,25 @@ const UserProfile = ($el, { id }) => {
 $('#root').atomMount(UserProfile, { id: 42 });
 ```
 
+### `.atomUnmount()`
+
+Explicitly triggers unmounting and resource cleanup for components mounted via `.atomMount()`.
+
+- **Signature**: `.atomUnmount(): JQuery`
+- **Mechanism**: Delegates to `registry.cleanupTree()` to recursively dispose of all reactive bindings, effects, and component-level teardown hooks.
+
+#### Best Practice
+
+Always invoke `.atomUnmount()` before programmatically removing or replacing the outer container of a mounted component to guarantee complete garbage collection of reactive resources.
+
+```javascript
+// Mount the component
+$('#root').atomMount(UserProfile, { id: 42 });
+
+// Best Practice: Explicitly unmount before removing from the DOM
+$('#root').atomUnmount().remove();
+```
+
 ---
 
 ## Web Components
@@ -313,21 +339,26 @@ Custom Elements can configure reactivity via static properties.
 | Property | Type | Description |
 | :--- | :--- | :--- |
 | `aejStyles` | `(string \| CSSStyleSheet)[]` | Array of styles applied via `adoptedStyleSheets`. |
-| `aejBind` | `Record<string, ReadonlyAtom<any>>` | Text bindings targeting `data-aej-bind` attributes. |
+| `aejBind` | `Record<string, ReadonlyAtom<any>>` | Text bindings targeting `data-aej-bind` (or legacy `data-bind`) attributes. |
 | `aejAria` | `Record<string, ReadonlyAtom<any>>` | Reactive ARIA synchronization via `ElementInternals`. |
 | `aejParts` | `Record<string, ReadonlyAtom<any>>` | Reactive CSS Shadow Parts control. |
 | `aejDispatch` | `Record<string, ReactiveValue<any>>` | Automatic `CustomEvent` dispatching on state changes. |
-| `aejValue` | `Atom<any> \| { val: Atom, state?: Atom }` | Form-Associated Custom Element (FACE) data synchronization. |
-| `aejValidation` | `Atom<ValidityStateFlags \| string> \| Function` | Native Constraint Validation API integration. |
+| `aejValue` | `ReadonlyAtom<any> \| { val: ReadonlyAtom<any>, state?: ReadonlyAtom<any> }` | Form-Associated Custom Element (FACE) data synchronization. |
+| `aejValidation` | `ReadonlyAtom<ValidityStateFlags \| string> \| ((val: unknown) => ValidityStateFlags \| string)` | Native Constraint Validation API integration. |
+
+> [!IMPORTANT]
+> **Static Property State Sharing**: Because static properties (such as `aejBind` and `aejValue`) are defined on the class constructor, any reactive primitives (like `$.atom` or `$.computed`) assigned directly to them are shared across all instances of the custom element. If instance-specific reactive state is required, initialize the state dynamically inside the constructor or `connectedCallback`, and register them via `this.aej.setup({ ... })`.
 
 #### Controller API
 
 - **`host`**: The raw host element of the component.
 - **`root`**: The active root node (`ShadowRoot` or Host container).
 - **`attrs(name: string)`**: Returns a Lens Atom targeting a specific attribute. Respects `static observedAttributes` if defined.
-- **`slots(name?: string)`**: Returns a `ReadonlyAtom<Node[]>` representing the assigned nodes of a Shadow DOM `<slot>`.
+- **`slots(name: string)`**: Returns a `ReadonlyAtom<Node[]>` representing the assigned nodes of a Shadow DOM `<slot>` with the specified name (use `'default'` or `''` for the default unnamed slot).
 - **`internals`**: Provides access to the `ElementInternals` object.
 - **`$(selector)`**: A scoped jQuery selector isolated to the component's `ShadowRoot` or host container.
+- **`provideAtom(key: string | symbol, val: any)`**: Registers a reactive provider on the host element for dependency injection.
+- **`injectAtom(key: string | symbol)`**: Injects a reactive context value provided by an ancestor element.
 - **`teardown()`**: Releases all reactive resources and disposes of internal states.
 - **`setup(options?)`**: Bootstraps the reactive features based on the provided configuration or static specs.
 
@@ -338,14 +369,18 @@ Bootstraps the reactive features based on the provided configuration or the stat
 ```javascript
 class MyComp extends HTMLElement {
   static aejStyles = [':host { display: block; }'];
-  static aejBind = { title: $.atom('Hello World') };
 
-  private aej = $.useAtomComponent(this); 
+  aej = $.useAtomComponent(this); 
+  title = $.atom('Hello World');
   
   connectedCallback() {
     this.attachShadow({ mode: 'open' }).innerHTML = `
       <h1 data-aej-bind="title"></h1>
     `;
+    // Register instance-specific reactive bindings
+    this.aej.setup({
+      bind: { title: this.title }
+    });
   }
   
   disconnectedCallback() {
@@ -380,6 +415,14 @@ Retrieves a value registered by an ancestor via `provideAtom`.
 ### `$.atomLens(atom, path)`
 
 Creates a two-way reactive lens addressing a specific nested property path. Supports structural sharing.
+
+### `$.composeLens(lens1, lens2)`
+
+Composes two lenses to access nested properties.
+
+### `$.lensFor(atom)`
+
+Creates a dynamic lens builder helper for an atom's properties.
 
 ### `$.mergeAtoms(...atoms)`
 
@@ -417,13 +460,18 @@ Returns a `Promise` resolving after the next reactive scheduler flush cycle.
 
 A reactive wrapper for AJAX requests.
 
-- **Concurrency**: Integrates `AbortController` to cancel pending requests when dependencies update.
+- **Concurrency**: Automatically cancels pending requests by calling `.abort()` on the underlying jQuery `jqXHR` object when reactive dependencies update.
 - **Normalization**: Standardizes `jqXHR` objects into native `Error` classes.
+
+The returned computed atom exposes an `.abort()` method allowing manual cancellation of the active request:
 
 ```javascript
 const user = $.atomFetch(() => `/api/users/${userId.value}`, {
   defaultValue: null,
 });
+
+// Cancel the active network request manually
+user.abort();
 ```
 
 ---
@@ -434,8 +482,25 @@ const user = $.atomFetch(() => `/api/users/${userId.value}`, {
 
 A Single Page Application router supporting both HTML5 History and Hash modes.
 
-- **Pattern Matching**: Leverages the native `URLPattern` API for segment extraction, falling back to Regex when unsupported.
+- **Pattern Matching**: Compiles dynamic route patterns into regular expressions for segment extraction.
 - **Route Lifecycle**: Provides `onEnter` and `onLeave` hooks for navigation guards.
+
+#### Router Instance Interface
+
+The returned `Router` instance exposes the following reactive properties and methods:
+
+| Property / Method | Type | Description |
+| :--- | :--- | :--- |
+| `currentRoute` | `ReadonlyAtom<string>` | Reactive atom containing the current active path. |
+| `queryParams` | `ReadonlyAtom<Record<string, string>>` | Reactive atom containing the current query string parameters. |
+| `params` | `ReadonlyAtom<Record<string, string>>` | Reactive atom containing the extracted path parameters (e.g. `:id`). |
+| `location` | `ReadonlyAtom<RouteLocation>` | Reactive atom containing a snapshot of the current location state (`path`, `query`, `params`). |
+| `navigate(to)` | `(to: string \| Partial<RouteLocation>) => void` | Programmatically navigates to the specified path or location object. |
+| `destroy()` | `() => void` | Shuts down the router and disposes of internal event listeners. |
+
+#### Best Practice
+
+To prevent listener leaks, always invoke `router.destroy()` when tearing down the application context, particularly in single-page testing suites or micro-frontend configurations.
 
 ---
 
@@ -453,9 +518,32 @@ A PJAX-style navigation manager that intercepts link clicks to fetch and swap HT
 ```javascript
 const nav = $.atomNav({
   target: '#main-content',
-  selector: '#main-content',
+  selector: 'a[data-nav]',
   onMount: ($container, url) => console.log(`Navigated to ${url}`)
 });
+```
+
+#### AtomNav Instance Interface
+
+The returned `AtomNav` instance exposes the following properties and methods:
+
+| Property / Method | Type | Description |
+| :--- | :--- | :--- |
+| `currentUrl` | `ReadonlyAtom<string>` | Reactive atom containing the currently loaded relative URL. |
+| `isPending` | `ReadonlyAtom<boolean>` | Reactive atom indicating whether a fragment fetch request is in progress. |
+| `hasError` | `ReadonlyAtom<boolean>` | Reactive atom indicating if the last navigation request failed. |
+| `navigate(url, options?)` | `(url: string, options?: { replace?: boolean }) => Promise<void>` | Programmatically triggers a PJAX transition to the specified URL. |
+| `destroy()` | `() => void` | Disposes of the navigation manager, global event listeners, and internal scheduler hooks. |
+
+#### Best Practice
+
+Leverage the `nav.isPending` atom to render transition progress bars or loading states, enhancing perceived performance during asynchronous page transitions:
+
+```javascript
+const nav = $.atomNav({ target: '#main-content' });
+
+// Bind loading state to a global progress indicator
+$('#global-loader').atomShow(nav.isPending);
 ```
 
 ---
@@ -467,5 +555,5 @@ const nav = $.atomNav({
 When enabled via `$.debug.enabled = true`:
 
 - **Console Diagnostics**: Logs node updates and specific DOM operations.
-- **Visual Highlighting**: Outlines updated elements using `requestAnimationFrame` for performance profiling. Style checks are throttled to 1000ms intervals to eliminate profiling overhead during high-frequency sequential updates.
+- **Visual Highlighting**: Outlines updated elements using native CSS animation (`Element.prototype.animate`) immediately when the DOM updates.
 - **Precision**: Logs structural paths utilizing the `tag#id.class` format.
