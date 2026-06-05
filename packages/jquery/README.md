@@ -32,7 +32,7 @@ pnpm add @but212/atom-effect-jquery jquery
 
 ```html
 <script src="https://code.jquery.com/jquery-4.0.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/dist/atom-effect-jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.1/dist/atom-effect-jquery.min.js"></script>
 
 <script>
   // Initializing global state and safety net
