@@ -118,26 +118,24 @@ describe('Computeds: Asynchronous Flows', () => {
   );
 
   bench(
-    `resolution: promise resolving lifecycle (x${REPEATS})`,
+    'resolution: promise resolving lifecycle',
     async () => {
-      for (let i = 0; i < REPEATS; i++) {
-        let resolve!: (v: number) => void;
-        const promise = new Promise<number>((r) => {
-          resolve = r;
-        });
-        const c = computed(() => promise, { defaultValue: 0 });
-        c.subscribe(() => {}); // keep active
+      let resolve!: (v: number) => void;
+      const promise = new Promise<number>((r) => {
+        resolve = r;
+      });
+      const c = computed(() => promise, { defaultValue: 0 });
+      c.subscribe(() => {}); // keep active
 
-        try {
-          keep(c.value); // trigger calculation, transitions to pending
-          resolve(42);
+      try {
+        keep(c.value); // trigger calculation, transitions to pending
+        resolve(42);
 
-          await promise; // wait for promise to settle
-          await Promise.resolve(); // wait for computed microtask to resolve
-          keep(c.value); // read resolved value
-        } finally {
-          c.dispose();
-        }
+        await promise; // wait for promise to settle
+        await Promise.resolve(); // wait for computed microtask to resolve
+        keep(c.value); // read resolved value
+      } finally {
+        c.dispose();
       }
     },
     microBenchOptions
