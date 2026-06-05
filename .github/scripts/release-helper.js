@@ -7,41 +7,24 @@ if (!version) {
   process.exit(1);
 }
 
-// 1. Discover and verify packages
-const rootPkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-if (rootPkg.version !== version) {
-  console.error(`x Root version mismatch: package.json (${rootPkg.version}) != ${version}`);
-  process.exit(1);
-}
-
-const packages = fs
-  .readdirSync('packages', { withFileTypes: true })
-  .filter((d) => d.isDirectory())
-  .map((d) => path.join('packages', d.name))
-  .filter((p) => fs.existsSync(path.join(p, 'package.json')));
-
-const packageDetails = packages.map((p) => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(p, 'package.json'), 'utf8'));
-  return {
-    path: p,
-    name: pkg.name,
-    version: pkg.version,
-    private: pkg.private === true,
-  };
-});
-
-// Only verify versions for non-private packages
-const publishablePackages = packageDetails.filter((pkg) => !pkg.private);
-const mismatches = publishablePackages.filter((pkg) => pkg.version !== version);
-
-if (mismatches.length > 0) {
-  for (const m of mismatches) {
-    console.error(`x Version mismatch: ${m.path} (${m.version}) != ${version}`);
+// 1. Verify root and sub-package versions
+const verifyVersion = (filePath, name, force = false) => {
+  const pkg = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  if ((force || !pkg.private) && pkg.version !== version) {
+    console.error(`x Version mismatch in ${name}: ${pkg.version} !== ${version}`);
+    process.exit(1);
   }
-  process.exit(1);
+};
+
+verifyVersion('package.json', 'root', true);
+for (const dir of fs.readdirSync('packages')) {
+  const pkgPath = path.join('packages', dir, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    verifyVersion(pkgPath, dir);
+  }
 }
 
-// 2. Extract release notes by record splitting
+// 2. Extract release notes
 const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
 const sections = changelog.split(/(?=^## \[)/m);
 const target = sections.find((s) => s.startsWith(`## [${version}]`));
@@ -51,16 +34,5 @@ if (!target) {
   process.exit(1);
 }
 
-const notes = target.replace(/^## \[.*?\]\n?/, '').trim();
-fs.writeFileSync('RELEASE_NOTES.md', notes);
+fs.writeFileSync('RELEASE_NOTES.md', target.replace(/^## \[.*?\]\n?/, '').trim());
 console.log(`✓ RELEASE_NOTES.md generated for v${version}`);
-
-// 3. Output matrix for GHA
-const matrix = publishablePackages.map(({ name, path: dir }) => ({
-  name,
-  dir,
-}));
-
-if (process.env.GITHUB_OUTPUT) {
-  fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(matrix)}\n`);
-}

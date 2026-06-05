@@ -1,4 +1,4 @@
-name: "Setup pnpm environment"
+name: "Setup Environment"
 description: "Setup pnpm, Node.js, and install dependencies"
 
 inputs:
@@ -10,9 +10,6 @@ inputs:
     default: ""
   install-playwright:
     description: "Whether to install Playwright browsers"
-    default: "false"
-  skip-install:
-    description: "Skip installing dependencies (e.g. when restoring from cache)"
     default: "false"
 
 runs:
@@ -32,11 +29,10 @@ runs:
         cache-dependency-path: pnpm-lock.yaml
 
     - name: Install dependencies
-      if: inputs['skip-install'] != 'true'
       run: pnpm install --frozen-lockfile
       shell: bash
 
     - name: Install Playwright Browsers
-      if: inputs['skip-install'] != 'true' && inputs['install-playwright'] == 'true'
+      if: inputs.install-playwright == 'true'
       run: pnpm exec playwright install --with-deps chromium
       shell: bash
