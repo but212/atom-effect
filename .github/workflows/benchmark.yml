@@ -101,4 +101,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh cache delete "${{ runner.os }}-workspace-${{ github.sha }}" || true
+          gh cache delete "${{ runner.os }}-workspace-${{ github.sha }}" --repo "${{ github.repository }}" || true
