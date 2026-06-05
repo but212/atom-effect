@@ -130,9 +130,8 @@ The routing subsystem is decoupled into strategy-based modules.
 
 - **`UrlAdapter` Strategy**: Abstracts browser navigation APIs (History `pushState` vs Hash routing), allowing the core matching engine to remain agnostic.
 - **Tiered Matcher**: Evaluates routes using a performance hierarchy:
-  1. Static `Map` lookup (O(1)).
-  2. Native `URLPattern` API (for dynamic segments).
-  3. Anchored Regex matching (Fallback for older engines).
+  1. Static `Map` lookup (O(1)) for exact paths.
+  2. RegExp-compiled pattern matching for dynamic paths with parameter extraction.
 
 ### 6.2 PJAX Navigation (`$.atomNav`)
 
