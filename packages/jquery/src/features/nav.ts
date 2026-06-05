@@ -27,8 +27,14 @@ import {
   updateAttributes,
 } from '@/core/navigation';
 import { registry } from '@/core/registry';
-import type { AtomNav, AtomNavOptions, ReadonlyAtom } from '@/types';
-import { sanitizeHtml } from '@/utils/sanitize';
+import type { AtomNav, AtomNavOptions, ReadonlyAtom, WritableAtom } from '@/types';
+import { DEFAULT_POLICY, sanitizeHtml } from '@/utils/sanitize';
+
+const NAV_POLICY = {
+  ...DEFAULT_POLICY,
+  urlAttributes: [...DEFAULT_POLICY.urlAttributes],
+  blacklistedTags: DEFAULT_POLICY.blacklistedTags.filter((tag) => tag !== 'form'),
+};
 
 /** @internal */
 interface NavState {
@@ -75,6 +81,57 @@ function reconcileDOM(
     $target.html(state.html);
 
     options.onMount?.($target, url);
+  });
+}
+
+/**
+ * Logic: Navigation Transition Apply
+ * Performs DOM updates and browser history synchronization within a single reactive batch.
+ */
+function applyNavigationState(
+  win: Window,
+  $target: JQuery,
+  intent: WritableAtom<NavState>,
+  rendered: WritableAtom<{ url: string; path: string }>,
+  pjaxState: ContentState,
+  url: string,
+  hash: string,
+  type: NavigationType,
+  curRendered: { url: string; path: string },
+  options: AtomNavOptions
+): void {
+  const isRedirect = !!(pjaxState.redirectUrl && pjaxState.redirectUrl !== url);
+  const previousUrl = curRendered.url;
+
+  let finalUrl = isRedirect ? (pjaxState.redirectUrl as string) : url;
+  if (isRedirect && hash && !finalUrl.includes('#')) {
+    finalUrl += `#${hash}`;
+  }
+
+  const { pathAndSearch: finalPath } = getUrlParts(finalUrl, win.location.href);
+  const isNewTarget = finalPath !== curRendered.path;
+
+  $.batch(() => {
+    if (isRedirect) {
+      win.history.replaceState(null, '', finalUrl);
+      intent.value = { url: finalUrl, type: 'push' };
+    }
+
+    if (isNewTarget || isRedirect) {
+      reconcileDOM($target, pjaxState, finalUrl, previousUrl, win, options);
+    }
+
+    const prevHash = getUrlParts(curRendered.url, win.location.href).hash;
+    const { shouldScroll, resetScroll } = getScrollDecision({
+      hash,
+      type,
+      isNewTarget,
+      prevHash,
+      scrollToTop: options.scrollToTop ?? true,
+    });
+
+    if (shouldScroll) performScroll(win, hash, resetScroll);
+    rendered.value = { url: finalUrl, path: finalPath };
   });
 }
 
@@ -130,6 +187,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
   const initialPath = initialUrlObj.pathname + initialUrlObj.search;
 
+  // Reactivity State
   const intent = $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' });
   const rendered = $.atom({ url: initialUrl, path: initialPath }, { name: 'nav:rendered' });
   const fetchVersion = $.atom(0, { name: 'nav:version' });
@@ -163,7 +221,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
           redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined,
           title: xhr?.getResponseHeader?.('X-PJAX-Title') ?? undefined,
         });
-        return { ...result, html: sanitizeHtml(result.html).trim() };
+        return { ...result, html: sanitizeHtml(result.html, NAV_POLICY).trim() };
       },
     }
   );
@@ -218,39 +276,18 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
       if (!content.isResolved || content.isPending) return undefined;
 
-      const isRedirect = !!(pjaxState.redirectUrl && pjaxState.redirectUrl !== url);
-      const previousUrl = curRendered.url;
-
-      let finalUrl = isRedirect ? (pjaxState.redirectUrl as string) : url;
-      if (isRedirect && hash && !finalUrl.includes('#')) {
-        finalUrl += `#${hash}`;
-      }
-
-      const { pathAndSearch: finalPath } = getUrlParts(finalUrl, win.location.href);
-      const isNewTarget = finalPath !== curRendered.path;
-
-      $.batch(() => {
-        if (isRedirect) {
-          win.history.replaceState(null, '', finalUrl);
-          intent.value = { url: finalUrl, type: 'push' };
-        }
-
-        if (isNewTarget || isRedirect) {
-          reconcileDOM($target, pjaxState, finalUrl, previousUrl, win, options);
-        }
-
-        const prevUrlObj = Result.unwrap(getAbsoluteUrl(curRendered.url, win.location.href));
-        const { shouldScroll, resetScroll } = getScrollDecision({
-          hash,
-          type,
-          isNewTarget,
-          prevHash: prevUrlObj.hash.slice(1),
-          scrollToTop: options.scrollToTop ?? true,
-        });
-
-        if (shouldScroll) performScroll(win, hash, resetScroll);
-        rendered.value = { url: finalUrl, path: finalPath };
-      });
+      applyNavigationState(
+        win,
+        $target,
+        intent,
+        rendered,
+        pjaxState,
+        url,
+        hash,
+        type,
+        curRendered,
+        options
+      );
 
       return undefined;
     },
@@ -263,33 +300,30 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     intent.value = { url: loc.pathname + loc.search + loc.hash, type: 'pop' };
   };
 
+  const handleLinkClick = (e: MouseEvent): void => {
+    if (e.defaultPrevented || !(e.target instanceof Element)) return;
+    const el = e.target.closest<HTMLAnchorElement>(selector);
+    if (!el) return;
+
+    const targetAttr = el.dataset.target;
+    const myId = $target.attr('id');
+    const isExplicit = !!(targetAttr && myId && targetAttr === `#${myId}`);
+    if (targetAttr) {
+      if (!isExplicit) return;
+    } else {
+      const closest = $(el).closest('[data-atom-nav-target="true"]')[0];
+      if (closest && closest !== $target[0]) return;
+    }
+
+    if (isNavigationClick(e) && isInterceptee(el, win)) {
+      e.preventDefault();
+      navigator.navigate(el.href);
+    }
+  };
+
+  // Browser Event Subscriptions
   win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
-
-  // Logic: Click Interception
-  win.document.addEventListener(
-    'click',
-    (e) => {
-      if (e.defaultPrevented) return;
-      const el = (e.target as Element).closest<HTMLAnchorElement>(selector);
-      if (!el) return;
-
-      const targetAttr = el.dataset.target;
-      const myId = $target.attr('id');
-      const isExplicit = !!(targetAttr && myId && targetAttr === `#${myId}`);
-      if (targetAttr) {
-        if (!isExplicit) return;
-      } else {
-        const closest = $(el).closest('[data-atom-nav-target="true"]')[0];
-        if (closest && closest !== $target[0]) return;
-      }
-
-      if (isNavigationClick(e) && isInterceptee(el, win)) {
-        e.preventDefault();
-        navigator.navigate(el.href);
-      }
-    },
-    { signal: _lifecycleController.signal }
-  );
+  win.document.addEventListener('click', handleLinkClick, { signal: _lifecycleController.signal });
 
   const isPending = $.computed(() => content.isPending || pendingHooks.value > 0, {
     name: 'nav:isPending',

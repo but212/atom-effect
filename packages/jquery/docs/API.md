@@ -322,10 +322,14 @@ Custom Elements can configure reactivity via static properties.
 
 #### Controller API
 
+- **`host`**: The raw host element of the component.
+- **`root`**: The active root node (`ShadowRoot` or Host container).
 - **`attrs(name: string)`**: Returns a Lens Atom targeting a specific attribute. Respects `static observedAttributes` if defined.
 - **`slots(name?: string)`**: Returns a `ReadonlyAtom<Node[]>` representing the assigned nodes of a Shadow DOM `<slot>`.
 - **`internals`**: Provides access to the `ElementInternals` object.
 - **`$(selector)`**: A scoped jQuery selector isolated to the component's `ShadowRoot` or host container.
+- **`teardown()`**: Releases all reactive resources and disposes of internal states.
+- **`setup(options?)`**: Bootstraps the reactive features based on the provided configuration or static specs.
 
 #### `setup(options?)`
 

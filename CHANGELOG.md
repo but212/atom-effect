@@ -6,6 +6,7 @@
 
 #### Changed
 
+- Extracted and modularized `applyNavigationState` helper function within `atomNav` to handle PJAX DOM updates and history state synchronization.
 - Optimized context resolution in `ContextEngine.discover` by implementing a direct parent-pointer DOM walk crossing Shadow DOM boundaries, falling back to bubbling `CustomEvent` dispatch.
 - Integrated `sanitizeCache` into `batchSanitize` to skip parsing and attribute scrubbing for cached dynamic HTML templates.
 - Optimized `cleanupDescendants` in the binding registry using an O(1) class-presence check (`getElementsByClassName`) to skip expensive recursive `querySelectorAll` scans on clean, non-reactive DOM subtrees.
@@ -14,6 +15,7 @@
 
 #### Fixed
 
+- Preserved `<form>` elements during PJAX navigation in `atomNav` by utilizing a specialized navigation sanitization policy that permits form tags while ensuring nested scripting, unsafe attributes, and DOM clobbering vectors are neutralized.
 - Hardened the sanitization engine in `sanitize.ts` with early-return fast paths for URIs, entity decoding, and normalization, and optimized attribute iteration to avoid intermediate array allocations.
 
 ## [0.33.0]
