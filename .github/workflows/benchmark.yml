@@ -17,11 +17,14 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+      - name: Cache workspace dependencies and builds
+        uses: actions/cache/save@v4
         with:
-          name: build-artifacts
-          path: packages/*/dist
+          path: |
+            node_modules
+            packages/*/node_modules
+            packages/*/dist
+          key: ${{ runner.os }}-workspace-${{ github.sha }}
 
   benchmark:
     name: ${{ matrix.name }} - ${{ matrix.package }} (${{ matrix.type }})
@@ -62,15 +65,30 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup
-        with:
-          install-playwright: ${{ matrix.playwright }}
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
+      - name: Setup pnpm path
+        uses: pnpm/action-setup@v6
         with:
-          name: build-artifacts
-          path: packages
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+
+      - name: Restore workspace dependencies and builds
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            packages/*/dist
+          key: ${{ runner.os }}-workspace-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Install Playwright Browsers
+        if: matrix.playwright == 'true'
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run benchmark
         working-directory: packages/${{ matrix.package }}
