@@ -302,22 +302,23 @@ $('#card-root').atomMount(UserCard, { userId: 42 });
 
 ## 9. Web Components (Custom Elements)
 
+> [!WARNING]
+> **Avoid Shared State in Static Properties**: 
+> Declaring mutable state (such as `$.atom` or `$.computed`) directly within static properties (e.g., `static aejBind = { count: $.atom(0) }`) causes that state to be shared across **all** instances of the Custom Element class. 
+> To ensure each instance has its own isolated reactive state, define atoms as instance properties (e.g., `this.count = $.atom(0)`) and register them via the `setup()` method during connection.
+
 ### Declarative Specification
 
-Define reactive behavior using static properties. The engine handles initialization and observation automatically.
+Stylesheets can be defined statically on the class using `aejStyles`. For other reactive bindings (bindings, attributes, slots, etc.), initialize instance properties and register them dynamically.
 
 ```javascript
 class MyComponent extends HTMLElement {
   static aejStyles = [sharedStyles];
-  static aejBind = { 
-    title: $.computed(() => `Theme: ${this.aej.attrs('theme').value}`),
-    count: $.atom(0)
-  };
-  static aejParts = {
-    status: $.computed(() => (this.aejBind.count.value % 2 === 0 ? 'even' : 'odd'))
-  };
 
-  private aej = $.useAtomComponent(this);
+  aej = $.useAtomComponent(this);
+  count = $.atom(0);
+  title = $.computed(() => `Theme: ${this.aej.attrs('theme').value}`);
+  status = $.computed(() => (this.count.value % 2 === 0 ? 'even' : 'odd'));
 
   connectedCallback() {
     this.attachShadow({ mode: 'open' }).innerHTML = `
@@ -328,6 +329,12 @@ class MyComponent extends HTMLElement {
         <button class="inc">Count: <span data-aej-bind="count"></span></button>
       </div>
     `;
+
+    // Register instance-specific reactive features
+    this.aej.setup({
+      bind: { title: this.title, count: this.count },
+      parts: { status: this.status }
+    });
   }
 }
 customElements.define('my-component', MyComponent);
@@ -339,7 +346,7 @@ Use `aej.setup()` to provide dynamic configuration, such as attaching to a 'clos
 
 ```javascript
 class AdvancedComponent extends HTMLElement {
-  private aej = $.useAtomComponent(this);
+  aej = $.useAtomComponent(this);
 
   connectedCallback() {
     const sr = this.attachShadow({ mode: 'closed' });
@@ -378,8 +385,8 @@ Consumers maintain connections even if relocated within the DOM hierarchy.
 
 ```javascript
 class DeepChild extends HTMLElement {
-  private aej = $.useAtomComponent(this);
-  private theme = $.injectAtom(this, 'theme');
+  aej = $.useAtomComponent(this);
+  theme = $.injectAtom(this, 'theme');
 
   connectedCallback() {
     this.aej.setup();
@@ -401,20 +408,24 @@ Integrate custom controls into native `<form>` submission and validation pipelin
 ```javascript
 class MyInput extends HTMLElement {
   static formAssociated = true;
-  
-  // Declarative FACE specification
-  static aejValue = $.atom('');
-  static aejValidation = (v) => (v.includes('@') ? '' : 'Invalid email');
 
-  private aej = $.useAtomComponent(this);
+  aej = $.useAtomComponent(this);
+  value = $.atom('');
+  validation = (v) => (v.includes('@') ? '' : 'Invalid email');
 
   connectedCallback() {
     this.attachShadow({ mode: 'open' }).innerHTML = `
       <input type="text" placeholder="Type here...">
     `;
 
+    // Register instance-specific form value and validation logic
+    this.aej.setup({
+      value: this.value,
+      validation: this.validation
+    });
+
     this.aej.$('input').on('input', (e) => {
-      (this.constructor as any).aejValue.value = e.target.value;
+      this.value.value = e.target.value;
     });
   }
 }

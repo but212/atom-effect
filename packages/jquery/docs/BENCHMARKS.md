@@ -17,8 +17,25 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 ## Running Benchmarks
 
+These commands can be executed either from the monorepo root (using workspace filters) or directly within the `packages/jquery` directory:
+
+### From the Monorepo Root
+
 ```bash
-# Run all jquery benchmarks
+# Run all jQuery benchmarks
+pnpm --filter @but212/atom-effect-jquery bench
+
+# Run only micro-benchmarks
+pnpm --filter @but212/atom-effect-jquery bench:micro
+
+# Run only macro-benchmarks
+pnpm --filter @but212/atom-effect-jquery bench:macro
+```
+
+### From the `packages/jquery` Directory
+
+```bash
+# Run all jQuery benchmarks
 pnpm bench
 
 # Run only micro-benchmarks

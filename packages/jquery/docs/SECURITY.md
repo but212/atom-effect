@@ -34,14 +34,14 @@ High-risk elements are neutralized by transforming them into safe `<span>` wrapp
 
 - **Executable Tags**: `script`, `iframe`, `object`, `embed`, `applet`.
 - **Structural/State Tags**: `base`, `meta`, `link`, `style`, `title`, `noscript`, `form`, `isindex`.
-- **Global Fragments**: `body`, `html`, `head`.
+- **Global Fragments**: `body`.
 
 ### Attribute Scrubbing
 
 All element attributes undergo a rule-based inspection:
 
 1. **Event Handler Blocking**: Attributes starting with `on` (e.g., `onclick`) are removed. Detected events are logged in a `data-unsafe-attr` attribute for diagnostic visibility.
-2. **URI Protocol Validation**: Attributes designated as URL-carrying (e.g., `href`, `src`, `xlink:href`, `fill`, `filter`) are validated against a protocol whitelist. Malicious protocols (e.g., `javascript:`, `vbscript:`) result in the value being replaced with `data-unsafe-protocol:`.
+2. **URI Protocol Validation**: Attributes designated as URL-carrying (e.g., `href`, `src`, `xlink:href`, `fill`, `filter`) are validated against a protocol whitelist. In `sanitizeHtml` (used by `$.fn.atomHtml`), malicious protocols (e.g., `javascript:`, `vbscript:`) result in the value being replaced with `data-unsafe-protocol:`. In direct attribute/property bindings (`$.fn.atomAttr`, `$.fn.atomProp`), updates containing malicious protocols are aborted (skipped), leaving the target unchanged, and a warning is logged.
 3. **DOM Clobbering Defense**: Attributes such as `id` and `name` are blocked if their values match sensitive native property names (e.g., `attributes`, `tagName`, `parentNode`).
 4. **SVG/SMIL Safety**: Animation attributes (`attributeName`, `from`, `to`, `values`) are scrubbed if they contain event handlers or dangerous URI patterns.
 
@@ -62,15 +62,15 @@ Automatically routes all reactive updates through the `sanitizeHtml` engine. Thi
 
 ### `$.fn.atomAttr(name, atom)`
 
-Validates both the attribute name and value. Inline event handlers are blocked, and URI-based values are normalized and protocol-checked.
+Validates both the attribute name and value. Inline event handlers are blocked, and URI-based values are normalized and protocol-checked. If a dangerous URI protocol is detected, the attribute update is aborted (skipped) and a warning is logged.
 
 ### `$.fn.atomCss(prop, atom)`
 
-Filters CSS declarations to detect script injection patterns. It strips CSS comments to reveal hidden payloads and blocks `expression()`, `behavior:`, `-moz-binding`, and dangerous `url()` protocols.
+Filters CSS declarations to detect script injection patterns. It strips CSS comments to reveal hidden payloads and blocks `expression()`, `-moz-binding`, and dangerous `url()` protocols.
 
 ### `$.fn.atomProp(name, atom)`
 
-Enforces a strict sink blacklist. Access to structural properties like `innerHTML`, `outerHTML`, and `srcdoc` is blocked for reactive property bindings.
+Enforces a strict sink blacklist. Access to structural properties like `innerHTML`, `outerHTML`, and `srcdoc` is blocked for reactive property bindings. If a blocked property or a dangerous URI protocol is detected, the property update is aborted (skipped) and a warning is logged.
 
 ---
 
