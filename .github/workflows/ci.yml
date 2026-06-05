@@ -9,27 +9,79 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Lint, Build, and Typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup
-      - name: Lint
-        run: pnpm lint
-      - name: Build and typecheck
-        run: pnpm build && pnpm typecheck
-
-  test:
-    name: Test with Coverage
+  setup:
+    name: Setup and Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
         with:
           install-playwright: "true"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Cache workspace dependencies and builds
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            packages/*/dist
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-workspace-${{ github.sha }}
+
+  quality:
+    name: Lint and Typecheck
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          skip-install: "true"
+
+      - name: Restore workspace dependencies and builds
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            packages/*/dist
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-workspace-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  test:
+    name: Test with Coverage
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          skip-install: "true"
+
+      - name: Restore workspace dependencies and builds
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+            packages/*/dist
+            ~/.cache/ms-playwright
+          key: ${{ runner.os }}-workspace-${{ github.sha }}
+          fail-on-cache-miss: true
+
       - name: Test
         run: pnpm test:coverage
+
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         with:
