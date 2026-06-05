@@ -301,8 +301,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   };
 
   const handleLinkClick = (e: MouseEvent): void => {
-    if (e.defaultPrevented) return;
-    const el = (e.target as Element).closest<HTMLAnchorElement>(selector);
+    if (e.defaultPrevented || !(e.target instanceof Element)) return;
+    const el = e.target.closest<HTMLAnchorElement>(selector);
     if (!el) return;
 
     const targetAttr = el.dataset.target;
