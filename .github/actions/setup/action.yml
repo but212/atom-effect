@@ -32,11 +32,11 @@ runs:
         cache-dependency-path: pnpm-lock.yaml
 
     - name: Install dependencies
-      if: inputs.skip-install != 'true'
+      if: inputs['skip-install'] != 'true'
       run: pnpm install --frozen-lockfile
       shell: bash
 
     - name: Install Playwright Browsers
-      if: inputs.skip-install != 'true' && inputs.install-playwright == 'true'
+      if: inputs['skip-install'] != 'true' && inputs['install-playwright'] == 'true'
       run: pnpm exec playwright install --with-deps chromium
       shell: bash
