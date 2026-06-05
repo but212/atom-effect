@@ -330,8 +330,12 @@ $(() => {
   });
 
   const currentPage = $.computed(() => {
-    const url = new URL(nav.currentUrl.value, window.location.origin);
-    return url.searchParams.get("page") || "home";
+    try {
+      const url = new URL(nav.currentUrl.value, window.location.origin);
+      return url.searchParams.get("page") || "home";
+    } catch {
+      return "home";
+    }
   });
 
   // Bind active classes to sidebar links reactively
