@@ -87,3 +87,17 @@ jobs:
         with:
           name: coverage
           path: packages/*/coverage
+
+  cleanup:
+    name: Cleanup Temporary Cache
+    needs: [quality, test]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete temporary workflow cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache delete "${{ runner.os }}-workspace-${{ github.sha }}" --confirm || true
