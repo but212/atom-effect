@@ -88,3 +88,17 @@ jobs:
         with:
           name: benchmark-results-${{ matrix.package }}-${{ matrix.type }}
           path: results/
+
+  cleanup:
+    name: Cleanup Temporary Cache
+    needs: benchmark
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete temporary workflow cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache delete "${{ runner.os }}-workspace-${{ github.sha }}" --repo "${{ github.repository }}" || true
