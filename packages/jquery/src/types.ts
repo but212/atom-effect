@@ -358,7 +358,7 @@ export interface Router {
 export interface AtomNavOptions {
   /** The target container for injected content. */
   target: string | JQuery<HTMLElement> | HTMLElement;
-  /** The CSS selector for link elements clicks on which should be intercepted (default: 'a[data-nav]'). */
+  /** The CSS selector for link elements whose clicks should be intercepted (default: 'a[data-nav]'). */
   selector?: string;
   /** Custom HTTP headers for navigation requests. */
   headers?: Record<string, string>;

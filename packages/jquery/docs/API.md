@@ -370,8 +370,8 @@ Bootstraps the reactive features based on the provided configuration or the stat
 class MyComp extends HTMLElement {
   static aejStyles = [':host { display: block; }'];
 
-  private aej = $.useAtomComponent(this); 
-  private title = $.atom('Hello World');
+  aej = $.useAtomComponent(this); 
+  title = $.atom('Hello World');
   
   connectedCallback() {
     this.attachShadow({ mode: 'open' }).innerHTML = `

@@ -411,7 +411,7 @@ class MyInput extends HTMLElement {
 
   aej = $.useAtomComponent(this);
   value = $.atom('');
-  validation = (v) => (v.includes('@') ? '' : 'Invalid email');
+  validation = (v) => (typeof v === 'string' && v.includes('@') ? '' : 'Invalid email');
 
   connectedCallback() {
     this.attachShadow({ mode: 'open' }).innerHTML = `
