@@ -21,7 +21,7 @@ const appState = atom({
 });
 
 // Create a lens pointing to the theme
-const themeLens = atomLens(appState, ['user', 'theme']);
+const themeLens = atomLens(appState, 'user.theme');
 
 // Reading works normally
 console.log(themeLens.value); // 'dark'
@@ -80,20 +80,23 @@ Large applications often need to combine isolated state domains into a unified i
 ### Example: Unifying Writable State
 
 ```typescript
-import { atom, mergeLenses, atomLens } from '@but212/atom-effect';
+import { atom, mergeLenses } from '@but212/atom-effect';
 
-const user = atom({ name: 'Alice' });
-const settings = atom({ notifications: true });
+const profile = atom({ name: 'Alice' });
+const preferences = atom({ notifications: true });
 
-// Combine specific properties into a unified writable form state
-const formState = mergeLenses(
-  atomLens(user, ['name']),
-  atomLens(settings, ['notifications'])
-);
+// Combine the source atoms into a unified form state
+const formState = mergeLenses(profile, preferences);
 
-// Updates to formState map back to their respective sources within a single batch
+// Reading the merged value returns a shallow-merged object:
+console.log(formState.value); // { name: 'Alice', notifications: true }
+
+// Writing updates both source atoms within a single batch
 formState.value = { name: 'Bob', notifications: false };
 ```
+
+> [!WARNING]
+> **Write Propagation Constraint**: `mergeLenses` propagates the assigned value in its entirety to each underlying lens (i.e., `lens.value = newVal` for each lens). It does not partition or split the assigned object properties by path. Consequently, target atoms will receive the entire merged object, and primitive-value lenses will be overwritten with the merged object itself. When precise property splitting is required, updates should be applied directly to the individual sub-lenses instead of the merged lens.
 
 ---
 

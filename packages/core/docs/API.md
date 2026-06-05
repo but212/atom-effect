@@ -42,10 +42,10 @@ counter.dispose();
 
 - `value`: A getter/setter for the internal state. Accessing the getter registers the atom as a dependency in the current reactive context. The setter updates the value and schedules notifications if the new value fails an equality check (`Object.is` by default).
 - `peek(): T`: Returns the current value without registering a dependency. Recommended for one-time reads or initialization logic.
-- `subscribe(listener: (newValue: T, oldValue: T) => void): () => void`: Attaches a listener that executes whenever the value changes. Returns an unsubscription function.
+- `subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void`: Attaches a listener that executes whenever the value changes. Returns an unsubscription function. The callback parameters are optional as certain transition states may propagate `undefined`. Low-level scheduler integrations can provide a `Subscriber` object implementing the `execute(): void` interface.
 - `subscriberCount(): number`: Returns the number of active subscribers. Primarily used for diagnostics.
 - `dispose(): void`: Permanently disables the atom, clearing all subscribers and releasing the stored value for garbage collection.
-- `isDisposed`: A read-only boolean indicating if the atom has been disposed.
+- `isDisposed`: A read-only boolean indicating if the atom has been disposed. (Note: Excluded from the public `ReadonlyAtom`/`WritableAtom` TypeScript interfaces, but accessible on the runtime instance).
 
 ### Options
 
@@ -101,16 +101,19 @@ console.log(double.value); // 2
 - `lastError`: The specific error thrown by this node's computation, if any.
 - `isPending`: True if an asynchronous computation is currently in progress.
 - `isResolved`: True if the node has successfully resolved to a value at least once.
+- `isRejected`: True if the most recent computation was rejected (async or sync).
+- `isDisposed`: True if the node has been permanently disposed. (Note: Included in the public `ComputedAtom` TypeScript interface).
 - `peek(): T`: Returns the cached value without triggering dependency tracking or re-computation.
 - `invalidate(): void`: Forces the node to be marked as dirty, ensuring re-computation on the next access.
-- `subscribe(listener: (newValue: T, oldValue: T) => void): () => void`: Attaches a listener to the computation's results.
+- `subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void`: Attaches a listener to the computation's results. Parameters are optional as they will receive `undefined` when the computed node transitions to a dirty or async pending state. Low-level integrations can also pass a `Subscriber` object.
 - `dispose(): void`: Disconnects the node from all dependencies and clears its subscriber list.
 
 ### Async Support
 
 Asynchronous computations can be defined by returning a `Promise`. The returned node is typed as `ComputedAtom<T>` (not `ComputedAtom<Promise<T>>`), so accessing `.value` returns the resolved value of type `T`.
 
-* **With `defaultValue` (Recommended)**: The `defaultValue` is returned while the Promise is pending.
+- **With `defaultValue` (Recommended)**: The `defaultValue` is returned while the Promise is pending.
+
   ```typescript
   const userId = atom(123);
 
@@ -119,7 +122,9 @@ Asynchronous computations can be defined by returning a `Promise`. The returned 
     return response.json();
   }, { defaultValue: { loading: true } });
   ```
-* **Without `defaultValue`**: Accessing `.value` while the Promise is pending will throw a `ComputedError`. Once resolved, the value can be read normally.
+
+- **Without `defaultValue`**: Accessing `.value` while the Promise is pending will throw a `ComputedError`. Once resolved, the value can be read normally.
+
   ```typescript
   const p = computed(async () => {
     await sleep(10);
@@ -145,7 +150,14 @@ Asynchronous computations can be defined by returning a `Promise`. The returned 
 
 ---
 
-## `effect(fn: () => void | CleanupFn | Promise<void | CleanupFn>, options?: EffectOptions)`
+## `effect(fn: EffectFunction, options?: EffectOptions)`
+
+### `EffectFunction` and `EffectCleanup` Types
+
+```typescript
+type EffectCleanup = () => void;
+type EffectFunction = () => (void | EffectCleanup) | Promise<void | EffectCleanup>;
+```
 
 Starts a side effect that executes immediately and re-runs whenever its dependencies change.
 
@@ -201,15 +213,20 @@ Groups multiple state updates into a single notification cycle.
 
 ---
 
-## `runInFlushScope<T>(fn: () => T): T | undefined`
-
-Executes a function while the scheduler is locked for a new execution pass. This groups updates to be processed within a single, atomic flush cycle. Returns the result of `fn`, or `undefined` if the flush could not be started.
-
----
-
 ## `aeNextTick(fn?: () => void): Promise<void>`
 
 Returns a promise that resolves after the next scheduler flush. Recommended for waiting for asynchronous effects to settle during testing.
+
+---
+
+## `globalScheduler`
+
+The global scheduler instance. Provides low-level control over flush cycles, batching depth, and execution budgets.
+
+> [!NOTE]
+> The concrete `ReactiveScheduler` class and its `SchedulerState` interface are internal types and are not exported from the public entry point. The scheduler is exposed directly as the `globalScheduler` instance.
+>
+> For diagnostic graph dumps or inspecting active nodes, use [`runtimeDebug.dumpGraph()`](#debugging-utilities) instead of the scheduler.
 
 ---
 
@@ -241,6 +258,7 @@ The base class for library-specific errors.
 - `message`: Description of the failure.
 - `cause`: The underlying error or value that triggered the failure.
 - `code`: Machine-readable error code (e.g., `ERR_CIRCULAR_DEP`).
+- `recoverable`: Boolean indicating if the scheduler can attempt to retry the failed operation.
 
 ### Specialized Errors
 
@@ -264,7 +282,7 @@ Lenses provide reactive, two-way views into specific paths of an object-based at
 Creates a writable virtual atom pointing to a dot-path within a source atom.
 
 - **Structural Sharing**: Updates only clone the objects along the modified path, preserving reference equality for unrelated branches.
-- **Path Support**: Supports dot-notation for deep objects, array indices (`users.0.name`), `Map` keys, and `Set` members.
+- **Path Support**: Supports dot-notation for deep objects, array indices (`users.0.name`), and `Map` keys. `Set` instances are treated as terminal values and do not support nested path traversal.
 - **Prototype Preservation**: Updates to class instances preserve the original prototype and methods.
 
 ### `lensFor(atom)`
@@ -283,9 +301,17 @@ A semantic alias for creating a sub-lens from an existing lens.
 
 Combines multiple atoms or computed nodes into a single read-only computed atom with a flattened object type.
 
+> [!IMPORTANT]
+> **Object-based Nodes Only**: This utility is designed specifically for object-based nodes. Merging primitive-valued nodes (e.g., strings or numbers) will cause a type-mismatch discrepancy: the static TypeScript type resolves to the primitive type (e.g., `string`), but the runtime value returned is an index-keyed object (e.g., `{ '0': val1, '1': val2 }`).
+
 ### `mergeLenses(...lenses)`
 
-Merges multiple writable lenses into a single unified writable atom. Updates to the merged object's properties are propagated back to the respective source atoms within a single `batch`.
+Merges multiple writable lenses into a single unified writable atom.
+
+> [!IMPORTANT]
+> **Object-based Nodes Only**: This utility is designed specifically for object-based nodes. Merging primitive-valued nodes (e.g., strings or numbers) will cause a type-mismatch discrepancy: the static TypeScript type resolves to the primitive type (e.g., `string`), but the runtime value returned is an index-keyed object (e.g., `{ '0': val1, '1': val2 }`).
+> [!WARNING]
+> **Write Propagation Behavior**: When writing a new value to the merged lens (`merged.value = newVal`), the value is written in its entirety to each underlying lens (`lens.value = newVal`) within a single `batch`. The merged value is *not* partitioned or split by paths. Ensure that each underlying lens can accept the entire merged object structure or that target properties can handle the full value.
 
 ---
 
@@ -297,16 +323,17 @@ The library provides several type guards to identify reactive nodes at runtime.
 - `isComputed(node: unknown): node is ComputedAtom`: Returns true if the object is a computed node.
 - `isEffect(node: unknown): node is EffectObject`: Returns true if the object is an effect handle.
 - `isWritable(node: unknown): node is WritableAtom`: Returns true if the node supports write operations.
+- `isPromise<T = unknown>(value: unknown): value is PromiseLike<T>`: Returns true if the value is a Promise or a thenable object.
 
 ---
 
 ## Low-level Utilities
 
-### `getPathValue(obj, path)`
+### `getPathValue(source, parts)`
 
 Retrieves a value from a nested object structure using a dot-path (provided as an array of strings).
 
-### `setDeepValue(obj, path, index, value)`
+### `setDeepValue(obj, keys, index, value)`
 
 Performs an immutable update at a specific path, returning a new object structure with structural sharing.
 
@@ -318,7 +345,7 @@ The `debug` object (exported as `runtimeDebug` in some contexts) provides tools 
 
 - `dumpGraph()`: Returns metadata for all currently active reactive nodes.
 - `trackUpdate(id, name)`: Increments the update count for a node (internal use).
-- **Automatic Naming**: Nodes are assigned IDs (e.g., `atom_1`, `calc_5`) if no explicit name is provided.
+- **Automatic Naming**: Nodes are assigned IDs (e.g., `atom_1`, `calc_5`, `fx_3`) if no explicit name is provided.
 
 ---
 
@@ -328,9 +355,9 @@ The `debug` object (exported as `runtimeDebug` in some contexts) provides tools 
 
 A high-performance container optimized for V8 hidden class stability. It manages listeners and dependencies using a combination of inline slots and an overflow array.
 
-### `DependencyBuffer`
+### Dependency Buffers (`ReactiveDependencyTracker`)
 
-The internal state management for dependency tracking, featuring:
+The internal state management helper module and interfaces used for dependency tracking on nodes, featuring:
 
-- **Lazy Indexing**: Transitions from linear scans to `Map`-based lookups for large dependency sets.
-- **Reconciliation**: Optimized logic for reusing existing subscriptions during re-evaluation.
+- **Lazy Indexing**: Transitions from linear scans to `Map`-based lookups for large dependency sets once a capacity threshold is exceeded.
+- **Reconciliation**: Optimized logic for swapping and reusing existing subscriptions during re-evaluation to avoid redundant listeners.

@@ -18,11 +18,36 @@ The following table summarizes key performance metrics observed in version `0.33
 
 ## Running Benchmarks
 
-Benchmarks are executed using `vitest bench`. The following commands are available:
+Benchmarks are executed using the Vitest test runner. Because this project is structured as a monorepo, benchmark scripts can be executed either globally from the workspace root using package filters or directly within the `@but212/atom-effect` core package directory.
 
-### Execution Commands
+### Execution from the Workspace Root (Recommended)
+
+To run benchmarks from the root of the monorepo, use the `--filter` flag to target the core package:
 
 ```bash
+# Execute the full benchmark suite
+pnpm --filter @but212/atom-effect bench
+
+# Execute micro-benchmarks only
+pnpm --filter @but212/atom-effect bench:micro
+
+# Execute macro-benchmarks only
+pnpm --filter @but212/atom-effect bench:macro
+
+# Execute realistic scenario benchmarks
+pnpm --filter @but212/atom-effect bench:realistic
+
+# Execute state benchmarks only
+pnpm --filter @but212/atom-effect bench:state
+```
+
+### Execution within the Core Package Directory
+
+Alternatively, navigate to the core package directory to execute the scripts locally:
+
+```bash
+cd packages/core
+
 # Execute the full benchmark suite
 pnpm bench
 
@@ -35,18 +60,22 @@ pnpm bench:macro
 # Execute realistic scenario benchmarks
 pnpm bench:realistic
 
-# Execute state start benchmarks
+# Execute state benchmarks only
 pnpm bench:state
 ```
 
 ### Targeted Execution
 
+Specific benchmark suites can be targeted by passing a search pattern. The runner filters the test suites by matching the pattern against file paths:
+
 ```bash
-# Target specific primitives
-pnpm bench:atom
-pnpm bench:computed
-pnpm bench:effect
-pnpm bench:propagation
+# From the workspace root:
+pnpm --filter @but212/atom-effect bench atoms
+pnpm --filter @but212/atom-effect bench computeds
+
+# Or inside packages/core/:
+pnpm bench atoms
+pnpm bench computeds
 ```
 
 ---
