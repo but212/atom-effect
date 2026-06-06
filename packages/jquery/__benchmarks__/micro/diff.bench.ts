@@ -4,7 +4,7 @@
 
 import { bench, describe } from 'vitest';
 import $ from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 interface SimpleItem {
   id: number;
@@ -19,107 +19,54 @@ describe('List Diffing: Reconciliation computation overhead (1000 items)', () =>
     val: `Item ${i}`,
   }));
 
-  bench(
-    'No-op (Same reference, no diffing)',
-    () => {
-      const $c = createContainer();
-      const list = $.atom<SimpleItem[]>(baseItems);
-      $c.atomList(list, { key: 'id', render: renderEmpty });
-
-      // Trigger update with same value
-      list.value = baseItems;
-
-      cleanupContainer($c);
+  const cases = [
+    {
+      name: 'No-op (Same reference, no diffing)',
+      next: baseItems,
     },
-    microBenchOptions
-  );
-
-  bench(
-    'Append 100 items (Tail insertion)',
-    () => {
-      const $c = createContainer();
-      const list = $.atom<SimpleItem[]>(baseItems);
-      $c.atomList(list, { key: 'id', render: renderEmpty });
-
-      // Append mutation
-      const appended: SimpleItem[] = [
+    {
+      name: 'Append 100 items (Tail insertion)',
+      next: [
         ...baseItems,
         ...Array.from({ length: 100 }, (_, i) => ({
           id: 1000 + i,
           val: `New Item ${i}`,
         })),
-      ];
-      list.value = appended;
-
-      cleanupContainer($c);
+      ],
     },
-    microBenchOptions
-  );
-
-  bench(
-    'Prepend 100 items (Head insertion)',
-    () => {
-      const $c = createContainer();
-      const list = $.atom<SimpleItem[]>(baseItems);
-      $c.atomList(list, { key: 'id', render: renderEmpty });
-
-      // Prepend mutation
-      const prepended: SimpleItem[] = [
+    {
+      name: 'Prepend 100 items (Head insertion)',
+      next: [
         ...Array.from({ length: 100 }, (_, i) => ({
           id: 1000 + i,
           val: `New Item ${i}`,
         })),
         ...baseItems,
-      ];
-      list.value = prepended;
-
-      cleanupContainer($c);
+      ],
     },
-    microBenchOptions
-  );
-
-  bench(
-    'Reverse list (1000 items diff & swap)',
-    () => {
-      const $c = createContainer();
-      const list = $.atom<SimpleItem[]>(baseItems);
-      $c.atomList(list, { key: 'id', render: renderEmpty });
-
-      // Reverse mutation
-      list.value = [...baseItems].reverse();
-
-      cleanupContainer($c);
+    {
+      name: 'Reverse list (1000 items diff & swap)',
+      next: [...baseItems].reverse(),
     },
-    microBenchOptions
-  );
-
-  bench(
-    'Filter/Remove 500 items',
-    () => {
-      const $c = createContainer();
-      const list = $.atom<SimpleItem[]>(baseItems);
-      $c.atomList(list, { key: 'id', render: renderEmpty });
-
-      // Filter out even IDs
-      list.value = baseItems.filter((item) => item.id % 2 === 0);
-
-      cleanupContainer($c);
+    {
+      name: 'Filter/Remove 500 items',
+      next: baseItems.filter((item) => item.id % 2 === 0),
     },
-    microBenchOptions
-  );
-
-  bench(
-    'Clear all items',
-    () => {
-      const $c = createContainer();
-      const list = $.atom<SimpleItem[]>(baseItems);
-      $c.atomList(list, { key: 'id', render: renderEmpty });
-
-      // Clear mutation
-      list.value = [];
-
-      cleanupContainer($c);
+    {
+      name: 'Clear all items',
+      next: [] as SimpleItem[],
     },
-    microBenchOptions
-  );
+  ];
+
+  for (const { name, next } of cases) {
+    bench(
+      name,
+      withContainer(($c) => {
+        const list = $.atom<SimpleItem[]>(baseItems);
+        $c.atomList(list, { key: 'id', render: renderEmpty });
+        list.value = next;
+      }),
+      microBenchOptions
+    );
+  }
 });

@@ -4,7 +4,7 @@
 
 import { bench, describe } from 'vitest';
 import $, { type RouteConfig, type Router } from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { createContainer, microBenchOptions, withContainer } from '../utils/setup';
 
 function createRouteConfig(target: HTMLElement, routesCount: number): RouteConfig {
   const routes: Record<string, { render: () => void }> = {};
@@ -31,33 +31,17 @@ function createRouteConfig(target: HTMLElement, routesCount: number): RouteConfi
 // ============================================================================
 
 describe('Routing: Router Setup Overhead', () => {
-  bench(
-    'setup router with 5 routes',
-    () => {
-      const $c = createContainer();
+  const runSetup = (count: number) =>
+    withContainer(($c) => {
       const container = $c[0];
       if (!container) throw new Error('Container not found');
-      const config = createRouteConfig(container, 5);
+      const config = createRouteConfig(container, count);
       const r = $.route(config);
       r.destroy();
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+    });
 
-  bench(
-    'setup router with 50 routes',
-    () => {
-      const $c = createContainer();
-      const container = $c[0];
-      if (!container) throw new Error('Container not found');
-      const config = createRouteConfig(container, 50);
-      const r = $.route(config);
-      r.destroy();
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+  bench('setup router with 5 routes', runSetup(5), microBenchOptions);
+  bench('setup router with 50 routes', runSetup(50), microBenchOptions);
 });
 
 // ============================================================================
@@ -76,41 +60,30 @@ describe('Routing: Path Matching Compile and Lookup', () => {
       '/users/:id/posts/:postId': { render: () => {} },
       '/items/*': { render: () => {} },
     },
-    mode: 'hash' as const,
+    mode: 'history' as const,
     autoBindLinks: false,
     default: '/',
   };
   const r: Router = $.route(config);
 
-  bench(
-    'match static route (/)',
-    async () => {
-      await r.navigate('/');
+  const cases = [
+    { name: 'match static route (/)', path: '/' },
+    { name: 'match parameterized route (/users/123)', path: '/users/123' },
+    {
+      name: 'match multi-parameterized route (/users/123/posts/456)',
+      path: '/users/123/posts/456',
     },
-    microBenchOptions
-  );
+  ];
 
-  bench(
-    'match parameterized route (/users/123)',
-    async () => {
-      await r.navigate('/users/123');
-    },
-    microBenchOptions
-  );
-
-  bench(
-    'match multi-parameterized route (/users/123/posts/456)',
-    async () => {
-      await r.navigate('/users/123/posts/456');
-    },
-    microBenchOptions
-  );
-
-  // Cleanup after all benchmarks in this describe run
-  // Vitest does not run standard afterAll inside bench suite reliably,
-  // so we rely on container/destroy isolation or clean it at the end of the last run.
-  r.destroy();
-  cleanupContainer($c);
+  for (const { name, path } of cases) {
+    bench(
+      name,
+      async () => {
+        await r.navigate(path);
+      },
+      microBenchOptions
+    );
+  }
 });
 
 // ============================================================================
@@ -120,8 +93,7 @@ describe('Routing: Path Matching Compile and Lookup', () => {
 describe('Routing: View Transitions rendering', () => {
   bench(
     'navigate and swap simple render views (50 times)',
-    async () => {
-      const $c = createContainer();
+    withContainer(async ($c) => {
       const container = $c[0];
       if (!container) throw new Error('Container not found');
       const r = $.route({
@@ -149,15 +121,13 @@ describe('Routing: View Transitions rendering', () => {
       }
 
       r.destroy();
-      cleanupContainer($c);
-    },
-    { ...microBenchOptions, iterations: 20 } // Fewer iterations for intensive navigation loops
+    }),
+    { ...microBenchOptions, iterations: 20 }
   );
 
   bench(
     'navigate with onLeave guard and custom unmount cleanups',
-    async () => {
-      const $c = createContainer();
+    withContainer(async ($c) => {
       const container = $c[0];
       if (!container) throw new Error('Container not found');
       let _disposeCount = 0;
@@ -173,7 +143,7 @@ describe('Routing: View Transitions rendering', () => {
               });
             },
             onLeave: () => {
-              return true; // allow leaving
+              return true;
             },
           },
           '/b': {
@@ -193,8 +163,7 @@ describe('Routing: View Transitions rendering', () => {
       }
 
       r.destroy();
-      cleanupContainer($c);
-    },
+    }),
     { ...microBenchOptions, iterations: 20 }
   );
 });
@@ -206,8 +175,7 @@ describe('Routing: View Transitions rendering', () => {
 describe('Routing: Navigation Link Scanning', () => {
   bench(
     'scan document and bind active highlighting to 100 links',
-    () => {
-      const $c = createContainer();
+    withContainer(($c) => {
       const container = $c[0];
       if (!container) throw new Error('Container not found');
       const r = $.route({
@@ -222,7 +190,6 @@ describe('Routing: Navigation Link Scanning', () => {
         default: '/route-0',
       });
 
-      // Inject 100 links
       const frag = document.createDocumentFragment();
       for (let i = 0; i < 100; i++) {
         const a = document.createElement('a');
@@ -231,12 +198,10 @@ describe('Routing: Navigation Link Scanning', () => {
       }
       container.appendChild(frag);
 
-      // Trigger a navigation update to run the dynamic active highlight effect
       r.navigate('/route-1');
 
       r.destroy();
-      cleanupContainer($c);
-    },
+    }),
     microBenchOptions
   );
 });

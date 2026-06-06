@@ -1,6 +1,7 @@
 import type { PluginOptions } from 'unplugin-dts';
 import dts from 'unplugin-dts/vite';
 import { defineConfig, type LibraryFormats, mergeConfig, type UserConfig } from 'vite';
+import { getAliasConfig } from './shared';
 
 export interface BaseViteConfigOptions {
   packageDir: string;
@@ -12,6 +13,12 @@ export interface BaseViteConfigOptions {
   emptyOutDir?: boolean;
   skipDts?: boolean;
 }
+
+const FORMAT_EXTENSIONS: Record<string, string> = {
+  es: 'mjs',
+  umd: 'js',
+  cjs: 'cjs',
+};
 
 export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig => {
   const {
@@ -26,6 +33,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
   } = options;
 
   return {
+    ...getAliasConfig(packageDir),
     build: {
       target: 'ES2022',
       sourcemap: true,
@@ -36,13 +44,8 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         entry,
         name,
         formats,
-        ...(libFileNames
-          ? {
-              fileName: (format: string) =>
-                libFileNames[format] ??
-                `index.${format === 'es' ? 'mjs' : format === 'umd' ? 'js' : 'cjs'}`,
-            }
-          : {}),
+        fileName: (format) =>
+          libFileNames?.[format] ?? `index.${FORMAT_EXTENSIONS[format] ?? format}`,
       },
       rollupOptions: {
         output: {
@@ -50,21 +53,17 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         },
       },
     },
-    resolve: {
-      alias: {
-        '@': `${packageDir}/src`,
-      },
-    },
-    plugins: [
-      !skipDts &&
-        dts({
-          include: ['src/**/*'],
-          exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
-          tsconfigPath: './tsconfig.build.json',
-          bundleTypes: true,
-          ...dtsOptions,
-        }),
-    ].filter(Boolean),
+    plugins: skipDts
+      ? []
+      : [
+          dts({
+            include: ['src/**/*'],
+            exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
+            tsconfigPath: './tsconfig.build.json',
+            bundleTypes: true,
+            ...dtsOptions,
+          }),
+        ],
   };
 };
 
