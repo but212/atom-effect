@@ -45,11 +45,11 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
   } = options;
 
   const kebabName = name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
-  const finalFormats = formats ?? (isBundle ? ['umd'] : target === 'lib' ? ['es', 'cjs'] : ['es']);
+  const finalFormats = formats ?? (isBundle ? ['umd'] : isLib ? ['es', 'cjs'] : ['es']);
   const finalEmptyOutDir = emptyOutDir ?? isTypes;
   const finalSkipDts = skipDts ?? !isTypes;
 
-  const formatExtensions: Record<string, string> = { es: 'mjs', umd: 'js', cjs: 'cjs' };
+  const formatExtensions: Record<string, string> = { es: 'mjs', cjs: 'cjs' };
 
   return {
     resolve: {
