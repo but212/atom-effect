@@ -219,7 +219,18 @@ describe('Dashboard KPI Pipeline (10 sources → 5 KPIs → 1 summary)', () => {
   );
 
   const dataSources = Array.from({ length: 10 }, (_, i) => atom(i * 100));
-  const [ds0, ds1, ds2, ds3, ds4, ds5, ds6, ds7, ds8, ds9] = dataSources as any;
+  const [ds0, ds1, ds2, ds3, ds4, ds5, ds6, ds7, ds8, ds9] = dataSources as [
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+    (typeof dataSources)[number],
+  ];
 
   const kpi1 = computed(() => (ds0.value + ds1.value) / 2);
   const kpi2 = computed(() => Math.max(ds2.value, ds3.value));

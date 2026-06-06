@@ -332,8 +332,8 @@ describe('Dependency Graph Patterns', () => {
 describe('Complex Graph Architecture', () => {
   const mixedAtoms = Array.from({ length: 100 }, (_, i) => atom(i));
   const mixedComputeds = Array.from({ length: 200 }, (_, i) => {
-    const left = mixedAtoms[i % 100];
-    const right = mixedAtoms[(i + 1) % 100];
+    const left = mixedAtoms[i % mixedAtoms.length];
+    const right = mixedAtoms[(i + 1) % mixedAtoms.length];
     return computed(() => (left?.value ?? 0) + (right?.value ?? 0));
   });
 
@@ -437,7 +437,7 @@ describe('Large Grid with Lenses (50x50)', () => {
       for (const update of randomUpdates) {
         const cell = cellLenses[update.r]?.[update.c];
         if (cell) {
-          cell.value = { v: update.v, color: 'blue' };
+          cell.value = { v: Math.random(), color: 'blue' };
         }
       }
     },
@@ -510,7 +510,7 @@ describe('Memory & GC pressure', () => {
     'create and dispose 1000 units (atom/comp/effect)',
     () => {
       const a = atom(0);
-      const units: any[] = [];
+      const units: { dispose(): void }[] = [];
       for (let i = 0; i < 1000; i++) {
         if (i < 333) {
           units.push(atom(0));

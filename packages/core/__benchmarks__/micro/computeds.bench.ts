@@ -138,7 +138,7 @@ describe('Computeds: Read Methods (.value vs .peek())', () => {
 });
 
 describe('Computeds: Asynchronous Flows', () => {
-  const resolvedAsync = computed(async () => 42, { defaultValue: 0 });
+  let resolvedAsync: any;
   let resolvedUnsub: () => void;
 
   bench(
@@ -164,6 +164,7 @@ describe('Computeds: Asynchronous Flows', () => {
     {
       ...microBenchOptions,
       setup: () => {
+        resolvedAsync = computed(async () => 42, { defaultValue: 0 });
         resolvedUnsub = resolvedAsync.subscribe(() => {});
         resolvedAsync.value; // trigger evaluation
       },
