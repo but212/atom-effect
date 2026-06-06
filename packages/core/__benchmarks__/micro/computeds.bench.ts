@@ -9,14 +9,31 @@ import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
 describe('Computeds: Reactive Logic', () => {
   bench(
-    `creation: flat vs chain (10 levels)`,
+    'baseline: raw function creation',
+    () => {
+      const a = { value: 0 };
+      const b = { value: 1 };
+      const c = { value: 2 };
+      keep(() => a.value + b.value + c.value);
+    },
+    microBenchOptions
+  );
+
+  bench(
+    'creation: flat computed',
     () => {
       const a = atom(0);
       const b = atom(1);
       const c = atom(2);
-      // Flat
       keep(computed(() => a.value + b.value + c.value));
-      // Chain
+    },
+    microBenchOptions
+  );
+
+  bench(
+    'creation: chained computed (10 levels)',
+    () => {
+      const a = atom(0);
       let current = computed(() => a.value);
       for (let i = 0; i < 9; i++) {
         const prev = current;
@@ -37,6 +54,30 @@ describe('Computeds: Reactive Logic', () => {
     return curr;
   })();
 
+  const rawSource = { value: 0 };
+  const c1 = () => rawSource.value;
+  const c2 = () => c1() + 1;
+  const c3 = () => c2() + 1;
+  const c4 = () => c3() + 1;
+  const c5 = () => c4() + 1;
+  const c6 = () => c5() + 1;
+  const c7 = () => c6() + 1;
+  const c8 = () => c7() + 1;
+  const c9 = () => c8() + 1;
+  const chain10Raw = () => c9() + 1;
+
+  bench(
+    `baseline: raw chained function evaluation (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        rawSource.value++;
+        keep(chain10Raw());
+        keep(chain10Raw());
+      }
+    },
+    microBenchOptions
+  );
+
   bench(
     `recomputation & cache (x${REPEATS})`,
     () => {
@@ -54,7 +95,7 @@ describe('Computeds: Reactive Logic', () => {
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(i);
-        const c = computed(() => a.value * 2, { lazy: true });
+        const c = computed(() => a.value * 2);
         keep(c.value);
       }
     },
@@ -65,34 +106,40 @@ describe('Computeds: Reactive Logic', () => {
 describe('Computeds: Read Methods (.value vs .peek())', () => {
   const a = atom(42);
   const c = computed(() => a.value + 1);
-  c.subscribe(() => {}); // keep active
+  let unsub: () => void;
 
-  bench(
-    `computed.value read (active, x${REPEATS})`,
-    () => {
-      let sum = 0;
-      for (let i = 0; i < REPEATS; i++) sum += c.value;
-      keep(sum);
-    },
-    microBenchOptions
-  );
+  const rawFn = () => 43;
 
-  bench(
-    `computed.peek() read (active, x${REPEATS})`,
-    () => {
-      let sum = 0;
-      for (let i = 0; i < REPEATS; i++) sum += c.peek();
-      keep(sum);
-    },
-    microBenchOptions
-  );
+  const readCases = [
+    { name: 'baseline: plain function call', read: () => rawFn() },
+    { name: 'computed.value read (active)', read: () => c.value },
+    { name: 'computed.peek() read (active)', read: () => c.peek() },
+  ];
+
+  for (const { name, read } of readCases) {
+    bench(
+      `${name} (x${REPEATS})`,
+      () => {
+        let sum = 0;
+        for (let i = 0; i < REPEATS; i++) sum += read();
+        keep(sum);
+      },
+      {
+        ...microBenchOptions,
+        setup: () => {
+          unsub = c.subscribe(() => {});
+        },
+        teardown: () => {
+          unsub();
+        },
+      }
+    );
+  }
 });
 
 describe('Computeds: Asynchronous Flows', () => {
-  // Pre-resolved async computed for testing read overhead
   const resolvedAsync = computed(async () => 42, { defaultValue: 0 });
-  resolvedAsync.subscribe(() => {}); // keep active
-  resolvedAsync.value; // trigger evaluation
+  let resolvedUnsub: () => void;
 
   bench(
     `creation: async computed (x${REPEATS})`,
@@ -114,9 +161,20 @@ describe('Computeds: Asynchronous Flows', () => {
         keep(resolvedAsync.state);
       }
     },
-    microBenchOptions
+    {
+      ...microBenchOptions,
+      setup: () => {
+        resolvedUnsub = resolvedAsync.subscribe(() => {});
+        resolvedAsync.value; // trigger evaluation
+      },
+      teardown: () => {
+        resolvedUnsub();
+        resolvedAsync.dispose();
+      },
+    }
   );
 
+  let asyncUnsub: () => void;
   bench(
     'resolution: promise resolving lifecycle',
     async () => {
@@ -125,7 +183,7 @@ describe('Computeds: Asynchronous Flows', () => {
         resolve = r;
       });
       const c = computed(() => promise, { defaultValue: 0 });
-      c.subscribe(() => {}); // keep active
+      asyncUnsub = c.subscribe(() => {});
 
       try {
         keep(c.value); // trigger calculation, transitions to pending
@@ -135,6 +193,7 @@ describe('Computeds: Asynchronous Flows', () => {
         await Promise.resolve(); // wait for computed microtask to resolve
         keep(c.value); // read resolved value
       } finally {
+        asyncUnsub();
         c.dispose();
       }
     },

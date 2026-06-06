@@ -48,12 +48,12 @@ describe('Stress Tests: Extreme Scale (1000)', () => {
   const fanIn1000Sources = Array.from({ length: 1000 }, (_, i) => atom(i));
   const fanIn1000Target = computed(() => fanIn1000Sources.reduce((sum, s) => sum + s.value, 0));
   keep(fanIn1000Target.value); // Initial computation
+  const firstSource = fanIn1000Sources[0] ?? atom(0);
 
   bench(
     'N to 1 propagation (Fan In 1000)',
     () => {
-      const firstSource = fanIn1000Sources[0];
-      if (firstSource) firstSource.value++;
+      firstSource.value++;
       keep(fanIn1000Target.value);
     },
     microBenchOptions

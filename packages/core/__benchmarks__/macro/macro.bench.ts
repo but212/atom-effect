@@ -19,38 +19,39 @@ import {
   type TodoItem,
 } from '../utils/setup.js';
 
-describe('Todo App: Comprehensive Workflow', () => {
-  // Vanilla implementation
-  let vanillaTodos: TodoItem[] = [];
-  let vanillaFilter: 'all' | 'active' | 'completed' = 'all';
+// --- Domain Helpers ---
+const filterTodos = (todos: TodoItem[], filter: 'all' | 'active' | 'completed') =>
+  filter === 'all' ? todos : todos.filter((t) => t.completed === (filter === 'completed'));
 
+const sortGridData = (rows: DataGridRow[], direction: 'asc' | 'desc') =>
+  [...rows].sort((a, b) => {
+    const comp = a.name.localeCompare(b.name);
+    return direction === 'asc' ? comp : -comp;
+  });
+
+const initialLargeState = {
+  users: Array.from({ length: 1000 }, (_, id) => ({ id, name: `U ${id}` })),
+  posts: Array.from({ length: 5000 }, (_, id) => ({ id, userId: id % 1000, content: `P ${id}` })),
+  comments: Array.from({ length: 4000 }, (_, id) => ({ id, postId: id % 5000, text: `C ${id}` })),
+};
+
+describe('Todo App: Comprehensive Workflow', () => {
   bench(
     '[Vanilla] full workflow: add → toggle → filter → delete → stats',
     () => {
-      vanillaTodos = [];
-      vanillaFilter = 'all';
-
-      const nextBatch: TodoItem[] = [];
-      for (let i = 0; i < 100; i++) {
-        nextBatch.push({ id: i, text: 'New', completed: false, createdAt: new Date() });
-      }
-      vanillaTodos = nextBatch;
+      let vanillaTodos = Array.from({ length: 100 }, (_, i) => ({
+        id: i,
+        text: 'New',
+        completed: false,
+      }));
+      let vanillaFilter: 'all' | 'active' | 'completed' = 'all';
 
       vanillaTodos = vanillaTodos.map((t, i) => (i < 50 ? { ...t, completed: true } : t));
-
       vanillaFilter = 'active';
-
       vanillaTodos = vanillaTodos.slice(20);
-
       vanillaFilter = 'all';
 
-      const filtered =
-        vanillaFilter === 'all'
-          ? vanillaTodos
-          : vanillaFilter === 'active'
-            ? vanillaTodos.filter((t) => !t.completed)
-            : vanillaTodos.filter((t) => t.completed);
-
+      const filtered = filterTodos(vanillaTodos, vanillaFilter);
       const total = vanillaTodos.length;
       const completed = vanillaTodos.filter((t) => t.completed).length;
       const rate = total === 0 ? 0 : (completed / total) * 100;
@@ -62,54 +63,39 @@ describe('Todo App: Comprehensive Workflow', () => {
 
   const todosWorkflow = atom<TodoItem[]>([]);
   const filterWorkflow = atom<'all' | 'active' | 'completed'>('all');
-  const filteredWorkflow = computed(() => {
-    const f = filterWorkflow.value;
-    if (f === 'all') return todosWorkflow.value;
-    if (f === 'active') return todosWorkflow.value.filter((t: TodoItem) => !t.completed);
-    return todosWorkflow.value.filter((t: TodoItem) => t.completed);
-  });
+  const filteredWorkflow = computed(() => filterTodos(todosWorkflow.value, filterWorkflow.value));
 
-  const totalCount = computed(() => todosWorkflow.value.length);
-  const completedCount = computed(
-    () => todosWorkflow.value.filter((t: TodoItem) => t.completed).length
-  );
-  const completionRate = computed(() =>
-    totalCount.value === 0 ? 0 : (completedCount.value / totalCount.value) * 100
-  );
+  // Principle 1: Well-designed unified data structure for statistics
+  const todoStats = computed(() => {
+    const todos = todosWorkflow.value;
+    const total = todos.length;
+    const completed = todos.filter((t) => t.completed).length;
+    return {
+      filteredLength: filteredWorkflow.value.length,
+      rate: total === 0 ? 0 : (completed / total) * 100,
+    };
+  });
 
   let _displayCount = 0;
   let _rate = 0;
   effect(() => {
-    _displayCount = filteredWorkflow.value.length;
-    _rate = completionRate.value;
+    _displayCount = todoStats.value.filteredLength;
+    _rate = todoStats.value.rate;
   }, benchEffectOptions);
 
   bench(
     '[Atom] full workflow: add → toggle → filter → delete → stats',
     () => {
-      // 1. Reset
-      todosWorkflow.value = [];
-      filterWorkflow.value = 'all';
-
-      // 2. Add 100
-      const nextBatch: TodoItem[] = [];
-      for (let i = 0; i < 100; i++) {
-        nextBatch.push({ id: i, text: 'New', completed: false, createdAt: new Date() });
-      }
-      todosWorkflow.value = nextBatch;
-
-      // 3. Toggle 50
+      todosWorkflow.value = Array.from({ length: 100 }, (_, i) => ({
+        id: i,
+        text: 'New',
+        completed: false,
+      }));
       todosWorkflow.value = todosWorkflow.value.map((t, i) =>
         i < 50 ? { ...t, completed: true } : t
       );
-
-      // 4. Filter
       filterWorkflow.value = 'active';
-
-      // 5. Delete 20
       todosWorkflow.value = todosWorkflow.value.slice(20);
-
-      // 6. Back to all and check stats
       filterWorkflow.value = 'all';
       keep([_displayCount, _rate]);
     },
@@ -122,12 +108,7 @@ describe('Todo App: Input Size Tiers', () => {
     const data = generateTodosBySizeKey(size);
     const todosAtom = atom<TodoItem[]>(data);
     const filterAtom = atom<'all' | 'active' | 'completed'>('all');
-    const filtered = computed(() => {
-      const f = filterAtom.value;
-      if (f === 'all') return todosAtom.value;
-      if (f === 'active') return todosAtom.value.filter((t) => !t.completed);
-      return todosAtom.value.filter((t) => t.completed);
-    });
+    const filtered = computed(() => filterTodos(todosAtom.value, filterAtom.value));
     let _count = 0;
     effect(() => {
       _count = filtered.value.length;
@@ -147,12 +128,7 @@ describe('Todo App: Input Size Tiers', () => {
       `[Vanilla] toggle filter (${size}: ${data.length} items)`,
       () => {
         vanillaFilter = vanillaFilter === 'all' ? 'active' : 'all';
-        const r =
-          vanillaFilter === 'all'
-            ? data
-            : vanillaFilter === 'active'
-              ? data.filter((t) => !t.completed)
-              : data.filter((t) => t.completed);
+        const r = filterTodos(data, vanillaFilter);
         keep(r.length);
       },
       macroBenchOptions
@@ -162,35 +138,26 @@ describe('Todo App: Input Size Tiers', () => {
 
 describe('Data Grid: Core Operations (1000 Rows)', () => {
   const data = generateGridData(1000);
+  const rows = atom(data); // Principle 1 & 3: Unified state to avoid redundant atom creations
 
   let sortDir: 'asc' | 'desc' = 'asc';
   bench(
     '[Vanilla] toggle sort',
     () => {
       sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-      const sorted = [...data].sort((a, b) => {
-        const compare = a.name.localeCompare(b.name);
-        return sortDir === 'asc' ? compare : -compare;
-      });
-      keep(sorted[0]);
+      keep(sortGridData(data, sortDir)[0]);
     },
     macroBenchOptions
   );
 
-  const rowsSort = atom<DataGridRow[]>(data);
   const sortDirAtom = atom<'asc' | 'desc'>('asc');
-  const sortedRows = computed(() => {
-    return [...rowsSort.value].sort((a, b) => {
-      const compare = a.name.localeCompare(b.name);
-      return sortDirAtom.value === 'asc' ? compare : -compare;
-    });
-  });
+  const sortedRows = computed(() => sortGridData(rows.value, sortDirAtom.value));
 
   bench(
     '[Atom] toggle sort',
     () => {
       sortDirAtom.value = sortDirAtom.value === 'asc' ? 'desc' : 'asc';
-      keep(sortedRows.value);
+      keep(sortedRows.value[0]); // Principle 2: Details - consistent with vanilla [0] return value
     },
     macroBenchOptions
   );
@@ -200,23 +167,21 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
     '[Vanilla] switch filter',
     () => {
       dept = dept === 'Engineering' ? 'Sales' : 'Engineering';
-      const filtered = data.filter((row: DataGridRow) => row.department === dept);
-      keep(filtered[0]);
+      keep(data.filter((row) => row.department === dept)[0]);
     },
     macroBenchOptions
   );
 
-  const rowsFilter = atom<DataGridRow[]>(data);
   const departmentFilter = atom<string>('Engineering');
-  const filteredRows = computed(() => {
-    return rowsFilter.value.filter((row: DataGridRow) => row.department === departmentFilter.value);
-  });
+  const filteredRows = computed(() =>
+    rows.value.filter((row) => row.department === departmentFilter.value)
+  );
 
   bench(
     '[Atom] switch filter',
     () => {
       departmentFilter.value = departmentFilter.value === 'Engineering' ? 'Sales' : 'Engineering';
-      keep(filteredRows.value);
+      keep(filteredRows.value[0]); // Principle 2: Details - consistent [0] return value
     },
     macroBenchOptions
   );
@@ -226,33 +191,26 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
     '[Vanilla] sort + filter + paginate',
     () => {
       sortDirP = sortDirP === 'asc' ? 'desc' : 'asc';
-      const sorted = [...data].sort((a, b) => {
-        return sortDirP === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-      });
-      const filtered = sorted.filter((row: DataGridRow) => row.department === 'Engineering');
-      const paginated = filtered.slice(0, 20);
+      const paginated = sortGridData(data, sortDirP)
+        .filter((row) => row.department === 'Engineering')
+        .slice(0, 20);
       keep(paginated[0]);
     },
     macroBenchOptions
   );
 
-  const rowsComplex = atom<DataGridRow[]>(data);
   const sortDirComplex = atom<'asc' | 'desc'>('asc');
-  const paginatedRowsComplex = computed(() => {
-    const sorted = [...rowsComplex.value].sort((a, b) => {
-      return sortDirComplex.value === 'asc'
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name);
-    });
-    const filtered = sorted.filter((row: DataGridRow) => row.department === 'Engineering');
-    return filtered.slice(0, 20);
-  });
+  const paginatedRowsComplex = computed(() =>
+    sortGridData(rows.value, sortDirComplex.value)
+      .filter((row) => row.department === 'Engineering')
+      .slice(0, 20)
+  );
 
   bench(
     '[Atom] sort + filter + paginate',
     () => {
       sortDirComplex.value = sortDirComplex.value === 'asc' ? 'desc' : 'asc';
-      keep(paginatedRowsComplex.value);
+      keep(paginatedRowsComplex.value[0]); // Principle 2: Details - consistent [0] return value
     },
     macroBenchOptions
   );
@@ -262,8 +220,6 @@ describe('Data Grid: Targeted Updates', () => {
   const ROW_COUNT = 1000;
   const data = generateGridData(ROW_COUNT);
   const rowsAtom = atom<DataGridRow[]>(data);
-
-  // Target middle row
   const targetIdx = Math.floor(ROW_COUNT / 2);
   const nameLens = atomLens(rowsAtom, `${targetIdx}.name`);
 
@@ -326,15 +282,13 @@ describe('Dependency Graph Patterns', () => {
   const diamondLevel1 = Array.from({ length: 10 }, (_, i) =>
     computed(() => diamondSource.value * (i + 1))
   );
-  const diamondLevel2 = Array.from({ length: 10 }, (_, i) =>
-    computed(() => (diamondLevel1[i]?.value ?? 0) * 2)
-  );
+  const diamondLevel2 = diamondLevel1.map((prev) => computed(() => prev.value * 2));
   const diamondSink = computed(() => diamondLevel2.reduce((sum, c) => sum + c.value, 0));
 
   const pyramidBase = Array.from({ length: 50 }, (_, i) => atom(i));
   let currentLevel = pyramidBase.map((a) => computed(() => a.value));
-  for (let level = 1; level < 50; level++) {
-    const nextLevel: any[] = [];
+  while (currentLevel.length > 1) {
+    const nextLevel: typeof currentLevel = [];
     for (let i = 0; i < currentLevel.length - 1; i++) {
       const left = currentLevel[i];
       const right = currentLevel[i + 1];
@@ -343,7 +297,6 @@ describe('Dependency Graph Patterns', () => {
       }
     }
     currentLevel = nextLevel;
-    if (currentLevel.length === 0) break;
   }
   const pyramidApex = currentLevel[0];
 
@@ -368,10 +321,9 @@ describe('Dependency Graph Patterns', () => {
   bench(
     'pyramid pattern (50 levels)',
     () => {
-      if (pyramidBase[0]) {
-        pyramidBase[0].value += 1;
-      }
-      keep(pyramidApex?.value);
+      const first = pyramidBase[0];
+      if (first) first.value += 1;
+      if (pyramidApex) keep(pyramidApex.value);
     },
     macroBenchOptions
   );
@@ -380,14 +332,12 @@ describe('Dependency Graph Patterns', () => {
 describe('Complex Graph Architecture', () => {
   const mixedAtoms = Array.from({ length: 100 }, (_, i) => atom(i));
   const mixedComputeds = Array.from({ length: 200 }, (_, i) => {
-    const idx1 = i % mixedAtoms.length;
-    const idx2 = (i + 1) % mixedAtoms.length;
-    return computed(() => (mixedAtoms[idx1]?.value ?? 0) + (mixedAtoms[idx2]?.value ?? 0));
+    const left = mixedAtoms[i % 100];
+    const right = mixedAtoms[(i + 1) % 100];
+    return computed(() => (left?.value ?? 0) + (right?.value ?? 0));
   });
 
-  const circA = atom(1);
-  const circB = atom(2);
-  const circC = atom(3);
+  const [circA, circB, circC] = [atom(1), atom(2), atom(3)];
   const circAb = computed(() => circA.value + circB.value);
   const circBc = computed(() => circB.value + circC.value);
   const circCa = computed(() => circC.value + circA.value);
@@ -452,7 +402,9 @@ describe('Dynamic Dependency Patterns', () => {
         idxAtom.value = (idxAtom.value + 1) % 10;
         keep(arrSelected.value);
         const valAtom = arrValues[idxAtom.value];
-        if (valAtom) valAtom.value++;
+        if (valAtom) {
+          valAtom.value++;
+        }
         keep(arrSelected.value);
       }
     },
@@ -473,16 +425,19 @@ describe('Large Grid with Lenses (50x50)', () => {
     row.map((_, c) => atomLens(gridAtom, `${r}.${c}`))
   );
 
+  const randomUpdates = Array.from({ length: 10 }, () => ({
+    r: Math.floor(Math.random() * ROWS),
+    c: Math.floor(Math.random() * COLS),
+    v: Math.random(),
+  }));
+
   bench(
     'batch update: 10 random cells',
     () => {
-      for (let i = 0; i < 10; i++) {
-        const r = Math.floor(Math.random() * ROWS);
-        const i_col = Math.floor(Math.random() * COLS);
-        const rowLenses = cellLenses[r];
-        if (rowLenses) {
-          const cell = rowLenses[i_col];
-          if (cell) cell.value = { v: Math.random(), color: 'blue' };
+      for (const update of randomUpdates) {
+        const cell = cellLenses[update.r]?.[update.c];
+        if (cell) {
+          cell.value = { v: update.v, color: 'blue' };
         }
       }
     },
@@ -503,8 +458,11 @@ describe('Large Grid with Lenses (50x50)', () => {
     `read performance: 2500 lenses`,
     () => {
       for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          keep(cellLenses[r]?.[c]?.value);
+        const row = cellLenses[r];
+        if (row) {
+          for (let c = 0; c < COLS; c++) {
+            keep(row[c]?.value);
+          }
         }
       }
     },
@@ -514,10 +472,6 @@ describe('Large Grid with Lenses (50x50)', () => {
 
 describe('Recursive Lens Depth Stress', () => {
   const DEPTH = 100;
-  // Logic: Bypass Path Depth Limit
-  // By using a broad string indexer, we force Paths<T> to resolve to 'string',
-  // allowing us to create extremely deep lens chains for performance stress testing
-  // without triggering TypeScript's static recursion guards.
   type StressTarget = { child: any };
 
   const source = atom({ child: null } as StressTarget);
@@ -527,12 +481,12 @@ describe('Recursive Lens Depth Stress', () => {
     currentLens = atomLens(currentLens, 'child');
   }
 
-  let deepestSource = source.value;
+  const root: StressTarget = { child: null };
+  let current = root;
   for (let i = 0; i < DEPTH; i++) {
-    deepestSource.child = { child: null };
-    deepestSource = deepestSource.child;
+    current = current.child = { child: null };
   }
-  source.value = { ...source.value };
+  source.value = root;
 
   bench(
     `read depth ${DEPTH} lens chain (x${REPEATS})`,
@@ -556,13 +510,18 @@ describe('Memory & GC pressure', () => {
     'create and dispose 1000 units (atom/comp/effect)',
     () => {
       const a = atom(0);
-      const units = [
-        ...Array.from({ length: 333 }, () => atom(0)),
-        ...Array.from({ length: 333 }, (_, i) => computed(() => a.value + i)),
-        ...Array.from({ length: 334 }, () => effect(() => keep(a.value), benchEffectOptions)),
-      ];
+      const units: any[] = [];
+      for (let i = 0; i < 1000; i++) {
+        if (i < 333) {
+          units.push(atom(0));
+        } else if (i < 666) {
+          units.push(computed(() => a.value + i));
+        } else {
+          units.push(effect(() => keep(a.value), benchEffectOptions));
+        }
+      }
       for (const u of units) {
-        (u as any).dispose();
+        u.dispose();
       }
       a.dispose();
     },
@@ -602,19 +561,7 @@ describe('Large State Analysis', () => {
   bench(
     '10K entity state tree management',
     () => {
-      const state = atom({
-        users: Array.from({ length: 1000 }, (_, i) => ({ id: i, name: `U ${i}` })),
-        posts: Array.from({ length: 5000 }, (_, i) => ({
-          id: i,
-          userId: i % 1000,
-          content: `P ${i}`,
-        })),
-        comments: Array.from({ length: 4000 }, (_, i) => ({
-          id: i,
-          postId: i % 5000,
-          text: `C ${i}`,
-        })),
-      });
+      const state = atom(initialLargeState);
 
       const counts = computed(() => ({
         u: state.value.users.length,
@@ -634,7 +581,7 @@ describe('Large State Analysis', () => {
     'heap monitoring (1000 large atoms)',
     () => {
       const before = getMemoryUsage();
-      const atoms = Array.from({ length: 1000 }, (_, i) => atom(new Array(100).fill(i)));
+      const atoms = Array.from({ length: 1000 }, (_, i) => atom(new Array<number>(100).fill(i)));
       const during = getMemoryUsage();
       for (const a of atoms) {
         a.dispose();

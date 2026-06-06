@@ -17,14 +17,11 @@ function buildDeepTree(
 
   for (let d = 0; d < depth; d++) {
     const nextLevel: HTMLElement[] = [];
-    for (const parent of currentLevel) {
+    for (const p of currentLevel) {
       for (let b = 0; b < breadth; b++) {
-        const child = document.createElement('div');
-        parent.appendChild(child);
+        const child = p.appendChild(document.createElement('div'));
         nextLevel.push(child);
-
         if (bindReactive && (d + b) % 2 === 0) {
-          // Bind reactive text
           $(child).atomText(source);
         }
       }
@@ -34,20 +31,16 @@ function buildDeepTree(
 }
 
 describe('Registry: Deep Tree Cleanup', () => {
-  const runCleanup = (bindReactive: boolean) =>
-    withContainer(($c) => {
-      const containerEl = $c[0];
-      if (containerEl) {
-        buildDeepTree(containerEl, 5, 4, bindReactive); // ~1024 elements
-      }
-      cleanup($c);
-    });
+  const run = (name: string, bindReactive: boolean) =>
+    bench(
+      name,
+      withContainer(($c) => {
+        if ($c[0]) buildDeepTree($c[0], 5, 4, bindReactive);
+        cleanup($c);
+      }),
+      microBenchOptions
+    );
 
-  bench('cleanup() - non-reactive 1000 elements tree scan', runCleanup(false), microBenchOptions);
-
-  bench(
-    'cleanup() - reactive 1000 elements tree (mixed bindings)',
-    runCleanup(true),
-    microBenchOptions
-  );
+  run('cleanup() - non-reactive 1000 elements tree scan', false);
+  run('cleanup() - reactive 1000 elements tree (mixed bindings)', true);
 });

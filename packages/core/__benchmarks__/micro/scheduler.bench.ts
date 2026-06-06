@@ -5,25 +5,51 @@
  */
 
 import { bench, describe } from 'vitest';
-import { aeNextTick, atom, batch, computed, effect, untracked } from '../../dist';
-import { benchEffectOptions, keep, microBenchOptions, REPEATS } from '../utils/setup.js';
+import { aeNextTick, atom, computed, untracked } from '../../dist';
+import {
+  asyncParallelBenchOptions,
+  asyncSingleBenchOptions,
+  keep,
+  microBenchOptions,
+  REPEATS,
+} from '../utils/setup.js';
 
 describe('Scheduler: aeNextTick', () => {
+  bench(
+    'baseline: schedule 1 native microtask',
+    async () => {
+      await Promise.resolve();
+    },
+    asyncSingleBenchOptions
+  );
+
   bench(
     'schedule 1 microtask',
     async () => {
       await aeNextTick();
     },
-    { time: 1000, iterations: 500, warmupTime: 100, warmupIterations: 10, throws: true }
+    asyncSingleBenchOptions
   );
 
-  bench(
-    `schedule ${REPEATS} microtasks (parallel)`,
-    async () => {
-      await Promise.all(Array.from({ length: REPEATS }, () => aeNextTick()));
-    },
-    { time: 1500, iterations: 100, warmupTime: 200, warmupIterations: 5, throws: true }
-  );
+  const promises = new Array<Promise<void>>(REPEATS);
+
+  const asyncParallelCases = [
+    { name: `baseline: schedule ${REPEATS} native microtasks`, schedule: () => Promise.resolve() },
+    { name: `schedule ${REPEATS} microtasks`, schedule: () => aeNextTick() },
+  ];
+
+  for (const { name, schedule } of asyncParallelCases) {
+    bench(
+      `${name} (parallel)`,
+      async () => {
+        for (let i = 0; i < REPEATS; i++) {
+          promises[i] = schedule();
+        }
+        await Promise.all(promises);
+      },
+      asyncParallelBenchOptions
+    );
+  }
 });
 
 describe('Scheduler: untracked context', () => {
@@ -62,54 +88,6 @@ describe('Scheduler: untracked context', () => {
       let sum = 0;
       for (let i = 0; i < REPEATS; i++) sum += a.peek();
       keep(sum);
-    },
-    microBenchOptions
-  );
-});
-
-describe('Scheduler: batch nesting', () => {
-  const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
-  for (const a of atoms) {
-    effect(() => keep(a.value), benchEffectOptions);
-  }
-
-  bench(
-    `unbatched ${REPEATS} writes`,
-    () => {
-      for (let i = 0; i < REPEATS; i++) {
-        const at = atoms[i];
-        if (at) at.value++;
-      }
-    },
-    microBenchOptions
-  );
-
-  bench(
-    `flat batch (${REPEATS} writes)`,
-    () => {
-      batch(() => {
-        for (let i = 0; i < REPEATS; i++) {
-          const at = atoms[i];
-          if (at) at.value++;
-        }
-      });
-    },
-    microBenchOptions
-  );
-
-  bench(
-    `nested batch 3 levels (${REPEATS} writes)`,
-    () => {
-      batch(() =>
-        batch(() =>
-          batch(() => {
-            for (let i = 0; i < REPEATS; i++) {
-              const at = atoms[i];
-              if (at) at.value++;
-            }
-          })
-        )
-      );
     },
     microBenchOptions
   );
