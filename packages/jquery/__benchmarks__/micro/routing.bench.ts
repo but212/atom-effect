@@ -49,41 +49,47 @@ describe('Routing: Router Setup Overhead', () => {
 // ============================================================================
 
 describe('Routing: Path Matching Compile and Lookup', () => {
-  const $c = createContainer();
-  const container = $c[0];
-  if (!container) throw new Error('Container not found');
-  const config = {
-    target: container,
-    routes: {
-      '/': { render: () => {} },
-      '/users/:id': { render: () => {} },
-      '/users/:id/posts/:postId': { render: () => {} },
-      '/items/*': { render: () => {} },
-    },
-    mode: 'history' as const,
-    autoBindLinks: false,
-    default: '/',
-  };
-  const r: Router = $.route(config);
-
-  const cases = [
-    { name: 'match static route (/)', path: '/' },
-    { name: 'match parameterized route (/users/123)', path: '/users/123' },
-    {
-      name: 'match multi-parameterized route (/users/123/posts/456)',
-      path: '/users/123/posts/456',
-    },
-  ];
-
-  for (const { name, path } of cases) {
+  const createRoutingBench = (name: string, path: string) => {
+    let $c: JQuery;
+    let r: Router;
     bench(
       name,
       async () => {
         await r.navigate(path);
       },
-      microBenchOptions
+      {
+        ...microBenchOptions,
+        setup() {
+          $c = createContainer();
+          const container = $c[0];
+          if (!container) throw new Error('Container not found');
+          r = $.route({
+            target: container,
+            routes: {
+              '/': { render: () => {} },
+              '/users/:id': { render: () => {} },
+              '/users/:id/posts/:postId': { render: () => {} },
+              '/items/*': { render: () => {} },
+            },
+            mode: 'history',
+            autoBindLinks: false,
+            default: '/',
+          });
+        },
+        teardown() {
+          r.destroy();
+          $c.atomUnbind().remove();
+        },
+      }
     );
-  }
+  };
+
+  createRoutingBench('match static route (/)', '/');
+  createRoutingBench('match parameterized route (/users/123)', '/users/123');
+  createRoutingBench(
+    'match multi-parameterized route (/users/123/posts/456)',
+    '/users/123/posts/456'
+  );
 });
 
 // ============================================================================

@@ -6,11 +6,27 @@ import { bench, describe } from 'vitest';
 import $ from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
-console.log = (): void => {};
-console.warn = (): void => {};
-console.error = (): void => {};
-
 describe('Debug Diagnostics: Runtime Overhead', () => {
+  let originalLog: typeof console.log;
+  let originalWarn: typeof console.warn;
+  let originalError: typeof console.error;
+
+  const mockConsole = {
+    setup() {
+      originalLog = console.log;
+      originalWarn = console.warn;
+      originalError = console.error;
+      console.log = () => {};
+      console.warn = () => {};
+      console.error = () => {};
+    },
+    teardown() {
+      console.log = originalLog;
+      console.warn = originalWarn;
+      console.error = originalError;
+    },
+  };
+
   const runTest = (enabled: boolean) =>
     withContainer(($c) => {
       $.debug.enabled = enabled;
@@ -23,10 +39,13 @@ describe('Debug Diagnostics: Runtime Overhead', () => {
       }
     });
 
-  bench('100 elements x 20 updates (Debug Disabled)', runTest(false), microBenchOptions);
-  bench(
-    '100 elements x 20 updates (Debug Enabled - console mocked)',
-    runTest(true),
-    microBenchOptions
-  );
+  bench('100 elements x 20 updates (Debug Disabled)', runTest(false), {
+    ...microBenchOptions,
+    ...mockConsole,
+  });
+
+  bench('100 elements x 20 updates (Debug Enabled - console mocked)', runTest(true), {
+    ...microBenchOptions,
+    ...mockConsole,
+  });
 });

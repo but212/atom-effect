@@ -3,7 +3,7 @@
  * @description Real-world scenario simulations: Todo App, Dashboard, and Form scaling.
  */
 
-import { afterAll, bench, describe } from 'vitest';
+import { bench, describe } from 'vitest';
 import type { WritableAtom } from '../../dist';
 import $ from '../../dist';
 import {
@@ -248,15 +248,12 @@ describe('Macro: Dashboard & Reactive Topology', () => {
 // ============================================================================
 
 describe('Macro: atomForm O(1) Scaling', () => {
-  const $c = createContainer();
-  afterAll(() => cleanupContainer($c));
-
   interface FormState {
     [key: string]: string;
   }
 
-  const createForm = (count: number): WritableAtom<FormState> => {
-    const $form = $('<form></form>').appendTo($c);
+  const createFormInContainer = ($container: JQuery, count: number): WritableAtom<FormState> => {
+    const $form = $('<form></form>').appendTo($container);
     const initial: FormState = Object.fromEntries(
       Array.from({ length: count }, (_, i) => {
         $(`<input name="f${i}" />`).appendTo($form);
@@ -286,18 +283,26 @@ describe('Macro: atomForm O(1) Scaling', () => {
     { count: 1000, name: `Update 1 field in 1000-field form (O(1) validation, x${REPEATS})` },
   ];
 
-  const updaters = cases.map((c) => createUpdater(createForm(c.count)));
+  for (const { name, count } of cases) {
+    let $c: JQuery;
+    let updater: (i: number) => void;
 
-  cases.forEach(({ name }, idx) => {
-    const updater = updaters[idx];
     bench(
       name,
       () => {
-        if (updater) {
-          for (let i = 0; i < REPEATS; i++) updater(i);
-        }
+        for (let i = 0; i < REPEATS; i++) updater(i);
       },
-      macroBenchOptions
+      {
+        ...macroBenchOptions,
+        setup() {
+          $c = createContainer();
+          const formAtom = createFormInContainer($c, count);
+          updater = createUpdater(formAtom);
+        },
+        teardown() {
+          cleanupContainer($c);
+        },
+      }
     );
-  });
+  }
 });

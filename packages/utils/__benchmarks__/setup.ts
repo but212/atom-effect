@@ -10,7 +10,7 @@ export let _sink: unknown;
  */
 export function keep(value: unknown): void {
   _sink = value;
-  if (Date.now() < 0) {
+  if ((globalThis as unknown as { __dce_guard__: unknown }).__dce_guard__ === _sink) {
     console.log(_sink);
   }
 }
