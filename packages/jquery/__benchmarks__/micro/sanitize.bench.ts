@@ -11,34 +11,33 @@ import { microBenchOptions } from '../utils/setup';
 // ============================================================================
 
 describe('Sanitize: Safe Content', () => {
-  const smallHtml = '<p>Hello, World!</p>';
-  const mediumHtml = `
-    <div class="card">
-      <h3>Card Title</h3>
-      <p>This is a paragraph with <strong>bold</strong> and <em>italic</em> text.</p>
-      <span>Some item list:</span>
-      <ul>
-        <li>Item A</li>
-        <li>Item B</li>
-      </ul>
-    </div>
-  `;
-
-  bench(
-    'sanitize small safe HTML',
-    () => {
-      sanitizeHtml(smallHtml);
+  const cases = [
+    { name: 'sanitize small safe HTML', html: '<p>Hello, World!</p>' },
+    {
+      name: 'sanitize medium safe HTML',
+      html: `
+        <div class="card">
+          <h3>Card Title</h3>
+          <p>This is a paragraph with <strong>bold</strong> and <em>italic</em> text.</p>
+          <span>Some item list:</span>
+          <ul>
+            <li>Item A</li>
+            <li>Item B</li>
+          </ul>
+        </div>
+      `,
     },
-    microBenchOptions
-  );
+  ];
 
-  bench(
-    'sanitize medium safe HTML',
-    () => {
-      sanitizeHtml(mediumHtml);
-    },
-    microBenchOptions
-  );
+  for (const { name, html } of cases) {
+    bench(
+      name,
+      () => {
+        sanitizeHtml(html);
+      },
+      microBenchOptions
+    );
+  }
 });
 
 // ============================================================================
@@ -46,34 +45,30 @@ describe('Sanitize: Safe Content', () => {
 // ============================================================================
 
 describe('Sanitize: Vulnerability Neutralization', () => {
-  const xssTagPayload =
-    '<div><script>alert(1)</script><iframe src="javascript:alert(2)"></iframe></div>';
-  const xssEventPayload = '<img src="x" onerror="alert(1)" onload="alert(2)" onclick="alert(3)">';
-  const xssNestedPayload = '<iframe srcdoc="<script>alert(1)</script>"></iframe>';
-
-  bench(
-    'scrub blacklisted tags (script, iframe)',
-    () => {
-      sanitizeHtml(xssTagPayload);
+  const cases = [
+    {
+      name: 'scrub blacklisted tags (script, iframe)',
+      payload: '<div><script>alert(1)</script><iframe src="javascript:alert(2)"></iframe></div>',
     },
-    microBenchOptions
-  );
-
-  bench(
-    'scrub inline event attributes (onerror, onload, onclick)',
-    () => {
-      sanitizeHtml(xssEventPayload);
+    {
+      name: 'scrub inline event attributes (onerror, onload, onclick)',
+      payload: '<img src="x" onerror="alert(1)" onload="alert(2)" onclick="alert(3)">',
     },
-    microBenchOptions
-  );
-
-  bench(
-    'scrub recursively nested srcdoc payloads',
-    () => {
-      sanitizeHtml(xssNestedPayload);
+    {
+      name: 'scrub recursively nested srcdoc payloads',
+      payload: '<iframe srcdoc="<script>alert(1)</script>"></iframe>',
     },
-    microBenchOptions
-  );
+  ];
+
+  for (const { name, payload } of cases) {
+    bench(
+      name,
+      () => {
+        sanitizeHtml(payload);
+      },
+      microBenchOptions
+    );
+  }
 });
 
 // ============================================================================
@@ -109,7 +104,6 @@ describe('Sanitize: URI and CSS Checks', () => {
 // ============================================================================
 
 describe('Sanitize: DOM Clobbering prevention', () => {
-  // Payloads attempting to clobber attributes property or parent node reference
   const clobberPayload = '<form id="attributes"><input name="id"><input id="parentNode"></form>';
 
   bench(

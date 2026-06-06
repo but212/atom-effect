@@ -4,7 +4,7 @@
 
 import { bench, describe } from 'vitest';
 import $ from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 interface CounterProps {
   initialCount: number;
@@ -24,8 +24,7 @@ const CounterComponent = ($el: JQuery, props: CounterProps) => {
 describe('Mounting: Component Initialization', () => {
   bench(
     'atomMount initial setup (100 elements)',
-    () => {
-      const $c = createContainer();
+    withContainer(($c) => {
       const elements: JQuery[] = [];
       for (let i = 0; i < 100; i++) {
         elements.push($('<div></div>').appendTo($c));
@@ -34,24 +33,19 @@ describe('Mounting: Component Initialization', () => {
       for (let i = 0; i < 100; i++) {
         elements[i]?.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
       }
-
-      cleanupContainer($c);
-    },
+    }),
     microBenchOptions
   );
 
   bench(
     'atomMount replacement (10 elements x 10 re-mounts)',
-    () => {
-      const $c = createContainer();
+    withContainer(($c) => {
       const $el = $('<div></div>').appendTo($c);
 
       for (let i = 0; i < 100; i++) {
         $el.atomMount(CounterComponent, { initialCount: i, label: `Remount-${i}` });
       }
-
-      cleanupContainer($c);
-    },
+    }),
     microBenchOptions
   );
 });
@@ -59,8 +53,7 @@ describe('Mounting: Component Initialization', () => {
 describe('Mounting: Component Teardown', () => {
   bench(
     'atomUnmount (100 elements)',
-    () => {
-      const $c = createContainer();
+    withContainer(($c) => {
       const elements: JQuery[] = [];
       for (let i = 0; i < 100; i++) {
         const $el = $('<div></div>').appendTo($c);
@@ -71,9 +64,7 @@ describe('Mounting: Component Teardown', () => {
       for (let i = 0; i < 100; i++) {
         elements[i]?.atomUnmount();
       }
-
-      cleanupContainer($c);
-    },
+    }),
     microBenchOptions
   );
 });
@@ -96,8 +87,7 @@ describe('Mounting: Deep Tree Operations', () => {
 
   bench(
     'mount and deep unmount (depth 4, breadth 3 ~ 120 nodes)',
-    () => {
-      const $c = createContainer();
+    withContainer(($c) => {
       const containerEl = $c[0];
       if (containerEl) {
         buildDeepDivTree(containerEl, 4, 3);
@@ -108,8 +98,7 @@ describe('Mounting: Deep Tree Operations', () => {
 
       // Unmount from container root (recursive scan of the tree)
       $c.atomUnmount();
-      cleanupContainer($c);
-    },
+    }),
     microBenchOptions
   );
 });

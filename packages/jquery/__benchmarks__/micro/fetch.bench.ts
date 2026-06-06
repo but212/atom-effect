@@ -4,69 +4,45 @@
 
 import { bench, describe } from 'vitest';
 import $ from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 interface FetchMockData {
   id: number;
   name: string;
 }
 
-const originalAjax = $.ajax;
+let mockResponse: FetchMockData = { id: 1, name: 'Alice' };
 
-function setupMockAjax(responseObj: FetchMockData): void {
-  $.ajax = (
-    _urlOrSettings?: string | JQuery.AjaxSettings,
-    _settings?: JQuery.AjaxSettings
-  ): JQuery.jqXHR => {
-    const deferred = $.Deferred<FetchMockData, string, never>();
-    deferred.resolve(responseObj);
-    const promise = deferred.promise();
-    return {
-      ...promise,
-      abort: () => {},
-      getResponseHeader: () => null,
-    } as unknown as JQuery.jqXHR;
-  };
-}
-
-function restoreAjax(): void {
-  $.ajax = originalAjax;
-}
+$.ajax = (
+  _urlOrSettings?: string | JQuery.AjaxSettings,
+  _settings?: JQuery.AjaxSettings
+): JQuery.jqXHR => {
+  const deferred = $.Deferred<FetchMockData, string, never>();
+  deferred.resolve(mockResponse);
+  const promise = deferred.promise();
+  return {
+    ...promise,
+    abort: () => {},
+    getResponseHeader: () => null,
+  } as unknown as JQuery.jqXHR;
+};
 
 // ============================================================================
 // 1. Initialization
 // ============================================================================
 
 describe('Fetch: Setup & Eager/Lazy Initialization', () => {
-  const mockData: FetchMockData = { id: 1, name: 'Alice' };
+  const setupFetch = (eager: boolean) => () => {
+    mockResponse = { id: 1, name: 'Alice' };
+    const fetchAtom = $.atomFetch<FetchMockData>(() => '/api/user', {
+      eager,
+      defaultValue: { id: 0, name: '' },
+    });
+    fetchAtom.dispose();
+  };
 
-  bench(
-    'setup eager atomFetch',
-    () => {
-      setupMockAjax(mockData);
-      const fetchAtom = $.atomFetch<FetchMockData>(() => '/api/user', {
-        eager: true,
-        defaultValue: { id: 0, name: '' },
-      });
-      fetchAtom.dispose();
-      restoreAjax();
-    },
-    microBenchOptions
-  );
-
-  bench(
-    'setup lazy atomFetch',
-    () => {
-      setupMockAjax(mockData);
-      const fetchAtom = $.atomFetch<FetchMockData>(() => '/api/user', {
-        eager: false,
-        defaultValue: { id: 0, name: '' },
-      });
-      fetchAtom.dispose();
-      restoreAjax();
-    },
-    microBenchOptions
-  );
+  bench('setup eager atomFetch', setupFetch(true), microBenchOptions);
+  bench('setup lazy atomFetch', setupFetch(false), microBenchOptions);
 });
 
 // ============================================================================
@@ -74,13 +50,10 @@ describe('Fetch: Setup & Eager/Lazy Initialization', () => {
 // ============================================================================
 
 describe('Fetch: Dependency Reaction and Pipeline', () => {
-  const mockData: FetchMockData = { id: 42, name: 'Bob' };
-
   bench(
     'trigger refetch on dependency update',
-    async () => {
-      setupMockAjax(mockData);
-      const $c = createContainer();
+    withContainer(async () => {
+      mockResponse = { id: 42, name: 'Bob' };
       const userId = $.atom(1);
 
       const fetchAtom = $.atomFetch<FetchMockData>(() => `/api/user/${userId.value}`, {
@@ -96,16 +69,14 @@ describe('Fetch: Dependency Reaction and Pipeline', () => {
       await fetchAtom.value;
 
       fetchAtom.dispose();
-      cleanupContainer($c);
-      restoreAjax();
-    },
+    }),
     { ...microBenchOptions, iterations: 100 }
   );
 
   bench(
     'trigger fetch with sync transformation pipeline',
     async () => {
-      setupMockAjax(mockData);
+      mockResponse = { id: 42, name: 'Bob' };
       const fetchAtom = $.atomFetch<string>(() => '/api/user', {
         defaultValue: '',
         eager: true,
@@ -118,7 +89,6 @@ describe('Fetch: Dependency Reaction and Pipeline', () => {
       await fetchAtom.value;
 
       fetchAtom.dispose();
-      restoreAjax();
     },
     { ...microBenchOptions, iterations: 100 }
   );
@@ -129,12 +99,10 @@ describe('Fetch: Dependency Reaction and Pipeline', () => {
 // ============================================================================
 
 describe('Fetch: Concurrency & Abort Overhead', () => {
-  const mockData: FetchMockData = { id: 99, name: 'Charlie' };
-
   bench(
     'rapid dependency updates causing multiple aborts (50 times)',
     async () => {
-      setupMockAjax(mockData);
+      mockResponse = { id: 99, name: 'Charlie' };
       const userId = $.atom(1);
 
       const fetchAtom = $.atomFetch<FetchMockData>(() => `/api/user/${userId.value}`, {
@@ -151,7 +119,6 @@ describe('Fetch: Concurrency & Abort Overhead', () => {
       await fetchAtom.value;
 
       fetchAtom.dispose();
-      restoreAjax();
     },
     { ...microBenchOptions, iterations: 50 }
   );

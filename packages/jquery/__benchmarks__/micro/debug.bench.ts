@@ -4,69 +4,48 @@
 
 import { bench, describe } from 'vitest';
 import $ from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 describe('Debug Diagnostics: Runtime Overhead', () => {
-  // Capture original console methods to prevent spamming test outputs and avoid I/O bottlenecks
-  const originalLog = console.log;
-  const originalWarn = console.warn;
-  const originalError = console.error;
+  let originalLog: typeof console.log;
+  let originalWarn: typeof console.warn;
+  let originalError: typeof console.error;
 
-  const mockConsole = (): void => {
-    console.log = (): void => {};
-    console.warn = (): void => {};
-    console.error = (): void => {};
+  const mockConsole = {
+    setup() {
+      originalLog = console.log;
+      originalWarn = console.warn;
+      originalError = console.error;
+      console.log = () => {};
+      console.warn = () => {};
+      console.error = () => {};
+    },
+    teardown() {
+      console.log = originalLog;
+      console.warn = originalWarn;
+      console.error = originalError;
+    },
   };
 
-  const restoreConsole = (): void => {
-    console.log = originalLog;
-    console.warn = originalWarn;
-    console.error = originalError;
-  };
-
-  bench(
-    '100 elements x 20 updates (Debug Disabled)',
-    () => {
-      mockConsole();
-      $.debug.enabled = false;
-
-      const $c = createContainer();
+  const runTest = (enabled: boolean) =>
+    withContainer(($c) => {
+      $.debug.enabled = enabled;
       const source = $.atom('val');
-
       for (let i = 0; i < 100; i++) {
         $('<span></span>').appendTo($c).atomText(source);
       }
-
       for (let i = 0; i < 20; i++) {
         source.value = `update-${i}`;
       }
+    });
 
-      cleanupContainer($c);
-      restoreConsole();
-    },
-    microBenchOptions
-  );
+  bench('100 elements x 20 updates (Debug Disabled)', runTest(false), {
+    ...microBenchOptions,
+    ...mockConsole,
+  });
 
-  bench(
-    '100 elements x 20 updates (Debug Enabled - console mocked)',
-    () => {
-      mockConsole();
-      $.debug.enabled = true;
-
-      const $c = createContainer();
-      const source = $.atom('val');
-
-      for (let i = 0; i < 100; i++) {
-        $('<span></span>').appendTo($c).atomText(source);
-      }
-
-      for (let i = 0; i < 20; i++) {
-        source.value = `update-${i}`;
-      }
-
-      cleanupContainer($c);
-      restoreConsole();
-    },
-    microBenchOptions
-  );
+  bench('100 elements x 20 updates (Debug Enabled - console mocked)', runTest(true), {
+    ...microBenchOptions,
+    ...mockConsole,
+  });
 });

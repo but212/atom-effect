@@ -1,10 +1,20 @@
 import { bench, describe } from 'vitest';
 import { Option } from '../dist';
-import { keep, nextRandom, nextRandomInt, REPEATS } from './setup';
+import { keep, REPEATS } from './setup';
 
 describe('Option', () => {
   const someVal = Option.some(1);
   const noneVal = Option.none;
+
+  // Pre-generate data structures to minimize runtime overhead inside benchmark loops.
+  const mixedOptions = Array.from({ length: REPEATS }, (_, i) => (i % 2 === 0 ? someVal : noneVal));
+  const nullableVals = Array.from({ length: REPEATS }, (_, i) => (i % 2 === 0 ? i : null));
+
+  const mapFn = (x: number) => x + 1;
+  const matchBranches = {
+    some: (x: number) => x,
+    none: () => 0,
+  };
 
   bench(`Some creation (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
@@ -19,41 +29,35 @@ describe('Option', () => {
   });
 
   bench(`unwrapOr (mixed, x${REPEATS})`, () => {
-    const opts = [someVal, noneVal];
     for (let i = 0; i < REPEATS; i++) {
-      const opt = opts[nextRandomInt(2)];
-      keep(Option.unwrapOr(opt, 0));
+      keep(Option.unwrapOr(mixedOptions[i], 0));
     }
   });
 
   bench(`map (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(Option.map(someVal, (x) => x + 1));
+      keep(Option.map(someVal, mapFn));
     }
   });
 
   bench(`match (mixed, x${REPEATS})`, () => {
-    const opts = [someVal, noneVal];
-    const branches = {
-      some: (x: number) => x,
-      none: () => 0,
-    };
     for (let i = 0; i < REPEATS; i++) {
-      const opt = opts[nextRandomInt(2)];
-      keep(Option.match(opt, branches));
+      keep(Option.match(mixedOptions[i], matchBranches));
     }
   });
 
   bench(`fromNullable (mixed, x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      const val = nextRandom() > 0.5 ? i : null;
-      keep(Option.fromNullable(val));
+      keep(Option.fromNullable(nullableVals[i]));
     }
   });
 
   describe('Native Comparison (null/undefined)', () => {
     const rawVal = 1;
     const rawNull = null;
+    const mixedRawVals = Array.from({ length: REPEATS }, (_, i) =>
+      i % 2 === 0 ? rawVal : rawNull
+    );
 
     bench(`Literal assignment (x${REPEATS})`, () => {
       for (let i = 0; i < REPEATS; i++) {
@@ -68,10 +72,8 @@ describe('Option', () => {
     });
 
     bench(`Nullish coalescing (mixed, x${REPEATS})`, () => {
-      const vals = [rawVal, rawNull];
       for (let i = 0; i < REPEATS; i++) {
-        const val = vals[nextRandomInt(2)];
-        keep(val ?? 0);
+        keep(mixedRawVals[i] ?? 0);
       }
     });
 
@@ -82,9 +84,8 @@ describe('Option', () => {
     });
 
     bench(`If-Else branch (mixed, x${REPEATS})`, () => {
-      const vals = [rawVal, rawNull];
       for (let i = 0; i < REPEATS; i++) {
-        const val = vals[nextRandomInt(2)];
+        const val = mixedRawVals[i];
         if (val == null) {
           keep(0);
         } else {

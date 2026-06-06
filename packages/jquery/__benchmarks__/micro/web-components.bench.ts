@@ -4,7 +4,7 @@
 
 import { bench, describe } from 'vitest';
 import $, { type AtomComponentController } from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 class BenchmarkComp extends HTMLElement {
   controller?: AtomComponentController;
@@ -28,8 +28,7 @@ if (!customElements.get('benchmark-comp')) {
 describe('Web Components: Controller Lifecycle', () => {
   bench(
     'setup and teardown 100 components',
-    () => {
-      const $c = createContainer();
+    withContainer(($c) => {
       const container = $c[0];
       if (!container) throw new Error('Container not found');
       for (let i = 0; i < 100; i++) {
@@ -39,8 +38,7 @@ describe('Web Components: Controller Lifecycle', () => {
         el.teardown();
         container.removeChild(el);
       }
-      cleanupContainer($c);
-    },
+    }),
     microBenchOptions
   );
 });
@@ -50,47 +48,31 @@ describe('Web Components: Controller Lifecycle', () => {
 // ============================================================================
 
 describe('Web Components: Context Lookup Depth', () => {
-  const runDepthLookup = (depth: number) => {
-    const $c = createContainer();
-    const root = $c[0];
-    if (!root) throw new Error('Container not found');
+  const runDepthLookup = (depth: number) =>
+    withContainer(($c) => {
+      const root = $c[0];
+      if (!root) throw new Error('Container not found');
 
-    // Register provider on root
-    $.provideAtom(root, 'context-key', 'context-value');
+      // Register provider on root
+      $.provideAtom(root, 'context-key', 'context-value');
 
-    // Build DOM tree of specified depth
-    let current = root;
-    for (let i = 0; i < depth; i++) {
-      const child = document.createElement('div');
-      current.appendChild(child);
-      current = child;
-    }
+      // Build DOM tree of specified depth
+      let current = root;
+      for (let i = 0; i < depth; i++) {
+        const child = document.createElement('div');
+        current.appendChild(child);
+        current = child;
+      }
 
-    const leaf = current;
+      // Run lookup multiple times to measure traversal cost
+      for (let i = 0; i < 100; i++) {
+        $.injectAtom(current, 'context-key');
+      }
+    });
 
-    // Run lookup multiple times to measure traversal cost
-    for (let i = 0; i < 100; i++) {
-      $.injectAtom(leaf, 'context-key');
-    }
+  bench('context injection (depth 5, lookup 100x)', runDepthLookup(5), microBenchOptions);
 
-    cleanupContainer($c);
-  };
-
-  bench(
-    'context injection (depth 5, lookup 100x)',
-    () => {
-      runDepthLookup(5);
-    },
-    microBenchOptions
-  );
-
-  bench(
-    'context injection (depth 20, lookup 100x)',
-    () => {
-      runDepthLookup(20);
-    },
-    microBenchOptions
-  );
+  bench('context injection (depth 20, lookup 100x)', runDepthLookup(20), microBenchOptions);
 });
 
 // ============================================================================
@@ -100,8 +82,7 @@ describe('Web Components: Context Lookup Depth', () => {
 describe('Web Components: Shadow DOM Boundary Traversal', () => {
   bench(
     'context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)',
-    () => {
-      const $c = createContainer();
+    withContainer(($c) => {
       const container = $c[0];
       if (!container) throw new Error('Container not found');
 
@@ -118,15 +99,11 @@ describe('Web Components: Shadow DOM Boundary Traversal', () => {
         currentHost = child;
       }
 
-      const leaf = currentHost;
-
       // Injecting from the deepest nested element inside Shadow DOM
       for (let i = 0; i < 100; i++) {
-        $.injectAtom(leaf, 'theme-context');
+        $.injectAtom(currentHost, 'theme-context');
       }
-
-      cleanupContainer($c);
-    },
+    }),
     microBenchOptions
   );
 });

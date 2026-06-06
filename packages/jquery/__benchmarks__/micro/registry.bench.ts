@@ -4,7 +4,7 @@
 
 import { bench, describe } from 'vitest';
 import $, { cleanup } from '../../dist';
-import { createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 function buildDeepTree(
   container: HTMLElement,
@@ -34,31 +34,20 @@ function buildDeepTree(
 }
 
 describe('Registry: Deep Tree Cleanup', () => {
-  bench(
-    'cleanup() - non-reactive 1000 elements tree scan',
-    () => {
-      const $c = createContainer();
+  const runCleanup = (bindReactive: boolean) =>
+    withContainer(($c) => {
       const containerEl = $c[0];
       if (containerEl) {
-        buildDeepTree(containerEl, 5, 4, false); // ~1024 elements
+        buildDeepTree(containerEl, 5, 4, bindReactive); // ~1024 elements
       }
       cleanup($c);
-      $c.remove();
-    },
-    microBenchOptions
-  );
+    });
+
+  bench('cleanup() - non-reactive 1000 elements tree scan', runCleanup(false), microBenchOptions);
 
   bench(
     'cleanup() - reactive 1000 elements tree (mixed bindings)',
-    () => {
-      const $c = createContainer();
-      const containerEl = $c[0];
-      if (containerEl) {
-        buildDeepTree(containerEl, 5, 4, true); // ~1024 elements, mixed reactive bindings
-      }
-      cleanup($c);
-      $c.remove();
-    },
+    runCleanup(true),
     microBenchOptions
   );
 });

@@ -1,12 +1,16 @@
 import { bench, describe } from 'vitest';
 import { isOption, isPromise, Option } from '../dist';
-import { keep, nextRandomInt, REPEATS } from './setup';
+import { keep, REPEATS } from './setup';
 
 describe('type-guard', () => {
   const promise = Promise.resolve();
   const thenable = { then: () => {} };
   const obj = {};
   const option = Option.some(1);
+
+  const rawInputs = [promise, thenable, obj, option, null, undefined];
+  // Pre-generate mixed inputs of length REPEATS to avoid random selection overhead in the benchmark loop
+  const mixedInputs = Array.from({ length: REPEATS }, (_, i) => rawInputs[i % rawInputs.length]);
 
   bench(`isPromise: native promise (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
@@ -39,11 +43,8 @@ describe('type-guard', () => {
   });
 
   bench(`isPromise: mixed data (x${REPEATS})`, () => {
-    const inputs = [promise, thenable, obj, option, null, undefined];
     for (let i = 0; i < REPEATS; i++) {
-      // Switch input based on random index
-      const input = inputs[nextRandomInt(inputs.length)];
-      keep(isPromise(input));
+      keep(isPromise(mixedInputs[i]));
     }
   });
 });
