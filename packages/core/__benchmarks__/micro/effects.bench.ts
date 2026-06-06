@@ -12,6 +12,19 @@ describe('Effects: Life-cycle & Propagation', () => {
   const lifecycleFn = () => keep(lifecycleAtom.value);
 
   bench(
+    `baseline: listener registration and removal (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        const listeners = new Set<() => void>();
+        const listener = () => {};
+        listeners.add(listener);
+        listeners.delete(listener);
+      }
+    },
+    microBenchOptions
+  );
+
+  bench(
     `creation & disposal (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
@@ -22,12 +35,38 @@ describe('Effects: Life-cycle & Propagation', () => {
     microBenchOptions
   );
 
+  const rawComp = () => rawTrigger.value * 2;
+  const rawTrigger = {
+    _value: 0,
+    get value() {
+      return this._value;
+    },
+    set value(v) {
+      this._value = v;
+      for (const listener of rawListeners) listener();
+    },
+  };
+  const rawListeners: (() => void)[] = [];
+  let rawVal = 0;
+  rawListeners.push(() => {
+    rawVal = rawComp();
+  });
+
   const trigger = atom(0);
   const comp = computed(() => trigger.value * 2);
   let _val = 0;
-  effect(() => {
-    _val = comp.value;
-  }, benchEffectOptions);
+  let activeEffect: any;
+
+  bench(
+    `baseline: raw callback propagation (x${REPEATS})`,
+    () => {
+      for (let i = 0; i < REPEATS; i++) {
+        rawTrigger.value++;
+      }
+      keep(rawVal);
+    },
+    microBenchOptions
+  );
 
   bench(
     `propagation: atom → computed → effect (x${REPEATS})`,
@@ -37,7 +76,17 @@ describe('Effects: Life-cycle & Propagation', () => {
       }
       keep(_val);
     },
-    microBenchOptions
+    {
+      ...microBenchOptions,
+      setup: () => {
+        activeEffect = effect(() => {
+          _val = comp.value;
+        }, benchEffectOptions);
+      },
+      teardown: () => {
+        activeEffect.dispose();
+      },
+    }
   );
 
   bench(
@@ -63,26 +112,40 @@ describe('Effects: Life-cycle & Propagation', () => {
 describe('Subscribe / Unsubscribe Hotpath', () => {
   const a = atom(0);
   const c = computed(() => a.value * 2);
+  const callbackSet = new Set<() => void>();
 
-  bench(
-    `atom.subscribe + unsubscribe (x${REPEATS})`,
-    () => {
-      for (let i = 0; i < REPEATS; i++) {
+  const subCases = [
+    {
+      name: 'baseline: Set add + delete',
+      run: () => {
+        const cb = () => {};
+        callbackSet.add(cb);
+        callbackSet.delete(cb);
+      },
+    },
+    {
+      name: 'atom.subscribe + unsubscribe',
+      run: () => {
         const unsub = a.subscribe(() => {});
         unsub();
-      }
+      },
     },
-    microBenchOptions
-  );
-
-  bench(
-    `computed.subscribe + unsubscribe (x${REPEATS})`,
-    () => {
-      for (let i = 0; i < REPEATS; i++) {
+    {
+      name: 'computed.subscribe + unsubscribe',
+      run: () => {
         const unsub = c.subscribe(() => {});
         unsub();
-      }
+      },
     },
-    microBenchOptions
-  );
+  ];
+
+  for (const { name, run } of subCases) {
+    bench(
+      `${name} (x${REPEATS})`,
+      () => {
+        for (let i = 0; i < REPEATS; i++) run();
+      },
+      microBenchOptions
+    );
+  }
 });

@@ -21,84 +21,51 @@ const CounterComponent = ($el: JQuery, props: CounterProps) => {
   };
 };
 
-describe('Mounting: Component Initialization', () => {
-  bench(
-    'atomMount initial setup (100 elements)',
-    withContainer(($c) => {
-      const elements: JQuery[] = [];
-      for (let i = 0; i < 100; i++) {
-        elements.push($('<div></div>').appendTo($c));
-      }
+describe('Mounting: Component Lifecycle', () => {
+  const run = (name: string, fn: ($c: JQuery) => void) =>
+    bench(name, withContainer(fn), microBenchOptions);
 
-      for (let i = 0; i < 100; i++) {
-        elements[i]?.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
-      }
-    }),
-    microBenchOptions
-  );
+  run('atomMount initial setup (100 elements)', ($c) => {
+    const elements = Array.from({ length: 100 }, () => $('<div></div>').appendTo($c));
+    for (let i = 0; i < 100; i++) {
+      elements[i]?.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
+    }
+  });
 
-  bench(
-    'atomMount replacement (10 elements x 10 re-mounts)',
-    withContainer(($c) => {
+  run('atomMount replacement (10 elements x 10 re-mounts)', ($c) => {
+    const $el = $('<div></div>').appendTo($c);
+    for (let i = 0; i < 100; i++) {
+      $el.atomMount(CounterComponent, { initialCount: i, label: `Remount-${i}` });
+    }
+  });
+
+  run('atomUnmount (100 elements)', ($c) => {
+    const elements = Array.from({ length: 100 }, (_, i) => {
       const $el = $('<div></div>').appendTo($c);
+      $el.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
+      return $el;
+    });
+    for (let i = 0; i < 100; i++) {
+      elements[i]?.atomUnmount();
+    }
+  });
 
-      for (let i = 0; i < 100; i++) {
-        $el.atomMount(CounterComponent, { initialCount: i, label: `Remount-${i}` });
-      }
-    }),
-    microBenchOptions
-  );
-});
-
-describe('Mounting: Component Teardown', () => {
-  bench(
-    'atomUnmount (100 elements)',
-    withContainer(($c) => {
-      const elements: JQuery[] = [];
-      for (let i = 0; i < 100; i++) {
-        const $el = $('<div></div>').appendTo($c);
-        $el.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
-        elements.push($el);
-      }
-
-      for (let i = 0; i < 100; i++) {
-        elements[i]?.atomUnmount();
-      }
-    }),
-    microBenchOptions
-  );
-});
-
-describe('Mounting: Deep Tree Operations', () => {
-  function buildDeepDivTree(parent: HTMLElement, depth: number, breadth: number): void {
-    let currentLevel: HTMLElement[] = [parent];
-    for (let d = 0; d < depth; d++) {
+  run('mount and deep unmount (depth 4, breadth 3 ~ 120 nodes)', ($c) => {
+    const containerEl = $c[0];
+    if (!containerEl) return;
+    // Build tree
+    let currentLevel: HTMLElement[] = [containerEl];
+    for (let d = 0; d < 4; d++) {
       const nextLevel: HTMLElement[] = [];
       for (const p of currentLevel) {
-        for (let b = 0; b < breadth; b++) {
-          const child = document.createElement('div');
-          p.appendChild(child);
-          nextLevel.push(child);
+        for (let b = 0; b < 3; b++) {
+          nextLevel.push(p.appendChild(document.createElement('div')));
         }
       }
       currentLevel = nextLevel;
     }
-  }
 
-  bench(
-    'mount and deep unmount (depth 4, breadth 3 ~ 120 nodes)',
-    withContainer(($c) => {
-      const containerEl = $c[0];
-      if (containerEl) {
-        buildDeepDivTree(containerEl, 4, 3);
-      }
-
-      const leaf = $c.find('div').last();
-      leaf.atomMount(CounterComponent, { initialCount: 0, label: 'Deep' });
-
-      // Unmount from container root (recursive scan of the tree)
-      $c.atomUnmount();
-    }),
-    microBenchOptions
-  );
+    $c.find('div').last().atomMount(CounterComponent, { initialCount: 0, label: 'Deep' });
+    $c.atomUnmount();
+  });
 });

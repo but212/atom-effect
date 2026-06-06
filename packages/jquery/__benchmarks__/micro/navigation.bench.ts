@@ -14,128 +14,75 @@ const mockHtml = `
   </div>
 `;
 
-$.ajax = (
-  _urlOrSettings?: string | JQuery.AjaxSettings,
-  _settings?: JQuery.AjaxSettings
-): JQuery.jqXHR => {
-  const deferred = $.Deferred<string, string, never>();
-  deferred.resolve(mockHtml);
-  const promise = deferred.promise();
+$.ajax = (): JQuery.jqXHR => {
+  const def = $.Deferred<string, string, never>().resolve(mockHtml);
   return {
-    ...promise,
+    ...def.promise(),
     abort: () => {},
-    getResponseHeader: (header: string) => {
-      if (header === 'X-PJAX-URL') return '/target-page';
-      if (header === 'X-PJAX-Title') return 'New Title';
-      return null;
-    },
+    getResponseHeader: (h: string) =>
+      h === 'X-PJAX-URL' ? '/target-page' : h === 'X-PJAX-Title' ? 'New Title' : null,
   } as unknown as JQuery.jqXHR;
 };
 
-// ============================================================================
-// 1. Navigation Initialization
-// ============================================================================
+describe('Navigation: Setup & E2E Programmatic Transitions', () => {
+  const run = (name: string, fn: ($c: JQuery) => void | Promise<void>, iterations = 200) =>
+    bench(name, withContainer(fn), { ...microBenchOptions, iterations });
 
-describe('Navigation: Setup & Teardown', () => {
-  bench(
-    'initialize and destroy atomNav',
-    withContainer(($c) => {
-      $c.attr('id', 'main-content');
-      const nav = $.atomNav({
-        target: $c,
-        selector: 'a[data-nav]',
-      });
-      nav.destroy();
-    }),
-    microBenchOptions
-  );
-});
+  run('initialize and destroy atomNav', ($c) => {
+    $c.attr('id', 'main-content');
+    $.atomNav({ target: $c, selector: 'a[data-nav]' }).destroy();
+  });
 
-// ============================================================================
-// 2. Programmatic PJAX Transition E2E
-// ============================================================================
-
-describe('Navigation: E2E Programmatic Transitions', () => {
-  bench(
+  run(
     'navigate E2E (fetch mock html -> extract -> reconcile DOM)',
-    withContainer(async ($c) => {
+    async ($c) => {
       $c.attr('id', 'main-content');
-
-      const nav = $.atomNav({
-        target: $c,
-        selector: 'a[data-nav]',
-        syncTitle: true,
-      });
-
+      const nav = $.atomNav({ target: $c, selector: 'a[data-nav]', syncTitle: true });
       await nav.navigate('/target-page');
-
       nav.destroy();
-    }),
-    { ...microBenchOptions, iterations: 50 }
+    },
+    50
   );
 
-  bench(
+  run(
     'navigate E2E with before/mount hooks',
-    withContainer(async ($c) => {
+    async ($c) => {
       $c.attr('id', 'main-content');
       let _mountCalled = 0;
-
       const nav = $.atomNav({
         target: $c,
         selector: 'a[data-nav]',
-        onBeforeLoad: async () => {
-          return true;
-        },
+        onBeforeLoad: async () => true,
         onMount: () => {
           _mountCalled++;
         },
       });
-
       await nav.navigate('/target-page');
-
       nav.destroy();
-    }),
-    { ...microBenchOptions, iterations: 50 }
+    },
+    50
   );
-});
 
-// ============================================================================
-// 3. Click Interception
-// ============================================================================
+  run('intercept click event on a[data-nav] (100 times)', ($c) => {
+    $c.attr('id', 'main-content');
+    const nav = $.atomNav({ target: $c, selector: 'a[data-nav]' });
+    const frag = document.createDocumentFragment();
+    const anchors: HTMLAnchorElement[] = [];
 
-describe('Navigation: Anchor Click Interception', () => {
-  bench(
-    'intercept click event on a[data-nav] (100 times)',
-    withContainer(($c) => {
-      $c.attr('id', 'main-content');
+    for (let i = 0; i < 100; i++) {
+      const a = document.createElement('a');
+      a.setAttribute('href', `/page-${i}`);
+      a.setAttribute('data-nav', 'true');
+      frag.appendChild(a);
+      anchors.push(a);
+    }
+    $c[0]?.appendChild(frag);
 
-      const nav = $.atomNav({
-        target: $c,
-        selector: 'a[data-nav]',
-      });
-
-      const frag = document.createDocumentFragment();
-      const anchors: HTMLAnchorElement[] = [];
-      for (let i = 0; i < 100; i++) {
-        const a = document.createElement('a');
-        a.setAttribute('href', `/page-${i}`);
-        a.setAttribute('data-nav', 'true');
-        frag.appendChild(a);
-        anchors.push(a);
-      }
-      $c[0]?.appendChild(frag);
-
-      for (let i = 0; i < 100; i++) {
-        const event = new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-        });
-        anchors[i]?.dispatchEvent(event);
-      }
-
-      nav.destroy();
-    }),
-    microBenchOptions
-  );
+    for (let i = 0; i < 100; i++) {
+      anchors[i]?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, view: window })
+      );
+    }
+    nav.destroy();
+  });
 });

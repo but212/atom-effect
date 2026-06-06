@@ -45,8 +45,7 @@ describe('Patch: jQuery method overrides overhead', () => {
       name,
       withContainer(($c) => {
         initAEJ({ patch, autoCleanup: false });
-        const $el = $(html ? '<div></div>' : '<span></span>').appendTo($c);
-        run($el);
+        run($(html ? '<div></div>' : '<span></span>').appendTo($c));
       }),
       microBenchOptions
     );

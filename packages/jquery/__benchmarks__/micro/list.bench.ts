@@ -22,53 +22,36 @@ const makeItems = (count: number, offset = 0): ListItem[] =>
     text: `Item ${i + 1 + offset}`,
   }));
 
-// ============================================================================
-// 1. Initial List Rendering
-// ============================================================================
-
 describe('List Rendering: Initial Render (1000 items)', () => {
-  bench(
-    'jQuery: manual render 1000 items',
-    withContainer(($c) => {
-      const items = makeItems(1000);
-      let html = '';
-      for (let i = 0; i < 1000; i++) {
-        html += `<div class="item">${items[i]?.text}</div>`;
-      }
-      $c.html(html);
-    }),
-    microBenchOptions
-  );
+  const run = (name: string, fn: ($c: JQuery) => void) =>
+    bench(name, withContainer(fn), microBenchOptions);
 
-  bench(
-    'atom-effect: atomList render 1000 items',
-    withContainer(($c) => {
-      const items = $.atom<ListItem[]>(makeItems(1000));
-      $c.atomList(items, listOptions);
-    }),
-    microBenchOptions
-  );
+  run('jQuery: manual render 1000 items', ($c) => {
+    const items = makeItems(1000);
+    let html = '';
+    for (let i = 0; i < 1000; i++) {
+      html += `<div class="item">${items[i]?.text}</div>`;
+    }
+    $c.html(html);
+  });
 
-  bench(
-    'atom-effect: atomList render 1000 items (with bind callback)',
-    withContainer(($c) => {
-      const items = $.atom<ListItem[]>(makeItems(1000));
-      $c.atomList(items, {
-        key: 'id',
-        render: () => '<div class="item"><span class="label"></span></div>',
-        bind: ($el, item) => {
-          $el.find('.label').atomText($.atom(item.text));
-          $el.atomClass('even', $.atom(item.id % 2 === 0));
-        },
-      });
-    }),
-    microBenchOptions
-  );
+  run('atom-effect: atomList render 1000 items', ($c) => {
+    const items = $.atom<ListItem[]>(makeItems(1000));
+    $c.atomList(items, listOptions);
+  });
+
+  run('atom-effect: atomList render 1000 items (with bind callback)', ($c) => {
+    const items = $.atom<ListItem[]>(makeItems(1000));
+    $c.atomList(items, {
+      key: 'id',
+      render: () => '<div class="item"><span class="label"></span></div>',
+      bind: ($el, item) => {
+        $el.find('.label').atomText($.atom(item.text));
+        $el.atomClass('even', $.atom(item.id % 2 === 0));
+      },
+    });
+  });
 });
-
-// ============================================================================
-// 2. Reconciliation & Dynamic Mutation
-// ============================================================================
 
 describe('List Rendering: Reconciliation (Base 100 items)', () => {
   const base = makeItems(100);
