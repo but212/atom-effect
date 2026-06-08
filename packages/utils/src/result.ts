@@ -50,16 +50,42 @@ export type Err<E> = ResultBase &
  */
 export type Result<T, E = Error> = Ok<T> | Err<E>;
 
+// Optimization: Registry to track valid Result instances for secure runtime protocol verification.
+const RESULT_REGISTRY = new WeakSet<object>();
+
+// Logic: Registers an object in the Result registry and returns it.
+const register = <T extends object>(res: T): T => {
+  RESULT_REGISTRY.add(res);
+  return res;
+};
+
+/**
+ * Checks if a value is a valid {@link Result} instance.
+ *
+ * When to use:
+ * - To verify at runtime whether an unknown input conforms to the Result protocol.
+ *
+ * @param val - The value to check.
+ * @returns True if the value is a Result, false otherwise.
+ *
+ * @example
+ * const isRes = isResult(Result.ok(42)); // true
+ */
+export const isResult = (val: unknown): val is Result<unknown, unknown> =>
+  !!val && typeof val === 'object' && RESULT_REGISTRY.has(val);
+
 /**
  * Pre-allocated success result for void operations.
  * Optimization: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
  */
-const VOID_SUCCESS = Object.freeze({
-  ok: true,
-  value: undefined,
-  error: undefined,
-  [RESULT_SYMBOL]: true,
-} as const);
+const VOID_SUCCESS = register(
+  Object.freeze({
+    ok: true,
+    value: undefined,
+    error: undefined,
+    [RESULT_SYMBOL]: true,
+  } as const)
+);
 
 /**
  * Normalizes a caught value into an Error object.
@@ -99,9 +125,9 @@ export const Result = {
    * const res = Result.ok(42);
    */
   ok: <T, E = never>(value: T): Result<T, E> =>
-    (value === undefined
-      ? VOID_SUCCESS
-      : { ok: true, value, error: undefined, [RESULT_SYMBOL]: true }) as unknown as Result<T, E>,
+    value === undefined
+      ? (VOID_SUCCESS as unknown as Result<T, E>)
+      : register({ ok: true, value, error: undefined, [RESULT_SYMBOL]: true } as Ok<T>),
 
   /**
    * Creates a failed Result.
@@ -116,7 +142,7 @@ export const Result = {
    * const res = Result.err(new Error("failed"));
    */
   err: <T = never, E = Error>(error: E): Result<T, E> =>
-    ({ ok: false, value: undefined, error, [RESULT_SYMBOL]: true }) as unknown as Result<T, E>,
+    register({ ok: false, value: undefined, error, [RESULT_SYMBOL]: true } as Err<E>),
 
   /**
    * Type guard to check if a Result contains a value (Ok).
@@ -214,7 +240,7 @@ export const Result = {
    * @returns A new Result with the transformed value, or the original Err.
    */
   map: <T, E, U>(res: Result<T, E>, fn: (val: T) => U): Result<U, E> => {
-    if (!res.ok) return res as unknown as Result<U, E>;
+    if (!res.ok) return res;
     const next = fn(res.value);
     return Object.is(next, res.value) ? (res as unknown as Result<U, E>) : Result.ok(next);
   },
@@ -227,7 +253,7 @@ export const Result = {
    * @returns A new Result with the transformed error, or the original Ok.
    */
   mapErr: <T, E, F>(res: Result<T, E>, fn: (err: E) => F): Result<T, F> =>
-    res.ok ? (res as unknown as Result<T, F>) : Result.err(fn(res.error)),
+    res.ok ? res : Result.err(fn(res.error)),
 
   /**
    * Chains a function that returns another Result if Ok.
@@ -237,7 +263,7 @@ export const Result = {
    * @returns The Result returned by fn, or the original Err.
    */
   andThen: <T, E, U, F>(res: Result<T, E>, fn: (val: T) => Result<U, F>): Result<U, E | F> =>
-    res.ok ? fn(res.value) : (res as unknown as Result<U, E | F>),
+    res.ok ? fn(res.value) : res,
 
   /**
    * Wraps a synchronous function call that might throw.
@@ -289,4 +315,29 @@ export const Result = {
    * @returns Some wrapping the value if Ok, otherwise None.
    */
   toOption: <T, E>(res: Result<T, E>): Option<T> => (res.ok ? Option.some(res.value) : Option.none),
+
+  /**
+   * Checks for structural and value equality between two Results.
+   *
+   * @remarks
+   * Performs a strict equality check using `Object.is` for values or errors. Returns false
+   * if either input is not a valid Result instance.
+   *
+   * When to use:
+   * - To compare two Result states for equivalence.
+   *
+   * @param a - The first Result to compare.
+   * @param b - The second Result to compare.
+   * @returns True if both Results represent the same state and value/error.
+   *
+   * @example
+   * const equal = Result.equals(resA, resB);
+   */
+  equals: <T, E>(a: Result<T, E>, b: Result<T, E>): boolean => {
+    // Logic: Fast-paths identical references before performing checks.
+    if (!isResult(a) || !isResult(b)) return false;
+    if (a === b) return true;
+    if (a.ok !== b.ok) return false;
+    return a.ok ? Object.is(a.value, b.value) : Object.is(a.error, b.error);
+  },
 };
