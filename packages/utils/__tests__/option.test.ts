@@ -3,87 +3,155 @@ import { isOption, Option } from '@/index';
 import { OPTION_SYMBOL } from '../src/symbols';
 
 describe('Option<T>', () => {
+  // Shared fixtures: unregistered objects that mimic Option shape but are not valid instances.
+  const fakeSome = {
+    ok: true,
+    value: 42,
+    [OPTION_SYMBOL]: true,
+  } as unknown as Option<number>;
+
+  const fakeNone = {
+    ok: false,
+    value: undefined,
+  } as unknown as Option<never>;
+
   describe('Core Factories', () => {
-    it('some() wraps any present value', () => {
-      expect(Option.unwrap(Option.some(42))).toBe(42);
-      expect(Option.unwrap(Option.some(null))).toBe(null);
-      expect(Option.unwrap(Option.some(undefined))).toBe(undefined);
+    describe('some()', () => {
+      it('wraps any present value', () => {
+        expect(Option.unwrap(Option.some(42))).toBe(42);
+        expect(Option.unwrap(Option.some(null))).toBe(null);
+        expect(Option.unwrap(Option.some(undefined))).toBe(undefined);
+      });
     });
 
-    it('none represents absence', () => {
-      expect(Option.none.ok).toBe(false);
-      expect(Option.isNone(Option.none)).toBe(true);
-      expect(Option.map(Option.none, (x: unknown) => x)).toBe(Option.none);
-      expect(Option.filter(Option.none, () => true)).toBe(Option.none);
+    describe('none', () => {
+      it('represents absence', () => {
+        expect(Option.none.ok).toBe(false);
+        expect(Option.isNone(Option.none)).toBe(true);
+        expect(Option.map(Option.none, (x: unknown) => x)).toBe(Option.none);
+        expect(Option.filter(Option.none, () => true)).toBe(Option.none);
+      });
     });
 
-    it('fromNullable() normalizes nullish values to none', () => {
-      expect(Option.fromNullable(null)).toBe(Option.none);
-      expect(Option.fromNullable(undefined)).toBe(Option.none);
-      expect(Option.fromNullable(0).ok).toBe(true);
+    describe('fromNullable()', () => {
+      it('normalizes nullish values to none', () => {
+        expect(Option.fromNullable(null)).toBe(Option.none);
+        expect(Option.fromNullable(undefined)).toBe(Option.none);
+        expect(Option.fromNullable(0).ok).toBe(true);
+      });
     });
   });
 
   describe('Type Guards', () => {
-    it('isOption utility detects valid Option instances via symbol/registry', () => {
-      expect(isOption(Option.some(1))).toBe(true);
-      expect(isOption(Option.none)).toBe(true);
-      expect(isOption({ ok: true })).toBe(false);
+    describe('isOption()', () => {
+      it('detects valid Option instances via symbol/registry', () => {
+        expect(isOption(Option.some(1))).toBe(true);
+        expect(isOption(Option.none)).toBe(true);
+        expect(isOption({ ok: true })).toBe(false);
+      });
     });
 
-    it('isSome/isNone act as reliable compiler type guards', () => {
-      const opt: Option<number> = Option.some(42);
-      if (Option.isSome(opt)) {
-        const val: number = opt.value;
-        expect(val).toBe(42);
-      }
+    describe('isSome() / isNone()', () => {
+      it('act as reliable compiler type guards', () => {
+        const opt: Option<number> = Option.some(42);
+        if (Option.isSome(opt)) {
+          const val: number = opt.value;
+          expect(val).toBe(42);
+        }
+      });
     });
   });
 
   describe('Extraction & Fallbacks', () => {
-    it('unwrap() extracts the inner value or throws error', () => {
-      expect(Option.unwrap(Option.some(10))).toBe(10);
-      expect(() => Option.unwrap(Option.none)).toThrow('Option.unwrap() on None');
+    describe('unwrap()', () => {
+      it('extracts the inner value or throws error', () => {
+        expect(Option.unwrap(Option.some(10))).toBe(10);
+        expect(() => Option.unwrap(Option.none)).toThrow('Option.unwrap() on None');
+      });
     });
 
-    it('unwrapOr() provides fallback defaults', () => {
-      expect(Option.unwrapOr(Option.some(10), 20)).toBe(10);
-      expect(Option.unwrapOr(Option.none as Option<number>, 20)).toBe(20);
+    describe('expect()', () => {
+      it('extracts value or throws with custom message', () => {
+        expect(Option.expect(Option.some(42), 'error msg')).toBe(42);
+        expect(() => Option.expect(Option.none, 'error msg')).toThrow('error msg');
+      });
     });
 
-    it('unwrapOrElse() lazily computes default fallback when none', () => {
-      const fallback = vi.fn(() => 20);
-      expect(Option.unwrapOrElse(Option.some(10), fallback)).toBe(10);
-      expect(fallback).not.toHaveBeenCalled();
+    describe('unwrapOr()', () => {
+      it('provides fallback defaults', () => {
+        expect(Option.unwrapOr(Option.some(10), 20)).toBe(10);
+        expect(Option.unwrapOr(Option.none as Option<number>, 20)).toBe(20);
+      });
+    });
 
-      expect(Option.unwrapOrElse(Option.none as Option<number>, fallback)).toBe(20);
-      expect(fallback).toHaveBeenCalledTimes(1);
+    describe('unwrapOrElse()', () => {
+      it('lazily computes default fallback when none', () => {
+        const fallback = vi.fn(() => 20);
+        expect(Option.unwrapOrElse(Option.some(10), fallback)).toBe(10);
+        expect(fallback).not.toHaveBeenCalled();
 
-      expect(Option.unwrapOrElse(Option.none, () => 'default')).toBe('default');
+        expect(Option.unwrapOrElse(Option.none as Option<number>, fallback)).toBe(20);
+        expect(fallback).toHaveBeenCalledTimes(1);
+
+        expect(Option.unwrapOrElse(Option.none, () => 'default')).toBe('default');
+      });
     });
   });
 
   describe('Functional Transformations', () => {
-    it('map() transforms the wrapped value', () => {
-      expect(Option.unwrap(Option.map(Option.some(3), (n: number) => n * n))).toBe(9);
-      expect(Option.map(Option.none, (n: number) => n * n)).toBe(Option.none);
+    describe('map()', () => {
+      it('transforms the wrapped value', () => {
+        expect(Option.unwrap(Option.map(Option.some(3), (n: number) => n * n))).toBe(9);
+        expect(Option.map(Option.none, (n: number) => n * n)).toBe(Option.none);
+      });
+
+      it('preserves the same instance when mapping NaN to NaN', () => {
+        const opt = Option.some(NaN);
+        const mapped = Option.map(opt, (x) => x);
+        expect(mapped).toBe(opt);
+      });
+
+      it('should return a new Option instance when mapping a mutable object, even if the returned reference is identical', () => {
+        const originalObj = { count: 1 };
+        const opt = Option.some(originalObj);
+
+        const mapped = Option.map(opt, (obj) => {
+          obj.count = 2; // Mutate in-place
+          return obj;
+        });
+
+        expect(mapped).not.toBe(opt);
+        expect(Option.unwrap(mapped).count).toBe(2);
+      });
+
+      it('should reuse the Option instance when mapping a frozen object if the returned reference is identical', () => {
+        const frozenObj = Object.freeze({ count: 1 });
+        const opt = Option.some(frozenObj);
+
+        const mapped = Option.map(opt, (obj) => obj);
+
+        expect(mapped).toBe(opt);
+      });
     });
 
-    it('map() preserves the same instance when mapping NaN to NaN', () => {
-      const opt = Option.some(NaN);
-      const mapped = Option.map(opt, (x) => x);
-      expect(mapped).toBe(opt);
+    describe('andThen()', () => {
+      it('chains computations returning Options', () => {
+        const getLength = (s: string) => Option.some(s.length);
+        expect(Option.unwrap(Option.andThen(Option.some('hello'), getLength))).toBe(5);
+        expect(Option.andThen(Option.none, (s: string) => Option.some(s))).toBe(Option.none);
+      });
+
+      it('should throw an error if the mapper returns an invalid Option', () => {
+        const opt = Option.some(42);
+        expect(() => Option.andThen(opt, () => fakeSome)).toThrow();
+      });
     });
 
-    it('andThen() chains computations returning Options', () => {
-      const getLength = (s: string) => Option.some(s.length);
-      expect(Option.unwrap(Option.andThen(Option.some('hello'), getLength))).toBe(5);
-      expect(Option.andThen(Option.none, (s: string) => Option.some(s))).toBe(Option.none);
-    });
-
-    it('filter() drops values not matching the predicate', () => {
-      expect(Option.isSome(Option.filter(Option.some(10), (n) => n > 0))).toBe(true);
-      expect(Option.isNone(Option.filter(Option.some(-5), (n) => n > 0))).toBe(true);
+    describe('filter()', () => {
+      it('drops values not matching the predicate', () => {
+        expect(Option.isSome(Option.filter(Option.some(10), (n) => n > 0))).toBe(true);
+        expect(Option.isNone(Option.filter(Option.some(-5), (n) => n > 0))).toBe(true);
+      });
     });
   });
 
@@ -105,28 +173,32 @@ describe('Option<T>', () => {
   });
 
   describe('Equality & Comparison', () => {
-    it('equals() performs structural and value checks', () => {
-      expect(Option.equals(Option.some(42), Option.some(42))).toBe(true);
-      expect(Option.equals(Option.some(42), Option.some(43))).toBe(false);
-      expect(Option.equals(Option.some(42), Option.none)).toBe(false);
-      expect(Option.equals(Option.none, Option.none)).toBe(true);
-    });
+    describe('equals()', () => {
+      it('performs structural and value checks', () => {
+        expect(Option.equals(Option.some(42), Option.some(42))).toBe(true);
+        expect(Option.equals(Option.some(42), Option.some(43))).toBe(false);
+        expect(Option.equals(Option.some(42), Option.none)).toBe(false);
+        expect(Option.equals(Option.none, Option.none)).toBe(true);
+      });
 
-    it('equals() returns true for two Some(NaN) options', () => {
-      expect(Option.equals(Option.some(NaN), Option.some(NaN))).toBe(true);
-    });
+      it('returns true for two Some(NaN) options', () => {
+        expect(Option.equals(Option.some(NaN), Option.some(NaN))).toBe(true);
+      });
 
-    it('equals() returns false for Some(-0) and Some(+0)', () => {
-      expect(Option.equals(Option.some(-0), Option.some(+0))).toBe(false);
-    });
+      it('returns false for Some(-0) and Some(+0)', () => {
+        expect(Option.equals(Option.some(-0), Option.some(+0))).toBe(false);
+      });
 
-    it('equals() rejects shape-alike non-Option objects', () => {
-      expect(
-        Option.equals(Option.some(42), { ok: true, value: 42 } as unknown as Option<number>)
-      ).toBe(false);
-      expect(
-        Option.equals(Option.none, { ok: false, value: undefined } as unknown as Option<never>)
-      ).toBe(false);
+      it('throws an error if either argument is not a valid Option', () => {
+        const opt = Option.some(42);
+        const nonOpt = { ok: true, value: 42 };
+
+        expect(() => Option.equals(opt, fakeSome)).toThrow('Invalid Option instance');
+        expect(() => Option.equals(fakeSome, opt)).toThrow('Invalid Option instance');
+        expect(() =>
+          Option.equals(nonOpt as unknown as Option<unknown>, nonOpt as unknown as Option<unknown>)
+        ).toThrow('Invalid Option instance');
+      });
     });
   });
 
@@ -159,26 +231,58 @@ describe('Option<T>', () => {
 
   describe('Edge Cases & Security Guards', () => {
     it('fromNullable() treats NaN as None', () => {
-      // Why: NaN represents mathematically invalid state, normalized as absent.
       expect(Option.fromNullable(NaN)).toBe(Option.none);
     });
 
     it('isOption rejects fake Option literals created externally', () => {
-      // Security: Prevents mock objects bypassing structural matching registry guards.
-      const fakeOption = {
-        ok: true,
-        value: 42,
-        [OPTION_SYMBOL]: true,
-      };
-      expect(isOption(fakeOption)).toBe(false);
+      expect(isOption(fakeSome)).toBe(false);
+    });
+  });
+
+  describe('Runtime Protocol Enforcement (assertOption)', () => {
+    it('map() rejects invalid input', () => {
+      expect(() => Option.map(fakeSome, (x) => x)).toThrow('Invalid Option instance');
+      expect(() => Option.map(fakeNone, (x) => x)).toThrow('Invalid Option instance');
     });
 
-    it('equals() evaluates to false for identical non-Option objects', () => {
-      // Logic: Non-Option objects must not trigger early return as equal Option states.
-      const nonOpt = { ok: true, value: 42 };
-      expect(
-        Option.equals(nonOpt as unknown as Option<unknown>, nonOpt as unknown as Option<unknown>)
-      ).toBe(false);
+    it('andThen() rejects invalid input', () => {
+      expect(() => Option.andThen(fakeSome, (x) => Option.some(x))).toThrow(
+        'Invalid Option instance'
+      );
+    });
+
+    it('filter() rejects invalid input', () => {
+      expect(() => Option.filter(fakeSome, () => true)).toThrow('Invalid Option instance');
+    });
+
+    it('unwrap() rejects invalid input', () => {
+      expect(() => Option.unwrap(fakeSome)).toThrow('Invalid Option instance');
+    });
+
+    it('expect() rejects invalid input', () => {
+      expect(() => Option.expect(fakeSome, 'msg')).toThrow('Invalid Option instance');
+    });
+
+    it('unwrapOr() rejects invalid input', () => {
+      expect(() => Option.unwrapOr(fakeSome, 0)).toThrow('Invalid Option instance');
+    });
+
+    it('unwrapOrElse() rejects invalid input', () => {
+      expect(() => Option.unwrapOrElse(fakeSome, () => 0)).toThrow('Invalid Option instance');
+    });
+
+    it('match() rejects invalid input', () => {
+      expect(() => Option.match(fakeSome, { some: (v) => v, none: () => 0 })).toThrow(
+        'Invalid Option instance'
+      );
+    });
+
+    it('toNullable() rejects invalid input', () => {
+      expect(() => Option.toNullable(fakeSome)).toThrow('Invalid Option instance');
+    });
+
+    it('toUndefined() rejects invalid input', () => {
+      expect(() => Option.toUndefined(fakeSome)).toThrow('Invalid Option instance');
     });
   });
 });

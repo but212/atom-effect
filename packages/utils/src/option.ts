@@ -46,13 +46,19 @@ export type None = Prettify<{
 export type Option<T> = Some<T> | None;
 
 // Optimization: Registry to track valid Option instances for secure runtime protocol verification.
-const OPTION_REGISTRY = new WeakSet<object>();
+const optionRegistry = new WeakSet<object>();
 
 // Logic: Registers an object in the Option registry and returns it.
-const register = <T extends object>(opt: T): T => {
-  OPTION_REGISTRY.add(opt);
-  return opt;
+const registerOption = <T extends object>(option: T): T => {
+  optionRegistry.add(option);
+  return option;
 };
+
+// Logic: Checks if a value is immutable (either a primitive value or a frozen object).
+const isImmutable = (value: unknown): boolean =>
+  value === null ||
+  (typeof value !== 'object' && typeof value !== 'function') ||
+  Object.isFrozen(value);
 
 /**
  * Checks if a value is a valid {@link Option} instance.
@@ -60,14 +66,29 @@ const register = <T extends object>(opt: T): T => {
  * When to use:
  * - To verify at runtime whether an unknown input conforms to the Option protocol.
  *
- * @param val - The value to check.
+ * @param value - The value to check.
  * @returns True if the value is an Option, false otherwise.
  *
  * @example
  * const isOpt = isOption(Option.some(42)); // true
  */
-export const isOption = (val: unknown): val is Option<unknown> =>
-  !!val && typeof val === 'object' && OPTION_REGISTRY.has(val);
+export const isOption = (value: unknown): value is Option<unknown> =>
+  !!value && typeof value === 'object' && optionRegistry.has(value);
+
+/**
+ * Asserts that a value is a valid {@link Option} instance, throwing an error if not.
+ * @param value - The value to assert.
+ * @throws {Error} If the value is not a valid Option instance.
+ *
+ * @example
+ * assertOption(Option.some(42)); // No error
+ * assertOption({}); // Throws "Invalid Option instance"
+ */
+function assertOption(value: unknown): asserts value is Option<unknown> {
+  if (!isOption(value)) {
+    throw new Error('Invalid Option instance');
+  }
+}
 
 /**
  * Utilities for creating, transforming, and querying {@link Option} instances.
@@ -85,7 +106,7 @@ export const Option = {
    * @example
    * const opt = Option.some(42);
    */
-  some: <T>(value: T): Some<T> => register({ ok: true, value, [OPTION_SYMBOL]: true }),
+  some: <T>(value: T): Some<T> => registerOption({ ok: true, value, [OPTION_SYMBOL]: true }),
 
   /**
    * An Option instance representing the absence of a value.
@@ -97,7 +118,7 @@ export const Option = {
    * const opt = Option.none;
    */
   // Optimization: Freezes the None object to enforce immutability and allow safe sharing.
-  none: register(
+  none: registerOption(
     Object.freeze({
       ok: false,
       value: undefined,
@@ -111,7 +132,7 @@ export const Option = {
    * When to use:
    * - As a type guard to narrow the type to Some.
    *
-   * @param opt - The Option to check.
+   * @param option - The Option to check.
    * @returns True if the Option is Some.
    *
    * @example
@@ -119,7 +140,7 @@ export const Option = {
    *   console.log(opt.value);
    * }
    */
-  isSome: <T>(opt: Option<T>): opt is Some<T> => opt.ok,
+  isSome: <T>(option: Option<T>): option is Some<T> => option.ok,
 
   /**
    * Checks if an Option is empty.
@@ -127,7 +148,7 @@ export const Option = {
    * When to use:
    * - As a type guard to narrow the type to None.
    *
-   * @param opt - The Option to check.
+   * @param option - The Option to check.
    * @returns True if the Option is None.
    *
    * @example
@@ -135,7 +156,7 @@ export const Option = {
    *   console.log("Empty");
    * }
    */
-  isNone: <T>(opt: Option<T>): opt is None => !opt.ok,
+  isNone: <T>(option: Option<T>): option is None => !option.ok,
 
   /**
    * Returns the value of a Some, or throws a defined error if it is None.
@@ -143,7 +164,7 @@ export const Option = {
    * When to use:
    * - When a value must be present, raising an error otherwise.
    *
-   * @param opt - The Option to extract the value from.
+   * @param option - The Option to extract the value from.
    * @param message - The error message to throw.
    * @returns The inner value of Some.
    * @throws {Error} If the Option is None.
@@ -151,8 +172,9 @@ export const Option = {
    * @example
    * const val = Option.expect(opt, "Value must be present");
    */
-  expect: <T>(opt: Option<T>, message: string): T => {
-    if (opt.ok) return opt.value;
+  expect: <T>(option: Option<T>, message: string): T => {
+    assertOption(option);
+    if (option.ok) return option.value;
     throw new Error(message);
   },
 
@@ -162,14 +184,14 @@ export const Option = {
    * When to use:
    * - For assertion-style extraction when failure indicates a logic bug.
    *
-   * @param opt - The Option to extract the value from.
+   * @param option - The Option to extract the value from.
    * @returns The inner value of Some.
    * @throws {Error} If the Option is None.
    *
    * @example
    * const val = Option.unwrap(opt);
    */
-  unwrap: <T>(opt: Option<T>): T => Option.expect(opt, 'Option.unwrap() on None'),
+  unwrap: <T>(option: Option<T>): T => Option.expect(option, 'Option.unwrap() on None'),
 
   /**
    * Returns the inner value if present, otherwise returns a fallback value.
@@ -177,14 +199,17 @@ export const Option = {
    * When to use:
    * - To retrieve the value with a static fallback.
    *
-   * @param opt - The Option to extract the value from.
+   * @param option - The Option to extract the value from.
    * @param fallback - The default value to use if None.
    * @returns The inner value of Some, or the fallback.
    *
    * @example
    * const val = Option.unwrapOr(opt, 0);
    */
-  unwrapOr: <T, U>(opt: Option<T>, fallback: U): T | U => (opt.ok ? opt.value : fallback),
+  unwrapOr: <T, U>(option: Option<T>, fallback: U): T | U => {
+    assertOption(option);
+    return option.ok ? option.value : fallback;
+  },
 
   /**
    * Returns the inner value if present, otherwise computes a fallback value.
@@ -195,14 +220,17 @@ export const Option = {
    * When to use:
    * - To retrieve the value with a lazily computed fallback.
    *
-   * @param opt - The Option to extract the value from.
-   * @param fn - A function that computes the fallback value.
+   * @param option - The Option to extract the value from.
+   * @param fallbackProvider - A function that computes the fallback value.
    * @returns The inner value of Some, or the computed fallback.
    *
    * @example
    * const val = Option.unwrapOrElse(opt, () => computeDefault());
    */
-  unwrapOrElse: <T, U>(opt: Option<T>, fn: () => U): T | U => (opt.ok ? opt.value : fn()),
+  unwrapOrElse: <T, U>(option: Option<T>, fallbackProvider: () => U): T | U => {
+    assertOption(option);
+    return option.ok ? option.value : fallbackProvider();
+  },
 
   /**
    * Transforms the inner value using the provided function if present.
@@ -214,18 +242,22 @@ export const Option = {
    * When to use:
    * - To perform operations on the value without verifying presence first.
    *
-   * @param opt - The Option to map.
-   * @param fn - The function to apply to the inner value.
+   * @param option - The Option to map.
+   * @param mapper - The function to apply to the inner value.
    * @returns A new Option containing the transformed value, or None.
    *
    * @example
    * const opt2 = Option.map(opt1, x => x * 2);
    */
-  map: <T, U>(opt: Option<T>, fn: (val: T) => U): Option<U> => {
-    if (!opt.ok) return opt;
-    const next = fn(opt.value);
-    // Optimization: Reuses the original Option instance if the value remains unchanged.
-    return Object.is(next, opt.value) ? (opt as unknown as Option<U>) : Option.some(next);
+  map: <T, U>(option: Option<T>, mapper: (value: T) => U): Option<U> => {
+    assertOption(option);
+    if (!option.ok) return option;
+
+    const mappedValue = mapper(option.value);
+    const canReuse = Object.is(mappedValue, option.value) && isImmutable(mappedValue);
+
+    // Optimization: Reuses the original Option instance if the value remains unchanged, is immutable, and the input is valid.
+    return canReuse ? (option as unknown as Option<U>) : Option.some(mappedValue);
   },
 
   /**
@@ -234,15 +266,20 @@ export const Option = {
    * When to use:
    * - To compose multiple operations that may each return an Option.
    *
-   * @param opt - The Option to chain.
-   * @param fn - The function returning an Option.
+   * @param option - The Option to chain.
+   * @param mapper - The function returning an Option.
    * @returns The resulting Option from the function, or None.
    *
    * @example
    * const opt2 = Option.andThen(opt1, x => findUser(x));
    */
-  andThen: <T, U>(opt: Option<T>, fn: (val: T) => Option<U>): Option<U> =>
-    opt.ok ? fn(opt.value) : opt,
+  andThen: <T, U>(option: Option<T>, mapper: (value: T) => Option<U>): Option<U> => {
+    assertOption(option);
+    if (!option.ok) return option;
+    const mapped = mapper(option.value);
+    assertOption(mapped);
+    return mapped;
+  },
 
   /**
    * Creates an Option from a value that may be null or undefined.
@@ -265,7 +302,7 @@ export const Option = {
    * When to use:
    * - To perform conditional logic for both cases of an Option.
    *
-   * @param opt - The Option to match.
+   * @param option - The Option to match.
    * @param branches - The handlers for Some and None.
    * @returns The value returned by the executed branch.
    *
@@ -275,8 +312,10 @@ export const Option = {
    *   none: () => 'Guest'
    * });
    */
-  match: <T, R>(opt: Option<T>, branches: { some: (val: T) => R; none: () => R }): R =>
-    opt.ok ? branches.some(opt.value) : branches.none(),
+  match: <T, R>(option: Option<T>, branches: { some: (value: T) => R; none: () => R }): R => {
+    assertOption(option);
+    return option.ok ? branches.some(option.value) : branches.none();
+  },
 
   /**
    * Returns None if the inner value does not satisfy the predicate.
@@ -284,39 +323,44 @@ export const Option = {
    * When to use:
    * - To filter a wrapped value based on a condition.
    *
-   * @param opt - The Option to filter.
+   * @param option - The Option to filter.
    * @param predicate - The condition to test the value against.
    * @returns The Option if the predicate is met, otherwise None.
    *
    * @example
    * const positiveOpt = Option.filter(opt, x => x > 0);
    */
-  filter: <T>(opt: Option<T>, predicate: (val: T) => boolean): Option<T> =>
-    opt.ok && predicate(opt.value) ? opt : Option.none,
+  filter: <T>(option: Option<T>, predicate: (value: T) => boolean): Option<T> => {
+    assertOption(option);
+    return option.ok && predicate(option.value) ? option : Option.none;
+  },
 
   /**
    * Checks for structural and value equality between two Options.
    *
    * @remarks
-   * Performs a strict equality check using `Object.is` for Some values. Returns false
-   * if either input is not a valid Option instance.
+   * Performs a strict equality check using `Object.is` for Some values. Throws
+   * an error if either input is not a valid Option instance.
    *
    * When to use:
    * - To compare two Option states for equivalence.
    *
-   * @param a - The first Option to compare.
-   * @param b - The second Option to compare.
+   * @param optionA - The first Option to compare.
+   * @param optionB - The second Option to compare.
    * @returns True if both Options represent the same state and value.
    *
    * @example
    * const equal = Option.equals(optA, optB);
    */
-  equals: <T>(a: Option<T>, b: Option<T>): boolean => {
+  equals: <T>(optionA: Option<T>, optionB: Option<T>): boolean => {
+    assertOption(optionA);
+    assertOption(optionB);
     // Logic: Fast-paths identical references before performing checks.
-    if (!isOption(a) || !isOption(b)) return false;
-    if (a === b) return true;
+    if (optionA === optionB) return true;
     // Logic: Narrows the types of both options to Some before accessing their values.
-    return a.ok && b.ok ? Object.is(a.value, b.value) : a.ok === b.ok;
+    return optionA.ok && optionB.ok
+      ? Object.is(optionA.value, optionB.value)
+      : optionA.ok === optionB.ok;
   },
 
   /**
@@ -325,13 +369,16 @@ export const Option = {
    * When to use:
    * - When interacting with legacy APIs that expect null.
    *
-   * @param opt - The Option to convert.
+   * @param option - The Option to convert.
    * @returns The inner value of Some, or null.
    *
    * @example
    * const val = Option.toNullable(opt);
    */
-  toNullable: <T>(opt: Option<T>): T | null => (opt.ok ? opt.value : null),
+  toNullable: <T>(option: Option<T>): T | null => {
+    assertOption(option);
+    return option.ok ? option.value : null;
+  },
 
   /**
    * Converts an Option to an undefined representation.
@@ -339,11 +386,14 @@ export const Option = {
    * When to use:
    * - When interacting with legacy APIs that expect undefined.
    *
-   * @param opt - The Option to convert.
+   * @param option - The Option to convert.
    * @returns The inner value of Some, or undefined.
    *
    * @example
    * const val = Option.toUndefined(opt);
    */
-  toUndefined: <T>(opt: Option<T>): T | undefined => (opt.ok ? opt.value : undefined),
+  toUndefined: <T>(option: Option<T>): T | undefined => {
+    assertOption(option);
+    return option.ok ? option.value : undefined;
+  },
 };
