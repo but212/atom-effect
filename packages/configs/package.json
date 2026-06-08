@@ -16,18 +16,21 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json --external unplugin-dts --external @vue/language-core",
-    "dev": "pnpm run build --watch"
+    "dev": "pnpm run build --watch",
+    "clean": "rimraf dist",
+    "clean:deps": "rimraf node_modules"
   },
   "peerDependencies": {
-    "tsup": "^8.5.1",
-    "unplugin-dts": "^1.0.0",
-    "vite": "^8.0.0",
-    "vitest": "^4.0.0"
-  },
-  "devDependencies": {
     "tsup": "^8.5.1",
     "unplugin-dts": "^1.0.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
+  },
+  "devDependencies": {
+    "rimraf": "catalog:",
+    "tsup": "catalog:",
+    "unplugin-dts": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

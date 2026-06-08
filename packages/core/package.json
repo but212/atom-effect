@@ -17,6 +17,7 @@
     "build:lib": "cross-env BUILD_TARGET=lib vite build",
     "build:bundle": "cross-env BUILD_TARGET=bundle vite build",
     "clean": "rimraf dist",
+    "clean:deps": "rimraf node_modules",
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest __tests__/unit",
@@ -66,14 +67,17 @@
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
-    "@types/node": "^25.9.1",
-    "@vitest/browser": "^4.1.8",
-    "@vitest/browser-playwright": "^4.1.8",
-    "@vitest/coverage-v8": "^4.1.8",
-    "@vitest/ui": "^4.1.8",
-    "playwright": "^1.60.0",
-    "tinybench": "^6.0.2",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "rimraf": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "typescript": "catalog:",
+    "cross-env": "catalog:",
+    "tinybench": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/browser": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "playwright": "catalog:"
   }
 }
