@@ -66,7 +66,7 @@
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
-    "@types/node": "^25.9.1",
+    "@types/node": "^25.9.2",
     "@vitest/browser": "^4.1.8",
     "@vitest/browser-playwright": "^4.1.8",
     "@vitest/coverage-v8": "^4.1.8",
