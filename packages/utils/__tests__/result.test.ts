@@ -81,7 +81,7 @@ describe('Result<T, E>', () => {
     it('expect() returns value or throws custom error message', () => {
       expect(Result.expect(Result.ok(42), 'msg')).toBe(42);
       expect(() => Result.expect(Result.err('fail'), 'Custom error message')).toThrow(
-        'Custom error message',
+        'Custom error message'
       );
     });
 
@@ -276,9 +276,9 @@ describe('Result<T, E>', () => {
         error: undefined,
         [RESULT_SYMBOL]: true,
       };
-      expect(
-        Result.equals(Result.ok(42), spoofed as unknown as Result<unknown, unknown>),
-      ).toBe(false);
+      expect(Result.equals(Result.ok(42), spoofed as unknown as Result<unknown, unknown>)).toBe(
+        false
+      );
     });
   });
 
@@ -290,14 +290,14 @@ describe('Result<T, E>', () => {
       expect(
         Result.equals(
           Result.map(Result.ok(42), (x: number) => x),
-          Result.ok(42),
-        ),
+          Result.ok(42)
+        )
       ).toBe(true);
       expect(
         Result.equals(
           Result.map(Result.err('fail'), (x: unknown) => x),
-          Result.err('fail'),
-        ),
+          Result.err('fail')
+        )
       ).toBe(true);
     });
 
@@ -347,8 +347,8 @@ describe('Result<T, E>', () => {
       expect(
         Result.equals(
           nonRes as unknown as Result<unknown, unknown>,
-          nonRes as unknown as Result<unknown, unknown>,
-        ),
+          nonRes as unknown as Result<unknown, unknown>
+        )
       ).toBe(false);
     });
   });
