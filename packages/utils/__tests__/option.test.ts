@@ -10,11 +10,6 @@ describe('Option<T>', () => {
     [OPTION_SYMBOL]: true,
   } as unknown as Option<number>;
 
-  const fakeNone = {
-    ok: false,
-    value: undefined,
-  } as unknown as Option<never>;
-
   describe('Core Factories', () => {
     describe('some()', () => {
       it('wraps any present value', () => {
@@ -240,49 +235,20 @@ describe('Option<T>', () => {
   });
 
   describe('Runtime Protocol Enforcement (assertOption)', () => {
-    it('map() rejects invalid input', () => {
-      expect(() => Option.map(fakeSome, (x) => x)).toThrow('Invalid Option instance');
-      expect(() => Option.map(fakeNone, (x) => x)).toThrow('Invalid Option instance');
+    it('andThen() rejects invalid mapper result', () => {
+      const opt = Option.some(42);
+      expect(() => Option.andThen(opt, () => fakeSome)).toThrow();
     });
 
-    it('andThen() rejects invalid input', () => {
-      expect(() => Option.andThen(fakeSome, (x) => Option.some(x))).toThrow(
-        'Invalid Option instance'
-      );
-    });
+    it('equals() rejects invalid input', () => {
+      const opt = Option.some(42);
+      const nonOpt = { ok: true, value: 42 };
 
-    it('filter() rejects invalid input', () => {
-      expect(() => Option.filter(fakeSome, () => true)).toThrow('Invalid Option instance');
-    });
-
-    it('unwrap() rejects invalid input', () => {
-      expect(() => Option.unwrap(fakeSome)).toThrow('Invalid Option instance');
-    });
-
-    it('expect() rejects invalid input', () => {
-      expect(() => Option.expect(fakeSome, 'msg')).toThrow('Invalid Option instance');
-    });
-
-    it('unwrapOr() rejects invalid input', () => {
-      expect(() => Option.unwrapOr(fakeSome, 0)).toThrow('Invalid Option instance');
-    });
-
-    it('unwrapOrElse() rejects invalid input', () => {
-      expect(() => Option.unwrapOrElse(fakeSome, () => 0)).toThrow('Invalid Option instance');
-    });
-
-    it('match() rejects invalid input', () => {
-      expect(() => Option.match(fakeSome, { some: (v) => v, none: () => 0 })).toThrow(
-        'Invalid Option instance'
-      );
-    });
-
-    it('toNullable() rejects invalid input', () => {
-      expect(() => Option.toNullable(fakeSome)).toThrow('Invalid Option instance');
-    });
-
-    it('toUndefined() rejects invalid input', () => {
-      expect(() => Option.toUndefined(fakeSome)).toThrow('Invalid Option instance');
+      expect(() => Option.equals(opt, fakeSome)).toThrow('Invalid Option instance');
+      expect(() => Option.equals(fakeSome, opt)).toThrow('Invalid Option instance');
+      expect(() =>
+        Option.equals(nonOpt as unknown as Option<unknown>, nonOpt as unknown as Option<unknown>)
+      ).toThrow('Invalid Option instance');
     });
   });
 });

@@ -54,12 +54,6 @@ const registerOption = <T extends object>(option: T): T => {
   return option;
 };
 
-// Logic: Checks if a value is immutable (either a primitive value or a frozen object).
-const isImmutable = (value: unknown): boolean =>
-  value === null ||
-  (typeof value !== 'object' && typeof value !== 'function') ||
-  Object.isFrozen(value);
-
 /**
  * Checks if a value is a valid {@link Option} instance.
  *
@@ -75,15 +69,7 @@ const isImmutable = (value: unknown): boolean =>
 export const isOption = (value: unknown): value is Option<unknown> =>
   !!value && typeof value === 'object' && optionRegistry.has(value);
 
-/**
- * Asserts that a value is a valid {@link Option} instance, throwing an error if not.
- * @param value - The value to assert.
- * @throws {Error} If the value is not a valid Option instance.
- *
- * @example
- * assertOption(Option.some(42)); // No error
- * assertOption({}); // Throws "Invalid Option instance"
- */
+// Logic: Asserts that a value is a valid Option instance. Used only at trust boundaries.
 function assertOption(value: unknown): asserts value is Option<unknown> {
   if (!isOption(value)) {
     throw new Error('Invalid Option instance');
@@ -173,7 +159,6 @@ export const Option = {
    * const val = Option.expect(opt, "Value must be present");
    */
   expect: <T>(option: Option<T>, message: string): T => {
-    assertOption(option);
     if (option.ok) return option.value;
     throw new Error(message);
   },
@@ -206,10 +191,8 @@ export const Option = {
    * @example
    * const val = Option.unwrapOr(opt, 0);
    */
-  unwrapOr: <T, U>(option: Option<T>, fallback: U): T | U => {
-    assertOption(option);
-    return option.ok ? option.value : fallback;
-  },
+  unwrapOr: <T, U>(option: Option<T>, fallback: U): T | U =>
+    option.ok ? option.value : fallback,
 
   /**
    * Returns the inner value if present, otherwise computes a fallback value.
@@ -227,10 +210,8 @@ export const Option = {
    * @example
    * const val = Option.unwrapOrElse(opt, () => computeDefault());
    */
-  unwrapOrElse: <T, U>(option: Option<T>, fallbackProvider: () => U): T | U => {
-    assertOption(option);
-    return option.ok ? option.value : fallbackProvider();
-  },
+  unwrapOrElse: <T, U>(option: Option<T>, fallbackProvider: () => U): T | U =>
+    option.ok ? option.value : fallbackProvider(),
 
   /**
    * Transforms the inner value using the provided function if present.
@@ -250,14 +231,14 @@ export const Option = {
    * const opt2 = Option.map(opt1, x => x * 2);
    */
   map: <T, U>(option: Option<T>, mapper: (value: T) => U): Option<U> => {
-    assertOption(option);
     if (!option.ok) return option;
 
     const mappedValue = mapper(option.value);
-    const canReuse = Object.is(mappedValue, option.value) && isImmutable(mappedValue);
 
-    // Optimization: Reuses the original Option instance if the value remains unchanged, is immutable, and the input is valid.
-    return canReuse ? (option as unknown as Option<U>) : Option.some(mappedValue);
+    // Optimization: Reuses the original Option instance if the value is unchanged and immutable.
+    return Object.is(mappedValue, option.value) && Object.isFrozen(mappedValue)
+      ? (option as unknown as Option<U>)
+      : Option.some(mappedValue);
   },
 
   /**
@@ -274,7 +255,6 @@ export const Option = {
    * const opt2 = Option.andThen(opt1, x => findUser(x));
    */
   andThen: <T, U>(option: Option<T>, mapper: (value: T) => Option<U>): Option<U> => {
-    assertOption(option);
     if (!option.ok) return option;
     const mapped = mapper(option.value);
     assertOption(mapped);
@@ -312,10 +292,8 @@ export const Option = {
    *   none: () => 'Guest'
    * });
    */
-  match: <T, R>(option: Option<T>, branches: { some: (value: T) => R; none: () => R }): R => {
-    assertOption(option);
-    return option.ok ? branches.some(option.value) : branches.none();
-  },
+  match: <T, R>(option: Option<T>, branches: { some: (value: T) => R; none: () => R }): R =>
+    option.ok ? branches.some(option.value) : branches.none(),
 
   /**
    * Returns None if the inner value does not satisfy the predicate.
@@ -330,10 +308,8 @@ export const Option = {
    * @example
    * const positiveOpt = Option.filter(opt, x => x > 0);
    */
-  filter: <T>(option: Option<T>, predicate: (value: T) => boolean): Option<T> => {
-    assertOption(option);
-    return option.ok && predicate(option.value) ? option : Option.none;
-  },
+  filter: <T>(option: Option<T>, predicate: (value: T) => boolean): Option<T> =>
+    option.ok && predicate(option.value) ? option : Option.none,
 
   /**
    * Checks for structural and value equality between two Options.
@@ -375,10 +351,8 @@ export const Option = {
    * @example
    * const val = Option.toNullable(opt);
    */
-  toNullable: <T>(option: Option<T>): T | null => {
-    assertOption(option);
-    return option.ok ? option.value : null;
-  },
+  toNullable: <T>(option: Option<T>): T | null =>
+    option.ok ? option.value : null,
 
   /**
    * Converts an Option to an undefined representation.
@@ -392,8 +366,6 @@ export const Option = {
    * @example
    * const val = Option.toUndefined(opt);
    */
-  toUndefined: <T>(option: Option<T>): T | undefined => {
-    assertOption(option);
-    return option.ok ? option.value : undefined;
-  },
+  toUndefined: <T>(option: Option<T>): T | undefined =>
+    option.ok ? option.value : undefined,
 };
