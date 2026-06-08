@@ -8,3 +8,28 @@ overrides:
 
 allowBuilds:
   esbuild: true
+
+catalog:
+  # Bundlers & Compilers
+  vite: ^8.0.16
+  tsup: ^8.5.1
+  typescript: ^6.0.3
+  unplugin-dts: ^1.0.2
+  cross-env: ^10.1.0
+
+  # Linting & Formatting
+  "@biomejs/biome": ^2.4.16
+
+  # Testing & Benchmarking
+  vitest: ^4.1.8
+  "@vitest/browser": ^4.1.8
+  "@vitest/browser-playwright": ^4.1.8
+  "@vitest/coverage-v8": ^4.1.8
+  "@vitest/ui": ^4.1.8
+  playwright: ^1.60.0
+  tinybench: ^6.0.2
+
+  # Utilities & Types
+  rimraf: ^6.1.3
+  "@types/node": ^25.9.2
+
