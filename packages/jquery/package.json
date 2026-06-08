@@ -68,6 +68,7 @@
     "@but212/atom-effect-utils": "workspace:*",
     "@types/jquery": "^4.0.0",
     "jquery": "^4.0.0",
+    "rimraf": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
     "typescript": "catalog:",

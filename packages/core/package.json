@@ -67,6 +67,7 @@
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
+    "rimraf": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
     "typescript": "catalog:",

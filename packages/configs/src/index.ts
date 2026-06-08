@@ -29,17 +29,29 @@ export interface BaseViteConfigOptions {
   packageDir: string;
   /** The global variable name for UMD builds. */
   name: string;
-  /** The entry file for the library (default: `${packageDir}/src/index.ts`). */
+  /**
+   * The entry file for the library.
+   * @defaultValue `${packageDir}/src/index.ts`
+   */
   entry?: string;
   /** Custom file names for different formats (e.g., { es: 'index.mjs', cjs: 'index.cjs' }). */
   libFileNames?: Record<string, string>;
   /** Options for the unplugin-dts plugin. */
   dtsOptions?: PluginOptions;
-  /** Library formats to build (default: ['umd'] for bundle, ['es', 'cjs'] for lib, ['es'] otherwise). */
+  /**
+   * Library formats to build.
+   * @defaultValue `['umd']` for bundle, `['es', 'cjs']` for lib, `['es']` otherwise
+   */
   formats?: LibraryFormats[];
-  /** Whether to empty the output directory before building (default: true for types, false otherwise). */
+  /**
+   * Whether to empty the output directory before building.
+   * @defaultValue `true` for types, `false` otherwise
+   */
   emptyOutDir?: boolean;
-  /** Whether to skip generating TypeScript declaration files (default: true unless building types). */
+  /**
+   * Whether to skip generating TypeScript declaration files.
+   * @defaultValue `true` unless building types
+   */
   skipDts?: boolean;
 }
 

@@ -27,6 +27,7 @@
     "vitest": "^4.1.8"
   },
   "devDependencies": {
+    "rimraf": "catalog:",
     "tsup": "catalog:",
     "unplugin-dts": "catalog:",
     "vite": "catalog:",
