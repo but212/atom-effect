@@ -1,4 +1,3 @@
-import type { Options as TsupOptions } from 'tsup';
 import type { PluginOptions } from 'unplugin-dts';
 import dts from 'unplugin-dts/vite';
 import {
@@ -8,18 +7,6 @@ import {
   type UserConfig,
 } from 'vite';
 import { defineConfig as defineVitest, type ViteUserConfig } from 'vitest/config';
-
-/**
- * Base tsup configuration options for building libraries and bundles.
- *
- * @remarks This configuration is designed to be used as a starting point for building libraries and bundles with tsup. It includes common settings such as output formats, declaration file generation, cleaning the output directory, and source map generation. You can extend or override these options in your specific tsup configuration as needed.
- */
-export const baseTsupConfig: TsupOptions = {
-  format: ['esm', 'cjs'],
-  dts: true,
-  clean: true,
-  sourcemap: true,
-};
 
 /**
  * Base Vite configuration options for building libraries and bundles.
@@ -87,17 +74,12 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
     entry = `${packageDir}/src/index.ts`,
     libFileNames,
     dtsOptions,
-    formats,
-    emptyOutDir,
-    skipDts,
+    formats = isBundle ? ['umd'] : isLib ? ['es', 'cjs'] : ['es'],
+    emptyOutDir = isTypes,
+    skipDts = !isTypes,
   } = options;
 
   const kebabName = name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
-  const finalFormats = formats ?? (isBundle ? ['umd'] : isLib ? ['es', 'cjs'] : ['es']);
-  const finalEmptyOutDir = emptyOutDir ?? isTypes;
-  const finalSkipDts = skipDts ?? !isTypes;
-
-  const formatExtensions: Record<string, string> = { es: 'mjs', cjs: 'cjs' };
 
   return {
     resolve: {
@@ -109,17 +91,15 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
       target: 'ES2022',
       sourcemap: true,
       outDir: 'dist',
-      emptyOutDir: finalEmptyOutDir,
+      emptyOutDir,
       minify: 'esbuild',
       lib: {
         entry,
         name,
-        formats: finalFormats,
-        fileName: (format) =>
+        formats,
+        fileName: (format: string) =>
           libFileNames?.[format] ??
-          (format === 'umd'
-            ? `${kebabName}.min.js`
-            : `index.${formatExtensions[format] ?? format}`),
+          (format === 'umd' ? `${kebabName}.min.js` : `index.${format === 'es' ? 'mjs' : format}`),
       },
       rollupOptions: {
         output: {
@@ -127,7 +107,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         },
       },
     },
-    plugins: finalSkipDts
+    plugins: skipDts
       ? []
       : [
           dts({
@@ -138,7 +118,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
             ...dtsOptions,
           }),
         ],
-  };
+  } as UserConfig;
 };
 
 /**
