@@ -236,6 +236,37 @@ describe('Option<T>', () => {
     });
   });
 
+  describe('New APIs (all, fromPredicate)', () => {
+    describe('Option.all()', () => {
+      it('should combine an array of Some into a Some of array', () => {
+        const result = Option.all([Option.some(1), Option.some(2), Option.some(3)]);
+        expect(Option.unwrap(result)).toEqual([1, 2, 3]);
+      });
+
+      it('should return None if any Option is None', () => {
+        const result = Option.all([Option.some(1), Option.none, Option.some(3)]);
+        expect(Option.isNone(result)).toBe(true);
+      });
+
+      it('should return Some of empty array for empty input array', () => {
+        const result = Option.all([]);
+        expect(Option.unwrap(result)).toEqual([]);
+      });
+    });
+
+    describe('Option.fromPredicate()', () => {
+      it('should return Some of value when predicate evaluates to true', () => {
+        const result = Option.fromPredicate(42, (x) => x > 0);
+        expect(Option.unwrap(result)).toBe(42);
+      });
+
+      it('should return None when predicate evaluates to false', () => {
+        const result = Option.fromPredicate(-42, (x) => x > 0);
+        expect(Option.isNone(result)).toBe(true);
+      });
+    });
+  });
+
   describe('Runtime Protocol Enforcement (assertOption)', () => {
     it('andThen() rejects invalid mapper result', () => {
       const opt = Option.some(42);
