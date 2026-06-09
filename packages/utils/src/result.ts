@@ -276,7 +276,10 @@ export const Result = {
   map: <T, E, U>(result: Result<T, E>, mapper: (value: T) => U): Result<U, E> => {
     if (!result.ok) return result;
     const mappedValue = mapper(result.value);
-    return Object.is(mappedValue, result.value)
+    return Object.is(mappedValue, result.value) &&
+      (mappedValue === null ||
+        (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+        Object.isFrozen(mappedValue))
       ? (result as unknown as Result<U, E>)
       : Result.ok(mappedValue);
   },

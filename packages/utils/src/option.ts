@@ -229,7 +229,10 @@ export const Option = {
   map: <T, U>(option: Option<T>, mapper: (value: T) => U): Option<U> => {
     if (!option.ok) return option;
     const mappedValue = mapper(option.value);
-    return Object.is(mappedValue, option.value)
+    return Object.is(mappedValue, option.value) &&
+      (mappedValue === null ||
+        (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+        Object.isFrozen(mappedValue))
       ? (option as unknown as Option<U>)
       : Option.some(mappedValue);
   },
