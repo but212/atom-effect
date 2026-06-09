@@ -7,6 +7,7 @@
  */
 
 import { effect, untracked } from '@but212/atom-effect';
+import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
@@ -41,13 +42,14 @@ function toKebab(str: string): string {
  * Returns a validation result indicating if the property/attribute is safe,
  * allowing the caller to handle side effects like logging.
  */
-function checkBindingSafety(name: string, isProperty: boolean): string | null {
+function checkBindingSafety(name: string, isProperty: boolean): Option<string> {
   const lower = name.toLowerCase();
-  if (lower.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
+  if (lower.startsWith('on'))
+    return Option.some(SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name));
   if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
-    return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
+    return Option.some(SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name));
   }
-  return null;
+  return Option.none;
 }
 
 /**
@@ -57,9 +59,9 @@ function checkBindingSafety(name: string, isProperty: boolean): string | null {
  */
 function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string, T][] {
   return Object.entries(map).filter(([name]) => {
-    const err = checkBindingSafety(name, isProperty);
-    if (err) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${err}`);
+    const errOpt = checkBindingSafety(name, isProperty);
+    if (Option.isSome(errOpt)) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${errOpt.value}`);
       return false;
     }
     return true;

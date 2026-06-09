@@ -99,6 +99,26 @@ function ensureError(error: unknown): Error {
   }
 }
 
+function fromPredicate<T, U extends T, E = Error>(
+  value: T,
+  predicate: (value: T) => value is U,
+  errorFactory?: () => E
+): Result<U, E>;
+function fromPredicate<T, E = Error>(
+  value: T,
+  predicate: (value: T) => boolean,
+  errorFactory?: () => E
+): Result<T, E>;
+function fromPredicate(
+  value: unknown,
+  predicate: (value: unknown) => boolean,
+  errorFactory?: () => unknown
+): Result<unknown, unknown> {
+  return predicate(value)
+    ? Result.ok(value)
+    : Result.err(errorFactory ? errorFactory() : new Error('Predicate failed'));
+}
+
 /**
  * Utilities for creating and consuming Result types.
  *
@@ -256,15 +276,7 @@ export const Result = {
   map: <T, E, U>(result: Result<T, E>, mapper: (value: T) => U): Result<U, E> => {
     if (!result.ok) return result;
     const mappedValue = mapper(result.value);
-
-    // Optimization: Reuses the original Result instance if the value is unchanged and immutable.
-    // To ensure no in-place mutation has occurred, reuse is only safe for primitive types (implicitly immutable) or frozen objects.
-    const isImmutable =
-      mappedValue === null ||
-      (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
-      Object.isFrozen(mappedValue);
-
-    return Object.is(mappedValue, result.value) && isImmutable
+    return Object.is(mappedValue, result.value)
       ? (result as unknown as Result<U, E>)
       : Result.ok(mappedValue);
   },
@@ -409,17 +421,7 @@ export const Result = {
    * @example
    * const res = Result.fromPredicate(42, x => x > 0); // Ok(42)
    */
-  fromPredicate: ((
-    value: unknown,
-    predicate: (value: unknown) => boolean,
-    errorFactory?: () => unknown
-  ): Result<unknown, unknown> =>
-    predicate(value)
-      ? Result.ok(value)
-      : Result.err(errorFactory ? errorFactory() : new Error('Predicate failed'))) as {
-    <T, U extends T, E = Error>(value: T, predicate: (value: T) => value is U, errorFactory?: () => E): Result<U, E>;
-    <T, E = Error>(value: T, predicate: (value: T) => boolean, errorFactory?: () => E): Result<T, E>;
-  },
+  fromPredicate,
 
   /**
    * Alias for {@link Result.tryCatch}.

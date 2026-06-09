@@ -2,29 +2,51 @@ import { describe, expect, it } from 'vitest';
 import { SlotBuffer } from '@/index';
 
 describe('SlotBuffer', () => {
-  describe('Basic Operations', () => {
-    it('should manage basic insertion and access', () => {
+  describe('Initialization & Reset', () => {
+    it('should have length and size of 0 initially', () => {
       const buf = new SlotBuffer<number>();
-
       expect(buf.length).toBe(0);
       expect(buf.size).toBe(0);
       expect(buf.at(0)).toBeNull();
+    });
 
+    it('clear() should reset state completely', () => {
+      const buf = new SlotBuffer<number>();
+      for (const i of [1, 2, 3, 4, 5]) {
+        buf.push(i);
+      }
+      expect(buf.size).toBe(5);
+
+      buf.clear();
+      expect(buf.size).toBe(0);
+      expect(buf.length).toBe(0);
+      expect(buf.at(0)).toBeNull();
+      expect(buf.at(4)).toBeNull();
+    });
+
+    it('dispose() should reset state completely', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(1);
+      buf.dispose();
+      expect(buf.size).toBe(0);
+      expect(buf.length).toBe(0);
+    });
+  });
+
+  describe('Retrieval & Search (at, has)', () => {
+    it('at() should retrieve items or return null for empty/out-of-bounds slots', () => {
+      const buf = new SlotBuffer<number>();
       buf.push(10);
       buf.push(20);
-
-      expect(buf.length).toBe(2);
-      expect(buf.size).toBe(2);
       expect(buf.at(0)).toBe(10);
       expect(buf.at(1)).toBe(20);
       expect(buf.at(2)).toBeNull();
     });
 
-    it('should correctly identify item existence with has()', () => {
+    it('has() should correctly identify item existence in fast lane', () => {
       const buf = new SlotBuffer<string>();
       buf.push('a');
       buf.push('b');
-
       expect(buf.has('a')).toBe(true);
       expect(buf.has('b')).toBe(true);
       expect(buf.has('c')).toBe(false);
@@ -33,91 +55,142 @@ describe('SlotBuffer', () => {
       expect(buf.has('a')).toBe(false);
     });
 
-    it('should reset state on clear()', () => {
+    it('has() should correctly identify item existence in overflow array', () => {
+      const buf = new SlotBuffer<string>();
+      buf.push('a');
+      buf.push('b');
+      buf.push('c');
+      buf.push('d');
+      buf.push('e'); // index 4 (overflow)
+      expect(buf.has('e')).toBe(true);
+      expect(buf.has('f')).toBe(false);
+    });
+
+    it('has() should return false on empty buffer', () => {
       const buf = new SlotBuffer<number>();
-      for (const i of [1, 2, 3, 4, 5]) {
-        buf.push(i);
-      }
-
-      expect(buf.size).toBe(5);
-
-      buf.clear();
-
-      expect(buf.size).toBe(0);
-      expect(buf.length).toBe(0);
-      expect(buf.at(0)).toBeNull();
-      expect(buf.at(4)).toBeNull();
+      expect(buf.has(10)).toBe(false);
     });
   });
 
-  describe('Structural Integrity & Hole Management', () => {
-    it('should create and reuse holes correctly', () => {
+  describe('Insertion & Hole Reuse (push)', () => {
+    it('push() should append items to the tail', () => {
+      const buf = new SlotBuffer<number>();
+      const idx1 = buf.push(10);
+      const idx2 = buf.push(20);
+      expect(idx1).toBe(0);
+      expect(idx2).toBe(1);
+      expect(buf.length).toBe(2);
+      expect(buf.size).toBe(2);
+    });
+
+    it('push() should reuse vacated fast-lane holes correctly', () => {
       const buf = new SlotBuffer<number>();
       for (const i of [0, 1, 2]) {
         buf.push(i);
       }
-
-      // Create a hole in the "fast lane"
-      buf.remove(1); // [0, null, 2]
+      buf.remove(1); // Create a hole in the "fast lane" [0, null, 2]
       expect(buf.size).toBe(2);
       expect(buf.length).toBe(3);
       expect(buf.at(1)).toBeNull();
-      expect(buf.at(2)).toBe(2);
 
-      // Reuse the hole
-      buf.push(99); // [0, 99, 2]
+      buf.push(99); // Reuse the hole [0, 99, 2]
       expect(buf.at(1)).toBe(99);
       expect(buf.size).toBe(3);
       expect(buf.length).toBe(3);
     });
 
-    it('should manage physical boundaries during removal', () => {
+    it('push() should reuse free indices in LIFO order after removals', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 10; i++) {
+        buf.push(i);
+      }
+      buf.remove(8);
+      buf.remove(9);
+
+      const idx1 = buf.push(99);
+      const idx2 = buf.push(100);
+      expect(idx1).toBe(9);
+      expect(idx2).toBe(8);
+    });
+
+    it('push() should not reuse holes when buffer is locked', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
+      buf.remove(10); // Index 0 is a hole
+
+      buf.lock();
+      const idx = buf.push(30); // Pushed while locked
+      expect(idx).toBe(2); // Should append to tail (index 2) instead of reusing index 0
+      expect(buf.at(0)).toBeNull();
+      expect(buf.at(2)).toBe(30);
+
+      buf.unlock();
+      const idx2 = buf.push(40); // Pushed after unlock
+      expect(idx2).toBe(0); // Should now reuse index 0
+      expect(buf.at(0)).toBe(40);
+    });
+  });
+
+  describe('Removal (remove)', () => {
+    it('remove() should remove items by identity', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
+
+      const success = buf.remove(20);
+      expect(success).toBe(true);
+      expect(buf.at(1)).toBeNull();
+    });
+
+    it('remove() should return false on empty buffer', () => {
+      const buf = new SlotBuffer<number>();
+      expect(buf.remove(10)).toBe(false);
+    });
+
+    it('remove() should return false for non-existent items (without overflow)', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(1);
+      buf.push(2);
+      expect(buf.remove(99)).toBe(false);
+    });
+
+    it('remove() should return false for non-existent items (with overflow)', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 6; i++) {
+        buf.push(i);
+      }
+      expect(buf.remove(99)).toBe(false);
+    });
+
+    it('remove() should shrink physical capacity when tail items are removed', () => {
       const buf = new SlotBuffer<number>();
       buf.push(0);
       buf.push(1);
 
       buf.remove(1); // Removed from tail
       expect(buf.at(1)).toBeNull();
+      expect(buf.length).toBe(1);
 
       buf.push(2); // Should occupy index 1
       expect(buf.at(1)).toBe(2);
     });
 
-    it('should shrink physical capacity when tail overflow items are removed', () => {
+    it('remove() should shrink physical capacity when tail overflow items are removed', () => {
       const buf = new SlotBuffer<number>();
       for (let i = 0; i < 6; i++) {
         buf.push(i);
       }
-      // [0, 1, 2, 3, 4, 5]
-
       buf.remove(4); // ov[0] becomes null, i.e. [null, 5]
       buf.remove(5); // ov[1] becomes null, triggers shrinkPhysicalSizeFrom
 
       expect(buf.length).toBe(4);
       expect(buf.size).toBe(4);
     });
-
-    it('should reuse free indices when pushing new items after removals', () => {
-      const buf = new SlotBuffer<number>();
-      for (let i = 0; i < 10; i++) {
-        buf.push(i);
-      }
-
-      // Remove elements to populate free indices
-      buf.remove(8);
-      buf.remove(9);
-
-      // Verify free indices are reused in lifo order
-      const idx1 = buf.push(99);
-      const idx2 = buf.push(100);
-
-      expect(idx1).toBe(9);
-      expect(idx2).toBe(8);
-    });
   });
 
-  describe('Manual Indexing & Truncation', () => {
-    it('should allow sparse indexing with setAt()', () => {
+  describe('Manual Indexing (setAt)', () => {
+    it('setAt() should allow sparse indexing', () => {
       const buf = new SlotBuffer<string>();
       buf.setAt(10, 'far');
 
@@ -132,7 +205,7 @@ describe('SlotBuffer', () => {
       expect(buf.at(10)).toBeNull();
     });
 
-    it('should reuse free indices when gaps are created via setAt(index, null)', () => {
+    it('setAt() should create and reuse gaps via setAt(index, null)', () => {
       const buf = new SlotBuffer<number>();
       buf.push(10);
       buf.push(20);
@@ -143,7 +216,29 @@ describe('SlotBuffer', () => {
       expect(index).toBe(0);
     });
 
-    it('should truncate items and reset boundaries with truncateFrom()', () => {
+    it('setAt() should return early if value is unchanged', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      expect(buf.at(0)).toBe(10);
+
+      buf.setAt(0, 10);
+      expect(buf.size).toBe(1);
+      expect(buf.at(0)).toBe(10);
+    });
+
+    it('setAt() should replace existing value without changing logical size', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      expect(buf.size).toBe(1);
+
+      buf.setAt(0, 20);
+      expect(buf.size).toBe(1);
+      expect(buf.at(0)).toBe(20);
+    });
+  });
+
+  describe('Truncation (truncateFrom)', () => {
+    it('truncateFrom() should truncate items and reset boundaries', () => {
       const buf = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) buf.push(i);
 
@@ -155,7 +250,20 @@ describe('SlotBuffer', () => {
       expect(buf.at(9)).toBeNull();
     });
 
-    it('should keep free indices below the truncation index', () => {
+    it('truncateFrom() should handle holes in the truncated region', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 10; i++) buf.push(i);
+
+      buf.remove(7); // index 7 (in overflow) becomes null
+      expect(buf.size).toBe(9);
+      expect(buf.length).toBe(10);
+
+      buf.truncateFrom(5);
+      expect(buf.size).toBe(5); // elements 0, 1, 2, 3, 4 remain (all non-null, size=5)
+      expect(buf.length).toBe(5);
+    });
+
+    it('truncateFrom() should preserve free indices below the truncation index', () => {
       const buf = new SlotBuffer<number>();
       buf.push(10);
       buf.push(20);
@@ -164,15 +272,27 @@ describe('SlotBuffer', () => {
       buf.remove(10); // index 0 is a hole
       buf.remove(30); // index 2 is a hole
 
-      buf.truncateFrom(3); // truncates index 3 (40)
+      buf.truncateFrom(3); // Truncates index 3 (40)
       // Index 0 and 2 are still below 3, so they should be preserved!
       const idx = buf.push(50);
       expect(idx).toBe(2); // Should reuse index 2 (LIFO)
     });
+
+    it('truncateFrom() should return early if index is out of bounds', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
+      expect(buf.length).toBe(2);
+
+      buf.truncateFrom(10);
+      expect(buf.length).toBe(2);
+      expect(buf.at(0)).toBe(10);
+      expect(buf.at(1)).toBe(20);
+    });
   });
 
-  describe('Compaction', () => {
-    it('should eliminate holes and shift items forward', () => {
+  describe('Compaction (compact)', () => {
+    it('compact() should eliminate holes and shift items forward', () => {
       const buf = new SlotBuffer<number>();
       for (let i = 0; i < 5; i++) buf.push(i); // [0, 1, 2, 3, 4]
 
@@ -193,7 +313,7 @@ describe('SlotBuffer', () => {
       expect(buf.at(4)).toBeNull();
     });
 
-    it('should be a no-op if no holes exist', () => {
+    it('compact() should be a no-op if no holes exist', () => {
       const buf = new SlotBuffer<number>();
       buf.push(1);
       buf.push(2);
@@ -203,7 +323,7 @@ describe('SlotBuffer', () => {
       expect(buf.at(1)).toBe(2);
     });
 
-    it('should correctly compact fast-lane gaps without data corruption', () => {
+    it('compact() should correctly compact fast-lane gaps without data corruption', () => {
       const buf = new SlotBuffer<string>();
       buf.push('a'); // index 0
       buf.push('b'); // index 1
@@ -222,10 +342,35 @@ describe('SlotBuffer', () => {
       expect(items).toEqual(['b']);
       expect(buf.has('b')).toBe(true);
     });
+
+    it('compact() should clear the buffer completely when compacting a buffer with no items left', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(1);
+      buf.push(2);
+      buf.lock();
+      buf.remove(1);
+      buf.remove(2);
+      expect(buf.size).toBe(0);
+      expect(buf.length).toBe(2);
+      buf.unlock();
+      buf.compact();
+      expect(buf.size).toBe(0);
+      expect(buf.length).toBe(0);
+    });
+
+    it('compact() should truncate the overflow array length when elements still remain in overflow', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 8; i++) buf.push(i);
+      buf.remove(1); // [0, null, 2, 3, 4, 5, 6, 7]
+      buf.compact(); // [0, 2, 3, 4, 5, 6, 7] (7 items)
+      expect(buf.size).toBe(7);
+      expect(buf.length).toBe(7);
+      expect(buf.at(6)).toBe(7);
+    });
   });
 
-  describe('Search & Iteration', () => {
-    it('should iterate through non-null items with forEach()', () => {
+  describe('Iteration (forEach)', () => {
+    it('forEach() should iterate through non-null items in order', () => {
       const buf = new SlotBuffer<number>();
       for (const i of [0, 1, 2, 3, 4]) {
         buf.push(i);
@@ -240,7 +385,21 @@ describe('SlotBuffer', () => {
       expect(collected).toEqual([0, 2, 4]);
     });
 
-    it('should not pass null to callback when items are removed during forEach', () => {
+    it('forEach() should traverse non-null items when holes exist in the overflow array', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 6; i++) {
+        buf.push(i);
+      }
+      buf.remove(4); // index 4 (overflow) becomes null
+
+      const collected: number[] = [];
+      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
+      buf.forEach((item) => collected.push(item));
+
+      expect(collected).toEqual([0, 1, 2, 3, 5]);
+    });
+
+    it('forEach() should not pass null to callback when items are removed during iteration', () => {
       const buf = new SlotBuffer<number>();
       buf.push(10);
       buf.push(20);
@@ -257,7 +416,7 @@ describe('SlotBuffer', () => {
       expect(items).toEqual([10]);
     });
 
-    it('should not corrupt iteration or pass null when compacted during forEach', () => {
+    it('forEach() should not corrupt iteration or pass null when compacted during iteration', () => {
       const buf = new SlotBuffer<number>();
       buf.push(10);
       buf.push(20);
@@ -276,7 +435,32 @@ describe('SlotBuffer', () => {
       expect(items).toEqual([10, 30]);
     });
 
-    it('should perform early-exit with some()', () => {
+    it('forEach() should do nothing on empty buffer', () => {
+      const buf = new SlotBuffer<number>();
+      let count = 0;
+      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
+      buf.forEach(() => {
+        count++;
+      });
+      expect(count).toBe(0);
+    });
+  });
+
+  describe('Conditional Check (some)', () => {
+    it('some() should perform early-exit in fast-lane slots', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 10; i++) buf.push(i);
+
+      let countFast = 0;
+      const foundFast = buf.some((val) => {
+        countFast++;
+        return val === 2; // Index 2 (s2)
+      });
+      expect(foundFast).toBe(true);
+      expect(countFast).toBe(3); // 0, 1, 2
+    });
+
+    it('some() should perform early-exit in overflow array', () => {
       const buf = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) buf.push(i);
 
@@ -288,8 +472,24 @@ describe('SlotBuffer', () => {
 
       expect(found).toBe(true);
       expect(count).toBe(6); // 0, 1, 2, 3, 4, 5
+    });
 
+    it('some() should return false when element is not found (small buffer)', () => {
+      const buf = new SlotBuffer<number>();
+      buf.push(10);
+      buf.push(20);
       expect(buf.some((val) => val === 99)).toBe(false);
+    });
+
+    it('some() should return false when element is not found (large buffer)', () => {
+      const buf = new SlotBuffer<number>();
+      for (let i = 0; i < 10; i++) buf.push(i);
+      expect(buf.some((val) => val === 99)).toBe(false);
+    });
+
+    it('some() should return false on empty buffer', () => {
+      const buf = new SlotBuffer<number>();
+      expect(buf.some(() => true)).toBe(false);
     });
   });
 

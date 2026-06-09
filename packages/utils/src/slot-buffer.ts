@@ -76,11 +76,9 @@ export class SlotBuffer<T> {
 
     if (this.#count <= FAST_CAPACITY) return false;
 
-    const ov = this.#overflow;
-    if (ov) {
-      for (let i = 0, len = ov.length; i < len; i++) {
-        if (ov[i] === item) return true;
-      }
+    const ov = this.#overflow as (T | null)[];
+    for (let i = 0, len = ov.length; i < len; i++) {
+      if (ov[i] === item) return true;
     }
     return false;
   }
@@ -102,12 +100,10 @@ export class SlotBuffer<T> {
 
       if (this.#count <= FAST_CAPACITY) return;
 
-      const ov = this.#overflow;
-      if (ov) {
-        for (let i = 0, len = ov.length; i < len; i++) {
-          const item = ov[i];
-          if (item != null) fn(item);
-        }
+      const ov = this.#overflow as (T | null)[];
+      for (let i = 0, len = ov.length; i < len; i++) {
+        const item = ov[i];
+        if (item != null) fn(item);
       }
     } finally {
       this.unlock();
@@ -130,12 +126,10 @@ export class SlotBuffer<T> {
 
       if (this.#count <= FAST_CAPACITY) return false;
 
-      const ov = this.#overflow;
-      if (ov) {
-        for (let i = 0, len = ov.length; i < len; i++) {
-          const item = ov[i];
-          if (item != null && predicate(item)) return true;
-        }
+      const ov = this.#overflow as (T | null)[];
+      for (let i = 0, len = ov.length; i < len; i++) {
+        const item = ov[i];
+        if (item != null && predicate(item)) return true;
       }
       return false;
     } finally {
@@ -218,8 +212,8 @@ export class SlotBuffer<T> {
         this.#setFast(i, null);
       }
       this.#overflow = null;
-    } else if (this.#overflow) {
-      this.#overflow.length = index - FAST_CAPACITY;
+    } else {
+      (this.#overflow as (T | null)[]).length = index - FAST_CAPACITY;
     }
 
     this.#count = index;
@@ -361,11 +355,9 @@ export class SlotBuffer<T> {
     this.#count--;
 
     if (this.#count > FAST_CAPACITY) {
-      const ov = this.#overflow;
-      if (ov) {
-        while (this.#count > FAST_CAPACITY && ov[this.#count - (FAST_CAPACITY + 1)] == null) {
-          this.#count--;
-        }
+      const ov = this.#overflow as (T | null)[];
+      while (this.#count > FAST_CAPACITY && ov[this.#count - (FAST_CAPACITY + 1)] == null) {
+        this.#count--;
       }
     }
 
