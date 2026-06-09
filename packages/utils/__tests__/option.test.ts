@@ -184,15 +184,15 @@ describe('Option<T>', () => {
         expect(Option.equals(Option.some(-0), Option.some(+0))).toBe(false);
       });
 
-      it('throws an error if either argument is not a valid Option', () => {
+      it('returns false if either argument is not a valid Option', () => {
         const opt = Option.some(42);
         const nonOpt = { ok: true, value: 42 };
 
-        expect(() => Option.equals(opt, fakeSome)).toThrow('Invalid Option instance');
-        expect(() => Option.equals(fakeSome, opt)).toThrow('Invalid Option instance');
-        expect(() =>
+        expect(Option.equals(opt, fakeSome)).toBe(false);
+        expect(Option.equals(fakeSome, opt)).toBe(false);
+        expect(
           Option.equals(nonOpt as unknown as Option<unknown>, nonOpt as unknown as Option<unknown>)
-        ).toThrow('Invalid Option instance');
+        ).toBe(false);
       });
     });
   });
@@ -244,11 +244,11 @@ describe('Option<T>', () => {
       const opt = Option.some(42);
       const nonOpt = { ok: true, value: 42 };
 
-      expect(() => Option.equals(opt, fakeSome)).toThrow('Invalid Option instance');
-      expect(() => Option.equals(fakeSome, opt)).toThrow('Invalid Option instance');
-      expect(() =>
+      expect(Option.equals(opt, fakeSome)).toBe(false);
+      expect(Option.equals(fakeSome, opt)).toBe(false);
+      expect(
         Option.equals(nonOpt as unknown as Option<unknown>, nonOpt as unknown as Option<unknown>)
-      ).toThrow('Invalid Option instance');
+      ).toBe(false);
     });
   });
 });

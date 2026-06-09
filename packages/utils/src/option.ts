@@ -191,8 +191,7 @@ export const Option = {
    * @example
    * const val = Option.unwrapOr(opt, 0);
    */
-  unwrapOr: <T, U>(option: Option<T>, fallback: U): T | U =>
-    option.ok ? option.value : fallback,
+  unwrapOr: <T, U>(option: Option<T>, fallback: U): T | U => (option.ok ? option.value : fallback),
 
   /**
    * Returns the inner value if present, otherwise computes a fallback value.
@@ -329,8 +328,7 @@ export const Option = {
    * const equal = Option.equals(optA, optB);
    */
   equals: <T>(optionA: Option<T>, optionB: Option<T>): boolean => {
-    assertOption(optionA);
-    assertOption(optionB);
+    if (!isOption(optionA) || !isOption(optionB)) return false;
     // Logic: Fast-paths identical references before performing checks.
     if (optionA === optionB) return true;
     // Logic: Narrows the types of both options to Some before accessing their values.
@@ -351,8 +349,7 @@ export const Option = {
    * @example
    * const val = Option.toNullable(opt);
    */
-  toNullable: <T>(option: Option<T>): T | null =>
-    option.ok ? option.value : null,
+  toNullable: <T>(option: Option<T>): T | null => (option.ok ? option.value : null),
 
   /**
    * Converts an Option to an undefined representation.
@@ -366,6 +363,5 @@ export const Option = {
    * @example
    * const val = Option.toUndefined(opt);
    */
-  toUndefined: <T>(option: Option<T>): T | undefined =>
-    option.ok ? option.value : undefined,
+  toUndefined: <T>(option: Option<T>): T | undefined => (option.ok ? option.value : undefined),
 };

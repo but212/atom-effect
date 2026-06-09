@@ -74,6 +74,13 @@ const registerResult = <T extends object>(result: T): T => {
 export const isResult = (value: unknown): value is Result<unknown, unknown> =>
   !!value && typeof value === 'object' && resultRegistry.has(value);
 
+// Logic: Asserts that a value is a valid Result instance. Used only at trust boundaries.
+function assertResult(value: unknown): asserts value is Result<unknown, unknown> {
+  if (!isResult(value)) {
+    throw new Error('Invalid Result instance');
+  }
+}
+
 /**
  * Pre-allocated success result for void operations.
  * Optimization: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
@@ -247,7 +254,7 @@ export const Result = {
   map: <T, E, U>(result: Result<T, E>, mapper: (value: T) => U): Result<U, E> => {
     if (!result.ok) return result;
     const mappedValue = mapper(result.value);
-    return Object.is(mappedValue, result.value)
+    return Object.is(mappedValue, result.value) && Object.isFrozen(mappedValue)
       ? (result as unknown as Result<U, E>)
       : Result.ok(mappedValue);
   },
@@ -272,7 +279,12 @@ export const Result = {
   andThen: <T, E, U, F>(
     result: Result<T, E>,
     mapper: (value: T) => Result<U, F>
-  ): Result<U, E | F> => (result.ok ? mapper(result.value) : result),
+  ): Result<U, E | F> => {
+    if (!result.ok) return result;
+    const mapped = mapper(result.value);
+    assertResult(mapped);
+    return mapped;
+  },
 
   /**
    * Wraps a synchronous function call that might throw.

@@ -125,6 +125,28 @@ describe('Result<T, E>', () => {
       expect(mapped).toBe(ok);
     });
 
+    it('should return a new Result instance when mapping a mutable object, even if the returned reference is identical', () => {
+      const originalObj = { count: 1 };
+      const ok = Result.ok(originalObj);
+
+      const mapped = Result.map(ok, (obj) => {
+        obj.count = 2; // Mutate in-place
+        return obj;
+      });
+
+      expect(mapped).not.toBe(ok);
+      expect(Result.unwrap(mapped).count).toBe(2);
+    });
+
+    it('should reuse the Result instance when mapping a frozen object if the returned reference is identical', () => {
+      const frozenObj = Object.freeze({ count: 1 });
+      const ok = Result.ok(frozenObj);
+
+      const mapped = Result.map(ok, (obj) => obj);
+
+      expect(mapped).toBe(ok);
+    });
+
     it('mapErr() transforms the Err error value', () => {
       const err = Result.err('fail');
       const mapped = Result.mapErr(err, (s: string) => s.toUpperCase());
@@ -135,6 +157,18 @@ describe('Result<T, E>', () => {
       const ok = Result.ok(1);
       const chained = Result.andThen(ok, (n: number) => Result.ok(n + 1));
       expect(chained).toMatchObject(Result.ok(2));
+    });
+
+    it('should throw an error if the mapper returns an invalid Result', () => {
+      const ok = Result.ok(42);
+      const fakeResult = {
+        ok: true,
+        value: 42,
+        error: undefined,
+        [RESULT_SYMBOL]: true,
+      } as unknown as Result<number, unknown>;
+
+      expect(() => Result.andThen(ok, () => fakeResult)).toThrow('Invalid Result instance');
     });
   });
 
