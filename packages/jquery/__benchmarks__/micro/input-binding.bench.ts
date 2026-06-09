@@ -1,81 +1,49 @@
 /**
  * @fileoverview Micro-benchmarks for input bindings (atomVal / atomChecked).
- * @description Measures standard input events vs. IME composition events (compositionstart/end) overhead.
  */
 
 import { bench, describe } from 'vitest';
 import $ from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 describe('Input Bindings: Event Propagation', () => {
-  bench(
-    'Standard input event propagation (100 events)',
-    () => {
-      const $c = createContainer();
-      const state = $.atom('initial');
-      const $input = $('<input type="text">').appendTo($c).atomVal(state);
+  const run = (name: string, fn: ($c: JQuery) => void) =>
+    bench(name, withContainer(fn), microBenchOptions);
 
-      const inputEl = $input[0] as HTMLInputElement;
-      for (let i = 0; i < 100; i++) {
-        inputEl.value = `char-${i}`;
-        // Trigger mock standard input event
-        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+  run('Standard input event propagation (100 events)', ($c) => {
+    const state = $.atom('initial');
+    const inputEl = $('<input type="text">').appendTo($c).atomVal(state)[0] as HTMLInputElement;
 
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+    for (let i = 0; i < 100; i++) {
+      inputEl.value = `char-${i}`;
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
 
-  bench(
-    'IME Composition input overhead (50 composition cycles)',
-    () => {
-      const $c = createContainer();
-      const state = $.atom('initial');
-      const $input = $('<input type="text">').appendTo($c).atomVal(state);
+  run('IME Composition input overhead (50 composition cycles)', ($c) => {
+    const state = $.atom('initial');
+    const inputEl = $('<input type="text">').appendTo($c).atomVal(state)[0] as HTMLInputElement;
 
-      const inputEl = $input[0] as HTMLInputElement;
-      for (let i = 0; i < 50; i++) {
-        // 1. compositionstart
-        inputEl.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    for (let i = 0; i < 50; i++) {
+      inputEl.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      inputEl.value = `comp-${i}`;
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(
+        new CompositionEvent('compositionend', { bubbles: true, data: `comp-${i}` })
+      );
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
 
-        // 2. keystrokes during composition (should not update state immediately)
-        inputEl.value = `comp-${i}`;
-        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  run('Checkbox change event propagation (100 changes)', ($c) => {
+    const state = $.atom(false);
+    const checkboxEl = $('<input type="checkbox">')
+      .appendTo($c)
+      .atomChecked(state)[0] as HTMLInputElement;
 
-        // 3. compositionend (commits the value)
-        const compEndEvent = new CompositionEvent('compositionend', {
-          bubbles: true,
-          data: `comp-${i}`,
-        });
-        inputEl.dispatchEvent(compEndEvent);
-
-        // input event is typically dispatched right after compositionend to sync value
-        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
-});
-
-describe('Input Bindings: Checkbox and Radio', () => {
-  bench(
-    'Checkbox change event propagation (100 changes)',
-    () => {
-      const $c = createContainer();
-      const state = $.atom(false);
-      const $checkbox = $('<input type="checkbox">').appendTo($c).atomChecked(state);
-
-      const checkboxEl = $checkbox[0] as HTMLInputElement;
-      for (let i = 0; i < 100; i++) {
-        checkboxEl.checked = !state.value;
-        checkboxEl.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+    for (let i = 0; i < 100; i++) {
+      checkboxEl.checked = !state.value;
+      checkboxEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
 });

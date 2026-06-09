@@ -67,7 +67,10 @@ pnpm run lint
 pnpm run bench
 
 # Clean build artifacts and caches
-pnpm run clean
+pnpm run clean:build
+
+# Remove all node_modules across the workspace (pnpm v11 built-in)
+pnpm clean
 ```
 
 ## Documentation & Resources

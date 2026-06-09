@@ -18,7 +18,7 @@
     "build:types": "cross-env BUILD_TARGET=types vite build",
     "build:lib": "cross-env BUILD_TARGET=lib vite build",
     "build:bundle": "cross-env BUILD_TARGET=bundle vite build",
-    "clean": "rimraf dist",
+    "clean:build": "rimraf dist",
     "dev": "vite",
     "test": "vitest run",
     "bench": "vitest bench --config vitest.bench.config.ts",
@@ -27,9 +27,11 @@
   },
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
-    "tinybench": "^6.0.2",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "rimraf": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "typescript": "catalog:",
+    "cross-env": "catalog:",
+    "tinybench": "catalog:"
   }
 }

@@ -1,20 +1,9 @@
-import { defineViteConfig } from '@but212/atom-effect-configs';
-
-const target = process.env.BUILD_TARGET;
-const isTypes = target === 'types';
-const isBundle = target === 'bundle';
-const isLib = target === 'lib';
+import { defineViteConfig, isBundle } from '@but212/atom-effect-configs';
 
 export default defineViteConfig(
   {
     packageDir: import.meta.dirname,
     name: 'AtomEffectJQuery',
-    libFileNames: isBundle
-      ? { umd: 'atom-effect-jquery.min.js' }
-      : { es: 'index.mjs', cjs: 'index.cjs' },
-    formats: isBundle ? ['umd'] : isLib ? ['es', 'cjs'] : ['es'],
-    emptyOutDir: isTypes,
-    skipDts: !isTypes,
   },
   {
     build: {

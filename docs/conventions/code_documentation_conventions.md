@@ -70,7 +70,38 @@ All public-facing APIs **MUST** include TSDoc.
  */
 ```
 
-### 2. Polymorphic & Reactive Inputs
+### 2. Detailed Explanations (`@remarks`)
+
+Use the `@remarks` tag to house long-form explanations, complex behaviors, warnings, side effects, or detailed background information. The primary summary (the first paragraph) must remain a concise, single-line description to keep IDE autocomplete tooltips lightweight and easy to read.
+
+```typescript
+/**
+ * Resolves a computed reactive node.
+ * 
+ * @remarks
+ * This function initiates a dependency collection phase. Do not call this inside
+ * an active evaluation cycle as it may trigger circular dependency errors.
+ */
+```
+
+### 3. Optional Properties & Defaults (`@defaultValue`)
+
+Use the `@defaultValue` tag to specify the fallback behavior or default value of optional configuration properties, class properties, or parameters.
+
+```typescript
+/**
+ * Configuration options for the scheduler.
+ */
+export interface SchedulerOptions {
+  /**
+   * The maximum number of batch flushing iterations before throwing a loop error.
+   * @defaultValue `100`
+   */
+  readonly maxIterations?: number;
+}
+```
+
+### 4. Polymorphic & Reactive Inputs
 
 When a parameter accepts multiple forms (e.g., literal, atom, or getter), explicitly document the polymorphic behavior.
 
@@ -83,13 +114,13 @@ When a parameter accepts multiple forms (e.g., literal, atom, or getter), explic
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 ```
 
-### 3. @internal vs @public
+### 5. @internal vs @public
 
 * **`@public`**: Available to end-users. Requires full TSDoc and `@example`.
 * **`@internal`**: Used for cross-module members that are NOT part of the public API. Should still have TSDoc explaining its role to other contributors, but does not require `@example`.
   * **Constraint (Types):** Do NOT use `@internal` for types (interfaces, type aliases) that are referenced by any `@public` members. This causes bundling failures (leaked internal types) and broken declaration files (`.d.ts`). Such types must be `@public` to ensure the integrity of the distributed package.
 
-### 4. @deprecated Policy
+### 6. @deprecated Policy
 
 Deprecation is a critical communication tool for users. Always include:
 
@@ -167,6 +198,8 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 
 * [ ] Are all Public APIs documented with an `@example`?
 * [ ] Is the tone neutral and technical? (No "magic", "easy", etc.)
+* [ ] Did I use `@remarks` for detailed explanations, complex behavior warnings, or side effects?
+* [ ] Did I document optional properties/parameters with a clear `@defaultValue`?
 * [ ] Did I use `Security:` tags for any XSS-related logic?
 * [ ] Is the concurrency/cleanup logic explained for async operations?
 * [ ] Did I document polymorphic inputs (Logic: Polymorphic Input)?
@@ -177,5 +210,6 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 * [ ] Is the information placed in the correct layer (User TSDoc vs Contributor Inline)?
 * [ ] Does every TODO/FIXME have an issue reference or owner?
 * [ ] Is the TSDoc consistent with the current implementation's behavior?
+* [ ] Are `@remarks` used for long explanations and `@defaultValue` present on optional properties?
 * [ ] Are `Security:` and `Optimization:` tags used where appropriate?
 * [ ] Is the `@example` snippet accurate and standalone?

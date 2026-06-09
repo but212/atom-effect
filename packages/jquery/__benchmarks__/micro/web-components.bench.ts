@@ -4,7 +4,7 @@
 
 import { bench, describe } from 'vitest';
 import $, { type AtomComponentController } from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 class BenchmarkComp extends HTMLElement {
   controller?: AtomComponentController;
@@ -21,112 +21,51 @@ if (!customElements.get('benchmark-comp')) {
   customElements.define('benchmark-comp', BenchmarkComp);
 }
 
-// ============================================================================
-// 1. Controller setup / teardown
-// ============================================================================
+describe('Web Components: Lifecycle & Context', () => {
+  const run = (name: string, fn: ($c: JQuery) => void) =>
+    bench(name, withContainer(fn), microBenchOptions);
 
-describe('Web Components: Controller Lifecycle', () => {
-  bench(
-    'setup and teardown 100 components',
-    () => {
-      const $c = createContainer();
-      const container = $c[0];
-      if (!container) throw new Error('Container not found');
-      for (let i = 0; i < 100; i++) {
-        const el = document.createElement('benchmark-comp') as BenchmarkComp;
-        container.appendChild(el);
-        el.setup();
-        el.teardown();
-        container.removeChild(el);
-      }
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
-});
+  run('setup and teardown 100 components', ($c) => {
+    const container = $c[0];
+    if (!container) return;
+    for (let i = 0; i < 100; i++) {
+      const el = document.createElement('benchmark-comp') as BenchmarkComp;
+      container.appendChild(el);
+      el.setup();
+      el.teardown();
+      container.removeChild(el);
+    }
+  });
 
-// ============================================================================
-// 2. Context injection (depth lookup)
-// ============================================================================
-
-describe('Web Components: Context Lookup Depth', () => {
-  const runDepthLookup = (depth: number) => {
-    const $c = createContainer();
+  const runDepthLookup = (depth: number) => ($c: JQuery) => {
     const root = $c[0];
-    if (!root) throw new Error('Container not found');
-
-    // Register provider on root
+    if (!root) return;
     $.provideAtom(root, 'context-key', 'context-value');
-
-    // Build DOM tree of specified depth
     let current = root;
     for (let i = 0; i < depth; i++) {
-      const child = document.createElement('div');
-      current.appendChild(child);
-      current = child;
+      current = current.appendChild(document.createElement('div'));
     }
-
-    const leaf = current;
-
-    // Run lookup multiple times to measure traversal cost
     for (let i = 0; i < 100; i++) {
-      $.injectAtom(leaf, 'context-key');
+      $.injectAtom(current, 'context-key');
     }
-
-    cleanupContainer($c);
   };
 
-  bench(
-    'context injection (depth 5, lookup 100x)',
-    () => {
-      runDepthLookup(5);
-    },
-    microBenchOptions
-  );
+  run('context injection (depth 5, lookup 100x)', runDepthLookup(5));
+  run('context injection (depth 20, lookup 100x)', runDepthLookup(20));
 
-  bench(
-    'context injection (depth 20, lookup 100x)',
-    () => {
-      runDepthLookup(20);
-    },
-    microBenchOptions
-  );
-});
+  run('context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)', ($c) => {
+    const container = $c[0];
+    if (!container) return;
+    $.provideAtom(container, 'theme-context', 'dark-theme');
 
-// ============================================================================
-// 3. Shadow DOM Context Traversal
-// ============================================================================
+    let currentHost = container;
+    for (let i = 0; i < 5; i++) {
+      const host = currentHost.appendChild(document.createElement('div'));
+      currentHost = host.attachShadow({ mode: 'open' }).appendChild(document.createElement('div'));
+    }
 
-describe('Web Components: Shadow DOM Boundary Traversal', () => {
-  bench(
-    'context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)',
-    () => {
-      const $c = createContainer();
-      const container = $c[0];
-      if (!container) throw new Error('Container not found');
-
-      // Register provider
-      $.provideAtom(container, 'theme-context', 'dark-theme');
-
-      let currentHost = container;
-      for (let i = 0; i < 5; i++) {
-        const host = document.createElement('div');
-        currentHost.appendChild(host);
-        const shadow = host.attachShadow({ mode: 'open' });
-        const child = document.createElement('div');
-        shadow.appendChild(child);
-        currentHost = child;
-      }
-
-      const leaf = currentHost;
-
-      // Injecting from the deepest nested element inside Shadow DOM
-      for (let i = 0; i < 100; i++) {
-        $.injectAtom(leaf, 'theme-context');
-      }
-
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+    for (let i = 0; i < 100; i++) {
+      $.injectAtom(currentHost, 'theme-context');
+    }
+  });
 });

@@ -1,10 +1,17 @@
+/**
+ * @module Result
+ *
+ * Responsibility:
+ * Provides the Result monad variant (Ok/Err) for functional error handling.
+ *
+ * Design Intent:
+ * Encourages explicit error handling by representing computations that can either succeed (Ok) or fail (Err).
+ */
+
 import { Option } from './option';
 import { RESULT_SYMBOL } from './symbols';
 import type { Prettify } from './types';
 
-/**
- * Base type for Result variants to ensure symbol-based identification.
- */
 type ResultBase = {
   readonly [RESULT_SYMBOL]: true;
 };
@@ -33,53 +40,114 @@ export type Err<E> = ResultBase &
 
 /**
  * A discriminated union representing success (Ok) or failure (Err).
+ *
+ * @remarks
+ * Use this type to model computations that can intentionally fail without raising exceptions.
+ * By using this discriminated union, consumers are forced to check `res.ok` before accessing
+ * `value` or `error`, which is enforced at compile time.
+ *
+ * @defaultValue `Error` for the generic error type `E` if not specified.
  */
 export type Result<T, E = Error> = Ok<T> | Err<E>;
 
+// Optimization: Private brand symbol to track valid Result instances for secure runtime protocol verification.
+const RESULT_BRAND = Symbol('ResultBrand');
+
+/**
+ * Checks if a value is a valid {@link Result} instance.
+ *
+ * When to use:
+ * - To verify at runtime whether an unknown input conforms to the Result protocol.
+ *
+ * @param value - The value to check.
+ * @returns True if the value is a Result, false otherwise.
+ *
+ * @example
+ * const isRes = isResult(Result.ok(42)); // true
+ */
+export const isResult = (value: unknown): value is Result<unknown, unknown> =>
+  !!value && typeof value === 'object' && (value as Record<symbol, unknown>)[RESULT_BRAND] === true;
+
+// Logic: Asserts that a value is a valid Result instance. Used only at trust boundaries.
+function assertResult(value: unknown): asserts value is Result<unknown, unknown> {
+  if (!isResult(value)) {
+    throw new Error('Invalid Result instance');
+  }
+}
+
 /**
  * Pre-allocated success result for void operations.
- * Logic: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
+ * Optimization: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
  */
-const VOID_SUCCESS = Object.freeze({
+const voidSuccessResult = Object.freeze({
   ok: true,
   value: undefined,
   error: undefined,
   [RESULT_SYMBOL]: true,
-} as const) satisfies Result<void, never>;
+  [RESULT_BRAND]: true,
+} as const);
 
 /**
  * Normalizes a caught value into an Error object.
  * Logic: Ensures that even raw string throws or null values are wrapped in a standard Error.
  */
-function toError(e: unknown): Error {
-  if (e instanceof Error) return e;
+function ensureError(error: unknown): Error {
+  if (error instanceof Error) return error;
   try {
-    const message = typeof e === 'string' ? e : String(e ?? 'Unknown error');
-    return new Error(message, { cause: e });
+    return new Error(typeof error === 'string' ? error : String(error ?? 'Unknown error'), {
+      cause: error,
+    });
   } catch {
-    return new Error('Unknown error (failed to stringify caught value)', { cause: e });
+    return new Error('Unknown error', { cause: error });
   }
 }
 
 /**
  * Utilities for creating and consuming Result types.
+ *
+ * When to use:
+ * - When you need to wrap fallible synchronous or asynchronous functions without throwing.
+ * - When mapping, chaining, or matching over success and failure outcomes.
  */
 export const Result = {
   /**
    * Creates a successful Result.
+   *
+   * When to use:
+   * - When returning a successful value from a fallible operation.
+   *
+   * @remarks
+   * If the provided value is `undefined`, it will reuse the pre-allocated internal `voidSuccessResult`
+   * singleton to avoid unnecessary memory allocations.
+   *
+   * @param value The value to wrap in Ok.
+   * @returns An Ok Result wrapping the value.
+   *
+   * @example
+   * const res = Result.ok(42);
    */
   ok: <T, E = never>(value: T): Result<T, E> =>
     value === undefined
-      ? (VOID_SUCCESS as unknown as Result<T, E>)
+      ? (voidSuccessResult as unknown as Result<T, E>)
       : ({
           ok: true,
           value,
           error: undefined,
           [RESULT_SYMBOL]: true,
-        } as Ok<T>),
+          [RESULT_BRAND]: true,
+        } as unknown as Result<T, E>),
 
   /**
    * Creates a failed Result.
+   *
+   * When to use:
+   * - When returning an error from a fallible operation.
+   *
+   * @param error The error value to wrap in Err.
+   * @returns An Err Result wrapping the error.
+   *
+   * @example
+   * const res = Result.err(new Error("failed"));
    */
   err: <T = never, E = Error>(error: E): Result<T, E> =>
     ({
@@ -87,98 +155,226 @@ export const Result = {
       value: undefined,
       error,
       [RESULT_SYMBOL]: true,
-    }) as Err<E>,
+      [RESULT_BRAND]: true,
+    }) as unknown as Result<T, E>,
 
   /**
-   * Type guard for Ok variant.
+   * Type guard to check if a Result contains a value (Ok).
+   *
+   * @param result The Result to check.
+   * @returns True if the Result is Ok, false otherwise.
    */
-  isOk: <T, E>(res: Result<T, E>): res is Ok<T> => res.ok,
+  isOk: <T, E>(result: Result<T, E>): result is Ok<T> => result.ok,
 
   /**
-   * Type guard for Err variant.
+   * Type guard to check if a Result contains an error (Err).
+   *
+   * @param result The Result to check.
+   * @returns True if the Result is Err, false otherwise.
    */
-  isErr: <T, E>(res: Result<T, E>): res is Err<E> => !res.ok,
+  isErr: <T, E>(result: Result<T, E>): result is Err<E> => !result.ok,
 
   /**
    * Exhaustively handles both possible states of a Result.
+   *
+   * @param result The Result to match.
+   * @param matcher The pattern matcher containing ok and err handlers.
+   * @returns The returned value from the matched branch.
+   *
+   * @example
+   * const value = Result.match(res, {
+   *   ok: (v) => v * 2,
+   *   err: (e) => 0
+   * });
    */
-  match: <T, E, R>(res: Result<T, E>, matcher: { ok: (val: T) => R; err: (err: E) => R }): R =>
-    res.ok ? matcher.ok(res.value) : matcher.err(res.error),
+  match: <T, E, R>(
+    result: Result<T, E>,
+    matcher: { ok: (value: T) => R; err: (error: E) => R }
+  ): R => (result.ok ? matcher.ok(result.value) : matcher.err(result.error)),
 
   /**
    * Extracts the value if Ok, otherwise throws the error.
+   *
+   * @remarks
+   * Calling this function will throw the wrapped error directly if the result is in an Err state.
+   * Only call this if you are certain the result is Ok, or if throwing is the desired failure behavior.
+   *
+   * @param result The Result to unwrap.
+   * @returns The inner value if Ok.
+   * @throws {Error} The wrapped error if the Result is Err.
    */
-  unwrap: <T, E>(res: Result<T, E>): T => {
-    if (!res.ok) throw res.error;
-    return res.value;
+  unwrap: <T, E>(result: Result<T, E>): T => {
+    if (!result.ok) throw result.error;
+    return result.value;
   },
 
   /**
    * Extracts the value if Ok, otherwise throws with a custom message.
+   *
+   * @remarks
+   * The thrown Error will wrap the original error as its `cause`, preserving the stack trace
+   * and failure details.
+   *
+   * @param result The Result to unwrap.
+   * @param message The custom error message.
+   * @returns The inner value if Ok.
+   * @throws {Error} An Error with the custom message and original error as cause if Err.
    */
-  expect: <T, E>(res: Result<T, E>, msg: string): T => {
-    if (!res.ok) throw new Error(msg, { cause: res.error });
-    return res.value;
+  expect: <T, E>(result: Result<T, E>, message: string): T => {
+    if (!result.ok) throw new Error(message, { cause: result.error });
+    return result.value;
   },
 
   /**
    * Returns the value if Ok, otherwise returns the fallback value.
+   *
+   * @param result The Result to unwrap.
+   * @param fallback The fallback value.
+   * @returns The inner value if Ok, otherwise the fallback value.
    */
-  unwrapOr: <T, E, U>(res: Result<T, E>, fallback: U): T | U => (res.ok ? res.value : fallback),
+  unwrapOr: <T, E, U>(result: Result<T, E>, fallback: U): T | U =>
+    result.ok ? result.value : fallback,
 
   /**
    * Returns the value if Ok, otherwise computes a fallback via the provided function.
+   *
+   * @param result The Result to unwrap.
+   * @param fallbackProvider The function to compute fallback.
+   * @returns The inner value if Ok, otherwise the result of fallbackProvider.
    */
-  unwrapOrElse: <T, E, U>(res: Result<T, E>, fn: (err: E) => U): T | U =>
-    res.ok ? res.value : fn(res.error),
+  unwrapOrElse: <T, E, U>(result: Result<T, E>, fallbackProvider: (error: E) => U): T | U =>
+    result.ok ? result.value : fallbackProvider(result.error),
 
   /**
    * Transforms the inner value using the provided function if Ok.
-   * Optimization: Returns the original instance if the value remains unchanged.
+   *
+   * @remarks
+   * Implements an optimization where the original Result instance is returned unmodified
+   * if the mapping function returns the same value (determined via `Object.is`).
+   *
+   * @param result The Result to map.
+   * @param mapper The mapping function.
+   * @returns A new Result with the transformed value, or the original Err.
    */
-  map: <T, E, U>(res: Result<T, E>, fn: (val: T) => U): Result<U, E> => {
-    if (!res.ok) return res as unknown as Result<U, E>;
-    const next = fn(res.value);
-    return Object.is(next, res.value) ? (res as unknown as Result<U, E>) : Result.ok(next);
+  map: <T, E, U>(result: Result<T, E>, mapper: (value: T) => U): Result<U, E> => {
+    if (!result.ok) return result;
+    const mappedValue = mapper(result.value);
+
+    // Optimization: Reuses the original Result instance if the value is unchanged and immutable.
+    // To ensure no in-place mutation has occurred, reuse is only safe for primitive types (implicitly immutable) or frozen objects.
+    const isImmutable =
+      mappedValue === null ||
+      (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+      Object.isFrozen(mappedValue);
+
+    return Object.is(mappedValue, result.value) && isImmutable
+      ? (result as unknown as Result<U, E>)
+      : Result.ok(mappedValue);
   },
 
   /**
    * Transforms the inner error using the provided function if Err.
+   *
+   * @param result The Result to map.
+   * @param errorMapper The mapping function.
+   * @returns A new Result with the transformed error, or the original Ok.
    */
-  mapErr: <T, E, F>(res: Result<T, E>, fn: (err: E) => F): Result<T, F> =>
-    res.ok ? (res as unknown as Result<T, F>) : Result.err(fn(res.error)),
+  mapErr: <T, E, F>(result: Result<T, E>, errorMapper: (error: E) => F): Result<T, F> =>
+    result.ok ? result : Result.err(errorMapper(result.error)),
 
   /**
    * Chains a function that returns another Result if Ok.
+   *
+   * @param result The Result to chain.
+   * @param mapper The chaining function.
+   * @returns The Result returned by mapper, or the original Err.
    */
-  andThen: <T, E, U, F>(res: Result<T, E>, fn: (val: T) => Result<U, F>): Result<U, E | F> =>
-    res.ok ? fn(res.value) : (res as unknown as Result<U, E | F>),
+  andThen: <T, E, U, F>(
+    result: Result<T, E>,
+    mapper: (value: T) => Result<U, F>
+  ): Result<U, E | F> => {
+    if (!result.ok) return result;
+    const mapped = mapper(result.value);
+    assertResult(mapped);
+    return mapped;
+  },
 
   /**
    * Wraps a synchronous function call that might throw.
+   *
+   * When to use:
+   * - When executing code that may raise exceptions.
+   *
+   * @remarks
+   * If the function throws a non-Error value, it is automatically normalized using `ensureError`
+   * into a standard JavaScript `Error` with the thrown object set as the `cause`.
+   *
+   * @param operation The synchronous function.
+   * @returns An Ok Result wrapping the return value, or an Err Result wrapping the caught error.
    */
-  tryCatch: <T>(fn: () => T): Result<T, Error> => {
+  tryCatch: <T>(operation: () => T): Result<T, Error> => {
     try {
-      return Result.ok(fn());
+      return Result.ok<T>(operation());
     } catch (e) {
-      return Result.err(toError(e));
+      return Result.err(ensureError(e));
     }
   },
 
   /**
    * Wraps an asynchronous operation into a Result-bearing Promise.
+   *
+   * When to use:
+   * - When executing async code or Promise-returning functions that may reject.
+   *
+   * @remarks
+   * Similar to `tryCatch`, any thrown exceptions or rejected promises (including non-Error objects)
+   * are captured and normalized into a standard `Error` wrapping the original rejection.
+   *
+   * @param operation The asynchronous function.
+   * @returns A Promise resolving to an Ok Result wrapping the value, or an Err Result wrapping the caught error.
    */
-  tryAsync: async <T>(fn: () => PromiseLike<T>): Promise<Result<T, Error>> => {
+  tryAsync: async <T>(operation: () => PromiseLike<T>): Promise<Result<T, Error>> => {
     try {
-      const value = await fn();
-      return Result.ok<T>(value);
+      const resolvedValue = await operation();
+      return Result.ok<T>(resolvedValue);
     } catch (e) {
-      return Result.err(toError(e));
+      return Result.err(ensureError(e));
     }
   },
 
   /**
    * Converts a Result to an Option, dropping the error data.
+   *
+   * @param result The Result to convert.
+   * @returns Some wrapping the value if Ok, otherwise None.
    */
-  toOption: <T, E>(res: Result<T, E>): Option<T> => (res.ok ? Option.some(res.value) : Option.none),
+  toOption: <T, E>(result: Result<T, E>): Option<T> =>
+    result.ok ? Option.some(result.value) : Option.none,
+
+  /**
+   * Checks for structural and value equality between two Results.
+   *
+   * @remarks
+   * Performs a strict equality check using `Object.is` for values or errors. Returns false
+   * if either input is not a valid Result instance.
+   *
+   * When to use:
+   * - To compare two Result states for equivalence.
+   *
+   * @param resultA - The first Result to compare.
+   * @param resultB - The second Result to compare.
+   * @returns True if both Results represent the same state and value/error.
+   *
+   * @example
+   * const equal = Result.equals(resA, resB);
+   */
+  equals: <T, E>(resultA: Result<T, E>, resultB: Result<T, E>): boolean => {
+    // Logic: Fast-paths identical references before performing checks.
+    if (!isResult(resultA) || !isResult(resultB)) return false;
+    if (resultA === resultB) return true;
+    if (resultA.ok !== resultB.ok) return false;
+    return resultA.ok
+      ? Object.is(resultA.value, resultB.value)
+      : Object.is(resultA.error, resultB.error);
+  },
 };

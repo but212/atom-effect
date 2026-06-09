@@ -3,42 +3,17 @@
  */
 export const REPEATS = 100;
 
-/**
- * Pre-generated random values to avoid Math.random() overhead during benchmarks.
- */
-const RANDOM_POOL_SIZE = 1024;
-const _randomPool = Array.from({ length: RANDOM_POOL_SIZE }, () => Math.random());
-let _poolIdx = 0;
+export let _sink: unknown;
 
 /**
- * Returns a pre-generated random number (0 to 1).
+ * Prevents Dead Code Elimination (DCE) by assigning the value to a sink.
  */
-export function nextRandom(): number {
-  return _randomPool[_poolIdx++ % RANDOM_POOL_SIZE];
-}
-
-/**
- * Returns a random integer between 0 and max (exclusive).
- */
-export function nextRandomInt(max: number): number {
-  return Math.floor(nextRandom() * max);
-}
-
-/**
- * Side-effect sink to prevent DCE.
- */
-let _sink: unknown;
-
-/**
- * Prevents Dead Code Elimination by assigning to a module-level variable.
- */
-export function keep(val: unknown): void {
-  // Use a condition that is always true but hard for the compiler to prove at compile time
-  if (_poolIdx > -1) {
-    _sink = val;
+export function keep(value: unknown): void {
+  _sink = value;
+  if (
+    _sink !== undefined &&
+    (globalThis as unknown as { __dce_guard__: unknown }).__dce_guard__ === _sink
+  ) {
+    console.log(_sink);
   }
-}
-
-export function getSink(): unknown {
-  return _sink;
 }

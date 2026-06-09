@@ -126,6 +126,10 @@ describe('Cold vs Warm: Computed Cache', () => {
   const sharedSource = atom(0);
   const cachedComputed = computed(() => sharedSource.value * 3);
 
+  const missSource = atom(0);
+  const missComputed = computed(() => missSource.value * 3);
+  missComputed.subscribe(() => {}); // activate
+
   bench(
     '[Warm] reuse computed — cache hit (source unchanged)',
     () => {
@@ -137,14 +141,8 @@ describe('Cold vs Warm: Computed Cache', () => {
   bench(
     '[Warm] reuse computed — cache miss (source changed)',
     () => {
-      // Use a local setup for the cache miss to ensure consistent behavior
-      // and avoid infinite value accumulation in a shared atom.
-      const localSource = atom(0);
-      const localComputed = computed(() => localSource.value * 3);
-      localComputed.subscribe(() => {}); // activate
-
-      localSource.value++;
-      keep(localComputed.value);
+      missSource.value = missSource.peek() === 0 ? 1 : 0;
+      keep(missComputed.value);
     },
     microBenchOptions
   );

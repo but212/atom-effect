@@ -4,7 +4,7 @@
 
 import { bench, describe } from 'vitest';
 import $ from '../../dist';
-import { cleanupContainer, createContainer, microBenchOptions } from '../utils/setup';
+import { microBenchOptions, withContainer } from '../utils/setup';
 
 interface ListItem {
   id: number;
@@ -22,122 +22,58 @@ const makeItems = (count: number, offset = 0): ListItem[] =>
     text: `Item ${i + 1 + offset}`,
   }));
 
-// ============================================================================
-// 1. Initial List Rendering
-// ============================================================================
-
 describe('List Rendering: Initial Render (1000 items)', () => {
-  bench(
-    'jQuery: manual render 1000 items',
-    () => {
-      const $c = createContainer();
-      const items = makeItems(1000);
-      let html = '';
-      for (let i = 0; i < 1000; i++) {
-        html += `<div class="item">${items[i]?.text}</div>`;
-      }
-      $c.html(html);
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+  const run = (name: string, fn: ($c: JQuery) => void) =>
+    bench(name, withContainer(fn), microBenchOptions);
 
-  bench(
-    'atom-effect: atomList render 1000 items',
-    () => {
-      const $c = createContainer();
-      const items = $.atom<ListItem[]>(makeItems(1000));
-      $c.atomList(items, listOptions);
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+  run('jQuery: manual render 1000 items', ($c) => {
+    const items = makeItems(1000);
+    let html = '';
+    for (let i = 0; i < 1000; i++) {
+      html += `<div class="item">${items[i]?.text}</div>`;
+    }
+    $c.html(html);
+  });
 
-  bench(
-    'atom-effect: atomList render 1000 items (with bind callback)',
-    () => {
-      const $c = createContainer();
-      const items = $.atom<ListItem[]>(makeItems(1000));
-      $c.atomList(items, {
-        key: 'id',
-        render: () => '<div class="item"><span class="label"></span></div>',
-        bind: ($el, item) => {
-          $el.find('.label').atomText($.atom(item.text));
-          $el.atomClass('even', $.atom(item.id % 2 === 0));
-        },
-      });
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+  run('atom-effect: atomList render 1000 items', ($c) => {
+    const items = $.atom<ListItem[]>(makeItems(1000));
+    $c.atomList(items, listOptions);
+  });
+
+  run('atom-effect: atomList render 1000 items (with bind callback)', ($c) => {
+    const items = $.atom<ListItem[]>(makeItems(1000));
+    $c.atomList(items, {
+      key: 'id',
+      render: () => '<div class="item"><span class="label"></span></div>',
+      bind: ($el, item) => {
+        $el.find('.label').atomText($.atom(item.text));
+        $el.atomClass('even', $.atom(item.id % 2 === 0));
+      },
+    });
+  });
 });
 
-// ============================================================================
-// 2. Reconciliation & Dynamic Mutation
-// ============================================================================
-
 describe('List Rendering: Reconciliation (Base 100 items)', () => {
-  bench(
-    'append 10 items',
-    () => {
-      const $c = createContainer();
-      const base = makeItems(100);
-      const items = $.atom<ListItem[]>(base);
-      $c.atomList(items, listOptions);
-
-      // Append mutation
-      items.value = [...base, ...makeItems(10, 100)];
-
-      cleanupContainer($c);
+  const base = makeItems(100);
+  const cases = [
+    { name: 'append 10 items', next: [...base, ...makeItems(10, 100)] },
+    { name: 'prepend 10 items', next: [...makeItems(10, 100), ...base] },
+    {
+      name: 'reconciliation: full shuffle 100 items',
+      next: [...base].sort(() => 0.5 - Math.random()),
     },
-    microBenchOptions
-  );
+    { name: 'reconciliation: remove 50 items', next: base.slice(0, 50) },
+  ];
 
-  bench(
-    'prepend 10 items',
-    () => {
-      const $c = createContainer();
-      const base = makeItems(100);
-      const items = $.atom<ListItem[]>(base);
-      $c.atomList(items, listOptions);
-
-      // Prepend mutation
-      items.value = [...makeItems(10, 100), ...base];
-
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
-
-  bench(
-    'reconciliation: full shuffle 100 items',
-    () => {
-      const $c = createContainer();
-      const base = makeItems(100);
-      const items = $.atom<ListItem[]>(base);
-      $c.atomList(items, listOptions);
-
-      // Shuffle mutation
-      items.value = [...base].sort(() => Math.random() - 0.5);
-
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
-
-  bench(
-    'reconciliation: remove 50 items',
-    () => {
-      const $c = createContainer();
-      const base = makeItems(100);
-      const items = $.atom<ListItem[]>(base);
-      $c.atomList(items, listOptions);
-
-      // Slices off half of the items
-      items.value = base.slice(0, 50);
-
-      cleanupContainer($c);
-    },
-    microBenchOptions
-  );
+  for (const { name, next } of cases) {
+    bench(
+      name,
+      withContainer(($c) => {
+        const items = $.atom<ListItem[]>(base);
+        $c.atomList(items, listOptions);
+        items.value = next;
+      }),
+      microBenchOptions
+    );
+  }
 });

@@ -1,10 +1,24 @@
 import { bench, describe } from 'vitest';
 import { Result } from '../dist';
-import { keep, nextRandomInt, REPEATS } from './setup';
+import { keep, REPEATS } from './setup';
 
 describe('Result', () => {
   const okVal = Result.ok(1);
   const errVal = Result.err(new Error('test'));
+
+  // Pre-generate data structures to minimize runtime overhead inside benchmark loops.
+  const mixedResults = Array.from({ length: REPEATS }, (_, i) => (i % 2 === 0 ? okVal : errVal));
+
+  const resultMatcher = {
+    ok: (x: number) => x,
+    err: (_e: Error) => -1,
+  };
+
+  const okFn = () => 1;
+  const errFn = () => {
+    throw new Error();
+  };
+  const mixedFns = Array.from({ length: REPEATS }, (_, i) => (i % 2 === 0 ? okFn : errFn));
 
   bench(`Result.ok creation (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
@@ -13,27 +27,14 @@ describe('Result', () => {
   });
 
   bench(`Result.match (mixed, x${REPEATS})`, () => {
-    const results = [okVal, errVal];
-    const matcher = {
-      ok: (x: number) => x,
-      err: (_e: Error) => -1,
-    };
     for (let i = 0; i < REPEATS; i++) {
-      const res = results[nextRandomInt(2)];
-      keep(Result.match(res, matcher));
+      keep(Result.match(mixedResults[i], resultMatcher));
     }
   });
 
   bench(`Result.tryCatch (mixed, x${REPEATS})`, () => {
-    const fns = [
-      () => 1,
-      () => {
-        throw new Error();
-      },
-    ];
     for (let i = 0; i < REPEATS; i++) {
-      const fn = fns[nextRandomInt(2)];
-      keep(Result.tryCatch(fn));
+      keep(Result.tryCatch(mixedFns[i]));
     }
   });
 });

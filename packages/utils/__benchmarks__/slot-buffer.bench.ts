@@ -32,11 +32,11 @@ describe('SlotBuffer', () => {
 
   bench(`forEach (x${REPEATS})`, () => {
     let sum = 0;
+    const add = (val: number) => {
+      sum += val;
+    };
     for (let i = 0; i < REPEATS; i++) {
-      // biome-ignore lint/complexity/noForEach: Benchmarking SlotBuffer.forEach method performance
-      filledBuffer.forEach((val) => {
-        sum += val;
-      });
+      filledBuffer.forEach(add);
     }
     keep(sum);
   });
@@ -48,19 +48,21 @@ describe('SlotBuffer', () => {
       buffer.remove(2);
       buffer.remove(5);
       buffer.remove(8);
-      keep(buffer.compact());
+      buffer.compact();
     }
   });
 
+  const isFive = (val: number) => val === 5;
   bench(`some (early exit, x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(filledBuffer.some((val) => val === 5));
+      keep(filledBuffer.some(isFive));
     }
   });
 
+  const isNinetyNine = (val: number) => val === 99;
   bench(`some (full scan, x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(filledBuffer.some((val) => val === 99));
+      keep(filledBuffer.some(isNinetyNine));
     }
   });
 });
