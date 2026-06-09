@@ -99,8 +99,6 @@ function ensureError(error: unknown): Error {
   }
 }
 
-const defaultPredicateErrorFactory = () => new Error('Predicate failed');
-
 /**
  * Utilities for creating and consuming Result types.
  *
@@ -411,14 +409,17 @@ export const Result = {
    * @example
    * const res = Result.fromPredicate(42, x => x > 0); // Ok(42)
    */
-  fromPredicate: <T, E = Error>(
-    value: T,
-    predicate: (value: T) => boolean,
-    errorFactory?: () => E
-  ): Result<T, E> =>
+  fromPredicate: ((
+    value: unknown,
+    predicate: (value: unknown) => boolean,
+    errorFactory?: () => unknown
+  ): Result<unknown, unknown> =>
     predicate(value)
       ? Result.ok(value)
-      : Result.err((errorFactory ?? (defaultPredicateErrorFactory as () => E))()),
+      : Result.err(errorFactory ? errorFactory() : new Error('Predicate failed'))) as {
+    <T, U extends T, E = Error>(value: T, predicate: (value: T) => value is U, errorFactory?: () => E): Result<U, E>;
+    <T, E = Error>(value: T, predicate: (value: T) => boolean, errorFactory?: () => E): Result<T, E>;
+  },
 
   /**
    * Alias for {@link Result.tryCatch}.

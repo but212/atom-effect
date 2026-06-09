@@ -260,6 +260,12 @@ describe('Option<T>', () => {
         expect(Option.unwrap(result)).toBe(42);
       });
 
+      it('should narrow type when predicate is a type guard', () => {
+        const isString = (x: unknown): x is string => typeof x === 'string';
+        const result = Option.fromPredicate('hello' as unknown, isString);
+        expect(Option.unwrap(result)).toBe('hello');
+      });
+
       it('should return None when predicate evaluates to false', () => {
         const result = Option.fromPredicate(-42, (x) => x > 0);
         expect(Option.isNone(result)).toBe(true);

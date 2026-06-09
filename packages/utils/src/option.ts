@@ -395,6 +395,9 @@ export const Option = {
    * @example
    * const opt = Option.fromPredicate(42, x => x > 0); // Some(42)
    */
-  fromPredicate: <T>(value: T, predicate: (value: T) => boolean): Option<T> =>
-    predicate(value) ? Option.some(value) : Option.none,
+  fromPredicate: ((value: unknown, predicate: (value: unknown) => boolean): Option<unknown> =>
+    predicate(value) ? Option.some(value) : Option.none) as {
+    <T, U extends T>(value: T, predicate: (value: T) => value is U): Option<U>;
+    <T>(value: T, predicate: (value: T) => boolean): Option<T>;
+  },
 };

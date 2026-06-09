@@ -413,6 +413,12 @@ describe('Result<T, E>', () => {
         expect(Result.unwrap(res)).toBe(42);
       });
 
+      it('should narrow type when predicate is a type guard', () => {
+        const isString = (x: unknown): x is string => typeof x === 'string';
+        const res = Result.fromPredicate('hello' as unknown, isString);
+        expect(Result.unwrap(res)).toBe('hello');
+      });
+
       it('should return Err with default Error when predicate evaluates to false', () => {
         const res = Result.fromPredicate(-42, (x) => x > 0);
         expect(Result.isErr(res)).toBe(true);
