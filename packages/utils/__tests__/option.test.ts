@@ -121,6 +121,17 @@ describe('Option<T>', () => {
         const mapped = Option.map(opt, (obj) => obj);
         expect(mapped).toBe(opt);
       });
+
+      it('should NOT reuse the Option instance when mapping a mutable object if the returned reference is identical', () => {
+        const mutableObj = { count: 1 };
+        const opt = Option.some(mutableObj);
+
+        const mapped = Option.map(opt, (obj) => {
+          obj.count = 2;
+          return obj;
+        });
+        expect(mapped).not.toBe(opt);
+      });
     });
 
     describe('andThen()', () => {

@@ -169,6 +169,17 @@ describe('Result<T, E>', () => {
         const mapped = Result.map(ok, (obj) => obj);
         expect(mapped).toBe(ok);
       });
+
+      it('should NOT reuse the Result instance when mapping a mutable object if the returned reference is identical', () => {
+        const mutableObj = { count: 1 };
+        const ok = Result.ok(mutableObj);
+
+        const mapped = Result.map(ok, (obj) => {
+          obj.count = 2;
+          return obj;
+        });
+        expect(mapped).not.toBe(ok);
+      });
     });
 
     describe('mapErr()', () => {
