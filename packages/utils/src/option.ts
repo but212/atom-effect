@@ -67,6 +67,12 @@ function assertOption(value: unknown): asserts value is Option<unknown> {
   }
 }
 
+function fromPredicate<T, U extends T>(value: T, predicate: (value: T) => value is U): Option<U>;
+function fromPredicate<T>(value: T, predicate: (value: T) => boolean): Option<T>;
+function fromPredicate(value: unknown, predicate: (value: unknown) => boolean): Option<unknown> {
+  return predicate(value) ? Option.some(value) : Option.none;
+}
+
 /**
  * Utilities for creating, transforming, and querying {@link Option} instances.
  */
@@ -222,17 +228,11 @@ export const Option = {
    */
   map: <T, U>(option: Option<T>, mapper: (value: T) => U): Option<U> => {
     if (!option.ok) return option;
-
     const mappedValue = mapper(option.value);
-
-    // Optimization: Reuses the original Option instance if the value is unchanged and immutable.
-    // To ensure no in-place mutation has occurred, reuse is only safe for primitive types (implicitly immutable) or frozen objects.
-    const isImmutable =
-      mappedValue === null ||
-      (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
-      Object.isFrozen(mappedValue);
-
-    return Object.is(mappedValue, option.value) && isImmutable
+    return Object.is(mappedValue, option.value) &&
+      (mappedValue === null ||
+        (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+        Object.isFrozen(mappedValue))
       ? (option as unknown as Option<U>)
       : Option.some(mappedValue);
   },
@@ -395,9 +395,5 @@ export const Option = {
    * @example
    * const opt = Option.fromPredicate(42, x => x > 0); // Some(42)
    */
-  fromPredicate: ((value: unknown, predicate: (value: unknown) => boolean): Option<unknown> =>
-    predicate(value) ? Option.some(value) : Option.none) as {
-    <T, U extends T>(value: T, predicate: (value: T) => value is U): Option<U>;
-    <T>(value: T, predicate: (value: T) => boolean): Option<T>;
-  },
+  fromPredicate,
 };

@@ -18,13 +18,13 @@ export const RESULT_SYMBOL = Symbol.for('atom-effect.Result');
 /**
  * @internal
  * Private brand symbol for runtime verification of Option (security).
- * This is intentionally NOT exported to public API to prevent external forgery.
+ * Using Symbol.for for cross-boundary compatibility.
  */
-export const OPTION_BRAND = Symbol('OptionBrand');
+export const OPTION_BRAND = Symbol.for('atom-effect.Option#brand');
 
 /**
  * @internal
  * Private brand symbol for runtime verification of Result (security).
- * This is intentionally NOT exported to public API to prevent external forgery.
+ * Using Symbol.for for cross-boundary compatibility.
  */
-export const RESULT_BRAND = Symbol('ResultBrand');
+export const RESULT_BRAND = Symbol.for('atom-effect.Result#brand');
