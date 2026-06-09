@@ -9,7 +9,7 @@
  * eliminating runtime casting, and maintaining zero-overhead abstraction.
  */
 
-import { OPTION_SYMBOL } from './symbols';
+import { OPTION_BRAND, OPTION_SYMBOL } from './symbols';
 import type { Prettify } from './types';
 
 /**
@@ -44,9 +44,6 @@ export type None = Prettify<{
  * - For fields, returns, or parameters that may or may not contain a value.
  */
 export type Option<T> = Some<T> | None;
-
-// Optimization: Private brand symbol to track valid Option instances for secure runtime protocol verification.
-const OPTION_BRAND = Symbol('OptionBrand');
 
 /**
  * Checks if a value is a valid {@link Option} instance.
@@ -364,4 +361,43 @@ export const Option = {
    * const val = Option.toUndefined(opt);
    */
   toUndefined: <T>(option: Option<T>): T | undefined => (option.ok ? option.value : undefined),
+
+  /**
+   * Combines an array of Options into a single Option containing an array of values.
+   *
+   * If any Option is None, it returns None.
+   *
+   * @param options - An array of Option instances.
+   * @returns Option containing an array of values, or None.
+   *
+   * @example
+   * const combined = Option.all([Option.some(1), Option.some(2)]); // Some([1, 2])
+   */
+  all: <T>(options: Option<T>[]): Option<T[]> => {
+    const result: T[] = [];
+    for (const opt of options) {
+      if (Option.isNone(opt)) return Option.none;
+      result.push(opt.value);
+    }
+    return Option.some(result);
+  },
+
+  /**
+   * Creates an Option from a value based on a predicate function.
+   *
+   * If the predicate evaluates to true, it returns Some wrapping the value.
+   * Otherwise, it returns None.
+   *
+   * @param value - The value to evaluate.
+   * @param predicate - The condition function.
+   * @returns Option wrapping the value, or None.
+   *
+   * @example
+   * const opt = Option.fromPredicate(42, x => x > 0); // Some(42)
+   */
+  fromPredicate: ((value: unknown, predicate: (value: unknown) => boolean): Option<unknown> =>
+    predicate(value) ? Option.some(value) : Option.none) as {
+    <T, U extends T>(value: T, predicate: (value: T) => value is U): Option<U>;
+    <T>(value: T, predicate: (value: T) => boolean): Option<T>;
+  },
 };

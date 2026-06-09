@@ -386,4 +386,70 @@ describe('Result<T, E>', () => {
       ).toBe(false);
     });
   });
+
+  describe('New APIs (all, fromPredicate, fromThrowable)', () => {
+    describe('Result.all()', () => {
+      it('should combine an array of Ok into a Ok of array', () => {
+        const res = Result.all([Result.ok(1), Result.ok(2), Result.ok(3)]);
+        expect(Result.unwrap(res)).toEqual([1, 2, 3]);
+      });
+
+      it('should return the first Err if any Result is Err (fail-fast)', () => {
+        const err1 = Result.err('first error');
+        const err2 = Result.err('second error');
+        const res = Result.all([Result.ok(1), err1, Result.ok(3), err2]);
+        expect(res).toBe(err1);
+      });
+
+      it('should return Ok of empty array for empty input array', () => {
+        const res = Result.all([]);
+        expect(Result.unwrap(res)).toEqual([]);
+      });
+    });
+
+    describe('Result.fromPredicate()', () => {
+      it('should return Ok of value when predicate evaluates to true', () => {
+        const res = Result.fromPredicate(42, (x) => x > 0);
+        expect(Result.unwrap(res)).toBe(42);
+      });
+
+      it('should narrow type when predicate is a type guard', () => {
+        const isString = (x: unknown): x is string => typeof x === 'string';
+        const res = Result.fromPredicate('hello' as unknown, isString);
+        expect(Result.unwrap(res)).toBe('hello');
+      });
+
+      it('should return Err with default Error when predicate evaluates to false', () => {
+        const res = Result.fromPredicate(-42, (x) => x > 0);
+        expect(Result.isErr(res)).toBe(true);
+        if (Result.isErr(res)) {
+          expect(res.error).toBeInstanceOf(Error);
+          expect(res.error.message).toBe('Predicate failed');
+        }
+      });
+
+      it('should return Err with custom error when errorFactory is provided', () => {
+        const customErr = new Error('custom failure');
+        const res = Result.fromPredicate(
+          -42,
+          (x) => x > 0,
+          () => customErr
+        );
+        expect(res).toEqual(Result.err(customErr));
+      });
+    });
+
+    describe('Result.fromThrowable()', () => {
+      it('should behave identically to tryCatch', () => {
+        const success = Result.fromThrowable(() => 42);
+        expect(success).toEqual(Result.ok(42));
+
+        const error = new Error('thrown');
+        const failure = Result.fromThrowable(() => {
+          throw error;
+        });
+        expect(failure).toEqual(Result.err(error));
+      });
+    });
+  });
 });
