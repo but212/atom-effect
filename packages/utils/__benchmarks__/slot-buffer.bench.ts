@@ -48,7 +48,7 @@ describe('SlotBuffer', () => {
       buffer.remove(2);
       buffer.remove(5);
       buffer.remove(8);
-      keep(buffer.compact());
+      buffer.compact();
     }
   });
 

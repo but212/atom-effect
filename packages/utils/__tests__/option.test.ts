@@ -225,8 +225,10 @@ describe('Option<T>', () => {
   });
 
   describe('Edge Cases & Security Guards', () => {
-    it('fromNullable() treats NaN as None', () => {
-      expect(Option.fromNullable(NaN)).toBe(Option.none);
+    it('fromNullable() treats NaN as Some(NaN)', () => {
+      const opt = Option.fromNullable(NaN);
+      expect(Option.isSome(opt)).toBe(true);
+      expect(Number.isNaN(Option.unwrap(opt))).toBe(true);
     });
 
     it('isOption rejects fake Option literals created externally', () => {

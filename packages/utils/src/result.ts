@@ -50,14 +50,8 @@ export type Err<E> = ResultBase &
  */
 export type Result<T, E = Error> = Ok<T> | Err<E>;
 
-// Optimization: Registry to track valid Result instances for secure runtime protocol verification.
-const resultRegistry = new WeakSet<object>();
-
-// Logic: Registers an object in the Result registry and returns it.
-const registerResult = <T extends object>(result: T): T => {
-  resultRegistry.add(result);
-  return result;
-};
+// Optimization: Private brand symbol to track valid Result instances for secure runtime protocol verification.
+const RESULT_BRAND = Symbol('ResultBrand');
 
 /**
  * Checks if a value is a valid {@link Result} instance.
@@ -72,7 +66,7 @@ const registerResult = <T extends object>(result: T): T => {
  * const isRes = isResult(Result.ok(42)); // true
  */
 export const isResult = (value: unknown): value is Result<unknown, unknown> =>
-  !!value && typeof value === 'object' && resultRegistry.has(value);
+  !!value && typeof value === 'object' && (value as Record<symbol, unknown>)[RESULT_BRAND] === true;
 
 // Logic: Asserts that a value is a valid Result instance. Used only at trust boundaries.
 function assertResult(value: unknown): asserts value is Result<unknown, unknown> {
@@ -85,14 +79,13 @@ function assertResult(value: unknown): asserts value is Result<unknown, unknown>
  * Pre-allocated success result for void operations.
  * Optimization: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
  */
-const voidSuccessResult = registerResult(
-  Object.freeze({
-    ok: true,
-    value: undefined,
-    error: undefined,
-    [RESULT_SYMBOL]: true,
-  } as const)
-);
+const voidSuccessResult = Object.freeze({
+  ok: true,
+  value: undefined,
+  error: undefined,
+  [RESULT_SYMBOL]: true,
+  [RESULT_BRAND]: true,
+} as const);
 
 /**
  * Normalizes a caught value into an Error object.
@@ -136,7 +129,13 @@ export const Result = {
   ok: <T, E = never>(value: T): Result<T, E> =>
     value === undefined
       ? (voidSuccessResult as unknown as Result<T, E>)
-      : registerResult({ ok: true, value, error: undefined, [RESULT_SYMBOL]: true } as Ok<T>),
+      : ({
+          ok: true,
+          value,
+          error: undefined,
+          [RESULT_SYMBOL]: true,
+          [RESULT_BRAND]: true,
+        } as unknown as Result<T, E>),
 
   /**
    * Creates a failed Result.
@@ -151,7 +150,13 @@ export const Result = {
    * const res = Result.err(new Error("failed"));
    */
   err: <T = never, E = Error>(error: E): Result<T, E> =>
-    registerResult({ ok: false, value: undefined, error, [RESULT_SYMBOL]: true } as Err<E>),
+    ({
+      ok: false,
+      value: undefined,
+      error,
+      [RESULT_SYMBOL]: true,
+      [RESULT_BRAND]: true,
+    }) as unknown as Result<T, E>,
 
   /**
    * Type guard to check if a Result contains a value (Ok).
@@ -254,7 +259,15 @@ export const Result = {
   map: <T, E, U>(result: Result<T, E>, mapper: (value: T) => U): Result<U, E> => {
     if (!result.ok) return result;
     const mappedValue = mapper(result.value);
-    return Object.is(mappedValue, result.value) && Object.isFrozen(mappedValue)
+
+    // Optimization: Reuses the original Result instance if the value is unchanged and immutable.
+    // To ensure no in-place mutation has occurred, reuse is only safe for primitive types (implicitly immutable) or frozen objects.
+    const isImmutable =
+      mappedValue === null ||
+      (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+      Object.isFrozen(mappedValue);
+
+    return Object.is(mappedValue, result.value) && isImmutable
       ? (result as unknown as Result<U, E>)
       : Result.ok(mappedValue);
   },

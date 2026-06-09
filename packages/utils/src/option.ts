@@ -45,14 +45,8 @@ export type None = Prettify<{
  */
 export type Option<T> = Some<T> | None;
 
-// Optimization: Registry to track valid Option instances for secure runtime protocol verification.
-const optionRegistry = new WeakSet<object>();
-
-// Logic: Registers an object in the Option registry and returns it.
-const registerOption = <T extends object>(option: T): T => {
-  optionRegistry.add(option);
-  return option;
-};
+// Optimization: Private brand symbol to track valid Option instances for secure runtime protocol verification.
+const OPTION_BRAND = Symbol('OptionBrand');
 
 /**
  * Checks if a value is a valid {@link Option} instance.
@@ -67,7 +61,7 @@ const registerOption = <T extends object>(option: T): T => {
  * const isOpt = isOption(Option.some(42)); // true
  */
 export const isOption = (value: unknown): value is Option<unknown> =>
-  !!value && typeof value === 'object' && optionRegistry.has(value);
+  !!value && typeof value === 'object' && (value as Record<symbol, unknown>)[OPTION_BRAND] === true;
 
 // Logic: Asserts that a value is a valid Option instance. Used only at trust boundaries.
 function assertOption(value: unknown): asserts value is Option<unknown> {
@@ -92,7 +86,8 @@ export const Option = {
    * @example
    * const opt = Option.some(42);
    */
-  some: <T>(value: T): Some<T> => registerOption({ ok: true, value, [OPTION_SYMBOL]: true }),
+  some: <T>(value: T): Some<T> =>
+    ({ ok: true, value, [OPTION_SYMBOL]: true, [OPTION_BRAND]: true }) as unknown as Some<T>,
 
   /**
    * An Option instance representing the absence of a value.
@@ -104,13 +99,12 @@ export const Option = {
    * const opt = Option.none;
    */
   // Optimization: Freezes the None object to enforce immutability and allow safe sharing.
-  none: registerOption(
-    Object.freeze({
-      ok: false,
-      value: undefined,
-      [OPTION_SYMBOL]: true,
-    } as const) as Option<never>
-  ),
+  none: Object.freeze({
+    ok: false,
+    value: undefined,
+    [OPTION_SYMBOL]: true,
+    [OPTION_BRAND]: true,
+  } as const) as Option<never>,
 
   /**
    * Checks if an Option contains a value.
@@ -235,7 +229,13 @@ export const Option = {
     const mappedValue = mapper(option.value);
 
     // Optimization: Reuses the original Option instance if the value is unchanged and immutable.
-    return Object.is(mappedValue, option.value) && Object.isFrozen(mappedValue)
+    // To ensure no in-place mutation has occurred, reuse is only safe for primitive types (implicitly immutable) or frozen objects.
+    const isImmutable =
+      mappedValue === null ||
+      (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+      Object.isFrozen(mappedValue);
+
+    return Object.is(mappedValue, option.value) && isImmutable
       ? (option as unknown as Option<U>)
       : Option.some(mappedValue);
   },
@@ -273,7 +273,7 @@ export const Option = {
    * const opt = Option.fromNullable(apiResponse.user);
    */
   fromNullable: <T>(value: T | null | undefined): Option<T> =>
-    value == null || Object.is(value, NaN) ? Option.none : Option.some(value),
+    value == null ? Option.none : Option.some(value),
 
   /**
    * Executes a branch handler based on whether the Option contains a value.

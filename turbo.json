@@ -19,7 +19,7 @@
       "cache": false
     },
     "lint": {
-      "cache": true
+      "cache": false
     },
     "typecheck": {
       "dependsOn": ["^build"],
