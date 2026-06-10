@@ -10,33 +10,30 @@
 
 import { Option } from './option';
 import { RESULT_BRAND, RESULT_SYMBOL } from './symbols';
-import type { Prettify } from './types';
 
 type ResultBase = {
-  readonly [RESULT_SYMBOL]: true;
+  readonly [RESULT_SYMBOL]: unknown;
 };
 
 /**
  * Logic: Success Variant
  * Represents a successful computation result holding a value of type T.
  */
-export type Ok<T> = ResultBase &
-  Prettify<{
-    readonly ok: true;
-    readonly value: T;
-    readonly error: undefined;
-  }>;
+export interface Ok<T> extends ResultBase {
+  readonly ok: true;
+  readonly value: T;
+  readonly error: undefined;
+}
 
 /**
  * Logic: Failure Variant
  * Represents a failed computation holding an error of type E.
  */
-export type Err<E> = ResultBase &
-  Prettify<{
-    readonly ok: false;
-    readonly value: undefined;
-    readonly error: E;
-  }>;
+export interface Err<E> extends ResultBase {
+  readonly ok: false;
+  readonly value: undefined;
+  readonly error: E;
+}
 
 /**
  * A discriminated union representing success (Ok) or failure (Err).

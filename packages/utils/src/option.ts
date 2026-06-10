@@ -10,7 +10,6 @@
  */
 
 import { OPTION_BRAND, OPTION_SYMBOL } from './symbols';
-import type { Prettify } from './types';
 
 /**
  * Represents a present value of type T.
@@ -18,11 +17,11 @@ import type { Prettify } from './types';
  * When to use:
  * - When a value is computed or retrieved.
  */
-export type Some<T> = Prettify<{
+export type Some<T> = {
   readonly ok: true;
   readonly value: T;
-  readonly [OPTION_SYMBOL]: true;
-}>;
+  readonly [OPTION_SYMBOL]: unknown;
+};
 
 /**
  * Represents the absence of a value.
@@ -30,11 +29,11 @@ export type Some<T> = Prettify<{
  * When to use:
  * - When a value is absent, unavailable, or deferred.
  */
-export type None = Prettify<{
+export type None = {
   readonly ok: false;
   readonly value: undefined;
-  readonly [OPTION_SYMBOL]: true;
-}>;
+  readonly [OPTION_SYMBOL]: unknown;
+};
 
 /**
  * A discriminated union representing either a value ({@link Some})
@@ -107,7 +106,7 @@ export const Option = {
     value: undefined,
     [OPTION_SYMBOL]: true,
     [OPTION_BRAND]: true,
-  } as const) as Option<never>,
+  } as const) as None,
 
   /**
    * Checks if an Option contains a value.
