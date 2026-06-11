@@ -7,7 +7,6 @@
  */
 
 import { effect, untracked } from '@but212/atom-effect';
-import { Option } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
@@ -37,19 +36,14 @@ function toKebab(str: string): string {
 /**
  * Logic: XSS Protection Filter
  * Validates whether a property or attribute name is safe for reactive binding.
- *
- * Logic: Security Strategy
- * Returns a validation result indicating if the property/attribute is safe,
- * allowing the caller to handle side effects like logging.
  */
-function checkBindingSafety(name: string, isProperty: boolean): Option<string> {
+function checkBindingSafety(name: string, isProperty: boolean): string | undefined {
   const lower = name.toLowerCase();
-  if (lower.startsWith('on'))
-    return Option.some(SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name));
+  if (lower.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
   if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
-    return Option.some(SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name));
+    return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
   }
-  return Option.none;
+  return undefined;
 }
 
 /**
@@ -59,9 +53,9 @@ function checkBindingSafety(name: string, isProperty: boolean): Option<string> {
  */
 function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string, T][] {
   return Object.entries(map).filter(([name]) => {
-    const errOpt = checkBindingSafety(name, isProperty);
-    if (Option.isSome(errOpt)) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${errOpt.value}`);
+    const err = checkBindingSafety(name, isProperty);
+    if (err !== undefined) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${err}`);
       return false;
     }
     return true;
@@ -342,27 +336,13 @@ export function bindVisibility(
   condition: AsyncReactiveValue<boolean>,
   invert: boolean
 ): void {
-  // Capture initial display state, excluding 'none'.
-  let baseDisplay = element.style.display === 'none' ? '' : element.style.display;
-
+  const $element = $(element);
   registerReactiveEffect(
     element,
     condition,
     (value) => {
       const isVisible = invert !== !!value;
-      const current = element.style.display;
-
-      // Logic: Layout Preservation
-      // Toggles 'none' to hide the element while restoring the previously
-      // captured display mode (e.g., flex, grid) when showing.
-      if (isVisible) {
-        if (current === 'none') {
-          element.style.display = baseDisplay;
-        }
-      } else if (current !== 'none') {
-        baseDisplay = current;
-        element.style.display = 'none';
-      }
+      $element.toggle(isVisible);
     },
     invert ? 'hide' : 'show'
   );
@@ -397,77 +377,20 @@ export function bindVal(
 }
 
 /**
- * Global registry for tracking radio group elements context-sensitively.
- * Encapsulates nested mappings inside a single unified structure.
- * @internal
- */
-class RadioRegistry {
-  readonly #groups = new WeakMap<Node, Map<string, Set<HTMLInputElement>>>();
-
-  public register(element: HTMLInputElement): Node | undefined {
-    if (element.type !== 'radio' || !element.name) return;
-    const root = element.form || element.getRootNode();
-
-    let nameMap = this.#groups.get(root);
-    if (!nameMap) {
-      nameMap = new Map();
-      this.#groups.set(root, nameMap);
-    }
-
-    let set = nameMap.get(element.name);
-    if (!set) {
-      set = new Set();
-      nameMap.set(element.name, set);
-    }
-
-    set.add(element);
-    return root;
-  }
-
-  public unregister(element: HTMLInputElement, root: Node): void {
-    if (element.type !== 'radio' || !element.name) return;
-    const nameMap = this.#groups.get(root);
-    if (!nameMap) return;
-    const set = nameMap.get(element.name);
-    if (set) {
-      set.delete(element);
-      if (set.size === 0) {
-        nameMap.delete(element.name);
-        if (nameMap.size === 0) {
-          this.#groups.delete(root);
-        }
-      }
-    }
-  }
-
-  public getGroup(element: HTMLInputElement, root?: Node): Set<HTMLInputElement> | undefined {
-    if (element.type !== 'radio' || !element.name) return;
-    return this.#groups.get(root || element.form || element.getRootNode())?.get(element.name);
-  }
-}
-
-const radioRegistry = new RadioRegistry();
-
-/**
  * Synchronizes the visual state of a radio button group.
- *
- * Logic: Native radio buttons do not fire 'change' events when they are
- * unchecked by the selection of another radio button in the same group.
- * This utility manually triggers synchronization for the entire group
- * to ensure reactive consistency.
  *
  * @param element - The radio input element that was recently selected.
  * @internal
  */
 function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
-    const set = radioRegistry.getGroup(element);
-
-    if (set) {
-      for (const el of set) {
-        if (el !== element) {
-          $(el).trigger('change.atomRadioSync');
-        }
+    const root = element.form || element.getRootNode();
+    const safeName = element.name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const group = (root as ParentNode).querySelectorAll(`input[type="radio"][name="${safeName}"]`);
+    for (let i = 0; i < group.length; i++) {
+      const el = group[i];
+      if (el && el !== element) {
+        $(el as HTMLElement).trigger('change.atomRadioSync');
       }
     }
   }
@@ -484,8 +407,6 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   }
 
   const $element = $(element);
-  const isRadio = element.type === 'radio';
-  const radioRoot = isRadio ? radioRegistry.register(element) : undefined;
 
   const onChange = () => {
     if (atom.peek() !== element.checked) {
@@ -497,9 +418,6 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
 
   $element.on('change change.atomRadioSync', onChange);
   registry.onCleanup(element, () => {
-    if (isRadio && radioRoot) {
-      radioRegistry.unregister(element, radioRoot);
-    }
     $element.off('change change.atomRadioSync', onChange);
   });
 

@@ -153,12 +153,13 @@ describe('Chainable Methods: Two-Way Bindings', () => {
     const check = $.atom(true);
     const rA = $.atom(true);
     const rB = $.atom(false);
-    const radioName = 'user[role]';
+    // Guardrail: special characters in radio name (\, ")
+    const radioName = 'user[\\"role\\"]';
 
     const $form = $('<form>').appendTo(document.body);
     const $check = $('<input type="checkbox">').appendTo($form);
-    const $rA = $(`<input type="radio" name="${radioName}" value="A">`).appendTo($form);
-    const $rB = $(`<input type="radio" name="${radioName}" value="B">`).appendTo($form);
+    const $rA = $(`<input type="radio" name='${radioName}' value="A">`).appendTo($form);
+    const $rB = $(`<input type="radio" name='${radioName}' value="B">`).appendTo($form);
 
     $check.atomChecked(check);
     $rA.atomChecked(rA);
