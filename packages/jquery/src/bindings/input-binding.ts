@@ -181,13 +181,15 @@ export function applyInputBinding<T>(
     // Logic: Value normalization ensures that the physical DOM value exactly
     // matches the reactive state once user interaction has concluded.
     const atomValue = atom.peek();
-    if (!isDomUpToDate(atomValue)) {
-      isInternalWrite = true;
-      try {
+    try {
+      if (!isDomUpToDate(atomValue)) {
+        isInternalWrite = true;
         writeToDom(atomValue, formatValue(atomValue));
-      } finally {
-        isInternalWrite = false;
       }
+    } catch (err) {
+      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom (blur format) failed:', err);
+    } finally {
+      isInternalWrite = false;
     }
   };
 

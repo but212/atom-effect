@@ -405,6 +405,25 @@ describe('Events & Lifecycle', () => {
     $el.remove();
   });
 
+  it('unpacking handles null or undefined as second argument without crashing', async () => {
+    const el = document.createElement('div');
+    const val = $.atom(10);
+    // Passing null to ensure the unpack logic respects the tuple shape.
+    expect(() => {
+      $(el).atomBind({
+        // biome-ignore lint/suspicious/noExplicitAny: testing edge case null options
+        val: [val, null as any],
+      });
+    }).not.toThrow();
+
+    expect(() => {
+      $(el).atomBind({
+        // biome-ignore lint/suspicious/noExplicitAny: testing edge case undefined options
+        val: [val, undefined as any],
+      });
+    }).not.toThrow();
+  });
+
   it('atomUnbind: recursively stops reactivity for root and descendants', async () => {
     const outer = $.atom('O');
     const inner = $.atom('I');

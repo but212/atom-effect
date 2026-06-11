@@ -330,8 +330,34 @@ describe('Input Bindings (Two-way)', () => {
         expect.any(Error)
       );
 
+      // 3. Atom -> DOM format error inside handleBlur (testing try...finally isInternalWrite reset)
+      warnSpy.mockClear();
+      const val3 = $.atom(1);
+      const $el3 = $('<input>').appendTo(document.body);
+      let formatShouldThrow = false;
+
+      $el3.atomVal(val3, {
+        format: (v) => {
+          if (formatShouldThrow) throw new Error('Blur format error');
+          return String(v);
+        },
+      });
+
+      formatShouldThrow = true;
+      $el3.trigger('blur');
+
+      // The catch block will be hit internally inside handleBlur?
+      // Actually `handleBlur` does not have a catch block around `writeToDom`, it just throws if it fails.
+      // But we just want to ensure that if it throws, `isInternalWrite` is reset so we can type again.
+      formatShouldThrow = false;
+
+      // Now if we type, it should not be locked
+      $el3.val('5').trigger('input');
+      expect(val3.value).toBe('5'); // If it locked, it would be ignored and remain 1
+
       $el.remove();
       $el2.remove();
+      $el3.remove();
       warnSpy.mockRestore();
     });
 
