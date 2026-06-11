@@ -81,17 +81,17 @@ export class RootObserver {
 
         if (addedElements.length > 0) {
           for (const record of this.#additionCallbacks) {
-            const matchedElements: Element[] = [];
+            const matchedElements = new Set<Element>();
 
             for (const el of addedElements) {
               try {
                 if (el.matches(record.selector)) {
-                  matchedElements.push(el);
+                  matchedElements.add(el);
                 }
                 const children = el.querySelectorAll(record.selector);
                 for (let i = 0; i < children.length; i++) {
                   const child = children[i];
-                  if (child) matchedElements.push(child);
+                  if (child) matchedElements.add(child);
                 }
               } catch (error) {
                 console.error('Error querying or processing onNodeAdded:', error);

@@ -273,20 +273,31 @@ class BindingRegistry {
   cleanup(node: Node): void {
     const state = nodeStates.get(node);
     if (state) {
-      state.isKept = false;
-      state.isIgnored = false;
+      // biome-ignore lint/performance/noDelete: state property must be fully removed
+      delete state.isKept;
+      // biome-ignore lint/performance/noDelete: state property must be fully removed
+      delete state.isIgnored;
     }
     disableAutoCleanupFor(node);
 
-    if (node.nodeType !== 1) return;
+    if (node.nodeType !== 1) {
+      if (state && !state.shadowRoot) {
+        nodeStates.delete(node);
+      }
+      return;
+    }
     const element = node as Element;
 
     const record = state?.record;
 
+    if (state && !state.shadowRoot) {
+      nodeStates.delete(node);
+    } else if (state) {
+      // biome-ignore lint/performance/noDelete: state property must be fully removed
+      delete state.record;
+    }
+
     if (record) {
-      // biome-ignore lint/performance/noDelete: record must be fully removed from state
-      // biome-ignore lint/style/noNonNullAssertion: record existence implies state existence
-      delete state!.record;
       element.classList.remove(MARK_BOUND);
 
       // Logic: Component Teardown
