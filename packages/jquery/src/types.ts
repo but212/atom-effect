@@ -112,7 +112,10 @@ export interface BindingOptions<T = unknown> {
   /** Binds the element's text content. Can include an optional formatter. */
   text?:
     | AsyncReactiveValue<unknown>
-    | [source: AsyncReactiveValue<unknown>, formatter: (v: unknown) => string];
+    | [
+        source: AsyncReactiveValue<unknown>,
+        formatter?: ((v: unknown) => string) | null | undefined,
+      ];
   /** Binds the element's inner HTML. Use with caution for untrusted content. */
   html?: AsyncReactiveValue<string>;
   /** Toggles CSS classes based on reactive conditions. */
@@ -128,7 +131,7 @@ export interface BindingOptions<T = unknown> {
   /** Hides the element (`display: none`) when the condition is true. */
   hide?: AsyncReactiveValue<boolean>;
   /** Two-way binding for form input values. */
-  val?: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>];
+  val?: WritableAtom<T> | [atom: WritableAtom<T>, options?: ValOptions<T> | null | undefined];
   /** Two-way binding for checkbox and radio checked states. */
   checked?: WritableAtom<boolean>;
   /** Orchestrates two-way bindings for an entire form element. */
@@ -137,7 +140,7 @@ export interface BindingOptions<T = unknown> {
     | WritableAtom<unknown>[]
     | [
         atom: WritableAtom<T extends object ? T : unknown> | WritableAtom<unknown>[],
-        options: FormOptions<T extends object ? T : unknown>,
+        options?: FormOptions<T extends object ? T : unknown> | null | undefined,
       ];
   /** Registers event listeners with automatic lifecycle management. */
   on?: Record<string, (e: JQuery.Event) => void>;

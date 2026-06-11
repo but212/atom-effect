@@ -411,15 +411,13 @@ describe('Events & Lifecycle', () => {
     // Passing null to ensure the unpack logic respects the tuple shape.
     expect(() => {
       $(el).atomBind({
-        // biome-ignore lint/suspicious/noExplicitAny: testing edge case null options
-        val: [val, null as any],
+        val: [val, null],
       });
     }).not.toThrow();
 
     expect(() => {
       $(el).atomBind({
-        // biome-ignore lint/suspicious/noExplicitAny: testing edge case undefined options
-        val: [val, undefined as any],
+        val: [val, undefined],
       });
     }).not.toThrow();
   });
