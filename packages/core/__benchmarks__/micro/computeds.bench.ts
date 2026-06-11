@@ -9,7 +9,7 @@ import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
 describe('Computeds: Reactive Logic', () => {
   bench(
-    'baseline: raw function creation (x${REPEATS})',
+    `baseline: raw function creation (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const a = { value: 0 };
@@ -35,7 +35,7 @@ describe('Computeds: Reactive Logic', () => {
   );
 
   bench(
-    `creation: chained computed (10 levels)`,
+    'creation: chained computed (10 levels)',
     () => {
       const a = atom(0);
       let current = computed(() => a.value);
