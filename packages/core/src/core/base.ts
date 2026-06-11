@@ -39,10 +39,6 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
   flags: number;
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  _nextEpoch: number | undefined = undefined;
-  _trackEpoch: number = 0;
-  _trackCount: number = 0;
-  _error: Error | null = null;
   _k: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
   _slots: SlotBuffer<SubscriberTarget<T>> | null = null;

@@ -26,7 +26,6 @@ function createDepBuffer(): ReactiveDependencyTracker {
     flags: 0,
     version: 0,
     _lastSeenEpoch: 0,
-    _nextEpoch: undefined,
     _trackCount: 0,
     _trackEpoch: 0,
     _error: null,

@@ -14,9 +14,9 @@
  * by blacklisting sensitive keys like `__proto__`.
  */
 
-import { shallowEqual } from '@but212/atom-effect-utils';
+import { Result, shallowEqual } from '@but212/atom-effect-utils';
 import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG } from '@/constants';
-import { BaseNode } from '@/core/base';
+import { BaseNode, nodeNotifySubscribers, nodeSubscribe, nodeSubscriberCount } from '@/core/base';
 import { batch } from '@/index';
 import type {
   Equal,
@@ -196,7 +196,6 @@ class LensImpl<T extends object, P extends string>
   #path: P;
   #parts: string[];
   #isDangerous: boolean;
-  #listeners = new Set<SubscriberTarget<PathValue<T, P>>>();
   #sharedUnsub: (() => void) | null = null;
   #prevValue: PathValue<T, P> | undefined;
 
@@ -225,33 +224,33 @@ class LensImpl<T extends object, P extends string>
   }
 
   subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
-    if (!this.#listeners.size) {
+    if (nodeSubscriberCount(this) === 0) {
       this.#prevValue = this.peek();
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
     }
-    this.#listeners.add(listener);
-    let self: LensImpl<T, P> | undefined = this,
-      lis: SubscriberTarget<PathValue<T, P>> | undefined = listener;
+    const result = nodeSubscribe(this, listener);
+    if (Result.isErr(result)) {
+      throw result.error;
+    }
+    const innerUnsub = result.value;
     return () => {
-      if (!self || !lis) return;
-      self.#listeners.delete(lis);
-      if (!self.#listeners.size && self.#sharedUnsub) {
-        const unsub = self.#sharedUnsub;
-        self.#sharedUnsub = null;
+      innerUnsub();
+      if (nodeSubscriberCount(this) === 0 && this.#sharedUnsub) {
+        const unsub = this.#sharedUnsub;
+        this.#sharedUnsub = null;
         unsub();
       }
-      self = lis = undefined;
     };
   }
 
   subscriberCount(): number {
-    return this.#listeners.size;
+    return nodeSubscriberCount(this);
   }
 
   dispose(): void {
     this.#sharedUnsub?.();
     this.#sharedUnsub = null;
-    this.#listeners.clear();
+    this._slots?.clear();
   }
 
   #getValue(source: T): PathValue<T, P> {
@@ -263,9 +262,7 @@ class LensImpl<T extends object, P extends string>
     if (!DEFAULT_EQUAL(nv, this.#prevValue)) {
       const ov = this.#prevValue as PathValue<T, P>;
       this.#prevValue = nv;
-      for (const listener of this.#listeners) {
-        typeof listener === 'function' ? listener(nv, ov) : listener.execute();
-      }
+      nodeNotifySubscribers(this, nv, ov);
     }
   }
 
@@ -341,7 +338,6 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<MergedDependencyValue<L>>
 {
   #lenses: L;
-  #listeners = new Set<SubscriberTarget<MergedDependencyValue<L>>>();
   #unsubs: (() => void)[] = [];
   #prevValue: MergedDependencyValue<L> | undefined;
 
@@ -366,36 +362,36 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
-    if (!this.#listeners.size) {
+    if (nodeSubscriberCount(this) === 0) {
       this.#prevValue = this.peek();
       const notify = () => this.#notify();
       for (const lens of this.#lenses) {
         this.#unsubs.push(lens.subscribe(notify));
       }
     }
-    this.#listeners.add(listener);
-    let self: MergedLensImpl<L> | undefined = this,
-      lis: SubscriberTarget<MergedDependencyValue<L>> | undefined = listener;
+    const result = nodeSubscribe(this, listener);
+    if (Result.isErr(result)) {
+      throw result.error;
+    }
+    const innerUnsub = result.value;
     return () => {
-      if (!self || !lis) return;
-      self.#listeners.delete(lis);
-      if (!self.#listeners.size) {
-        const unsubs = self.#unsubs;
-        self.#unsubs = [];
+      innerUnsub();
+      if (nodeSubscriberCount(this) === 0) {
+        const unsubs = this.#unsubs;
+        this.#unsubs = [];
         for (const unsub of unsubs) unsub();
       }
-      self = lis = undefined;
     };
   }
 
   subscriberCount(): number {
-    return this.#listeners.size;
+    return nodeSubscriberCount(this);
   }
 
   dispose(): void {
     for (const unsub of this.#unsubs) unsub();
     this.#unsubs.length = 0;
-    this.#listeners.clear();
+    this._slots?.clear();
   }
 
   #notify(): void {
@@ -403,9 +399,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     if (!shallowEqual(nv, this.#prevValue)) {
       const ov = this.#prevValue;
       this.#prevValue = nv;
-      for (const listener of this.#listeners) {
-        typeof listener === 'function' ? listener(nv, ov) : listener.execute();
-      }
+      nodeNotifySubscribers(this, nv, ov);
     }
   }
 

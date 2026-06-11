@@ -60,6 +60,9 @@ class EffectImpl
 {
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
   _depFlags: number = BUFFER_FLAGS.NONE;
+  _trackEpoch = 0;
+  _trackCount = 0;
+  _nextEpoch: number | undefined = undefined;
 
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;

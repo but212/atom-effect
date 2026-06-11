@@ -125,6 +125,9 @@ class ComputedAtomImpl<T>
 {
   public _depSlots: SlotBuffer<DependencyLink>;
   public _depFlags: number = BUFFER_FLAGS.NONE;
+  public _trackEpoch = 0;
+  public _trackCount = 0;
+  public _error: Error | null = null;
 
   /** @internal */
   public readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;

@@ -32,6 +32,7 @@ class AtomImpl<T> extends BaseNode<T> implements WritableAtom<T>, ReactiveNode<T
   #value: T;
   #pendingOldValue: T | undefined;
   #equal: (a: T, b: T) => boolean;
+  _nextEpoch: number | undefined = undefined;
 
   /** @internal */
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
