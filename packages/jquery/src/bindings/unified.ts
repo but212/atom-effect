@@ -385,9 +385,8 @@ export function bindVal(
 function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
     const root = element.form || element.getRootNode();
-    const group = (root as ParentNode).querySelectorAll(
-      `input[type="radio"][name="${element.name}"]`
-    );
+    const safeName = element.name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const group = (root as ParentNode).querySelectorAll(`input[type="radio"][name="${safeName}"]`);
     for (let i = 0; i < group.length; i++) {
       const el = group[i];
       if (el && el !== element) {
