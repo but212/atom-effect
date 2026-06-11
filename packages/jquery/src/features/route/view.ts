@@ -186,14 +186,11 @@ export function setupRouteScanner(
     }
 
     trackedLinks.add(el);
-    const sub = effect(() => {
-      updateActive(el, currentRouteAtom.value, currentPatternAtom.value);
-    });
+    updateActive(el, currentRouteAtom.peek(), currentPatternAtom.peek());
 
     // Cleanup: Leverages the registry to ensure memory is released when the link is destroyed.
     registry.onCleanup(el, () => {
       trackedLinks.delete(el);
-      sub.dispose();
     });
   };
 
@@ -202,6 +199,17 @@ export function setupRouteScanner(
       trackLink(el);
     }
   };
+
+  // Logic: Centralized Active Link Sync
+  // Instead of creating O(N) effects per link, we use a single effect that iterates
+  // over the centralized set of tracked links.
+  const syncSub = effect(() => {
+    const current = currentRouteAtom.value;
+    const pattern = currentPatternAtom.value;
+    for (const el of trackedLinks) {
+      updateActive(el, current, pattern);
+    }
+  });
 
   // Logic: Dynamic Content Support
   // Handles scenarios where links are added dynamically (e.g., list rendering or async components).
@@ -229,7 +237,14 @@ export function setupRouteScanner(
   });
 
   scan();
-  return { scan, resolvePath, disconnect: () => linkObserver.disconnect() };
+  return {
+    scan,
+    resolvePath,
+    disconnect: () => {
+      syncSub.dispose();
+      linkObserver.disconnect();
+    },
+  };
 }
 
 /**
