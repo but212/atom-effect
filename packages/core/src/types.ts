@@ -226,7 +226,6 @@ export interface ReactiveNode<T> extends ReactiveNodeBase {
  */
 export interface ReactiveDependencyTracker extends ReactiveNodeBase {
   _depSlots: SlotBuffer<DependencyLink>;
-  _depMap: Map<Dependency, number> | null;
   _depFlags: number;
 }
 

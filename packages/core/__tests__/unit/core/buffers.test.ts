@@ -11,7 +11,6 @@ import {
   BUFFER_FLAGS,
   claimExisting,
   depBufferPush,
-  depBufferSetAt,
   depBufferTruncateFrom,
   disposeAll,
   insertNew,
@@ -23,7 +22,6 @@ import type { DependencyLink, ReactiveDependencyTracker } from '@/types';
 function createDepBuffer(): ReactiveDependencyTracker {
   return {
     _depSlots: new SlotBuffer<DependencyLink>(),
-    _depMap: null,
     _depFlags: BUFFER_FLAGS.NONE,
     flags: 0,
     version: 0,
@@ -119,161 +117,6 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
 
       insertNew(buf, 0, createLink(d1, 1, vi.fn()));
       expect(buf._depSlots.size).toBe(1);
-    });
-  });
-
-  describe('Map Lookup Optimization', () => {
-    it('Map Optimization: should maintain index integrity during large-scale reuse', () => {
-      const buf = createDepBuffer();
-      const count = 40; // Beyond threshold (8)
-      const deps = Array.from({ length: count }, (_, i) => createMockDep(i));
-      for (const d of deps) {
-        depBufferPush(buf, createLink(d, 1, vi.fn()));
-      }
-
-      // Verify index accuracy and swapping after Map creation
-      const dep39 = deps[39];
-      if (!dep39) throw new Error('Setup failed');
-      expect(claimExisting(buf, dep39, 0)).toBe(true);
-      expect(buf._depSlots.at(0)?.node).toBe(dep39);
-
-      // Regression test: Map index synchronization during hole reuse
-      depBufferSetAt(buf, 1, null);
-      const newDep = createMockDep(100);
-      const newLink = createLink(newDep, 1, vi.fn());
-      depBufferPush(buf, newLink); // Reuse index 1
-
-      expect(claimExisting(buf, newDep, 0)).toBe(true);
-      expect(buf._depSlots.at(0)).toBe(newLink);
-    });
-
-    it('claimExisting: Map lookup must find matching dependencies in valid range', () => {
-      const buf = createDepBuffer();
-      const d0 = createMockDep(0);
-      // Fill beyond threshold
-      const links = Array.from({ length: 40 }, (_, i) => {
-        const dep = i === 5 || i === 35 ? d0 : createMockDep(i + 100);
-        return createLink(dep, 1, vi.fn());
-      });
-      for (const l of links) {
-        depBufferPush(buf, l);
-      }
-      claimExisting(buf, createMockDep(999), 0); // Trigger Map
-
-      // Search for d0 from trackIndex 10.
-      // Index 5 is behind, index 35 is ahead.
-      expect(claimExisting(buf, d0, 10)).toBe(true);
-      expect(buf._depSlots.at(10)?.node).toBe(d0);
-    });
-  });
-
-  describe('Map Integrity & Duplicate Dependencies', () => {
-    it('Map Integrity: depBufferSetAt should not delete a duplicate dependency from the map if it still exists elsewhere', () => {
-      const buf = createDepBuffer();
-      const depA = createMockDep(100);
-      const depB = createMockDep(200);
-
-      // Push 9 elements to exceed MAP_THRESHOLD (8) and initialize map
-      const deps = [
-        createMockDep(1),
-        depA,
-        createMockDep(2),
-        createMockDep(3),
-        createMockDep(4),
-        createMockDep(5),
-        createMockDep(6),
-        depB,
-        depA,
-      ];
-      for (const d of deps) {
-        depBufferPush(buf, createLink(d, 1, vi.fn()));
-      }
-
-      expect(buf._depMap).not.toBeNull();
-      expect(buf._depMap?.get(depA)).toBe(8);
-
-      // Overwrite index 8 with null, which triggers map index update
-      depBufferSetAt(buf, 8, null);
-
-      // depA still exists at index 1, so claimExisting should find it
-      const claimed = claimExisting(buf, depA, 0);
-      expect(claimed).toBe(true);
-      expect(buf._depSlots.at(0)?.node).toBe(depA);
-    });
-
-    it('Map Integrity: depBufferTruncateFrom should not delete a duplicate dependency from the map if it still exists at a non-truncated index', () => {
-      const buf = createDepBuffer();
-      const depA = createMockDep(100);
-
-      // Push 12 elements to exceed threshold (8) and initialize map
-      const deps = [
-        createMockDep(1), // 0
-        depA, // 1
-        createMockDep(2), // 2
-        createMockDep(3), // 3
-        createMockDep(4), // 4
-        createMockDep(5), // 5
-        createMockDep(6), // 6
-        createMockDep(7), // 7
-        createMockDep(8), // 8
-        createMockDep(9), // 9
-        createMockDep(10), // 10
-        depA, // 11
-      ];
-      for (const d of deps) {
-        depBufferPush(buf, createLink(d, 1, vi.fn()));
-      }
-
-      expect(buf._depMap?.get(depA)).toBe(11);
-
-      // Truncate from 11. Since 11 > MAP_THRESHOLD (8), map is not discarded.
-      depBufferTruncateFrom(buf, 11);
-
-      // depA still exists at index 1, so claimExisting should find it
-      const claimed = claimExisting(buf, depA, 0);
-      expect(claimed).toBe(true);
-      expect(buf._depSlots.at(0)?.node).toBe(depA);
-    });
-
-    it('Map Integrity: claimExisting swap should not downgrade the map index of the swapped element if it exists at a higher index', () => {
-      const buf = createDepBuffer();
-      const depA = createMockDep(100);
-      const depB = createMockDep(200);
-
-      // Push 9 elements to initialize map
-      const deps = [
-        depB, // 0
-        depA, // 1
-        depB, // 2
-        createMockDep(3), // 3
-        createMockDep(4), // 4
-        createMockDep(5), // 5
-        createMockDep(6), // 6
-        createMockDep(7), // 7
-        createMockDep(8), // 8
-      ];
-      for (const d of deps) {
-        depBufferPush(buf, createLink(d, 1, vi.fn()));
-      }
-
-      expect(buf._depMap?.get(depB)).toBe(2);
-
-      // Claim depA at trackIndex 0 (swapping depA from index 1 to 0, and depB from 0 to 1)
-      claimExisting(buf, depA, 0);
-
-      // B still exists at index 2 (higher than 1), so map index for B should remain 2.
-      expect(buf._depMap?.get(depB)).toBe(2);
-
-      // Overwrite index 1 with null
-      depBufferSetAt(buf, 1, null);
-
-      // Since B was not downgraded to 1, overwriting index 1 should not delete B from map.
-      expect(buf._depMap?.get(depB)).toBe(2);
-
-      // claimExisting for B should find B at index 2
-      const claimed = claimExisting(buf, depB, 0);
-      expect(claimed).toBe(true);
-      expect(buf._depSlots.at(0)?.node).toBe(depB);
     });
   });
 

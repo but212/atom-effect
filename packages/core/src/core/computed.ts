@@ -142,7 +142,6 @@ class ComputedAtomImpl<T>
 
   public _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
   public _depSlots: SlotBuffer<DependencyLink>;
-  public _depMap: Map<Dependency, number> | null = null;
   public _depFlags: number = BUFFER_FLAGS.NONE;
 
   /** @internal */
