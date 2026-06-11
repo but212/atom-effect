@@ -22,7 +22,7 @@ describe('Computeds: Reactive Logic', () => {
   );
 
   bench(
-    'creation: flat computed (x${REPEATS})',
+    `creation: flat computed (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(0);
@@ -35,7 +35,7 @@ describe('Computeds: Reactive Logic', () => {
   );
 
   bench(
-    'creation: chained computed (10 levels)',
+    `creation: chained computed (10 levels)`,
     () => {
       const a = atom(0);
       let current = computed(() => a.value);
