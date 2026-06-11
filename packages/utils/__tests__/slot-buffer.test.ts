@@ -539,5 +539,36 @@ describe('SlotBuffer', () => {
       buf.lock();
       expect(buf.isLocked).toBe(true);
     });
+
+    it('should return false when calling has() with null or undefined on a buffer with empty slots', () => {
+      const buf = new SlotBuffer<unknown>();
+      buf.push('a');
+      buf.push('b');
+      // Buffer has empty slots at index 2 and 3 (which are internally null)
+      expect(buf.has(null)).toBe(false);
+      expect(buf.has(undefined)).toBe(false);
+    });
+
+    it('should return false and not corrupt state when calling remove() with null or undefined', () => {
+      const buf = new SlotBuffer<unknown>();
+      buf.push('a');
+      buf.push('b');
+      // Index 2 is an empty slot (represented by null internally)
+
+      const prevSize = buf.size;
+      const prevLength = buf.length;
+
+      // Attempting to remove null/undefined should do nothing
+      expect(buf.remove(null)).toBe(false);
+      expect(buf.remove(undefined)).toBe(false);
+
+      // State should not be corrupted
+      expect(buf.size).toBe(prevSize);
+      expect(buf.length).toBe(prevLength);
+
+      // Push another element to verify free indices is not corrupted
+      buf.push('c'); // Should go to index 2
+      expect(buf.at(2)).toBe('c');
+    });
   });
 });
