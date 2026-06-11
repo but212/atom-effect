@@ -333,9 +333,10 @@ interface BindingTask {
 }
 
 function unpack<T, O>(val: T | [T, O]): [T, O?] {
-  if (Array.isArray(val) && val.length === 2 && val[1] != null) {
+  if (Array.isArray(val) && val.length === 2) {
     const second = val[1];
     if (
+      second == null ||
       typeof second === 'function' ||
       (typeof second === 'object' && !('value' in second) && !('then' in second))
     ) {

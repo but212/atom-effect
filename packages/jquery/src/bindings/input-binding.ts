@@ -183,8 +183,11 @@ export function applyInputBinding<T>(
     const atomValue = atom.peek();
     if (!isDomUpToDate(atomValue)) {
       isInternalWrite = true;
-      writeToDom(atomValue, formatValue(atomValue));
-      isInternalWrite = false;
+      try {
+        writeToDom(atomValue, formatValue(atomValue));
+      } finally {
+        isInternalWrite = false;
+      }
     }
   };
 
