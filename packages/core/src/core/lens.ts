@@ -14,28 +14,18 @@
  * by blacklisting sensitive keys like `__proto__`.
  */
 
-import type { SlotBuffer } from '@but212/atom-effect-utils';
-import { shallowEqual } from '@but212/atom-effect-utils';
-import {
-  ATOM_STATE_FLAGS,
-  BRAND,
-  BrandFlags,
-  DEFAULT_EQUAL,
-  EPOCH_CONSTANTS,
-  KIND,
-  type LENS_CONFIG,
-  SMI_MAX,
-} from '@/constants';
+import { Result, shallowEqual } from '@but212/atom-effect-utils';
+import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG, STATE_FLAGS } from '@/constants';
+import { BaseNode, nodeNotifySubscribers, nodeSubscribe, nodeSubscriberCount } from '@/core/base';
 import { batch } from '@/index';
 import type {
   Equal,
   MergedDependencyValue,
   ReactiveNode,
-  ReactiveNodeBase,
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
-import { debug, generateId, mergeAtomValues } from '@/utils';
+import { debug, mergeAtomValues } from '@/utils';
 
 /**
  * Logic: Numeric Key Conversion
@@ -76,7 +66,7 @@ export type TerminalTypes =
  * type instantiation for circular or deeply nested structures.
  */
 export type Paths<T, D extends unknown[] = []> =
-  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
+  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in types
   Equal<T, any> extends true
     ? string
     : D['length'] extends typeof LENS_CONFIG.MAX_PATH_DEPTH
@@ -198,60 +188,14 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
 // Core Engine
 // ============================================================================
 
-/**
- * Role: Orchestrator for a Single-Property Reactive Lens.
- *
- * Optimization: Monomorphic Access
- * Uses public fields for engine compatibility to ensure consistent V8 hidden
- * class shapes in the reactive hot-path.
- *
- * Logic: Shared Subscription
- * Only subscribes to the root atom when the lens itself has active listeners,
- * preventing memory leaks and unnecessary computations for unused lenses.
- *
- * @internal
- */
-/**
- * Base class providing common engine properties for reactive nodes to guarantee consistent
- * hidden class shapes and monomorphic hot-path access in V8.
- *
- * @internal
- */
-abstract class BaseLens<T = unknown> implements ReactiveNodeBase {
-  flags = 0;
-  version = 0;
-  _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-  _nextEpoch: number | undefined = undefined;
-  _trackEpoch = 0;
-  _trackCount = 0;
-  _error: Error | null = null;
-  _k = KIND.Obj;
-  readonly id = generateId() & SMI_MAX;
-  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
-
-  get isDisposed() {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed() {
-    return false;
-  }
-  get isRejected() {
-    return false;
-  }
-  get hasError() {
-    return false;
-  }
-}
-
 class LensImpl<T extends object, P extends string>
-  extends BaseLens<PathValue<T, P>>
+  extends BaseNode<PathValue<T, P>>
   implements WritableAtom<PathValue<T, P>>, ReactiveNode<PathValue<T, P>>
 {
   #root: WritableAtom<T>;
   #path: P;
   #parts: string[];
   #isDangerous: boolean;
-  #listeners = new Set<SubscriberTarget<PathValue<T, P>>>();
   #sharedUnsub: (() => void) | null = null;
   #prevValue: PathValue<T, P> | undefined;
 
@@ -279,34 +223,36 @@ class LensImpl<T extends object, P extends string>
     return this.#getValue(this.#root.peek());
   }
 
-  subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
-    if (!this.#listeners.size) {
+  /** @internal */
+  _subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
+    if (nodeSubscriberCount(this) === 0) {
       this.#prevValue = this.peek();
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
     }
-    this.#listeners.add(listener);
-    let self: LensImpl<T, P> | undefined = this,
-      lis: SubscriberTarget<PathValue<T, P>> | undefined = listener;
+    const result = nodeSubscribe(this, listener);
+    if (Result.isErr(result)) {
+      throw result.error;
+    }
+    const innerUnsub = result.value;
     return () => {
-      if (!self || !lis) return;
-      self.#listeners.delete(lis);
-      if (!self.#listeners.size && self.#sharedUnsub) {
-        const unsub = self.#sharedUnsub;
-        self.#sharedUnsub = null;
+      innerUnsub();
+      if (nodeSubscriberCount(this) === 0 && this.#sharedUnsub) {
+        const unsub = this.#sharedUnsub;
+        this.#sharedUnsub = null;
         unsub();
       }
-      self = lis = undefined;
     };
   }
 
   subscriberCount(): number {
-    return this.#listeners.size;
+    return nodeSubscriberCount(this);
   }
 
   dispose(): void {
+    this.flags |= STATE_FLAGS.DISPOSED;
     this.#sharedUnsub?.();
     this.#sharedUnsub = null;
-    this.#listeners.clear();
+    this._slots?.clear();
   }
 
   #getValue(source: T): PathValue<T, P> {
@@ -318,9 +264,7 @@ class LensImpl<T extends object, P extends string>
     if (!DEFAULT_EQUAL(nv, this.#prevValue)) {
       const ov = this.#prevValue as PathValue<T, P>;
       this.#prevValue = nv;
-      for (const listener of this.#listeners) {
-        typeof listener === 'function' ? listener(nv, ov) : listener.execute();
-      }
+      nodeNotifySubscribers(this, nv, ov);
     }
   }
 
@@ -392,11 +336,10 @@ export function atomLens<T extends object, P extends Paths<T>>(
  * @internal
  */
 class MergedLensImpl<L extends WritableAtom<unknown>[]>
-  extends BaseLens<MergedDependencyValue<L>>
+  extends BaseNode<MergedDependencyValue<L>>
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<MergedDependencyValue<L>>
 {
   #lenses: L;
-  #listeners = new Set<SubscriberTarget<MergedDependencyValue<L>>>();
   #unsubs: (() => void)[] = [];
   #prevValue: MergedDependencyValue<L> | undefined;
 
@@ -420,37 +363,39 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     return mergeAtomValues(this.#lenses, true) as MergedDependencyValue<L>;
   }
 
-  subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
-    if (!this.#listeners.size) {
+  /** @internal */
+  _subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
+    if (nodeSubscriberCount(this) === 0) {
       this.#prevValue = this.peek();
       const notify = () => this.#notify();
       for (const lens of this.#lenses) {
         this.#unsubs.push(lens.subscribe(notify));
       }
     }
-    this.#listeners.add(listener);
-    let self: MergedLensImpl<L> | undefined = this,
-      lis: SubscriberTarget<MergedDependencyValue<L>> | undefined = listener;
+    const result = nodeSubscribe(this, listener);
+    if (Result.isErr(result)) {
+      throw result.error;
+    }
+    const innerUnsub = result.value;
     return () => {
-      if (!self || !lis) return;
-      self.#listeners.delete(lis);
-      if (!self.#listeners.size) {
-        const unsubs = self.#unsubs;
-        self.#unsubs = [];
+      innerUnsub();
+      if (nodeSubscriberCount(this) === 0) {
+        const unsubs = this.#unsubs;
+        this.#unsubs = [];
         for (const unsub of unsubs) unsub();
       }
-      self = lis = undefined;
     };
   }
 
   subscriberCount(): number {
-    return this.#listeners.size;
+    return nodeSubscriberCount(this);
   }
 
   dispose(): void {
+    this.flags |= STATE_FLAGS.DISPOSED;
     for (const unsub of this.#unsubs) unsub();
     this.#unsubs.length = 0;
-    this.#listeners.clear();
+    this._slots?.clear();
   }
 
   #notify(): void {
@@ -458,9 +403,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     if (!shallowEqual(nv, this.#prevValue)) {
       const ov = this.#prevValue;
       this.#prevValue = nv;
-      for (const listener of this.#listeners) {
-        typeof listener === 'function' ? listener(nv, ov) : listener.execute();
-      }
+      nodeNotifySubscribers(this, nv, ov);
     }
   }
 

@@ -201,10 +201,7 @@ export interface ReactiveNodeBase {
   flags: number;
   version: number;
   _lastSeenEpoch: number;
-  _nextEpoch: number | undefined;
-  _trackCount: number;
-  _trackEpoch: number;
-  _error: Error | null;
+  _error?: Error | null;
   readonly isRejected: boolean;
   readonly id: DependencyId;
   _k?: typeof KIND.Obj | undefined;
@@ -226,8 +223,9 @@ export interface ReactiveNode<T> extends ReactiveNodeBase {
  */
 export interface ReactiveDependencyTracker extends ReactiveNodeBase {
   _depSlots: SlotBuffer<DependencyLink>;
-  _depMap: Map<Dependency, number> | null;
   _depFlags: number;
+  _trackEpoch: number;
+  _trackCount: number;
 }
 
 /**

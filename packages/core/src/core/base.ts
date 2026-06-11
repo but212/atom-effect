@@ -12,25 +12,84 @@
  */
 
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
-import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX } from '@/constants';
+import {
+  EPOCH_CONSTANTS,
+  ERROR_MESSAGES,
+  IS_DEV,
+  KIND,
+  LOG_PREFIX,
+  SMI_MAX,
+  STATE_FLAGS,
+} from '@/constants';
 import type {
   AtomErrorConstructor,
   Dependency,
+  DependencyId,
   DependencyLink,
   DependencySubscriber,
   DependencyTracker,
   Prettify,
   ReactiveDependencyTracker,
   ReactiveNode,
+  ReactiveNodeBase,
   Subscriber,
   SubscriberTarget,
   TrackingContext,
 } from '@/types';
-import { AtomError, nextSmi, wrapError } from '@/utils';
+import { AtomError, generateId, nextSmi, wrapError } from '@/utils';
 
 import { BUFFER_FLAGS, claimExisting, depBufferTruncateFrom, insertNew } from './buffers';
 
 import { nextEpoch } from './scheduler';
+
+/** @internal */
+export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
+  flags: number;
+  version: number = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _k: typeof KIND.Obj = KIND.Obj;
+  readonly id: DependencyId = generateId() & SMI_MAX;
+  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
+
+  constructor(initialFlags: number = 0) {
+    this.flags = initialFlags;
+  }
+
+  get isDisposed(): boolean {
+    return (this.flags & STATE_FLAGS.DISPOSED) !== 0;
+  }
+
+  get isComputed(): boolean {
+    return false;
+  }
+
+  get isRejected(): boolean {
+    return false;
+  }
+
+  get hasError(): boolean {
+    return false;
+  }
+
+  subscribe(listener: SubscriberTarget<T>): () => void {
+    if (!isSubscriberTarget(listener)) {
+      return Result.unwrap(nodeSubscribe(this, listener));
+    }
+    if (this.isDisposed) {
+      return () => {};
+    }
+    return this._subscribe(listener);
+  }
+
+  /** @internal */
+  _subscribe(listener: SubscriberTarget<T>): () => void {
+    return Result.unwrap(nodeSubscribe(this, listener));
+  }
+
+  subscriberCount(): number {
+    return nodeSubscriberCount(this);
+  }
+}
 
 /** @internal */
 export function createTrackingContext(): TrackingContext {
@@ -48,9 +107,7 @@ export function pushTrackingSubscriber(
 
 /** @internal */
 export function popTrackingSubscriber(context: TrackingContext): void {
-  const stack = context.stack;
-  stack.pop();
-  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
+  restoreTrackingDepth(context, context.stack.length - 1);
 }
 
 /**
@@ -58,9 +115,7 @@ export function popTrackingSubscriber(context: TrackingContext): void {
  * @internal
  */
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
-  const stack = context.stack;
-  stack.length = Math.max(0, Math.min(depth, stack.length));
-  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
+  restoreTrackingDepth(context, depth);
 }
 
 /**
@@ -85,9 +140,16 @@ export function runInTrackingContext<T>(
 }
 
 /** @internal */
+export function restoreTrackingDepth(context: TrackingContext, depth: number): void {
+  const stack = context.stack;
+  const nextDepth = Math.max(0, Math.min(depth, stack.length));
+  stack.length = nextDepth;
+  context.current = stack[nextDepth - 1] ?? null;
+}
+
+/** @internal */
 export function resetTrackingContext(context: TrackingContext): void {
-  context.stack.length = 0;
-  context.current = null;
+  restoreTrackingDepth(context, 0);
 }
 
 /**
@@ -153,7 +215,7 @@ export function createDependencyLink(
 export function nodeTrackDependency(
   tracker: DependencyTracker & ReactiveDependencyTracker,
   dep: Dependency,
-  notifyCallback: () => void
+  notifyCallback: (() => void) | Subscriber
 ): void {
   if (!tracker._depSlots) return;
 
@@ -200,10 +262,7 @@ export function nodeSubscribe<T>(
   node: ReactiveNode<T>,
   listener: SubscriberTarget<T>
 ): Result<() => void, Error> {
-  const isFn = typeof listener === 'function';
-  const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
-
-  if (!isFn && !isObj) {
+  if (!isSubscriberTarget(listener)) {
     return Result.err(
       wrapError(
         new TypeError('Invalid subscriber'),
@@ -231,6 +290,14 @@ export function nodeSubscribe<T>(
       l = undefined;
     }
   });
+}
+
+/** @internal */
+export function isSubscriberTarget(listener: unknown): listener is SubscriberTarget<unknown> {
+  return (
+    typeof listener === 'function' ||
+    (listener != null && typeof (listener as Subscriber).execute === 'function')
+  );
 }
 
 /** @internal */

@@ -2,11 +2,10 @@
  * @module DependencyBuffers
  *
  * This module manages the state of dependency tracking during reactive evaluations.
- * It uses a hybrid approach (Array-like slots + Lazy Map) to balance memory
- * overhead for small atoms and lookup performance for complex computations.
+ * It uses a linear SlotBuffer to store dependency links.
  */
 
-import { BUFFER_CONFIG, COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
+import { COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type { Dependency, DependencyLink, ReactiveDependencyTracker } from '@/types';
 import { trackEvaluationFailure } from '@/utils/debug';
 import { trackingContext, untracked } from './base';
@@ -60,24 +59,17 @@ export function claimExisting(
   slots.setAt(trackIndex, link);
   slots.setAt(existingIndex, temp);
 
-  mapSwap(state, dep, trackIndex, temp, existingIndex);
-
   return true;
 }
 
 /**
- * Searches for a dependency in the buffer, preferring the Map if available.
+ * Searches for a dependency in the buffer.
  */
 function findExistingIndex(
   state: ReactiveDependencyTracker,
   dep: Dependency,
   start: number
 ): number {
-  if (state._depMap) {
-    const idx = state._depMap.get(dep);
-    return idx !== undefined && idx >= start ? idx : -1;
-  }
-
   const slots = state._depSlots;
   for (let i = start + 1, len = slots.length; i < len; i++) {
     const link = slots.at(i);
@@ -107,92 +99,12 @@ export function depBufferSetAt(
   index: number,
   item: DependencyLink | null
 ): void {
-  const old = state._depSlots.at(index);
-  if (old === item) return;
   state._depSlots.setAt(index, item);
-
-  if (old) {
-    mapUnregister(state, old.node, index);
-  }
-  if (item) {
-    mapRegister(state, item, index);
-  }
 }
 
 /** @internal */
 export function depBufferPush(state: ReactiveDependencyTracker, item: DependencyLink): number {
-  const idx = state._depSlots.push(item);
-  mapRegister(state, item, idx);
-  return idx;
-}
-
-/**
- * Initializes the lookup map only when the dependency count hits MAP_THRESHOLD.
- * This saves memory for the vast majority of small/simple reactive nodes.
- */
-function ensureMap(state: ReactiveDependencyTracker): void {
-  if (state._depMap || state._depSlots.length <= BUFFER_CONFIG.MAP_THRESHOLD) return;
-
-  const map = new Map<Dependency, number>();
-  const slots = state._depSlots;
-  for (let i = 0; i < slots.length; i++) {
-    const link = slots.at(i);
-    if (link?.unsub) map.set(link.node, i);
-  }
-  state._depMap = map;
-}
-
-/**
- * Registers a dependency link in the lookup map.
- */
-function mapRegister(state: ReactiveDependencyTracker, link: DependencyLink, index: number): void {
-  if (!link.unsub) return;
-  ensureMap(state);
-  state._depMap?.set(link.node, index);
-}
-
-/**
- * Unregisters or updates the map index for a dependency when a slot is overwritten or truncated.
- * Searches backwards from limitIndex - 1 to find another valid slot.
- */
-function mapUnregister(
-  state: ReactiveDependencyTracker,
-  node: Dependency,
-  currentIndex: number,
-  limitIndex = currentIndex
-): void {
-  const map = state._depMap;
-  if (!map || map.get(node) !== currentIndex) return;
-
-  const slots = state._depSlots;
-  for (let i = limitIndex - 1; i >= 0; i--) {
-    const link = slots.at(i);
-    if (link?.node === node && link.unsub) {
-      map.set(node, i);
-      return;
-    }
-  }
-  map.delete(node);
-}
-
-/**
- * Updates the map indices when two dependency slots are swapped.
- */
-function mapSwap(
-  state: ReactiveDependencyTracker,
-  depA: Dependency,
-  idxA: number,
-  linkB: DependencyLink | null,
-  idxB: number
-): void {
-  const map = state._depMap;
-  if (!map) return;
-
-  map.set(depA, idxA);
-
-  if (linkB?.unsub && (map.get(linkB.node) ?? -1) < idxB) {
-    map.set(linkB.node, idxB);
-  }
+  return state._depSlots.push(item);
 }
 
 /**
@@ -265,7 +177,6 @@ export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: n
   for (let i = index; i < len; i++) {
     const link = slots.at(i);
     if (link) {
-      mapUnregister(state, link.node, i, index);
       if (link.unsub) {
         try {
           link.unsub();
@@ -276,12 +187,6 @@ export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: n
     }
   }
   slots.truncateFrom(index);
-
-  // Memory cleanup: If the buffer shrinks below the threshold, discard the map
-  // to free up memory on long-lived atoms.
-  if (state._depMap && index <= BUFFER_CONFIG.MAP_THRESHOLD) {
-    state._depMap = null;
-  }
 }
 
 /**

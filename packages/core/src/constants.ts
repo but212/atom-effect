@@ -263,6 +263,14 @@ export const STATE_MASKS = {
 
 /**
  * @internal
+ * Role: Flag contract exposing public capabilities for generic state nodes.
+ */
+export const STATE_FLAGS = {
+  DISPOSED: FLAGS.DISPOSED,
+} as const;
+
+/**
+ * @internal
  * Role: Flag contract exposing public capabilities for Effect nodes.
  */
 export const EFFECT_STATE_FLAGS = {
