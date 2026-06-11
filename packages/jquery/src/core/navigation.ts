@@ -6,7 +6,7 @@
  * click interception logic, and cross-feature coordination for SPA routing.
  */
 
-import { Option, Result } from '@but212/atom-effect-utils';
+import { Result } from '@but212/atom-effect-utils';
 import { debug } from '@/utils/debug';
 import { registry } from './registry';
 
@@ -41,11 +41,11 @@ export const normalizePath = (path: string): string => path.replace(/^\/+|\/+$/g
  * Splits a raw URL into its route pattern and optional query string.
  * @internal
  */
-export const splitPath = (path: string): { route: string; query: Option<string> } => {
+export const splitPath = (path: string): { route: string; query: string | null } => {
   const idx = path.indexOf('?');
   return idx === -1
-    ? { route: normalizePath(path), query: Option.none }
-    : { route: normalizePath(path.slice(0, idx)), query: Option.some(path.slice(idx + 1)) };
+    ? { route: normalizePath(path), query: null }
+    : { route: normalizePath(path.slice(0, idx)), query: path.slice(idx + 1) };
 };
 
 /** @internal */
