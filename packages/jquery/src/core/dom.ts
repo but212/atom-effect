@@ -22,26 +22,3 @@ export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQue
   }
   return jq;
 }
-
-/**
- * Logic: Overload Normalization Heuristics
- * Normalizes a binding source into a tuple containing the source and optional config.
- *
- * Logic: Heuristics
- * Determines if an input represents a configuration tuple (e.g., `[source, options]`)
- * or a simple array-based data value. Supports unified binding overloads.
- *
- * @internal
- */
-export function unpack<T, O>(val: T | [T, O]): [T, O?] {
-  if (Array.isArray(val) && val.length === 2 && val[1] != null) {
-    const second = val[1];
-    if (
-      typeof second === 'function' ||
-      (typeof second === 'object' && !('value' in second) && !('then' in second))
-    ) {
-      return val as [T, O];
-    }
-  }
-  return [val as T];
-}
