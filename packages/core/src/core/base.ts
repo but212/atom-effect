@@ -12,7 +12,15 @@
  */
 
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
-import { EPOCH_CONSTANTS, ERROR_MESSAGES, IS_DEV, KIND, LOG_PREFIX, SMI_MAX } from '@/constants';
+import {
+  EPOCH_CONSTANTS,
+  ERROR_MESSAGES,
+  IS_DEV,
+  KIND,
+  LOG_PREFIX,
+  SMI_MAX,
+  STATE_FLAGS,
+} from '@/constants';
 import type {
   AtomErrorConstructor,
   Dependency,
@@ -48,7 +56,7 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
   }
 
   get isDisposed(): boolean {
-    return (this.flags & 1) !== 0;
+    return (this.flags & STATE_FLAGS.DISPOSED) !== 0;
   }
 
   get isComputed(): boolean {
@@ -64,12 +72,18 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
   }
 
   subscribe(listener: SubscriberTarget<T>): () => void {
-    const unsub = Result.unwrap(nodeSubscribe(this, listener));
+    if (!isSubscriberTarget(listener)) {
+      return Result.unwrap(nodeSubscribe(this, listener));
+    }
     if (this.isDisposed) {
-      unsub();
       return () => {};
     }
-    return unsub;
+    return this._subscribe(listener);
+  }
+
+  /** @internal */
+  _subscribe(listener: SubscriberTarget<T>): () => void {
+    return Result.unwrap(nodeSubscribe(this, listener));
   }
 
   subscriberCount(): number {

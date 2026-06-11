@@ -15,7 +15,7 @@
  */
 
 import { Result, shallowEqual } from '@but212/atom-effect-utils';
-import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG } from '@/constants';
+import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG, STATE_FLAGS } from '@/constants';
 import { BaseNode, nodeNotifySubscribers, nodeSubscribe, nodeSubscriberCount } from '@/core/base';
 import { batch } from '@/index';
 import type {
@@ -223,7 +223,8 @@ class LensImpl<T extends object, P extends string>
     return this.#getValue(this.#root.peek());
   }
 
-  subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
+  /** @internal */
+  _subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
     if (nodeSubscriberCount(this) === 0) {
       this.#prevValue = this.peek();
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
@@ -248,6 +249,7 @@ class LensImpl<T extends object, P extends string>
   }
 
   dispose(): void {
+    this.flags |= STATE_FLAGS.DISPOSED;
     this.#sharedUnsub?.();
     this.#sharedUnsub = null;
     this._slots?.clear();
@@ -361,7 +363,8 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     return mergeAtomValues(this.#lenses, true) as MergedDependencyValue<L>;
   }
 
-  subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
+  /** @internal */
+  _subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
     if (nodeSubscriberCount(this) === 0) {
       this.#prevValue = this.peek();
       const notify = () => this.#notify();
@@ -389,6 +392,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   dispose(): void {
+    this.flags |= STATE_FLAGS.DISPOSED;
     for (const unsub of this.#unsubs) unsub();
     this.#unsubs.length = 0;
     this._slots?.clear();
