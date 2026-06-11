@@ -108,10 +108,13 @@ export const discoverProvider = (target: Node, key: string | symbol): unknown | 
  *
  * @internal
  */
-export function createContextProxy<T>(target: HTMLElement, key: string | symbol): WritableAtom<T> {
-  const resolve = (isPeek: boolean) => {
+export function createContextProxy<T>(
+  target: HTMLElement,
+  key: string | symbol
+): WritableAtom<T | null> {
+  const resolve = (isPeek: boolean): T | null => {
     const p = discoverProvider(target, key);
-    if (p === undefined) return null as T;
+    if (p === undefined) return null;
     return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
   };
 
@@ -119,7 +122,7 @@ export function createContextProxy<T>(target: HTMLElement, key: string | symbol)
     get value() {
       return resolve(false);
     },
-    set value(v: T) {
+    set value(v: T | null) {
       const p = discoverProvider(target, key);
       if (p !== undefined && isWritable(p)) {
         p.value = v;
@@ -145,7 +148,7 @@ export function createContextProxy<T>(target: HTMLElement, key: string | symbol)
       // No permanent resources to free in the proxy itself.
     },
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
-  } as WritableAtom<T>;
+  } as WritableAtom<T | null>;
 }
 
 if (typeof window !== 'undefined') {

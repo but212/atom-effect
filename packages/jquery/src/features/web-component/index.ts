@@ -391,7 +391,7 @@ export function provideAtom(
 export function injectAtom<T = unknown>(
   element: HTMLElement | JQuery | string,
   key: string | symbol
-): WritableAtom<T> | null {
+): WritableAtom<T | null> | null {
   const target =
     element instanceof HTMLElement
       ? element
@@ -412,10 +412,10 @@ export function injectAtom<T = unknown>(
   if (!state.injects) state.injects = new Map();
   let existing = state.injects.get(key);
   if (!existing) {
-    existing = createContextProxy<T>(target, key);
+    existing = createContextProxy<T>(target, key) as WritableAtom<unknown>;
     state.injects.set(key, existing);
   }
-  return existing as WritableAtom<T>;
+  return existing as WritableAtom<T | null>;
 }
 
 // Attach to jQuery namespace
