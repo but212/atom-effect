@@ -16,7 +16,6 @@ import $ from 'jquery';
 import { SYSTEM_BINDING } from '@/constants';
 import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { ValOptions, WritableAtom } from '@/types';
-import { BindingFlags } from '@/types';
 import { debug } from '@/utils/debug';
 
 type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
@@ -125,8 +124,8 @@ export function applyInputBinding<T>(
     isMultipleSelect ? STRATEGIES.multipleSelect : STRATEGIES.default
   ) as BindingStrategy<T>;
 
-  let flags = BindingFlags.None;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let isInternalWrite = false;
 
   const readValue = () => strategy.read(element, options.parse);
   const writeToDom = (value: T, formatted: string) => strategy.write(element, value, formatted);
@@ -138,14 +137,13 @@ export function applyInputBinding<T>(
 
     // Logic: While the input is focused, we allow minor discrepancies (e.g.,
     // "1.0" in DOM vs 1 in Atom) to avoid disruptive formatting while the user is typing.
-    if (flags & BindingFlags.Focused) return true;
+    if (document.activeElement === element) return true;
 
     return formatValue(atomValue) === element.value;
   };
 
   const syncToAtom = () => {
-    if (flags & BindingFlags.Busy) return;
-    flags |= BindingFlags.SyncingToAtom;
+    if (isInternalWrite) return;
     try {
       const domValue = readValue();
       if (!areEqual(atom.peek(), domValue)) {
@@ -154,31 +152,26 @@ export function applyInputBinding<T>(
     } catch (err) {
       debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', err);
     }
-    flags &= ~BindingFlags.SyncingToAtom;
   };
 
   const syncToDom = () => {
     const atomValue = atom.value;
-    // Logic: The bitmask gate is critical to prevent infinite feedback loops
-    // triggered by DOM change events that occur during synchronization.
-    if (flags & BindingFlags.Busy) return;
-
     untracked(() => {
       if (isDomUpToDate(atomValue)) return;
-      flags |= BindingFlags.SyncingToDom;
+      isInternalWrite = true;
       try {
         const formatted = formatValue(atomValue);
         writeToDom(atomValue, formatted);
         debug.domUpdated(SYSTEM_BINDING.PREFIX, $(element), 'val', formatted);
       } catch (err) {
         debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom failed:', err);
+      } finally {
+        isInternalWrite = false;
       }
-      flags &= ~BindingFlags.SyncingToDom;
     });
   };
 
   const handleBlur = () => {
-    flags &= ~BindingFlags.Focused;
     if (debounceTimer) {
       clearTimeout(debounceTimer);
       debounceTimer = undefined;
@@ -189,13 +182,17 @@ export function applyInputBinding<T>(
     // matches the reactive state once user interaction has concluded.
     const atomValue = atom.peek();
     if (!isDomUpToDate(atomValue)) {
+      isInternalWrite = true;
       writeToDom(atomValue, formatValue(atomValue));
+      isInternalWrite = false;
     }
   };
 
   const debounce = options.debounce ?? SYSTEM_BINDING.INPUT_DEFAULTS.debounce;
 
   const handleInput = (e?: Event | JQuery.TriggeredEvent) => {
+    if (isInternalWrite) return;
+
     const native = (e && 'originalEvent' in e ? e.originalEvent : e) as InputEvent;
     // Logic: Synchronization is deferred while an IME composition is active (Standard InputEvent).
     if (native?.isComposing) return;
@@ -208,14 +205,7 @@ export function applyInputBinding<T>(
     }
   };
 
-  const onFocus = () => {
-    flags |= BindingFlags.Focused;
-  };
-
-  const onBlur = handleBlur;
-
-  markInternal(onFocus);
-  markInternal(onBlur);
+  markInternal(handleBlur);
   markInternal(handleInput);
 
   const rawEventNames = options.event ?? SYSTEM_BINDING.INPUT_DEFAULTS.event;
@@ -226,8 +216,7 @@ export function applyInputBinding<T>(
     .join(' ');
 
   $(element)
-    .on(`focus${eventNamespace}`, onFocus)
-    .on(`blur${eventNamespace}`, onBlur)
+    .on(`blur${eventNamespace}`, handleBlur)
     .on(eventNames, handleInput as JQuery.EventHandler<HTMLElement>);
 
   return {

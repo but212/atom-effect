@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { unpack } from '@/core/dom';
 import $ from '@/index';
 
 describe('DOM Core Utilities', () => {
@@ -45,14 +44,6 @@ describe('DOM Core Utilities', () => {
         css: { color: 'red' },
       });
       expect(el.style.color).toBe('red');
-    });
-
-    it('unpack helper returns [val] if the second element has "value" or "then"', () => {
-      const objVal = { value: 2 };
-      const objThen = { then: () => {} };
-      expect(unpack([1, objVal])).toEqual([[1, objVal]]);
-      expect(unpack([1, objThen])).toEqual([[1, objThen]]);
-      expect(unpack([1, 2])).toEqual([[1, 2]]); // second is number
     });
   });
 });

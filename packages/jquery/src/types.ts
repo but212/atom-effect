@@ -396,30 +396,6 @@ export interface AtomNav {
 }
 
 /**
- * Internal state flags for two-way bindings.
- *
- * Logic: Feedback Loop Protection
- * Prevents recursive update loops between the DOM and reactive atoms
- * during two-way data flow (e.g., IME composition or rapid input events).
- *
- * @internal
- */
-export enum BindingFlags {
-  /** No active synchronization or interaction. */
-  None = 0,
-  /** The input element is currently focused by the user. */
-  Focused = 1 << 0,
-  /** The user is currently performing IME composition. */
-  Composing = 1 << 1,
-  /** Synchronization from DOM to Atom is currently active. */
-  SyncingToAtom = 1 << 2,
-  /** Synchronization from Atom to DOM is currently active. */
-  SyncingToDom = 1 << 3,
-  /** The binding is considered busy and will ignore external updates. */
-  Busy = Composing | SyncingToAtom | SyncingToDom,
-}
-
-/**
  * Options for customizing jQuery core method overrides.
  *
  * @public

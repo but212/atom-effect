@@ -26,7 +26,7 @@ import {
   bindVisibility,
 } from '@/bindings/unified';
 import { SYSTEM_BINDING } from '@/constants';
-import { atomEachElement, unpack } from '@/core/dom';
+import { atomEachElement } from '@/core/dom';
 import { registry } from '@/core/registry';
 import type {
   AsyncReactiveValue,
@@ -330,6 +330,19 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
 interface BindingTask {
   key: keyof BindingOptions<unknown>;
   run: (el: HTMLElement, val: unknown) => void;
+}
+
+function unpack<T, O>(val: T | [T, O]): [T, O?] {
+  if (Array.isArray(val) && val.length === 2 && val[1] != null) {
+    const second = val[1];
+    if (
+      typeof second === 'function' ||
+      (typeof second === 'object' && !('value' in second) && !('then' in second))
+    ) {
+      return val as [T, O];
+    }
+  }
+  return [val as T];
 }
 
 /**
