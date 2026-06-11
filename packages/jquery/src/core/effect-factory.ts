@@ -54,7 +54,7 @@ function createAsyncRunner<T>(
   debugType: BindingDebugType,
   updater: (value: T) => void
 ) {
-  let latestId = 0;
+  let activeVersion = 0;
   let isDisposed = false;
   let cleanupRegistered = false;
 
@@ -80,7 +80,7 @@ function createAsyncRunner<T>(
   };
 
   return (value: T | Promise<T>) => {
-    const currentId = ++latestId;
+    const version = ++activeVersion;
 
     if (!isPromise(value)) {
       runUpdate(value, false);
@@ -96,13 +96,17 @@ function createAsyncRunner<T>(
 
     value.then(
       (resolved) => {
-        if (currentId === latestId) {
+        if (version === activeVersion) {
           runUpdate(resolved, true);
         }
       },
       (error) => {
-        if (currentId === latestId && !isDisposed) {
-          debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType), error);
+        if (version === activeVersion && !isDisposed) {
+          debug.error(
+            SYSTEM_BINDING.PREFIX,
+            SYSTEM_BINDING.ERRORS.UPDATER_ERROR(debugType, false),
+            error
+          );
         }
       }
     );

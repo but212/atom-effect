@@ -52,14 +52,15 @@ export interface BindingRecord {
   teardown?: (() => void) | undefined;
 }
 
-const RECORD_KEY = Symbol.for('aej:record');
-const SHADOW_KEY = Symbol.for('aej:shadow');
-const KEPT_KEY = Symbol.for('aej:kept');
-const IGNORED_KEY = Symbol.for('aej:ignored');
+/** Internal WeakMap for Single Source of Truth */
+const nodeStates = new WeakMap<Node, NodeState>();
 
-type RegistryMetadata = Record<symbol, unknown>;
-type RegistryNode = Node & RegistryMetadata;
-type RegistryElement = Element & RegistryMetadata;
+interface NodeState {
+  isKept?: boolean;
+  isIgnored?: boolean;
+  shadowRoot?: ShadowRoot;
+  record?: BindingRecord;
+}
 
 /**
  * Logic: Central Lifecycle Engine
@@ -75,17 +76,26 @@ type RegistryElement = Element & RegistryMetadata;
 class BindingRegistry {
   #autoCleanupScheduled = false;
 
+  #getState(node: Node): NodeState {
+    let state = nodeStates.get(node);
+    if (!state) {
+      state = {};
+      nodeStates.set(node, state);
+    }
+    return state;
+  }
+
   /**
    * Logic: Resource Preservation
    * Marks a node to preserve its reactive resources even if detached.
    */
   keep(node: Node): void {
-    (node as RegistryNode)[KEPT_KEY] = true;
+    this.#getState(node).isKept = true;
   }
 
   /** Determines if a node is marked for resource preservation. */
   isKept(node: Node): boolean {
-    return !!(node as RegistryNode)[KEPT_KEY];
+    return !!nodeStates.get(node)?.isKept;
   }
 
   /**
@@ -93,12 +103,12 @@ class BindingRegistry {
    * Prevents automated cleanup during complex multi-step DOM manipulations.
    */
   markIgnored(node: Node): void {
-    (node as RegistryNode)[IGNORED_KEY] = true;
+    this.#getState(node).isIgnored = true;
   }
 
   /** Determines if a node is currently marked to be ignored. */
   isIgnored(node: Node): boolean {
-    return !!(node as RegistryNode)[IGNORED_KEY];
+    return !!nodeStates.get(node)?.isIgnored;
   }
 
   /**
@@ -106,7 +116,8 @@ class BindingRegistry {
    * @internal
    */
   unmarkIgnored(node: Node): void {
-    delete (node as RegistryNode)[IGNORED_KEY];
+    const state = nodeStates.get(node);
+    if (state) state.isIgnored = false;
   }
 
   /** @internal */
@@ -127,7 +138,7 @@ class BindingRegistry {
    * @internal
    */
   registerShadow(host: Element, sr: ShadowRoot): void {
-    (host as RegistryElement)[SHADOW_KEY] = sr;
+    this.#getState(host).shadowRoot = sr;
   }
 
   /**
@@ -161,9 +172,7 @@ class BindingRegistry {
    * @internal
    */
   getShadow(host: Element): ShadowRoot | null {
-    return (
-      host.shadowRoot ?? ((host as RegistryElement)[SHADOW_KEY] as ShadowRoot | undefined) ?? null
-    );
+    return host.shadowRoot ?? nodeStates.get(host)?.shadowRoot ?? null;
   }
 
   /**
@@ -191,11 +200,11 @@ class BindingRegistry {
       }
     }
 
-    const registryElement = element as RegistryElement;
-    let record = registryElement[RECORD_KEY] as BindingRecord | undefined;
+    const state = this.#getState(element);
+    let record = state.record;
     if (!record) {
       record = {};
-      registryElement[RECORD_KEY] = record;
+      state.record = record;
       this.#safeMark(element, MARK_BOUND);
     }
     return record;
@@ -253,7 +262,7 @@ class BindingRegistry {
 
   /** Determines if an element has any active bindings. */
   hasBind(element: Element): boolean {
-    return RECORD_KEY in element;
+    return !!nodeStates.get(element)?.record;
   }
 
   /**
@@ -262,17 +271,22 @@ class BindingRegistry {
    * @param node - The node to clean up.
    */
   cleanup(node: Node): void {
-    delete (node as RegistryNode)[KEPT_KEY];
-    delete (node as RegistryNode)[IGNORED_KEY];
+    const state = nodeStates.get(node);
+    if (state) {
+      state.isKept = false;
+      state.isIgnored = false;
+    }
     disableAutoCleanupFor(node);
 
     if (node.nodeType !== 1) return;
-    const element = node as RegistryElement;
+    const element = node as Element;
 
-    const record = element[RECORD_KEY] as BindingRecord | undefined;
+    const record = state?.record;
 
     if (record) {
-      delete element[RECORD_KEY];
+      // biome-ignore lint/performance/noDelete: record must be fully removed from state
+      // biome-ignore lint/style/noNonNullAssertion: record existence implies state existence
+      delete state!.record;
       element.classList.remove(MARK_BOUND);
 
       // Logic: Component Teardown
