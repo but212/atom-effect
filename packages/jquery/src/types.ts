@@ -490,7 +490,7 @@ export interface AtomComponentController {
   /** Registers a reactive provider on this element for dependency injection. */
   provideAtom<T = unknown>(key: string | symbol, val: T): void;
   /** Injects a reactive value provided by an ancestor element. */
-  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
+  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T | null> | null;
 
   /**
    * Initializes the component's reactive lifecycle and observers.

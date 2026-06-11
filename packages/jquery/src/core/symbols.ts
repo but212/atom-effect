@@ -19,25 +19,6 @@ export const HYDRATION_MARKER = Symbol.for('aej:hydrated');
 export const CLEANUP_MARKER = Symbol.for('aej:cleanup-enabled');
 
 /**
- * Logic: Reactive Dependency Injection
- * Event name used for the bubbling context discovery mechanism.
- * Descendant elements dispatch this event to locate reactive providers
- * higher in the DOM tree, including across Shadow DOM boundaries.
- */
-export const CONTEXT_REQUEST = 'aej:context-request';
-
-/**
- * Payload structure for context discovery events.
- * @internal
- */
-export interface ContextRequestDetail {
-  /** The unique key or symbol of the requested context. */
-  key: string | symbol;
-  /** A callback executed by the provider to deliver the reactive value. */
-  callback: (atom: unknown) => void;
-}
-
-/**
  * Logic: Batch Coalescing Marker
  * Marks event handlers as already wrapped in a reactive batch.
  *

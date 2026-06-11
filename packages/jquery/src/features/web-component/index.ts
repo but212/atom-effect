@@ -16,7 +16,7 @@ import { isAtom } from '@but212/atom-effect';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
-import { CLEANUP_MARKER, CONTEXT_REQUEST, type ContextRequestDetail } from '@/core/symbols';
+import { CLEANUP_MARKER } from '@/core/symbols';
 import type {
   AtomComponentController,
   AtomComponentStatic,
@@ -24,14 +24,7 @@ import type {
   WritableAtom,
 } from '@/types';
 import { debug } from '@/utils/debug';
-import {
-  autoSetupMap,
-  ContextEngine,
-  createContextProxy,
-  getInternalState,
-  getOrCreateSheet,
-  nodeStateMap,
-} from './engine';
+import { createContextProxy, getInternalState, getOrCreateSheet, nodeStateMap } from './engine';
 import { SetupFeatures } from './setup';
 import { ComponentState } from './state';
 import { resolveShadowRoot } from './utils';
@@ -181,7 +174,20 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         return;
       }
 
-      const config = options instanceof Node ? { shadowRoot: options } : (options ?? {});
+      const ctor = element.constructor as typeof HTMLElement & AtomComponentStatic;
+      const baseConfig = options instanceof Node ? { shadowRoot: options } : (options ?? {});
+
+      const config = {
+        shadowRoot: baseConfig.shadowRoot,
+        styles: baseConfig.styles ?? ctor.aejStyles,
+        bind: baseConfig.bind ?? ctor.aejBind,
+        aria: baseConfig.aria ?? ctor.aejAria,
+        parts: baseConfig.parts ?? ctor.aejParts,
+        dispatch: baseConfig.dispatch ?? ctor.aejDispatch,
+        value: baseConfig.value ?? ctor.aejValue,
+        validation: baseConfig.validation ?? ctor.aejValidation,
+      };
+
       const root = config.shadowRoot ?? element.shadowRoot ?? null;
       const sr = root instanceof ShadowRoot ? root : null;
 
@@ -281,44 +287,10 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         s.injects?.clear();
       }
 
-      if (autoSetupMap.has(element)) {
-        autoSetupMap.delete(element);
-        ContextEngine.release();
-      }
-
-      ContextEngine.bump();
       state.dispose();
       registry.cleanupTree(element);
     },
   } as unknown as AtomComponentController;
-
-  const ctor = element.constructor as typeof HTMLElement & AtomComponentStatic;
-  const hasStaticSpecs = !!(
-    ctor.aejStyles ||
-    ctor.aejBind ||
-    ctor.aejAria ||
-    ctor.aejParts ||
-    ctor.aejDispatch ||
-    ctor.aejValue ||
-    ctor.aejValidation
-  );
-
-  if (hasStaticSpecs) {
-    if (element.isConnected) {
-      controller.setup({
-        ...(ctor.aejStyles && { styles: ctor.aejStyles }),
-        ...(ctor.aejBind && { bind: ctor.aejBind }),
-        ...(ctor.aejAria && { aria: ctor.aejAria }),
-        ...(ctor.aejParts && { parts: ctor.aejParts }),
-        ...(ctor.aejDispatch && { dispatch: ctor.aejDispatch }),
-        ...(ctor.aejValue && { value: ctor.aejValue }),
-        ...(ctor.aejValidation && { validation: ctor.aejValidation }),
-      });
-    } else {
-      autoSetupMap.set(element, ctor);
-      ContextEngine.retain();
-    }
-  }
 
   registry.setTeardown(element, () => controller.teardown());
   internal.controller = controller;
@@ -366,13 +338,6 @@ export function provideAtom(
     const state = getInternalState(el);
     if (!state.providers) {
       state.providers = new Map();
-      el.addEventListener(CONTEXT_REQUEST, (e: Event) => {
-        const { key: reqKey, callback } = (e as CustomEvent<ContextRequestDetail>).detail;
-        if (state.providers?.has(reqKey)) {
-          e.stopPropagation();
-          callback(state.providers.get(reqKey));
-        }
-      });
     }
     state.providers.set(key, val);
 
@@ -393,7 +358,6 @@ export function provideAtom(
       } else sync(val);
     }
   }
-  ContextEngine.bump();
 }
 
 /**
@@ -427,7 +391,7 @@ export function provideAtom(
 export function injectAtom<T = unknown>(
   element: HTMLElement | JQuery | string,
   key: string | symbol
-): WritableAtom<T> | null {
+): WritableAtom<T | null> | null {
   const target =
     element instanceof HTMLElement
       ? element
@@ -448,13 +412,11 @@ export function injectAtom<T = unknown>(
   if (!state.injects) state.injects = new Map();
   let existing = state.injects.get(key);
   if (!existing) {
-    existing = createContextProxy<T>(target, key);
+    existing = createContextProxy<T>(target, key) as WritableAtom<unknown>;
     state.injects.set(key, existing);
   }
-  return existing as WritableAtom<T>;
+  return existing as WritableAtom<T | null>;
 }
 
 // Attach to jQuery namespace
 $.extend({ provideAtom, injectAtom, useAtomComponent });
-
-export { ContextEngine }; // Export for diagnostic tests if needed
