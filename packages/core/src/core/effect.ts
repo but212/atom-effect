@@ -28,7 +28,6 @@ import {
 import {
   nodeCommitDeps,
   nodeHandleError,
-  nodeIsDirty,
   nodeStartTracking,
   nodeTrackDependency,
   rollbackTrackingSubscriber,
@@ -50,7 +49,7 @@ import type {
 } from '@/types';
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
+import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
 import { currentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
 
 class EffectImpl
@@ -193,7 +192,7 @@ class EffectImpl
     // Execution is skipped if the effect is not 'forced', has no dependencies
     // yet, and its dependencies haven't changed (dirty check). This minimizes
     // redundant computations during the flush cycle.
-    if (!(force || this._depSlots.length === 0 || nodeIsDirty(this))) return Result.ok(false);
+    if (!(force || this._depSlots.size === 0 || isBufferDirty(this))) return Result.ok(false);
 
     const budgetRes = this.#validateBudget();
     if (Result.isErr(budgetRes)) return budgetRes as unknown as Result<boolean, Error>;

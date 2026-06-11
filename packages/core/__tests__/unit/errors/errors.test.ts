@@ -3,8 +3,8 @@
  * @description Verifies Error hierarchy, wrapping logic, and type guards
  */
 
+import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { ERROR_STRATEGIES, type ErrorStrategy } from '@/constants';
 import {
   AtomError,
   type AtomErrorJSON,
@@ -22,6 +22,7 @@ import {
   SchedulerError,
   serializeError,
 } from '@/index';
+import { ERROR_STRATEGIES, type ErrorStrategy } from '@/utils';
 
 describe('Error Handling System', () => {
   const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES as [ErrorStrategy, ErrorStrategy];
@@ -157,6 +158,14 @@ describe('Error Handling System', () => {
       const meta = fallbackStrategy.fetch(stdError);
 
       expect(meta.recoverable).toBe(false);
+    });
+
+    it('identifies cross-realm error objects in fallback strategy', () => {
+      const context = vm.createContext();
+      const crossRealmError = vm.runInContext('new Error("cross-realm")', context);
+
+      expect(crossRealmError instanceof Error).toBe(false);
+      expect(fallbackStrategy.test(crossRealmError)).toBe(true);
     });
 
     it('should not throw during Strategy 1 test check when e._tag property getter throws an error', () => {
