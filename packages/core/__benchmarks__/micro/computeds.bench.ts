@@ -9,23 +9,27 @@ import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
 describe('Computeds: Reactive Logic', () => {
   bench(
-    'baseline: raw function creation',
+    'baseline: raw function creation (x${REPEATS})',
     () => {
-      const a = { value: 0 };
-      const b = { value: 1 };
-      const c = { value: 2 };
-      keep(() => a.value + b.value + c.value);
+      for (let i = 0; i < REPEATS; i++) {
+        const a = { value: 0 };
+        const b = { value: 1 };
+        const c = { value: 2 };
+        keep(() => a.value + b.value + c.value);
+      }
     },
     microBenchOptions
   );
 
   bench(
-    'creation: flat computed',
+    'creation: flat computed (x${REPEATS})',
     () => {
-      const a = atom(0);
-      const b = atom(1);
-      const c = atom(2);
-      keep(computed(() => a.value + b.value + c.value));
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(0);
+        const b = atom(1);
+        const c = atom(2);
+        keep(computed(() => a.value + b.value + c.value));
+      }
     },
     microBenchOptions
   );
