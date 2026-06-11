@@ -214,12 +214,16 @@ export class SlotBuffer<T> {
     if (index >= limit) return;
 
     for (let i = index; i < limit; i++) {
-      const item = this.at(i);
-      if (item !== null) {
+      if (this.at(i) !== null) {
         this.#actualCount--;
       }
+    }
+
+    const fastLimit = Math.min(limit, FAST_CAPACITY);
+    for (let i = index; i < fastLimit; i++) {
       this.#rawWrite(i, null);
     }
+
     if (index <= FAST_CAPACITY) {
       this.#overflow = null;
     } else if (this.#overflow !== null) {
