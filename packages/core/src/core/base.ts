@@ -97,9 +97,7 @@ export function pushTrackingSubscriber(
 
 /** @internal */
 export function popTrackingSubscriber(context: TrackingContext): void {
-  const stack = context.stack;
-  stack.pop();
-  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
+  restoreTrackingDepth(context, context.stack.length - 1);
 }
 
 /**
@@ -107,9 +105,7 @@ export function popTrackingSubscriber(context: TrackingContext): void {
  * @internal
  */
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
-  const stack = context.stack;
-  stack.length = Math.max(0, Math.min(depth, stack.length));
-  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
+  restoreTrackingDepth(context, depth);
 }
 
 /**
@@ -134,9 +130,16 @@ export function runInTrackingContext<T>(
 }
 
 /** @internal */
+export function restoreTrackingDepth(context: TrackingContext, depth: number): void {
+  const stack = context.stack;
+  const nextDepth = Math.max(0, Math.min(depth, stack.length));
+  stack.length = nextDepth;
+  context.current = stack[nextDepth - 1] ?? null;
+}
+
+/** @internal */
 export function resetTrackingContext(context: TrackingContext): void {
-  context.stack.length = 0;
-  context.current = null;
+  restoreTrackingDepth(context, 0);
 }
 
 /**
@@ -249,10 +252,7 @@ export function nodeSubscribe<T>(
   node: ReactiveNode<T>,
   listener: SubscriberTarget<T>
 ): Result<() => void, Error> {
-  const isFn = typeof listener === 'function';
-  const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
-
-  if (!isFn && !isObj) {
+  if (!isSubscriberTarget(listener)) {
     return Result.err(
       wrapError(
         new TypeError('Invalid subscriber'),
@@ -280,6 +280,14 @@ export function nodeSubscribe<T>(
       l = undefined;
     }
   });
+}
+
+/** @internal */
+export function isSubscriberTarget(listener: unknown): listener is SubscriberTarget<unknown> {
+  return (
+    typeof listener === 'function' ||
+    (listener != null && typeof (listener as Subscriber).execute === 'function')
+  );
 }
 
 /** @internal */

@@ -325,9 +325,6 @@ class EffectImpl
  * ```
  */
 export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
-  if (typeof fn !== 'function') {
-    throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
-  }
   const effectInstance = new EffectImpl(fn, options);
   effectInstance.execute();
   return effectInstance;
