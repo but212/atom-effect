@@ -115,4 +115,14 @@ export function isEffect(obj: unknown): obj is EffectObject {
   return isBranded(obj, BrandFlags.Effect);
 }
 
+/**
+ * Determines whether a value is a standard Error object, including cross-realm instances.
+ */
+export function isError(e: unknown): e is Error {
+  return (
+    e instanceof Error ||
+    (typeof e === 'object' && e !== null && Object.prototype.toString.call(e) === '[object Error]')
+  );
+}
+
 export { isPromise };

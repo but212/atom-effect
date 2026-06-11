@@ -12,6 +12,7 @@
  */
 
 import type { AtomErrorConstructor, AtomErrorJSON, AtomErrorOptions } from '@/types';
+import { isError } from './type-guards';
 
 /**
  * Role: Base Reactive Error
@@ -166,7 +167,7 @@ export function serializeError(
 
   seen.add(error);
 
-  if (error instanceof Error) {
+  if (isError(error)) {
     const err = error as Error & Record<string, unknown>;
     return {
       name: err.name,
@@ -270,7 +271,7 @@ export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
     },
   },
   {
-    test: (e: unknown): e is Error => e instanceof Error,
+    test: (e: unknown): e is Error => isError(e),
     fetch: (e: unknown) => {
       const err = e as Error & Record<string, unknown>;
       return {
