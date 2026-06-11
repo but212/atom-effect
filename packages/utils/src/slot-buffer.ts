@@ -49,19 +49,23 @@ export class SlotBuffer<T> {
    * @returns The item, or null if the slot is empty or out of bounds.
    */
   at(index: number): T | null {
-    if (index === 0) return this.#s0;
-    if (index === 1) return this.#s1;
-    if (index === 2) return this.#s2;
-    if (index === 3) return this.#s3;
-    const ov = this.#overflow;
-    if (ov !== null && index >= FAST_CAPACITY && index < this.#count) {
-      return ov[index - FAST_CAPACITY] ?? null;
+    if (index < FAST_CAPACITY) {
+      if (index === 0) return this.#s0;
+      if (index === 1) return this.#s1;
+      if (index === 2) return this.#s2;
+      if (index === 3) return this.#s3;
+    } else {
+      const ov = this.#overflow;
+      if (ov !== null && index < this.#count) {
+        return ov[index - FAST_CAPACITY] ?? null;
+      }
     }
     return null;
   }
 
   /** Return true if the buffer contains the given item. */
   has(item: T): boolean {
+    if (item === null || item === undefined) return false;
     if (this.#actualCount === 0) return false;
 
     if (this.#s0 === item) return true;
@@ -162,6 +166,7 @@ export class SlotBuffer<T> {
    * @returns True if the item was found and removed.
    */
   remove(item: T): boolean {
+    if (item === null || item === undefined) return false;
     if (this.#actualCount === 0) return false;
 
     if (this.#s0 === item) return this.#removeAt(0);
@@ -204,25 +209,36 @@ export class SlotBuffer<T> {
     }
   }
 
-  /**
-   * Efficiently clears all items from the given index to the end.
-   */
   truncateFrom(index: number): void {
     const limit = this.#count;
     if (index >= limit) return;
 
-    for (let i = index; i < limit; i++) {
-      if (this.at(i) !== null) this.#actualCount--;
-    }
-
     if (index < FAST_CAPACITY) {
-      if (index <= 0) this.#s0 = null;
-      if (index <= 1) this.#s1 = null;
-      if (index <= 2) this.#s2 = null;
-      if (index <= 3) this.#s3 = null;
-      this.#overflow = null;
-    } else if (this.#overflow !== null) {
-      this.#overflow.length = index - FAST_CAPACITY;
+      if (index <= 0) { if (this.#s0 !== null) this.#actualCount--; this.#s0 = null; }
+      if (index <= 1) { if (this.#s1 !== null) this.#actualCount--; this.#s1 = null; }
+      if (index <= 2) { if (this.#s2 !== null) this.#actualCount--; this.#s2 = null; }
+      if (index <= 3) { if (this.#s3 !== null) this.#actualCount--; this.#s3 = null; }
+
+      const ov = this.#overflow;
+      if (ov !== null) {
+        const len = limit - FAST_CAPACITY;
+        for (let i = 0; i < len; i++) {
+          const item = ov[i];
+          if (item !== null && item !== undefined) this.#actualCount--;
+        }
+        this.#overflow = null;
+      }
+    } else {
+      const ov = this.#overflow;
+      if (ov !== null) {
+        const start = index - FAST_CAPACITY;
+        const end = limit - FAST_CAPACITY;
+        for (let i = start; i < end; i++) {
+          const item = ov[i];
+          if (item !== null && item !== undefined) this.#actualCount--;
+        }
+        ov.length = start;
+      }
     }
 
     this.#count = index;
@@ -297,13 +313,13 @@ export class SlotBuffer<T> {
     this.clear();
   }
 
-  /** Writes to a slot (0+). */
   #rawWrite(index: number, item: T | null): void {
-    if (index === 0) this.#s0 = item;
-    else if (index === 1) this.#s1 = item;
-    else if (index === 2) this.#s2 = item;
-    else if (index === 3) this.#s3 = item;
-    else {
+    if (index < FAST_CAPACITY) {
+      if (index === 0) this.#s0 = item;
+      else if (index === 1) this.#s1 = item;
+      else if (index === 2) this.#s2 = item;
+      else this.#s3 = item;
+    } else {
       if (this.#overflow === null) this.#overflow = [];
       this.#overflow[index - FAST_CAPACITY] = item;
     }
