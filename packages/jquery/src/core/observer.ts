@@ -68,29 +68,41 @@ export class RootObserver {
 
       // 2. Process added nodes
       if (this.#additionCallbacks.size > 0) {
+        // Collect all element nodes added in this batch
+        const addedElements: Element[] = [];
         for (const m of mutations) {
           for (const node of m.addedNodes) {
-            if (node instanceof Element) {
-              for (const record of this.#additionCallbacks) {
-                try {
-                  if (node.matches(record.selector)) {
-                    try {
-                      record.callback(node);
-                    } catch (error) {
-                      console.error('Error in onNodeAdded callback:', error);
-                    }
-                  }
-                  const children = node.querySelectorAll(record.selector);
-                  for (const child of children) {
-                    try {
-                      record.callback(child);
-                    } catch (error) {
-                      console.error('Error in onNodeAdded callback:', error);
-                    }
-                  }
-                } catch (error) {
-                  console.error('Error querying or processing onNodeAdded:', error);
+            if (node.nodeType === 1) {
+              // Node.ELEMENT_NODE
+              addedElements.push(node as Element);
+            }
+          }
+        }
+
+        if (addedElements.length > 0) {
+          for (const record of this.#additionCallbacks) {
+            const matchedElements = new Set<Element>();
+
+            for (const el of addedElements) {
+              try {
+                if (el.matches(record.selector)) {
+                  matchedElements.add(el);
                 }
+                const children = el.querySelectorAll(record.selector);
+                for (let i = 0; i < children.length; i++) {
+                  const child = children[i];
+                  if (child) matchedElements.add(child);
+                }
+              } catch (error) {
+                console.error('Error querying or processing onNodeAdded:', error);
+              }
+            }
+
+            for (const el of matchedElements) {
+              try {
+                record.callback(el);
+              } catch (error) {
+                console.error('Error in onNodeAdded callback:', error);
               }
             }
           }
