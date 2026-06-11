@@ -28,25 +28,12 @@ import type { DebugConfig, DependencyId, NodeMetadata } from '@/types';
 const noop = () => {};
 
 /** Helper to resolve fallback node identity structurally. @internal */
-const getFallbackIdentity = (obj: object, id: DependencyId): { name: string; type: string } => {
+const getFallbackIdentity = (obj: object, id: DependencyId): NodeMetadata => {
   const brand = (obj as { [BRAND]?: number })[BRAND];
   const info = brand === undefined ? undefined : BRAND_IDENTITY_MAP[brand & BRAND_MASK];
   const type = info?.type ?? 'unknown';
   const prefix = info?.prefix ?? `${type}_`;
   return { name: `${prefix}${id}`, type };
-};
-
-/** Helper to check if a name is a generated fallback name. @internal */
-const isFallbackName = (name: string, type: string, id: DependencyId): boolean => {
-  return (
-    name === `${type}_${id}` ||
-    name === `unknown_${id}` ||
-    name === `atom_${id}` ||
-    name === `calc_${id}` ||
-    name === `fx_${id}` ||
-    name === `effect_${id}` ||
-    name === `computed_${id}`
-  );
 };
 
 /**
@@ -143,12 +130,13 @@ class DevDebugEngine implements DebugConfig {
     if (entry) {
       if (customName !== undefined) {
         entry.name = customName;
-      } else if (isFallbackName(entry.name, entry.type, id)) {
+        entry.custom = true;
+      } else if (!entry.custom) {
         entry.name = `${type}_${id}`;
       }
       entry.type = type;
     } else {
-      entry = { name: customName ?? `${type}_${id}`, type };
+      entry = { name: customName ?? `${type}_${id}`, type, custom: customName !== undefined };
       this.#registry.set(id, entry);
     }
 

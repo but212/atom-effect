@@ -4,7 +4,6 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ERROR_STRATEGIES, type ErrorStrategy } from '@/constants';
 import {
   AtomError,
   type AtomErrorJSON,
@@ -22,6 +21,7 @@ import {
   SchedulerError,
   serializeError,
 } from '@/index';
+import { ERROR_STRATEGIES, type ErrorStrategy } from '@/utils';
 
 describe('Error Handling System', () => {
   const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES as [ErrorStrategy, ErrorStrategy];

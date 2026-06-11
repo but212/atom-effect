@@ -214,10 +214,22 @@ export class SlotBuffer<T> {
     if (index >= limit) return;
 
     if (index < FAST_CAPACITY) {
-      if (index <= 0) { if (this.#s0 !== null) this.#actualCount--; this.#s0 = null; }
-      if (index <= 1) { if (this.#s1 !== null) this.#actualCount--; this.#s1 = null; }
-      if (index <= 2) { if (this.#s2 !== null) this.#actualCount--; this.#s2 = null; }
-      if (index <= 3) { if (this.#s3 !== null) this.#actualCount--; this.#s3 = null; }
+      if (index <= 0) {
+        if (this.#s0 !== null) this.#actualCount--;
+        this.#s0 = null;
+      }
+      if (index <= 1) {
+        if (this.#s1 !== null) this.#actualCount--;
+        this.#s1 = null;
+      }
+      if (index <= 2) {
+        if (this.#s2 !== null) this.#actualCount--;
+        this.#s2 = null;
+      }
+      if (index <= 3) {
+        if (this.#s3 !== null) this.#actualCount--;
+        this.#s3 = null;
+      }
 
       const ov = this.#overflow;
       if (ov !== null) {

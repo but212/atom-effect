@@ -352,6 +352,7 @@ export interface NodeMetadata {
   name: string;
   type: string;
   ref?: WeakRef<object>;
+  custom?: boolean;
 }
 
 /**

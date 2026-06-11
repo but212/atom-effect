@@ -56,6 +56,8 @@ export {
   AtomError,
   ComputedError,
   EffectError,
+  ERROR_STRATEGIES,
+  type ErrorStrategy,
   getErrorChain,
   SchedulerError,
   serializeError,
