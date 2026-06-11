@@ -213,44 +213,17 @@ export class SlotBuffer<T> {
     const limit = this.#count;
     if (index >= limit) return;
 
-    if (index < FAST_CAPACITY) {
-      if (index <= 0) {
-        if (this.#s0 !== null) this.#actualCount--;
-        this.#s0 = null;
+    for (let i = index; i < limit; i++) {
+      const item = this.at(i);
+      if (item !== null) {
+        this.#actualCount--;
       }
-      if (index <= 1) {
-        if (this.#s1 !== null) this.#actualCount--;
-        this.#s1 = null;
-      }
-      if (index <= 2) {
-        if (this.#s2 !== null) this.#actualCount--;
-        this.#s2 = null;
-      }
-      if (index <= 3) {
-        if (this.#s3 !== null) this.#actualCount--;
-        this.#s3 = null;
-      }
-
-      const ov = this.#overflow;
-      if (ov !== null) {
-        const len = limit - FAST_CAPACITY;
-        for (let i = 0; i < len; i++) {
-          const item = ov[i];
-          if (item !== null && item !== undefined) this.#actualCount--;
-        }
-        this.#overflow = null;
-      }
-    } else {
-      const ov = this.#overflow;
-      if (ov !== null) {
-        const start = index - FAST_CAPACITY;
-        const end = limit - FAST_CAPACITY;
-        for (let i = start; i < end; i++) {
-          const item = ov[i];
-          if (item !== null && item !== undefined) this.#actualCount--;
-        }
-        ov.length = start;
-      }
+      this.#rawWrite(i, null);
+    }
+    if (index <= FAST_CAPACITY) {
+      this.#overflow = null;
+    } else if (this.#overflow !== null) {
+      this.#overflow.length = index - FAST_CAPACITY;
     }
 
     this.#count = index;
@@ -293,7 +266,7 @@ export class SlotBuffer<T> {
       if (writeIdx <= FAST_CAPACITY) this.#overflow = null;
       else ov.length = writeIdx - FAST_CAPACITY;
     }
-    this.#freeIndices = [];
+    this.#freeIndices.length = 0;
     this.#pendingCompact = false;
   }
 
@@ -316,7 +289,7 @@ export class SlotBuffer<T> {
     this.#count = 0;
     this.#actualCount = 0;
     this.#overflow = null;
-    this.#freeIndices = [];
+    this.#freeIndices.length = 0;
     this.#pendingCompact = false;
   }
 
@@ -365,27 +338,14 @@ export class SlotBuffer<T> {
   #shrinkPhysicalSizeFrom(index: number): void {
     if (this.isLocked) return;
     if (index !== this.#count - 1) return;
-    this.#count--;
 
-    if (this.#count > FAST_CAPACITY) {
-      const ov = this.#overflow;
-      if (ov !== null) {
-        while (
-          this.#count > FAST_CAPACITY &&
-          (ov[this.#count - (FAST_CAPACITY + 1)] === null ||
-            ov[this.#count - (FAST_CAPACITY + 1)] === undefined)
-        ) {
-          this.#count--;
-        }
-      }
+    while (this.#count > 0 && this.at(this.#count - 1) === null) {
+      this.#count--;
     }
-
     if (this.#count <= FAST_CAPACITY) {
-      if (this.#s3 !== null) this.#count = 4;
-      else if (this.#s2 !== null) this.#count = 3;
-      else if (this.#s1 !== null) this.#count = 2;
-      else if (this.#s0 === null) this.#count = 0;
-      else this.#count = 1;
+      this.#overflow = null;
+    } else if (this.#overflow !== null) {
+      this.#overflow.length = this.#count - FAST_CAPACITY;
     }
   }
 }
