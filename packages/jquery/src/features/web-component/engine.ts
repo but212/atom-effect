@@ -12,22 +12,9 @@
  * and reactive tracking across the DOM tree.
  */
 
-import {
-  BRAND,
-  BrandFlags,
-  type EffectObject,
-  isAtom,
-  isWritable,
-  untracked,
-} from '@but212/atom-effect';
+import { BRAND, BrandFlags, type EffectObject, isAtom, isWritable } from '@but212/atom-effect';
 import $ from 'jquery';
-import { CONTEXT_REQUEST, type ContextRequestDetail } from '@/core/symbols';
-import type {
-  AtomComponentController,
-  AtomComponentStatic,
-  ReadonlyAtom,
-  WritableAtom,
-} from '@/types';
+import type { AtomComponentController, WritableAtom } from '@/types';
 
 export interface NodeInternalState {
   providers?: Map<string | symbol, unknown>;
@@ -44,7 +31,6 @@ export interface DebugPortal {
 
 export const nodeStateMap = new WeakMap<Node, NodeInternalState>();
 export const sheetCache = new Map<string, CSSStyleSheet>();
-export const autoSetupMap = new WeakMap<HTMLElement, AtomComponentStatic>();
 
 export const MAX_SHEET_CACHE_SIZE = 100;
 
@@ -87,151 +73,46 @@ export const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet 
 };
 
 /**
- * Logic: Reactive Dependency Injection
- * Internal singleton that coordinates Dependency Injection (DI) across the DOM.
+ * Logic: Reactive Dependency Discovery
+ * Walks the DOM tree upwards (including crossing Shadow DOM boundaries)
+ * to locate a reactive provider matching the given key.
  *
- * Role: Context Orchestrator
- * Manages the versioning and observation of the DOM tree to invalidate
- * late-bound context proxies when elements move.
+ * Design Intent:
+ * Pure, synchronous DOM traversal. Removes the need for global mutation observers
+ * or asynchronous event bubbling, enabling completely deterministic and memory-safe
+ * context resolution.
  *
  * @internal
  */
-export const ContextEngine = (() => {
-  const version = $.atom(0);
-  let isBumpPending = false;
-  let observer: MutationObserver | null = null;
-  let activeCount = 0;
-
-  const bump = () => {
-    if (isBumpPending) return;
-    isBumpPending = true;
-    queueMicrotask(() => {
-      version.value++;
-      isBumpPending = false;
-    });
-  };
-
-  const init = (el: HTMLElement) => {
-    const specs = autoSetupMap.get(el);
-    if (specs) {
-      // Logic: Atomic Take & Release
-      autoSetupMap.delete(el);
-      ContextEngine.release();
-
-      const ctrl = nodeStateMap.get(el)?.controller;
-      if (ctrl) {
-        const opts: Parameters<AtomComponentController['setup']>[0] = {};
-        if (specs.aejStyles !== undefined) opts.styles = specs.aejStyles;
-        if (specs.aejBind !== undefined) opts.bind = specs.aejBind;
-        if (specs.aejAria !== undefined) opts.aria = specs.aejAria;
-        if (specs.aejParts !== undefined) opts.parts = specs.aejParts;
-        if (specs.aejDispatch !== undefined) opts.dispatch = specs.aejDispatch;
-        if (specs.aejValue !== undefined) opts.value = specs.aejValue;
-        if (specs.aejValidation !== undefined) opts.validation = specs.aejValidation;
-        ctrl.setup(opts);
-      }
+export const discoverProvider = (target: Node, key: string | symbol): unknown | undefined => {
+  let curr: Node | null = target;
+  while (curr) {
+    const state = nodeStateMap.get(curr);
+    if (state?.providers?.has(key)) {
+      return state.providers.get(key);
     }
-  };
-
-  const ensureObserver = () => {
-    if (observer || typeof document === 'undefined') return;
-    observer = new MutationObserver((mutations) => {
-      let needsBump = false;
-      for (const { addedNodes, removedNodes } of mutations) {
-        if (addedNodes.length) {
-          needsBump = true;
-          for (const node of addedNodes) {
-            if (node instanceof HTMLElement) {
-              init(node);
-              for (const child of node.querySelectorAll('*')) {
-                init(child as HTMLElement);
-              }
-            }
-          }
-        }
-        if (removedNodes.length) needsBump = true;
-      }
-      if (needsBump) bump();
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-  };
-
-  const releaseObserver = () => {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
-  };
-
-  return {
-    get version() {
-      return version;
-    },
-    bump,
-    retain() {
-      activeCount++;
-      if (activeCount === 1) ensureObserver();
-    },
-    release() {
-      activeCount--;
-      if (activeCount === 0) releaseObserver();
-    },
-    /**
-     * Resolves a context key by dispatching a bubbling DOM event.
-     * Contract: This method RELIES on synchronous event dispatch.
-     */
-    discover(target: HTMLElement, key: string | symbol): unknown | undefined {
-      // Fast-path: direct parent pointer walk crossing Shadow DOM boundaries
-      let curr: Node | null = target;
-      while (curr) {
-        const state = nodeStateMap.get(curr);
-        if (state?.providers?.has(key)) {
-          return state.providers.get(key);
-        }
-        curr = curr instanceof ShadowRoot ? curr.host : curr.parentNode;
-      }
-
-      // Fallback path: event-based resolution
-      let found: unknown | undefined;
-      const event = new CustomEvent<ContextRequestDetail>(CONTEXT_REQUEST, {
-        detail: {
-          key,
-          callback: (atom) => {
-            found = atom;
-          },
-        },
-        bubbles: true,
-        composed: true,
-      });
-      target.dispatchEvent(event);
-      return found;
-    },
-  };
-})();
+    curr = curr instanceof ShadowRoot ? curr.host : curr.parentNode;
+  }
+  return undefined;
+};
 
 /**
  * Logic: Reactive Context Proxy
- * Creates a reactive proxy that follows a context value as it moves in the DOM.
+ * Creates a reactive proxy that resolves its target provider synchronously
+ * on every access.
  *
- * Logic: Late-Bound Tracking
- * Tracks `ContextEngine.version` to ensure that cached values are
- * invalidated if the element is moved within the DOM hierarchy.
+ * Design Intent:
+ * Drops global state versioning. By traversing the DOM upon access,
+ * the proxy ensures it always resolves to the current location's provider
+ * without maintaining tracking state.
  *
  * @internal
  */
 export function createContextProxy<T>(target: HTMLElement, key: string | symbol): WritableAtom<T> {
-  let sharedAtom: ReadonlyAtom<T> | null = null;
-
   const resolve = (isPeek: boolean) => {
-    if (!isPeek) ContextEngine.version.value;
-    const p = untracked(() => ContextEngine.discover(target, key));
+    const p = discoverProvider(target, key);
     if (p === undefined) return null as T;
     return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
-  };
-
-  const getShared = () => {
-    if (!sharedAtom) sharedAtom = $.computed(() => resolve(false));
-    return sharedAtom;
   };
 
   return {
@@ -239,7 +120,7 @@ export function createContextProxy<T>(target: HTMLElement, key: string | symbol)
       return resolve(false);
     },
     set value(v: T) {
-      const p = untracked(() => ContextEngine.discover(target, key));
+      const p = discoverProvider(target, key);
       if (p !== undefined && isWritable(p)) {
         p.value = v;
       }
@@ -248,19 +129,20 @@ export function createContextProxy<T>(target: HTMLElement, key: string | symbol)
       return resolve(true);
     },
     subscribe(fn) {
-      ContextEngine.retain();
-      const unsub = getShared().subscribe(fn);
+      // In this stateless model, we create a temporary computed that captures the current
+      // resolution value and subscribe to it. If the user wants to react to *movement* in the DOM,
+      // they must explicitly re-evaluate or use a component lifecycle hook.
+      // This enforces explicit bounds over implicit magical DOM tracking.
+      const shared = $.computed(() => resolve(false));
+      const unsub = shared.subscribe(fn);
       return () => {
         unsub();
-        ContextEngine.release();
+        shared.dispose();
       };
     },
-    subscriberCount: () => (sharedAtom ? sharedAtom.subscriberCount() : 0),
+    subscriberCount: () => 0, // Proxy has no permanent subscribers.
     dispose() {
-      if (sharedAtom) {
-        sharedAtom.dispose();
-        sharedAtom = null;
-      }
+      // No permanent resources to free in the proxy itself.
     },
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
   } as WritableAtom<T>;
