@@ -41,7 +41,4 @@ export const SCHEDULER_CONFIG = Object.freeze({
 
   /** Minimum iterations required to allow nested batches to resolve. */
   MIN_FLUSH_ITERATIONS: 10,
-
-  /** Memory threshold to shrink the batch queue, releasing memory back to the heap. */
-  BATCH_QUEUE_SHRINK_THRESHOLD: 1000,
 } as const satisfies SchedulerConfig);

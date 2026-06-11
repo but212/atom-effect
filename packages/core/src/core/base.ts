@@ -12,7 +12,7 @@
  */
 
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
-import { COMPUTED_STATE_FLAGS, ERROR_MESSAGES, IS_DEV, LOG_PREFIX } from '@/constants';
+import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX } from '@/constants';
 import type {
   AtomErrorConstructor,
   Dependency,
@@ -28,14 +28,7 @@ import type {
 } from '@/types';
 import { AtomError, nextSmi, wrapError } from '@/utils';
 
-import {
-  BUFFER_FLAGS,
-  claimExisting,
-  depBufferTruncateFrom,
-  insertNew,
-  isBufferDirty,
-  isBufferShallowDirty,
-} from './buffers';
+import { BUFFER_FLAGS, claimExisting, depBufferTruncateFrom, insertNew } from './buffers';
 
 import { nextEpoch } from './scheduler';
 
@@ -378,27 +371,7 @@ export function nodeHandleError<T, E extends Error>(
   nodeNotifySubscribers(node, undefined, undefined);
 }
 
-/** @internal - Checks computed flag. */
-export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
-  return (node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
-}
-
-/** @internal - Checks if the slot buffer is locked during notification. */
-export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
-  return node._slots?.isLocked ?? false;
-}
-
 /** @internal - Returns active listener count. */
 export function nodeSubscriberCount<T>(node: ReactiveNode<T>): number {
   return node._slots?.size ?? 0;
-}
-
-/** @internal - Deep check for upstream changes. */
-export function nodeIsDirty(node: ReactiveDependencyTracker): boolean {
-  return isBufferDirty(node);
-}
-
-/** @internal - Shallow check for upstream signals. */
-export function nodeIsShallowDirty(node: ReactiveDependencyTracker): boolean {
-  return isBufferShallowDirty(node);
 }

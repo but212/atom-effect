@@ -89,19 +89,6 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   get isDisposed(): boolean {
     return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
   }
-  get isNotifying(): boolean {
-    return this._slots?.isLocked ?? false;
-  }
-
-  /** @internal */
-  get isNotificationScheduled(): boolean {
-    return (this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0;
-  }
-
-  /** @internal */
-  get isSync(): boolean {
-    return (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
-  }
 
   /**
    * Logic: Reactive Tracking

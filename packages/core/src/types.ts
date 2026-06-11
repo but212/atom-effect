@@ -342,7 +342,6 @@ export interface SchedulerConfig {
   MAX_EXECUTIONS_PER_FLUSH: number;
   MAX_FLUSH_ITERATIONS: number;
   MIN_FLUSH_ITERATIONS: number;
-  BATCH_QUEUE_SHRINK_THRESHOLD: number;
 }
 
 /**

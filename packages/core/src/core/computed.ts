@@ -30,8 +30,6 @@ import {
   nextVersion,
   nodeCommitDeps,
   nodeHandleError,
-  nodeIsDirty,
-  nodeIsShallowDirty,
   nodeNotifySubscribers,
   nodeStartTracking,
   nodeSubscribe,
@@ -58,7 +56,13 @@ import type {
 } from '@/types';
 import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
+import {
+  BUFFER_FLAGS,
+  disposeAll,
+  isBufferDirty,
+  isBufferShallowDirty,
+  prepareTracking,
+} from './buffers';
 
 /**
  * Logic: Re-computation Heuristics
@@ -187,9 +191,6 @@ class ComputedAtomImpl<T>
     }
   }
 
-  get isDirty(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.DIRTY) !== 0;
-  }
   get isDisposed(): boolean {
     return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
   }
@@ -199,9 +200,6 @@ class ComputedAtomImpl<T>
   get isRejected(): boolean {
     trackingContext.current?.addDependency(this);
     return (this.flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
-  }
-  get isRecomputing(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
   }
 
   /**
@@ -508,7 +506,7 @@ class ComputedAtomImpl<T>
 
     if (
       (flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) !== 0 ||
-      (!(flags & COMPUTED_STATE_FLAGS.FORCE_COMPUTE) && !nodeIsShallowDirty(this))
+      (!(flags & COMPUTED_STATE_FLAGS.FORCE_COMPUTE) && !isBufferShallowDirty(this))
     ) {
       return;
     }
@@ -519,7 +517,7 @@ class ComputedAtomImpl<T>
   }
 
   #isDirty(): boolean {
-    return nodeIsDirty(this);
+    return isBufferDirty(this);
   }
 }
 
