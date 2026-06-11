@@ -12,7 +12,7 @@
  * to ensure high-performance propagation through the dependency graph.
  */
 
-import { Result, SlotBuffer } from '@but212/atom-effect-utils';
+import { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   BRAND,
@@ -20,20 +20,16 @@ import {
   COMPUTED_STATE_FLAGS,
   DEFAULT_EQUAL,
   EMPTY_ERROR_ARRAY,
-  EPOCH_CONSTANTS,
   ERROR_MESSAGES,
-  KIND,
-  SMI_MAX,
   STATE_MASKS,
 } from '@/constants';
 import {
+  BaseNode,
   nextVersion,
   nodeCommitDeps,
   nodeHandleError,
   nodeNotifySubscribers,
   nodeStartTracking,
-  nodeSubscribe,
-  nodeSubscriberCount,
   nodeTrackDependency,
   rollbackTrackingSubscriber,
   runInTrackingContext,
@@ -45,16 +41,14 @@ import type {
   ComputedAtom,
   ComputedOptions,
   Dependency,
-  DependencyId,
   DependencyLink,
   MergedDependencyValue,
   ReactiveDependencyTracker,
   ReactiveNode,
   ReactiveNodeBase,
   Subscriber,
-  SubscriberTarget,
 } from '@/types';
-import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
+import { ComputedError, debug, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import {
   BUFFER_FLAGS,
@@ -126,21 +120,9 @@ function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst: boolea
  * @internal
  */
 class ComputedAtomImpl<T>
+  extends BaseNode<T>
   implements ComputedAtom<T>, Subscriber, ReactiveNode<T>, ReactiveDependencyTracker
 {
-  // Logic: Engine-exposed state (Public fields for monomorphic performance)
-  public flags: number =
-    COMPUTED_STATE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
-  public version: number = 0;
-  public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  public _nextEpoch: number | undefined = undefined;
-  public _trackEpoch: number = 0;
-  public _trackCount: number = 0;
-  public _error: Error | null = null;
-  public _k: typeof KIND.Obj = KIND.Obj;
-  public readonly id: DependencyId = generateId() & SMI_MAX;
-
-  public _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
   public _depSlots: SlotBuffer<DependencyLink>;
   public _depFlags: number = BUFFER_FLAGS.NONE;
 
@@ -154,6 +136,9 @@ class ComputedAtomImpl<T>
   #onError: ((error: Error) => void) | null;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
+    super(
+      COMPUTED_STATE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE
+    );
     this._depSlots = new SlotBuffer<DependencyLink>();
 
     this.#value = undefined as T;
@@ -174,13 +159,10 @@ class ComputedAtomImpl<T>
     }
   }
 
-  get isDisposed(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed(): boolean {
+  override get isComputed(): boolean {
     return true;
   }
-  get isRejected(): boolean {
+  override get isRejected(): boolean {
     trackingContext.current?.addDependency(this);
     return (this.flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
   }
@@ -316,19 +298,6 @@ class ComputedAtomImpl<T>
   get isResolved(): boolean {
     trackingContext.current?.addDependency(this);
     return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
-  }
-
-  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    const unsub = Result.unwrap(nodeSubscribe(this, listener));
-    if (this.isDisposed) {
-      unsub();
-      return () => {};
-    }
-    return unsub;
-  }
-
-  subscriberCount(): number {
-    return nodeSubscriberCount(this);
   }
 
   /**

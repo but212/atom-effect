@@ -14,28 +14,18 @@
  * by blacklisting sensitive keys like `__proto__`.
  */
 
-import type { SlotBuffer } from '@but212/atom-effect-utils';
 import { shallowEqual } from '@but212/atom-effect-utils';
-import {
-  ATOM_STATE_FLAGS,
-  BRAND,
-  BrandFlags,
-  DEFAULT_EQUAL,
-  EPOCH_CONSTANTS,
-  KIND,
-  type LENS_CONFIG,
-  SMI_MAX,
-} from '@/constants';
+import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG } from '@/constants';
+import { BaseNode } from '@/core/base';
 import { batch } from '@/index';
 import type {
   Equal,
   MergedDependencyValue,
   ReactiveNode,
-  ReactiveNodeBase,
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
-import { debug, generateId, mergeAtomValues } from '@/utils';
+import { debug, mergeAtomValues } from '@/utils';
 
 /**
  * Logic: Numeric Key Conversion
@@ -76,7 +66,7 @@ export type TerminalTypes =
  * type instantiation for circular or deeply nested structures.
  */
 export type Paths<T, D extends unknown[] = []> =
-  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
+  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in types
   Equal<T, any> extends true
     ? string
     : D['length'] extends typeof LENS_CONFIG.MAX_PATH_DEPTH
@@ -198,53 +188,8 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
 // Core Engine
 // ============================================================================
 
-/**
- * Role: Orchestrator for a Single-Property Reactive Lens.
- *
- * Optimization: Monomorphic Access
- * Uses public fields for engine compatibility to ensure consistent V8 hidden
- * class shapes in the reactive hot-path.
- *
- * Logic: Shared Subscription
- * Only subscribes to the root atom when the lens itself has active listeners,
- * preventing memory leaks and unnecessary computations for unused lenses.
- *
- * @internal
- */
-/**
- * Base class providing common engine properties for reactive nodes to guarantee consistent
- * hidden class shapes and monomorphic hot-path access in V8.
- *
- * @internal
- */
-abstract class BaseLens<T = unknown> implements ReactiveNodeBase {
-  flags = 0;
-  version = 0;
-  _lastSeenEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-  _nextEpoch: number | undefined = undefined;
-  _trackEpoch = 0;
-  _trackCount = 0;
-  _error: Error | null = null;
-  _k = KIND.Obj;
-  readonly id = generateId() & SMI_MAX;
-  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
-
-  get isDisposed() {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed() {
-    return false;
-  }
-  get isRejected() {
-    return false;
-  }
-  get hasError() {
-    return false;
-  }
-}
-
 class LensImpl<T extends object, P extends string>
-  extends BaseLens<PathValue<T, P>>
+  extends BaseNode<PathValue<T, P>>
   implements WritableAtom<PathValue<T, P>>, ReactiveNode<PathValue<T, P>>
 {
   #root: WritableAtom<T>;
@@ -392,7 +337,7 @@ export function atomLens<T extends object, P extends Paths<T>>(
  * @internal
  */
 class MergedLensImpl<L extends WritableAtom<unknown>[]>
-  extends BaseLens<MergedDependencyValue<L>>
+  extends BaseNode<MergedDependencyValue<L>>
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<MergedDependencyValue<L>>
 {
   #lenses: L;

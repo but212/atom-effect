@@ -12,25 +12,74 @@
  */
 
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
-import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX } from '@/constants';
+import { EPOCH_CONSTANTS, ERROR_MESSAGES, IS_DEV, KIND, LOG_PREFIX, SMI_MAX } from '@/constants';
 import type {
   AtomErrorConstructor,
   Dependency,
+  DependencyId,
   DependencyLink,
   DependencySubscriber,
   DependencyTracker,
   Prettify,
   ReactiveDependencyTracker,
   ReactiveNode,
+  ReactiveNodeBase,
   Subscriber,
   SubscriberTarget,
   TrackingContext,
 } from '@/types';
-import { AtomError, nextSmi, wrapError } from '@/utils';
+import { AtomError, generateId, nextSmi, wrapError } from '@/utils';
 
 import { BUFFER_FLAGS, claimExisting, depBufferTruncateFrom, insertNew } from './buffers';
 
 import { nextEpoch } from './scheduler';
+
+/** @internal */
+export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
+  flags: number;
+  version: number = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _nextEpoch: number | undefined = undefined;
+  _trackEpoch: number = 0;
+  _trackCount: number = 0;
+  _error: Error | null = null;
+  _k: typeof KIND.Obj = KIND.Obj;
+  readonly id: DependencyId = generateId() & SMI_MAX;
+  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
+
+  constructor(initialFlags: number = 0) {
+    this.flags = initialFlags;
+  }
+
+  get isDisposed(): boolean {
+    return (this.flags & 1) !== 0;
+  }
+
+  get isComputed(): boolean {
+    return false;
+  }
+
+  get isRejected(): boolean {
+    return false;
+  }
+
+  get hasError(): boolean {
+    return false;
+  }
+
+  subscribe(listener: SubscriberTarget<T>): () => void {
+    const unsub = Result.unwrap(nodeSubscribe(this, listener));
+    if (this.isDisposed) {
+      unsub();
+      return () => {};
+    }
+    return unsub;
+  }
+
+  subscriberCount(): number {
+    return nodeSubscriberCount(this);
+  }
+}
 
 /** @internal */
 export function createTrackingContext(): TrackingContext {

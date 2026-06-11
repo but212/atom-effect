@@ -21,11 +21,10 @@ import {
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
   IS_DEV,
-  KIND,
   SCHEDULER_CONFIG,
-  SMI_MAX,
 } from '@/constants';
 import {
+  BaseNode,
   nodeCommitDeps,
   nodeHandleError,
   nodeStartTracking,
@@ -36,7 +35,6 @@ import {
 } from '@/core/base';
 import type {
   Dependency,
-  DependencyId,
   DependencyLink,
   DependencyTracker,
   EffectFunction,
@@ -45,14 +43,14 @@ import type {
   ReactiveDependencyTracker,
   ReactiveNode,
   Subscriber,
-  SubscriberTarget,
 } from '@/types';
-import { debug, EffectError, generateId } from '@/utils';
+import { debug, EffectError } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
 import { currentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
 
 class EffectImpl
+  extends BaseNode<void>
   implements
     EffectObject,
     DependencyTracker,
@@ -60,18 +58,6 @@ class EffectImpl
     ReactiveNode<void>,
     ReactiveDependencyTracker
 {
-  // Optimization: Engine-exposed state (JS fields)
-  flags: number = 0;
-  version: number = 0;
-  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  _nextEpoch: number | undefined = undefined;
-  _trackEpoch: number = 0;
-  _trackCount: number = 0;
-  _error: Error | null = null;
-  _k: typeof KIND.Obj = KIND.Obj;
-  readonly id: DependencyId = generateId() & SMI_MAX;
-
-  _slots: SlotBuffer<SubscriberTarget<void>> | null = null;
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
   _depFlags: number = BUFFER_FLAGS.NONE;
 
@@ -93,6 +79,7 @@ class EffectImpl
   #totalExecutions = 0;
 
   constructor(fn: EffectFunction, options: EffectOptions = {}) {
+    super(0);
     if (typeof fn !== 'function') {
       throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
     }
@@ -108,10 +95,6 @@ class EffectImpl
 
     if (IS_DEV) debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
-
-  // ReactiveNode Personality Traits (Declarative Data)
-  readonly isComputed = false;
-  readonly isRejected = false;
 
   /** Triggers the effect execution immediately. */
   run(): void {
@@ -141,11 +124,6 @@ class EffectImpl
   /** Returns true if the effect is currently executing its function. */
   get isExecuting(): boolean {
     return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
-  }
-
-  /** Returns true if the effect has been permanently stopped. */
-  get isDisposed(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
   }
 
   /**
