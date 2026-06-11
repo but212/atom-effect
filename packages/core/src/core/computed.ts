@@ -84,7 +84,7 @@ export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracke
  * a visited set to handle potential cycles or diamonds.
  * @internal
  */
-export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst: boolean): Error[] {
+function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst: boolean): Error[] {
   const collected: Error[] = [];
   const seen = new Set<number>();
 
@@ -92,29 +92,19 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
-    if ((node.flags & STATE_MASKS.ERROR_MASK) !== 0) {
-      collected.push(
-        node._error ?? new Error('Internal Inconsistency: MASK_ERROR flag set but error is null')
-      );
+    if ((node.flags & STATE_MASKS.ERROR_MASK) !== 0 && node._error) {
+      collected.push(node._error);
       if (stopOnFirst) return true;
     }
 
     const tracker = node as unknown as Partial<ReactiveDependencyTracker>;
-    if (
-      tracker._depSlots &&
-      tracker._depFlags !== undefined &&
-      (tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0
-    ) {
-      const slots = tracker._depSlots;
+    const slots = tracker._depSlots;
+    if (slots) {
       const len = slots.length;
       for (let i = 0; i < len; i++) {
-        const link = slots.at(i);
-        if (
-          link &&
-          (link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0 &&
-          walk(link.node as unknown as ReactiveNodeBase)
-        ) {
-          return true;
+        const dep = slots.at(i)?.node;
+        if (dep && (dep.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0) {
+          if (walk(dep as unknown as ReactiveNodeBase)) return true;
         }
       }
     }
@@ -158,16 +148,11 @@ class ComputedAtomImpl<T>
   /** @internal */
   public readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
 
-  // Logic: Strictly encapsulated state
-  #activeSessionId = 0;
-  #sessionCounter = 0;
-
   #value: T;
   #equal: (a: T, b: T) => boolean;
   #computation: () => T | Promise<T>;
   #defaultValue: T;
   #onError: ((error: Error) => void) | null;
-  #notifyCallback: () => void;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
     this._depSlots = new SlotBuffer<DependencyLink>();
@@ -178,7 +163,6 @@ class ComputedAtomImpl<T>
     this.#computation = computation;
     this.#defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
     this.#onError = options.onError ?? null;
-    this.#notifyCallback = () => this.execute();
 
     debug.attachDebugInfo(this, 'computed', this.id, options.name);
 
@@ -216,18 +200,18 @@ class ComputedAtomImpl<T>
 
     if (this.#isStable()) return this.#value;
 
-    return Result.unwrap(this.#checkValueState());
+    return this.#checkValueState();
   }
 
-  #checkValueState(): Result<T, Error> {
+  #checkValueState(): T {
     if (this.isDisposed) {
-      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED));
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
     }
 
     const flags = this.flags;
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
-      if (this.#defaultValue !== (NO_DEFAULT_VALUE as T)) return Result.ok(this.#defaultValue);
-      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY));
+      if (this.#defaultValue !== (NO_DEFAULT_VALUE as T)) return this.#defaultValue;
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
@@ -242,17 +226,17 @@ class ComputedAtomImpl<T>
     }
 
     const nextFlags = this.flags;
-    if ((nextFlags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return Result.ok(this.#value);
+    if ((nextFlags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return this.#value;
 
     const hasDefault = this.#defaultValue !== (NO_DEFAULT_VALUE as T);
-    if ((nextFlags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0) return Result.ok(this.#value);
-    if (hasDefault) return Result.ok(this.#defaultValue);
+    if ((nextFlags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0) return this.#value;
+    if (hasDefault) return this.#defaultValue;
 
     if ((nextFlags & COMPUTED_STATE_FLAGS.REJECTED) !== 0) {
-      return Result.err(this._error ?? new Error('REJECTED without error'));
+      throw this._error ?? new Error('REJECTED without error');
     }
 
-    return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT));
+    throw new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT);
   }
 
   /**
@@ -379,7 +363,7 @@ class ComputedAtomImpl<T>
    * @internal
    */
   addDependency(dependency: Dependency): void {
-    nodeTrackDependency(this, dependency, this.#notifyCallback);
+    nodeTrackDependency(this, dependency, this);
   }
 
   /**
@@ -397,6 +381,7 @@ class ComputedAtomImpl<T>
 
     try {
       nodeStartTracking(this);
+      const epoch = this._trackEpoch;
       prepareTracking(this);
 
       let val: T | Promise<T> | undefined;
@@ -421,7 +406,7 @@ class ComputedAtomImpl<T>
       if (hasError) {
         this.#handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
       } else if (isPromise(val)) {
-        this.#handleAsyncComputation(val as Promise<T>);
+        this.#handleAsyncComputation(val as Promise<T>, epoch);
       } else {
         this.#finalizeResolution(val as T);
       }
@@ -435,18 +420,15 @@ class ComputedAtomImpl<T>
    * Orchestrates Promise resolution using unique session IDs (Drift Detection)
    * to discard results from computation cycles that are no longer valid.
    */
-  #handleAsyncComputation(promise: Promise<T>): void {
+  #handleAsyncComputation(promise: Promise<T>, epoch: number): void {
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.PENDING;
     nodeNotifySubscribers(this, undefined, undefined);
 
-    const sessionId = ++this.#sessionCounter;
-    this.#activeSessionId = sessionId;
-
     promise.then(
       (result) => {
-        if (this.#activeSessionId !== sessionId || this.isDisposed) return;
+        if (this._trackEpoch !== epoch || this.isDisposed) return;
 
         // Logic: Stale Result Suppression
         // If the node became dirty during the wait, defer resolution.
@@ -456,7 +438,7 @@ class ComputedAtomImpl<T>
         nodeNotifySubscribers(this, result, undefined);
       },
       (error) => {
-        if (this.#activeSessionId !== sessionId || this.isDisposed) return;
+        if (this._trackEpoch !== epoch || this.isDisposed) return;
         this.#handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
       }
     );

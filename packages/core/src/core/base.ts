@@ -153,7 +153,7 @@ export function createDependencyLink(
 export function nodeTrackDependency(
   tracker: DependencyTracker & ReactiveDependencyTracker,
   dep: Dependency,
-  notifyCallback: () => void
+  notifyCallback: (() => void) | Subscriber
 ): void {
   if (!tracker._depSlots) return;
 

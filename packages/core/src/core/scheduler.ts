@@ -144,14 +144,7 @@ class ReactiveScheduler implements SchedulerState {
         if (job._k === fnKind) {
           (job as SchedulerJobFunction)();
         } else {
-          const res = (job as SchedulerJobObject).execute() as unknown as Result<unknown, unknown>;
-          if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
-            console.error(
-              new SchedulerError('Error occurred during scheduler execution', {
-                cause: res.error,
-              })
-            );
-          }
+          (job as SchedulerJobObject).execute();
         }
       } catch (e) {
         console.error(

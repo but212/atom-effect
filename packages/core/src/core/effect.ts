@@ -79,10 +79,6 @@ class EffectImpl
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
-  // Logic: Concurrency Control
-  // Session IDs ensure that cleanup handles from asynchronous operations are
-  // discarded if a new tracking cycle starts before the Promise resolves.
-  #trackSessionId = 0;
   #cleanup: (() => void) | null = null;
 
   #fn: EffectFunction;
@@ -123,7 +119,7 @@ class EffectImpl
     if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     }
-    Result.unwrap(this.execute(true));
+    this.execute(true);
   }
 
   /**
@@ -157,21 +153,20 @@ class EffectImpl
    * Logic: Execution Lifecycle Orchestration
    * Synchronizes the effect state with its captured dependencies.
    */
-  execute(force = false): Result<void, Error> {
-    const prep = this.#prepareExecution(force);
-    if (Result.isErr(prep)) return prep;
-    if (!prep.value) return Result.ok(undefined);
+  execute(force = false): void {
+    if (!this.#prepareExecution(force)) return;
 
     this.#execCleanup();
 
     nodeStartTracking(this);
+    const epoch = this._trackEpoch;
     prepareTracking(this);
     const prevDepth = trackingContext.stack.length;
 
     try {
       const val = runInTrackingContext(trackingContext, this, this.#fn);
       nodeCommitDeps(this);
-      this.#handleResult(val);
+      this.#handleResult(val, epoch);
     } catch (e) {
       // Impact: Preserves tracking context integrity if the effect crashes.
       rollbackTrackingSubscriber(trackingContext, prevDepth);
@@ -179,27 +174,23 @@ class EffectImpl
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
-
-    return Result.ok(undefined);
   }
 
-  #prepareExecution(force: boolean): Result<boolean, Error> {
+  #prepareExecution(force: boolean): boolean {
     const flags = this.flags;
-    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0)
-      return Result.ok(false);
+    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) return false;
 
     // Logic: Selective Skipping
     // Execution is skipped if the effect is not 'forced', has no dependencies
     // yet, and its dependencies haven't changed (dirty check). This minimizes
     // redundant computations during the flush cycle.
-    if (!(force || this._depSlots.size === 0 || isBufferDirty(this))) return Result.ok(false);
+    if (!(force || this._depSlots.size === 0 || isBufferDirty(this))) return false;
 
-    const budgetRes = this.#validateBudget();
-    if (Result.isErr(budgetRes)) return budgetRes as unknown as Result<boolean, Error>;
+    this.#validateBudget();
     if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
-    return Result.ok(true);
+    return true;
   }
 
   /** Registers a dependency during the tracking session. */
@@ -212,7 +203,7 @@ class EffectImpl
    * Logic: Resolution Handling
    * Synchronously assigns the cleanup handle or delegates to the async handler.
    */
-  #handleResult(val: unknown): void {
+  #handleResult(val: unknown, epoch: number): void {
     if (val === undefined || val === null) {
       this.#cleanup = null;
       return;
@@ -221,7 +212,7 @@ class EffectImpl
     if (typeof val === 'function') {
       this.#cleanup = val as () => void;
     } else if (isPromise(val)) {
-      this.#handleAsyncResult(val as Promise<undefined | (() => void)>);
+      this.#handleAsyncResult(val as Promise<undefined | (() => void)>, epoch);
     } else {
       this.#cleanup = null;
     }
@@ -232,12 +223,10 @@ class EffectImpl
    * Orchestrates cleanup handles returned from Promises. Uses session IDs
    * to discard stale handles from invalidated tracking cycles.
    */
-  #handleAsyncResult(promise: Promise<unknown>): void {
-    const sessionId = ++this.#trackSessionId;
-
+  #handleAsyncResult(promise: Promise<unknown>, epoch: number): void {
     promise.then(
       (cleanup) => {
-        const isStale = this.#trackSessionId !== sessionId || this.isDisposed;
+        const isStale = this._trackEpoch !== epoch || this.isDisposed;
         if (typeof cleanup !== 'function') return;
 
         if (isStale) {
@@ -255,7 +244,7 @@ class EffectImpl
         this.#cleanup = cleanup as () => void;
       },
       (err) => {
-        if (this.#trackSessionId === sessionId) {
+        if (this._trackEpoch === epoch) {
           this.#handleExecutionError(err);
         }
       }
@@ -275,7 +264,7 @@ class EffectImpl
     }
   }
 
-  #validateBudget(): Result<void, Error> {
+  #validateBudget(): void {
     const epoch = currentFlushEpoch();
     if (this.#lastFlushEpoch !== epoch) {
       this.#lastFlushEpoch = epoch;
@@ -288,7 +277,7 @@ class EffectImpl
       );
       this.dispose();
       console.error(err);
-      return Result.err(err);
+      throw err;
     }
 
     // Constraint: Global safeguard against aggregate scheduler instability.
@@ -296,7 +285,7 @@ class EffectImpl
     if (Result.isErr(globalCount)) {
       this.dispose();
       console.error(globalCount.error);
-      return globalCount as unknown as Result<void, Error>;
+      throw globalCount.error;
     }
 
     this.#totalExecutions++;
@@ -312,12 +301,10 @@ class EffectImpl
           const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
           this.dispose();
           this.#handleExecutionError(err);
-          return Result.err(err);
+          throw err;
         }
       }
     }
-
-    return Result.ok(undefined);
   }
 
   #handleExecutionError(
@@ -365,6 +352,6 @@ export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectO
     throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
   }
   const effectInstance = new EffectImpl(fn, options);
-  Result.unwrap(effectInstance.execute());
+  effectInstance.execute();
   return effectInstance;
 }
