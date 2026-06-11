@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { BaseNode } from '@/core/base';
 import {
   aeNextTick,
   atom,
@@ -295,14 +296,14 @@ describe('Lens System', () => {
         const lens = atomLens(store, 'x');
         const merged = mergeLenses(lens);
 
-        expect(lens.isDisposed).toBe(false);
-        expect(merged.isDisposed).toBe(false);
+        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(false);
+        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(false);
 
         lens.dispose();
         merged.dispose();
 
-        expect(lens.isDisposed).toBe(true);
-        expect(merged.isDisposed).toBe(true);
+        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(true);
+        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(true);
       });
 
       it('should immediately return no-op unsubscribe when subscribing to a disposed LensImpl', () => {
