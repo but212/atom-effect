@@ -145,6 +145,7 @@ In `@but212/atom-effect-jquery`, the Web Component architecture has been complet
 If your Web Components relied on static properties (`static aejStyles`, `static aejBind`, etc.) without an explicit `setup()` call, they will no longer initialize automatically. You **must** call `this.aej.setup()` inside `connectedCallback`.
 
 **Before:**
+
 ```typescript
 class MyComponent extends HTMLElement {
   static aejStyles = [':host { color: red; }'];
@@ -153,6 +154,7 @@ class MyComponent extends HTMLElement {
 ```
 
 **After:**
+
 ```typescript
 class MyComponent extends HTMLElement {
   static aejStyles = [':host { color: red; }'];
@@ -170,6 +172,7 @@ class MyComponent extends HTMLElement {
 If you use `$.injectAtom()`, you must now explicitly handle the case where the returned atom's value is `null`.
 
 **Before:**
+
 ```typescript
 const themeProxy = $.injectAtom<string>(this, 'theme');
 // Falsely assumed string. If 'theme' provider didn't exist, this crashed at runtime.
@@ -177,6 +180,7 @@ console.log(themeProxy.value.toUpperCase());
 ```
 
 **After:**
+
 ```typescript
 const themeProxy = $.injectAtom<string>(this, 'theme');
 if (themeProxy && themeProxy.value !== null) {
