@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Core
+
+#### Breaking Changes
+
+- **Error Handling**: Removed deprecated `AtomError.getChain()` and `AtomError.toJSON()` instance methods.
+
 ### jQuery
 
 #### Breaking Changes
@@ -68,6 +74,15 @@
 
 - **Build System**: Partitioned the build into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets. Direct `dist/` file references may require updates.
 - **Error Handling**: Relocated `AtomErrorConstructor` and `AtomErrorJSON` types to the core types module.
+  
+  **How to Migrate?**
+  
+  Update your imports if you were referencing these types from internal paths or specific error modules.
+  
+  ```typescript
+  // Correct import
+  import type { AtomErrorConstructor, AtomErrorJSON } from '@but212/atom-effect';
+  ```
 
 ### jQuery
 
