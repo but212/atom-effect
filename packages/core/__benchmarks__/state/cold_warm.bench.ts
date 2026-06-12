@@ -7,61 +7,79 @@
 
 import { bench, describe } from 'vitest';
 import { atom, computed, effect } from '../../dist';
-import { benchEffectOptions, coldBenchOptions, keep, microBenchOptions } from '../utils/setup.js';
+import {
+  benchEffectOptions,
+  coldBenchOptions,
+  keep,
+  microBenchOptions,
+  REPEATS,
+} from '../utils/setup.js';
 
 describe('Cold Start: First Evaluation', () => {
   bench(
-    '[Vanilla] object allocation (baseline)',
+    `[Vanilla] object allocation (baseline) (x\${REPEATS})`,
     () => {
-      keep({ value: Math.random() });
+      for (let i = 0; i < REPEATS; i++) {
+        keep({ value: Math.random() });
+      }
     },
     coldBenchOptions
   );
 
   bench(
-    '[Atom] creation + first .value read',
+    `[Atom] creation + first .value read (x\${REPEATS})`,
     () => {
-      const a = atom(Math.random());
-      keep(a.value);
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(Math.random());
+        keep(a.value);
+      }
     },
     coldBenchOptions
   );
 
   bench(
-    '[Vanilla] function call (computed baseline)',
+    `[Vanilla] function call (computed baseline) (x\${REPEATS})`,
     () => {
-      const x = Math.random();
-      keep(((v: number) => v * 2)(x));
+      for (let i = 0; i < REPEATS; i++) {
+        const x = Math.random();
+        keep(((v: number) => v * 2)(x));
+      }
     },
     coldBenchOptions
   );
 
   bench(
-    '[Atom] lazy computed creation + first eval',
+    `[Atom] lazy computed creation + first eval (x\${REPEATS})`,
     () => {
-      const a = atom(Math.random());
-      const c = computed(() => a.value * 2, { lazy: true });
-      keep(c.value);
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(Math.random());
+        const c = computed(() => a.value * 2, { lazy: true });
+        keep(c.value);
+      }
     },
     coldBenchOptions
   );
 
   bench(
-    '[Atom] eager computed creation + first eval',
+    `[Atom] eager computed creation + first eval (x\${REPEATS})`,
     () => {
-      const a = atom(Math.random());
-      const c = computed(() => a.value * 2);
-      keep(c.value);
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(Math.random());
+        const c = computed(() => a.value * 2);
+        keep(c.value);
+      }
     },
     coldBenchOptions
   );
 
   bench(
-    '[Atom] effect creation + first run + dispose',
+    `[Atom] effect creation + first run + dispose (x\${REPEATS})`,
     () => {
-      const a = atom(Math.random());
-      const e = effect(() => keep(a.value), benchEffectOptions);
-      e.dispose();
+      for (let i = 0; i < REPEATS; i++) {
+        const a = atom(Math.random());
+        const e = effect(() => keep(a.value), benchEffectOptions);
+        e.dispose();
+      }
     },
     coldBenchOptions
   );
@@ -76,37 +94,45 @@ describe('Steady State: Repeated Operations', () => {
   }, benchEffectOptions);
 
   bench(
-    '[Vanilla] variable write + read',
+    `[Vanilla] variable write + read (x\${REPEATS})`,
     () => {
-      let x = 0;
-      x = Math.random() * 2;
-      keep(x);
+      for (let i = 0; i < REPEATS; i++) {
+        let x = 0;
+        x = Math.random() * 2;
+        keep(x);
+      }
     },
     microBenchOptions
   );
 
   bench(
-    '[Atom] atom write + computed propagation',
+    `[Atom] atom write + computed propagation (x\${REPEATS})`,
     () => {
-      warmAtom.value = Math.random();
-      keep(warmComputed.value);
-      keep(_warmSink);
+      for (let i = 0; i < REPEATS; i++) {
+        warmAtom.value = Math.random();
+        keep(warmComputed.value);
+        keep(_warmSink);
+      }
     },
     microBenchOptions
   );
 
   bench(
-    '[Atom] atom read only — warm cache',
+    `[Atom] atom read only — warm cache (x\${REPEATS})`,
     () => {
-      keep(warmAtom.value);
+      for (let i = 0; i < REPEATS; i++) {
+        keep(warmAtom.value);
+      }
     },
     microBenchOptions
   );
 
   bench(
-    '[Atom] computed read only — warm cache hit',
+    `[Atom] computed read only — warm cache hit (x\${REPEATS})`,
     () => {
-      keep(warmComputed.value);
+      for (let i = 0; i < REPEATS; i++) {
+        keep(warmComputed.value);
+      }
     },
     microBenchOptions
   );
@@ -114,11 +140,13 @@ describe('Steady State: Repeated Operations', () => {
 
 describe('Cold vs Warm: Computed Cache', () => {
   bench(
-    '[Cold] new computed each iteration',
+    `[Cold] new computed each iteration (x\${REPEATS})`,
     () => {
-      const source = atom(0);
-      const c = computed(() => source.value * 3);
-      keep(c.value);
+      for (let i = 0; i < REPEATS; i++) {
+        const source = atom(0);
+        const c = computed(() => source.value * 3);
+        keep(c.value);
+      }
     },
     coldBenchOptions
   );
@@ -131,18 +159,22 @@ describe('Cold vs Warm: Computed Cache', () => {
   missComputed.subscribe(() => {}); // activate
 
   bench(
-    '[Warm] reuse computed — cache hit (source unchanged)',
+    `[Warm] reuse computed — cache hit (source unchanged) (x\${REPEATS})`,
     () => {
-      keep(cachedComputed.value);
+      for (let i = 0; i < REPEATS; i++) {
+        keep(cachedComputed.value);
+      }
     },
     microBenchOptions
   );
 
   bench(
-    '[Warm] reuse computed — cache miss (source changed)',
+    `[Warm] reuse computed — cache miss (source changed) (x\${REPEATS})`,
     () => {
-      missSource.value = missSource.peek() === 0 ? 1 : 0;
-      keep(missComputed.value);
+      for (let i = 0; i < REPEATS; i++) {
+        missSource.value = missSource.peek() === 0 ? 1 : 0;
+        keep(missComputed.value);
+      }
     },
     microBenchOptions
   );
@@ -152,10 +184,12 @@ describe('Cold vs Warm: Effect Subscription', () => {
   const src = atom(0);
 
   bench(
-    '[Cold] effect create + first run + dispose',
+    `[Cold] effect create + first run + dispose (x\${REPEATS})`,
     () => {
-      const e = effect(() => keep(src.value), benchEffectOptions);
-      e.dispose();
+      for (let i = 0; i < REPEATS; i++) {
+        const e = effect(() => keep(src.value), benchEffectOptions);
+        e.dispose();
+      }
     },
     coldBenchOptions
   );
