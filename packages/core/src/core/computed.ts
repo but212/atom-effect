@@ -56,7 +56,15 @@ import type {
   Subscriber,
   SubscriberTarget,
 } from '@/types';
-import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
+import {
+  AtomError,
+  ComputedError,
+  debug,
+  generateId,
+  mergeAtomValues,
+  NO_DEFAULT_VALUE,
+  wrapError,
+} from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
 
@@ -338,11 +346,20 @@ class ComputedAtomImpl<T>
   }
 
   subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    const unsub = Result.unwrap(nodeSubscribe(this, listener));
+    const isFn = typeof listener === 'function';
+    const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
+
+    if (!isFn && !isObj) {
+      throw wrapError(
+        new TypeError('Invalid subscriber'),
+        AtomError,
+        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
+      );
+    }
     if (this.isDisposed) {
-      unsub();
       return () => {};
     }
+    const unsub = Result.unwrap(nodeSubscribe(this, listener));
     return unsub;
   }
 

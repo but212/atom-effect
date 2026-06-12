@@ -110,7 +110,14 @@ class EffectImpl
     this.#maxPerFlush = options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
 
     this.#notifyCallback =
-      (options.sync ?? false) ? () => this.execute() : () => schedulerSchedule(scheduler, this);
+      (options.sync ?? false)
+        ? () => {
+            const res = this.execute();
+            if (Result.isErr(res)) {
+              console.error(res.error);
+            }
+          }
+        : () => schedulerSchedule(scheduler, this);
 
     if (IS_DEV) debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
@@ -288,7 +295,6 @@ class EffectImpl
         `Infinite loop detected (per-effect): executed ${this.#loopCount} times in current flush.`
       );
       this.dispose();
-      console.error(err);
       return Result.err(err);
     }
 
@@ -296,7 +302,6 @@ class EffectImpl
     const globalCount = scheduler.incrementFlushExecutionCount();
     if (Result.isErr(globalCount)) {
       this.dispose();
-      console.error(globalCount.error);
       return globalCount as unknown as Result<void, Error>;
     }
 

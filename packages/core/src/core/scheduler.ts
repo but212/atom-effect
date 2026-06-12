@@ -146,16 +146,23 @@ class ReactiveScheduler implements SchedulerState {
         } else {
           const res = (job as SchedulerJobObject).execute() as unknown as Result<unknown, unknown>;
           if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+            const err = res.error as Error;
             console.error(
-              new SchedulerError('Error occurred during scheduler execution', {
-                cause: res.error,
-              })
+              new SchedulerError(
+                `Error occurred during scheduler execution: ${err?.message || String(err)}`,
+                {
+                  cause: err,
+                }
+              )
             );
           }
         }
       } catch (e) {
         console.error(
-          new SchedulerError('Error occurred during scheduler execution', { cause: e })
+          new SchedulerError(
+            `Error occurred during scheduler execution: ${e instanceof Error ? e.message : String(e)}`,
+            { cause: e }
+          )
         );
       }
     }
