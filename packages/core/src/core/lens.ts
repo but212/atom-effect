@@ -66,7 +66,7 @@ export type TerminalTypes =
  * type instantiation for circular or deeply nested structures.
  */
 export type Paths<T, D extends unknown[] = []> =
-  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in types
+  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
   Equal<T, any> extends true
     ? string
     : D['length'] extends typeof LENS_CONFIG.MAX_PATH_DEPTH
@@ -188,8 +188,34 @@ export function getPathValue(source: unknown, parts: string[]): unknown {
 // Core Engine
 // ============================================================================
 
+/**
+ * Role: Orchestrator for a Single-Property Reactive Lens.
+ *
+ * Optimization: Monomorphic Access
+ * Uses public fields for engine compatibility to ensure consistent V8 hidden
+ * class shapes in the reactive hot-path.
+ *
+ * Logic: Shared Subscription
+ * Only subscribes to the root atom when the lens itself has active listeners,
+ * preventing memory leaks and unnecessary computations for unused lenses.
+ *
+ * @internal
+ */
+/**
+ * Base class providing common engine properties for reactive nodes to guarantee consistent
+ * hidden class shapes and monomorphic hot-path access in V8.
+ *
+ * @internal
+ */
+abstract class BaseLens<T = unknown> extends BaseNode<T> {
+  _nextEpoch: number | undefined = undefined;
+  _trackEpoch = 0;
+  _trackCount = 0;
+  _error: Error | null = null;
+}
+
 class LensImpl<T extends object, P extends string>
-  extends BaseNode<PathValue<T, P>>
+  extends BaseLens<PathValue<T, P>>
   implements WritableAtom<PathValue<T, P>>, ReactiveNode<PathValue<T, P>>
 {
   #root: WritableAtom<T>;
@@ -223,17 +249,15 @@ class LensImpl<T extends object, P extends string>
     return this.#getValue(this.#root.peek());
   }
 
-  /** @internal */
-  _subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
-    if (nodeSubscriberCount(this) === 0) {
+  subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
+    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
+    if (this.isDisposed) {
+      return innerUnsub;
+    }
+    if (nodeSubscriberCount(this) === 1) {
       this.#prevValue = this.peek();
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
     }
-    const result = nodeSubscribe(this, listener);
-    if (Result.isErr(result)) {
-      throw result.error;
-    }
-    const innerUnsub = result.value;
     return () => {
       innerUnsub();
       if (nodeSubscriberCount(this) === 0 && this.#sharedUnsub) {
@@ -336,7 +360,7 @@ export function atomLens<T extends object, P extends Paths<T>>(
  * @internal
  */
 class MergedLensImpl<L extends WritableAtom<unknown>[]>
-  extends BaseNode<MergedDependencyValue<L>>
+  extends BaseLens<MergedDependencyValue<L>>
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<MergedDependencyValue<L>>
 {
   #lenses: L;
@@ -363,20 +387,18 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     return mergeAtomValues(this.#lenses, true) as MergedDependencyValue<L>;
   }
 
-  /** @internal */
-  _subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
-    if (nodeSubscriberCount(this) === 0) {
+  subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
+    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
+    if (this.isDisposed) {
+      return innerUnsub;
+    }
+    if (nodeSubscriberCount(this) === 1) {
       this.#prevValue = this.peek();
       const notify = () => this.#notify();
       for (const lens of this.#lenses) {
         this.#unsubs.push(lens.subscribe(notify));
       }
     }
-    const result = nodeSubscribe(this, listener);
-    if (Result.isErr(result)) {
-      throw result.error;
-    }
-    const innerUnsub = result.value;
     return () => {
       innerUnsub();
       if (nodeSubscriberCount(this) === 0) {
@@ -419,26 +441,18 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
  * - To synchronize multiple fields across different state trees.
  * - To create a single "form" atom from multiple disparate source atoms.
  *
- * Constraint: Object-based Nodes Only
- * Designed for object-based nodes. Merging primitive-valued nodes (e.g. strings, numbers)
- * will result in a mismatch where the static TypeScript type resolves to the primitive type
- * (e.g., `string`), but the runtime value returned is an index-keyed object (e.g., `{ '0': val1, '1': val2 }`).
- *
  * @param lenses - A list of writable atoms/lenses to merge.
  * @returns A unified writable atom that synchronizes all input lenses.
  *
  * @example
  * ```typescript
- * const profile = atom({ name: 'Alice' });
- * const preferences = atom({ theme: 'dark' });
+ * const firstName = atom('Alice');
+ * const lastName = atom('Smith');
  *
- * const formState = mergeLenses(profile, preferences);
+ * const fullName = mergeLenses(firstName, lastName);
  *
- * // Reading formState.value returns: { name: 'Alice', theme: 'dark' }
- * console.log(formState.value);
- *
- * // Writing updates both source atoms within a single batch
- * formState.value = { name: 'Bob', theme: 'light' };
+ * // Sets both firstName and lastName to 'Bob'
+ * fullName.value = 'Bob';
  * ```
  */
 export function mergeLenses<L extends WritableAtom<unknown>[]>(

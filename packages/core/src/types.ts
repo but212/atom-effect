@@ -399,8 +399,7 @@ export type EffectCleanup = () => void;
 /**
  * The execution logic for a reactive side-effect.
  */
-// biome-ignore lint/suspicious/noConfusingVoidType: void is required for TypeScript return type compatibility.
-export type EffectFunction = () => (void | EffectCleanup) | Promise<void | EffectCleanup>;
+export type EffectFunction<T = void> = () => (T | EffectCleanup) | Promise<T | EffectCleanup>;
 
 /**
  * Configuration for controlling reactive side-effects.

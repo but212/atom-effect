@@ -140,7 +140,6 @@ export function renderRoute(
  * Disposes of all resources and effects bound to the current route view.
  */
 export function runRendererCleanups(renderer: RouteRenderer) {
-  // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
   renderer.cleanups.forEach((fn) => Result.tryCatch(fn));
   renderer.cleanups.clear();
 }

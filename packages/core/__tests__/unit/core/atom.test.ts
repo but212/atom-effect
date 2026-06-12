@@ -256,6 +256,7 @@ describe('Atom', () => {
       const unsub = a.subscribe(() => {});
       expect(a.subscriberCount()).toBe(0);
       expect(() => unsub()).not.toThrow();
+      expect((a as unknown as { _slots: unknown })._slots).toBeNull();
     });
 
     it('should return undefined on read access after disposal', () => {
@@ -282,8 +283,11 @@ describe('Atom', () => {
       c.value;
 
       // Access dependencies
-      // biome-ignore lint/suspicious/noExplicitAny: Accessing internal storage for dependency validation
-      const slots = (c as any)._depSlots;
+      const slots = (
+        c as unknown as {
+          _depSlots: { length: number; at(i: number): { node: unknown } | undefined } | null;
+        }
+      )._depSlots;
       if (slots) {
         for (let i = 0; i < slots.length; i++) {
           const link = slots.at(i);

@@ -122,6 +122,5 @@ export interface PlaceCallbacks<T> {
 export interface EventBinding {
   type: string;
   selector: string;
-  // biome-ignore lint/suspicious/noExplicitAny: generic callback with arbitrary signature
-  callback: (...args: any[]) => any;
+  callback: (this: unknown, item: unknown, index: number, e: JQuery.TriggeredEvent) => void;
 }

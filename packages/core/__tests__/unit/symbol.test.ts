@@ -39,8 +39,7 @@ describe('Core Symbols & Branding (Bitwise)', () => {
   describe('Primitive Branding', () => {
     it('stamps writable atoms with Atom and Writable flags', () => {
       const a = atom(42);
-      // biome-ignore lint/suspicious/noExplicitAny: Accessing brand symbol for identity verification
-      const flags = (a as any)[BRAND];
+      const flags = (a as unknown as { [BRAND]: number })[BRAND];
 
       expect(flags & BrandFlags.Atom).toBeTruthy();
       expect(flags & BrandFlags.Writable).toBeTruthy();
@@ -54,8 +53,7 @@ describe('Core Symbols & Branding (Bitwise)', () => {
 
     it('stamps computed atoms with Atom and Computed flags', () => {
       const c = computed(() => 100);
-      // biome-ignore lint/suspicious/noExplicitAny: Accessing brand symbol for identity verification
-      const flags = (c as any)[BRAND];
+      const flags = (c as unknown as { [BRAND]: number })[BRAND];
 
       expect(flags & BrandFlags.Atom).toBeTruthy();
       expect(flags & BrandFlags.Computed).toBeTruthy();
@@ -69,8 +67,7 @@ describe('Core Symbols & Branding (Bitwise)', () => {
 
     it('stamps effects with Effect flag only', () => {
       const e = effect(() => {});
-      // biome-ignore lint/suspicious/noExplicitAny: Accessing brand symbol for identity verification
-      const flags = (e as any)[BRAND];
+      const flags = (e as unknown as { [BRAND]: number })[BRAND];
 
       expect(flags & BrandFlags.Effect).toBeTruthy();
       expect(flags & BrandFlags.Atom).toBeFalsy();
@@ -94,8 +91,7 @@ describe('Core Symbols & Branding (Bitwise)', () => {
       };
 
       // Brands should not be present on plain objects
-      // biome-ignore lint/suspicious/noExplicitAny: Checking for absence of brand symbol
-      expect((fakeAtom as any)[BRAND]).toBeUndefined();
+      expect((fakeAtom as unknown as { [BRAND]?: unknown })[BRAND]).toBeUndefined();
 
       // Type guards should reject them
       expect(isAtom(fakeAtom)).toBe(false);

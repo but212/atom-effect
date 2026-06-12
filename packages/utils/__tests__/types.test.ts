@@ -10,8 +10,7 @@ describe('Type Utilities', () => {
       assertType<Equal<{ a: number }, { a: number }>>(true);
 
       // Strict cases
-      // biome-ignore lint/suspicious/noExplicitAny: false positive
-      assertType<Equal<any, unknown>>(false);
+      assertType<Equal<ReturnType<typeof JSON.parse>, unknown>>(false);
       assertType<Equal<{ readonly a: number }, { a: number }>>(false);
     });
   });

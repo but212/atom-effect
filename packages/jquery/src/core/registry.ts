@@ -56,10 +56,10 @@ export interface BindingRecord {
 const nodeStates = new WeakMap<Node, NodeState>();
 
 interface NodeState {
-  isKept?: boolean;
-  isIgnored?: boolean;
+  isKept?: boolean | undefined;
+  isIgnored?: boolean | undefined;
   shadowRoot?: ShadowRoot;
-  record?: BindingRecord;
+  record?: BindingRecord | undefined;
 }
 
 /**
@@ -273,10 +273,8 @@ class BindingRegistry {
   cleanup(node: Node): void {
     const state = nodeStates.get(node);
     if (state) {
-      // biome-ignore lint/performance/noDelete: state property must be fully removed
-      delete state.isKept;
-      // biome-ignore lint/performance/noDelete: state property must be fully removed
-      delete state.isIgnored;
+      state.isKept = undefined;
+      state.isIgnored = undefined;
     }
     disableAutoCleanupFor(node);
 
@@ -293,8 +291,7 @@ class BindingRegistry {
     if (state && !state.shadowRoot) {
       nodeStates.delete(node);
     } else if (state) {
-      // biome-ignore lint/performance/noDelete: state property must be fully removed
-      delete state.record;
+      state.record = undefined;
     }
 
     if (record) {
@@ -314,7 +311,6 @@ class BindingRegistry {
       // Logic: Atomic Cleanup Tasks
       // Disposes of individual effects and low-level reactive bindings.
       if (record.tasks) {
-        // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
         record.tasks.forEach((cleanupFunction: () => void) => cleanupFunction());
         record.tasks.dispose();
       }
