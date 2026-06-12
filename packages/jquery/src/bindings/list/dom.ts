@@ -15,9 +15,42 @@ import { SYSTEM_LIST } from '@/constants';
 import type { ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { sanitizeHtml } from '@/utils/sanitize';
-import type { ListContext } from './context';
+import { type ListContext, removeNode } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
-import { cleanupNodes, setAtomKey } from './utils';
+import { cleanupNodes } from './utils';
+
+/**
+ * Helper to inject data-atom-key attribute directly into an HTML string's root element.
+ * Performance: Avoids setAttribute DOM calls inside placeItems.
+ */
+function injectKeyToHtml(html: string, key: string): string {
+  const match = html.match(/^<([a-zA-Z0-9-]+)/);
+  if (match) {
+    const insertIdx = match[0].length;
+    return `${html.slice(0, insertIdx)} data-atom-key="${key}"${html.slice(insertIdx)}`;
+  }
+  return html;
+}
+
+/**
+ * Extracts raw Nodes from a render result.
+ * Performance: Bypasses jQuery wrapper allocation.
+ */
+function getElements(raw: unknown): Node[] {
+  if (typeof raw === 'string') {
+    return $.parseHTML(raw) || [];
+  }
+  if (raw instanceof $) {
+    return (raw as JQuery).get();
+  }
+  if (raw instanceof DocumentFragment) {
+    return Array.from(raw.childNodes);
+  }
+  if (raw instanceof Node) {
+    return [raw];
+  }
+  return [];
+}
 
 /**
  * Optimization: Zero-allocation
@@ -25,13 +58,13 @@ import { cleanupNodes, setAtomKey } from './utils';
  * allocations for jQuery collections.
  */
 export function insertOrAppend(
-  $el: JQuery | undefined,
+  nodes: Node[] | undefined,
   nextNode: Node | null,
   container: Element
 ): void {
-  if (!$el) return;
-  for (let i = 0; i < $el.length; i++) {
-    const element = $el[i];
+  if (!nodes) return;
+  for (let i = 0; i < nodes.length; i++) {
+    const element = nodes[i];
     if (element) container.insertBefore(element, nextNode);
   }
 }
@@ -56,7 +89,7 @@ export function handleEmpty<T>(
 
   if (onRemove) {
     for (const row of snapshots) {
-      if (row.node) ctx.remove(row.key, row.node);
+      if (row.node) removeNode(ctx, row.key, row.node);
     }
   } else {
     $container.empty();
@@ -90,23 +123,21 @@ export function renderItems<T>(
 
   const hasStrings = results.some((r) => typeof r === 'string');
   const sanitized = hasStrings
-    ? results.map((r) => (typeof r === 'string' ? sanitizeHtml(r) : r))
+    ? results.map((r, i) => {
+        const slot = toRender[i];
+        const val = typeof r === 'string' ? sanitizeHtml(r) : r;
+        if (typeof val === 'string' && slot !== undefined) {
+          return injectKeyToHtml(val, String(slot.key));
+        }
+        return val;
+      })
     : results;
 
   const isAllStrings = results.every((r) => typeof r === 'string');
   if (isInitial && isAllStrings && !options.events) {
     const allNodes = $.parseHTML(sanitized.join(''));
-    if (allNodes && allNodes.length === renderCount) {
-      let allElements = true;
-      for (let i = 0; i < renderCount; i++) {
-        if (allNodes[i]?.nodeType !== 1) {
-          allElements = false;
-          break;
-        }
-      }
-      if (allElements) {
-        return sanitized as string[];
-      }
+    if (allNodes && allNodes.length === renderCount && allNodes.every((n) => n.nodeType === 1)) {
+      return sanitized as string[];
     }
   }
 
@@ -115,20 +146,38 @@ export function renderItems<T>(
     const raw = sanitized[i];
     if (!slot || raw === undefined) continue;
 
-    const $el = $(
-      (typeof raw === 'string' ? $.parseHTML(raw) : raw) as Element | DocumentFragment | JQuery
-    ) as unknown as JQuery;
+    const nodes = getElements(raw);
 
-    setAtomKey($el, String(slot.key));
+    // Fallback: Ensure data-atom-key is set on all Element nodes
+    for (const el of nodes) {
+      if (el.nodeType === 1) {
+        const element = el as HTMLElement;
+        if (!element.hasAttribute('data-atom-key')) {
+          element.setAttribute('data-atom-key', String(slot.key));
+        }
+      }
+    }
 
     const oldNode = slot.node;
     if (slot.state === ItemState.ForceReplace && oldNode) {
       cleanupNodes(oldNode);
-      oldNode.first().before($el);
-      oldNode.remove();
+      const firstOld = oldNode[0];
+      if (firstOld?.parentNode) {
+        const parent = firstOld.parentNode;
+        for (let j = 0; j < nodes.length; j++) {
+          const el = nodes[j];
+          if (el) parent.insertBefore(el, firstOld);
+        }
+        for (let j = 0; j < oldNode.length; j++) {
+          const el = oldNode[j];
+          if (el?.parentNode) {
+            el.parentNode.removeChild(el);
+          }
+        }
+      }
     }
 
-    slot.node = $el;
+    slot.node = nodes;
   }
 
   return null;
@@ -143,7 +192,7 @@ export function cleanupRemoved<T>(ctx: ListContext<T>): void {
   for (let i = 0; i < snapshots.length; i++) {
     const row = snapshots[i];
     if (row?.node && !keyToIndex.has(row.key)) {
-      ctx.remove(row.key, row.node);
+      removeNode(ctx, row.key, row.node);
     }
   }
 }
@@ -173,13 +222,13 @@ export function placeItems<T>(
       if (!slot) continue;
       const { key, item } = slot;
 
-      el.setAttribute('data-atom-key', String(key));
-      const $el = $(el) as unknown as JQuery;
-      slot.node = $el;
+      // Lazy wrapping: JQuery wrapper only allocated if callback exists
+      const $el = bind || onAdd ? $(el as HTMLElement) : null;
+      slot.node = [el as HTMLElement];
       slot.state = ItemState.Existing;
 
-      if (bind) bind($el, item, i);
-      if (onAdd) {
+      if (bind && $el) bind($el, item, i);
+      if (onAdd && $el) {
         onAdd($el);
         ctx.removingKeys.delete(key);
         debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
@@ -192,7 +241,7 @@ export function placeItems<T>(
   if (ctx.snapshots.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
     for (const slot of slots) {
-      if (slot.node) {
+      if (slot?.node) {
         for (let j = 0; j < slot.node.length; j++) {
           const element = slot.node[j];
           if (element) frag.appendChild(element);
@@ -231,22 +280,24 @@ export function placeItems<T>(
     const { state, node, item, key } = slot;
     if (state === ItemState.Unchanged || !node) continue;
 
-    switch (state) {
-      case ItemState.Existing:
-        if (update) update(node, item, i);
-        break;
-      case ItemState.New: {
-        if (bind) bind(node, item, i);
-        if (onAdd) {
-          onAdd(node);
-          ctx.removingKeys.delete(key);
-          debug.domUpdated(SYSTEM_LIST.PREFIX, node, 'list.add', item);
-        }
-        break;
+    if (bind || onAdd || (state === ItemState.Existing && update)) {
+      const $node = $(node as HTMLElement[]);
+      switch (state) {
+        case ItemState.Existing:
+          if (update) update($node, item, i);
+          break;
+        case ItemState.New:
+          if (bind) bind($node, item, i);
+          if (onAdd) {
+            onAdd($node);
+            ctx.removingKeys.delete(key);
+            debug.domUpdated(SYSTEM_LIST.PREFIX, $node, 'list.add', item);
+          }
+          break;
+        case ItemState.ForceReplace:
+          if (bind) bind($node, item, i);
+          break;
       }
-      case ItemState.ForceReplace:
-        if (bind) bind(node, item, i);
-        break;
     }
   }
 }

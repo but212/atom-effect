@@ -12,11 +12,17 @@ export interface NodeAddedCallback {
   callback: (element: Element) => void;
 }
 
+export interface AttributeCallback {
+  attributeName: string;
+  callback: (element: Element) => void;
+}
+
 export class RootObserver {
   readonly #root: Node;
   #observer: MutationObserver | null = null;
   readonly #removalCallbacks = new Set<(node: Node) => void>();
   readonly #additionCallbacks = new Set<NodeAddedCallback>();
+  readonly #attributeCallbacks = new Set<AttributeCallback>();
 
   constructor(root: Node) {
     this.#root = root;
@@ -27,9 +33,10 @@ export class RootObserver {
    */
   onNodeRemoved(callback: (node: Node) => void): () => void {
     this.#removalCallbacks.add(callback);
-    this.#ensureObserver();
+    this.#updateObserver();
     return () => {
       this.#removalCallbacks.delete(callback);
+      this.#updateObserver();
       this.#checkEmpty();
     };
   }
@@ -40,81 +47,144 @@ export class RootObserver {
   onNodeAdded(selector: string, callback: (element: Element) => void): () => void {
     const record = { selector, callback };
     this.#additionCallbacks.add(record);
-    this.#ensureObserver();
+    this.#updateObserver();
     return () => {
       this.#additionCallbacks.delete(record);
+      this.#updateObserver();
       this.#checkEmpty();
     };
   }
 
-  #ensureObserver(): void {
-    if (this.#observer) return;
+  /**
+   * Registers a callback to be called when an attribute with the specified name is mutated.
+   */
+  onAttributeChanged(attributeName: string, callback: (element: Element) => void): () => void {
+    const record = { attributeName, callback };
+    this.#attributeCallbacks.add(record);
+    this.#updateObserver();
+    return () => {
+      this.#attributeCallbacks.delete(record);
+      this.#updateObserver();
+      this.#checkEmpty();
+    };
+  }
 
-    this.#observer = new MutationObserver((mutations) => {
-      // 1. Process removed nodes
-      if (this.#removalCallbacks.size > 0) {
-        for (const m of mutations) {
-          for (const node of m.removedNodes) {
-            for (const cb of this.#removalCallbacks) {
-              try {
-                cb(node);
-              } catch (error) {
-                console.error('Error in onNodeRemoved callback:', error);
-              }
-            }
-          }
-        }
-      }
+  #updateObserver(): void {
+    if (
+      this.#removalCallbacks.size === 0 &&
+      this.#additionCallbacks.size === 0 &&
+      this.#attributeCallbacks.size === 0
+    ) {
+      this.disconnect();
+      return;
+    }
 
-      // 2. Process added nodes
-      if (this.#additionCallbacks.size > 0) {
-        // Collect all element nodes added in this batch
-        const addedElements: Element[] = [];
-        for (const m of mutations) {
-          for (const node of m.addedNodes) {
-            if (node.nodeType === 1) {
-              // Node.ELEMENT_NODE
-              addedElements.push(node as Element);
-            }
-          }
-        }
-
-        if (addedElements.length > 0) {
-          for (const record of this.#additionCallbacks) {
-            const matchedElements = new Set<Element>();
-
-            for (const el of addedElements) {
-              try {
-                if (el.matches(record.selector)) {
-                  matchedElements.add(el);
+    if (!this.#observer) {
+      this.#observer = new MutationObserver((mutations) => {
+        // 1. Process removed nodes
+        if (this.#removalCallbacks.size > 0) {
+          for (const m of mutations) {
+            if (m.type === 'childList') {
+              for (const node of m.removedNodes) {
+                for (const cb of this.#removalCallbacks) {
+                  try {
+                    cb(node);
+                  } catch (error) {
+                    console.error('Error in onNodeRemoved callback:', error);
+                  }
                 }
-                const children = el.querySelectorAll(record.selector);
-                for (let i = 0; i < children.length; i++) {
-                  const child = children[i];
-                  if (child) matchedElements.add(child);
-                }
-              } catch (error) {
-                console.error('Error querying or processing onNodeAdded:', error);
-              }
-            }
-
-            for (const el of matchedElements) {
-              try {
-                record.callback(el);
-              } catch (error) {
-                console.error('Error in onNodeAdded callback:', error);
               }
             }
           }
         }
-      }
-    });
 
-    this.#observer.observe(this.#root, { childList: true, subtree: true });
+        // 2. Process added nodes
+        if (this.#additionCallbacks.size > 0) {
+          // Collect all element nodes added in this batch
+          const addedElements: Element[] = [];
+          for (const m of mutations) {
+            if (m.type === 'childList') {
+              for (const node of m.addedNodes) {
+                if (node.nodeType === 1) {
+                  // Node.ELEMENT_NODE
+                  addedElements.push(node as Element);
+                }
+              }
+            }
+          }
+
+          if (addedElements.length > 0) {
+            for (const record of this.#additionCallbacks) {
+              const matchedElements = new Set<Element>();
+
+              for (const el of addedElements) {
+                try {
+                  if (el.matches(record.selector)) {
+                    matchedElements.add(el);
+                  }
+                  const children = el.querySelectorAll(record.selector);
+                  for (let i = 0; i < children.length; i++) {
+                    const child = children[i];
+                    if (child) matchedElements.add(child);
+                  }
+                } catch (error) {
+                  console.error('Error querying or processing onNodeAdded:', error);
+                }
+              }
+
+              for (const el of matchedElements) {
+                try {
+                  record.callback(el);
+                } catch (error) {
+                  console.error('Error in onNodeAdded callback:', error);
+                }
+              }
+            }
+          }
+        }
+
+        // 3. Process attribute mutations
+        if (this.#attributeCallbacks.size > 0) {
+          for (const m of mutations) {
+            if (m.type === 'attributes' && m.attributeName) {
+              for (const record of this.#attributeCallbacks) {
+                if (record.attributeName === m.attributeName) {
+                  try {
+                    record.callback(m.target as Element);
+                  } catch (error) {
+                    console.error('Error in onAttributeChanged callback:', error);
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    const options: MutationObserverInit = {
+      childList: true,
+      subtree: true,
+    };
+
+    if (this.#attributeCallbacks.size > 0) {
+      options.attributes = true;
+      const filters = new Set<string>();
+      for (const record of this.#attributeCallbacks) {
+        filters.add(record.attributeName);
+      }
+      options.attributeFilter = Array.from(filters);
+    }
+
+    this.#observer.observe(this.#root, options);
   }
 
   #checkEmpty(): void {
-    if (this.#removalCallbacks.size === 0 && this.#additionCallbacks.size === 0) {
+    if (
+      this.#removalCallbacks.size === 0 &&
+      this.#additionCallbacks.size === 0 &&
+      this.#attributeCallbacks.size === 0
+    ) {
       this.disconnect();
       rootObserversMap.delete(this.#root);
     }

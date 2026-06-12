@@ -202,12 +202,14 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (!rootNode[CLEANUP_MARKER]) {
         enableAutoCleanup(rootNode as Element);
         rootNode[CLEANUP_MARKER] = true;
-        state.effects.push({
-          dispose: () => {
-            disableAutoCleanupFor(rootNode as Element);
-            rootNode[CLEANUP_MARKER] = false;
-          },
-        });
+        if (sr) {
+          state.effects.push({
+            dispose: () => {
+              disableAutoCleanupFor(rootNode as Element);
+              rootNode[CLEANUP_MARKER] = false;
+            },
+          });
+        }
       }
 
       if (!state.slotsAtom) {

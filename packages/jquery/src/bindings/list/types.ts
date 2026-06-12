@@ -73,7 +73,7 @@ export interface DiffSlot<T> {
   /** The index in the new state. */
   targetIndex: number;
   /** The current DOM handle. */
-  node: JQuery | undefined;
+  node: Node[] | undefined;
 }
 
 /**
