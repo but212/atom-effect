@@ -22,6 +22,7 @@ import {
 } from '@but212/atom-effect';
 import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
+import { getOrCreateRootObserver } from '@/core/observer';
 import { registry } from '@/core/registry';
 import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { FormOptions } from '@/types';
@@ -321,26 +322,16 @@ export function bindForm<T extends object>(
 
   bindSubtree(form);
 
-  const observer = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      if (m.type === 'childList') {
-        for (const node of m.addedNodes) {
-          if (node.nodeType === 1) {
-            bindSubtree(node as Element);
-          }
-        }
-      } else if (m.attributeName === 'name') {
-        bindSubtree(m.target as Element);
-      }
+  const rootObserver = getOrCreateRootObserver(form);
+  const unsubAdded = rootObserver.onNodeAdded(SELECTOR, (el) => bindField(el));
+  const unsubAttr = rootObserver.onAttributeChanged('name', (el) => {
+    if (el.matches(SELECTOR)) {
+      bindField(el);
     }
   });
 
-  observer.observe(form, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['name'],
+  registry.onCleanup(form, () => {
+    unsubAdded();
+    unsubAttr();
   });
-
-  registry.onCleanup(form, () => observer.disconnect());
 }

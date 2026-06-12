@@ -797,5 +797,33 @@ describe('Web Component Features', () => {
       // 2. Getter function
       expect(resolveValue(() => 'getter-output')).toBe('getter-output');
     });
+
+    it('should disable auto-cleanup on teardown even when shadow root (sr) is null to prevent memory leaks', async () => {
+      const registry = await import('@/core/registry');
+      const parent = document.createElement('div');
+      const child = document.createElement('span');
+      parent.appendChild(child);
+
+      try {
+        $(child).atomText($.atom('val'));
+        expect(registry.registry.hasBind(child)).toBe(true);
+
+        const ctrl = $.useAtomComponent(parent);
+        ctrl.setup();
+
+        ctrl.teardown();
+
+        child.remove();
+        await $.nextTick();
+        await $.nextTick();
+
+        expect(registry.registry.hasBind(child)).toBe(true);
+      } finally {
+        child.remove();
+        parent.remove();
+        registry.registry.cleanup(child);
+        registry.registry.cleanup(parent);
+      }
+    });
   });
 });

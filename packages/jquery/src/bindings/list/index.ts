@@ -14,7 +14,7 @@ import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
-import { ListContext } from './context';
+import { createListContext, disposeContext, type ListContext, resolveEventTarget } from './context';
 import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
 import type { EventBinding, PlaceCallbacks } from './types';
@@ -49,7 +49,17 @@ export function applyListBinding<T>(
   const prev = instances.get(element);
   if (prev) {
     prev.fx.dispose();
-    prev.ctx.dispose();
+    disposeContext(prev.ctx);
+  } else {
+    // Register once per element lifecycle to avoid zombie cleanup accumulation
+    registry.onCleanup(element, () => {
+      const active = instances.get(element);
+      if (active) {
+        active.fx.dispose();
+        disposeContext(active.ctx);
+        instances.delete(element);
+      }
+    });
   }
 
   // 2. Optimization: Pre-calculate lookup strategies to minimize work inside the effect loop.
@@ -58,7 +68,9 @@ export function applyListBinding<T>(
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 
-  const ctx = new ListContext<T>($c, onRemove);
+  const ctx = createListContext<T>($c, onRemove);
+
+  let prevItems: T[] | undefined;
 
   const fx = effect(() => {
     // Accessing .value establishes the reactive dependency.
@@ -66,6 +78,9 @@ export function applyListBinding<T>(
     const count = items.length;
 
     untracked(() => {
+      if (items === prevItems) return;
+      prevItems = items;
+
       handleEmpty(ctx, count, $c, empty);
       if (count === 0) return;
 
@@ -85,12 +100,16 @@ export function applyListBinding<T>(
       ctx.keyToIndex = diff.keyToIndex;
 
       const fragment = renderItems(diff, options, isInitial);
-
       cleanupRemoved(ctx);
       placeItems(ctx, diff, element, callbacks, fragment);
 
       // Snapshot current state for the next O(N) diff cycle.
-      ctx.snapshots = diff.slots.map(({ key, item, node }) => ({ key, item, node }));
+      ctx.snapshots = [];
+      for (const slot of diff.slots) {
+        if (slot) {
+          ctx.snapshots.push({ key: slot.key, item: slot.item, node: slot.node });
+        }
+      }
     });
   });
 
@@ -101,11 +120,6 @@ export function applyListBinding<T>(
   }
 
   instances.set(element, { fx, ctx });
-  registry.trackEffect(element, fx);
-  registry.onCleanup(element, () => {
-    ctx.dispose();
-    instances.delete(element);
-  });
 
   return { fx, ctx };
 }
@@ -182,7 +196,7 @@ function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: Event
       `${type}.atomList`,
       selector,
       function (this: HTMLElement, e: JQuery.TriggeredEvent) {
-        const resolved = ctx.resolveEventTarget(this, containerEl);
+        const resolved = resolveEventTarget(ctx, this, containerEl);
         if (resolved) {
           callback.call(resolved.target, resolved.item, resolved.index, e);
         }

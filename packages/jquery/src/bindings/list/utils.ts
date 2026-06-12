@@ -20,8 +20,18 @@ import { registry } from '@/core/registry';
  * @param key - Unique string key for identification, or null to remove.
  * @internal
  */
-export function setAtomKey($el: JQuery, key: string | null): void {
-  key === null ? $el.removeAttr('data-atom-key') : $el.attr('data-atom-key', key);
+export function setAtomKey(nodes: Node[], key: string | null): void {
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i];
+    if (el && el.nodeType === 1) {
+      const element = el as HTMLElement;
+      if (key === null) {
+        element.removeAttribute('data-atom-key');
+      } else {
+        element.setAttribute('data-atom-key', key);
+      }
+    }
+  }
 }
 
 /**
@@ -34,12 +44,12 @@ export function setAtomKey($el: JQuery, key: string | null): void {
  * Failure to call this results in "zombie" reactive effects remaining in the
  * global registry, leading to significant memory growth over time.
  *
- * @param $el - The root collection to purge from the registry.
+ * @param nodes - The root nodes to purge from the registry.
  * @internal
  */
-export function cleanupNodes($el: JQuery): void {
-  for (let i = 0; i < $el.length; i++) {
-    const el = $el[i];
+export function cleanupNodes(nodes: Node[]): void {
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i];
     if (el) registry.cleanupTree(el);
   }
 }
