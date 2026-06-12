@@ -273,6 +273,8 @@ const collectMap = (
   return resolved;
 };
 
+const isReactive = (val: unknown): boolean => isAtom(val) || typeof val === 'function';
+
 export function registerBatchedEffects(el: Element, tasks: BatchedTask[]): void {
   let hasReactive = false;
   for (let i = 0; i < tasks.length; i++) {
@@ -281,16 +283,13 @@ export function registerBatchedEffects(el: Element, tasks: BatchedTask[]): void 
       if (t.sourceMap) {
         const values = Object.values(t.sourceMap);
         for (let j = 0; j < values.length; j++) {
-          const val = values[j];
-          if (isAtom(val) || typeof val === 'function') {
+          if (isReactive(values[j])) {
             hasReactive = true;
             break;
           }
         }
-      } else if (t.source) {
-        if (isAtom(t.source) || typeof t.source === 'function') {
-          hasReactive = true;
-        }
+      } else if ('source' in t && isReactive(t.source)) {
+        hasReactive = true;
       }
     }
     if (hasReactive) break;
@@ -303,9 +302,8 @@ export function registerBatchedEffects(el: Element, tasks: BatchedTask[]): void 
       const keys = Object.keys(sourceMap);
       return () => runner(collectMap(sourceMap, keys));
     }
-    const source = t.source;
-    if (source) {
-      return () => runner(getSourceValue(source));
+    if ('source' in t) {
+      return () => runner(getSourceValue(t.source));
     }
     return () => {};
   });

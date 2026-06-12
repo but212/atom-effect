@@ -24,7 +24,8 @@ import { cleanupNodes } from './utils';
  * Performance: Avoids setAttribute DOM calls inside placeItems.
  */
 function injectKeyToHtml(html: string, key: string): string {
-  const match = html.match(/^<([a-zA-Z0-9-]+)/);
+  if (!html.startsWith('<')) return html;
+  const match = html.match(/^<([^\s/>]+)/);
   if (match) {
     const insertIdx = match[0].length;
     return `${html.slice(0, insertIdx)} data-atom-key="${key}"${html.slice(insertIdx)}`;

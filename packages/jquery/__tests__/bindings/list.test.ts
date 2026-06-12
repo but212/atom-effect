@@ -740,5 +740,23 @@ describe('$.atomList (Integration)', () => {
       expect(firstEl?.parentNode).toBeNull(); // Old element must be detached
       $container.remove();
     });
+
+    it('should inject data-atom-key correctly into namespaced html tags', async () => {
+      const items = $.atom([{ id: 1 }]);
+      const $container = $('<div>');
+
+      try {
+        $container.atomList(items, {
+          key: 'id',
+          render: (item) => `<fb:like>test${item.id}</fb:like>`,
+        });
+        await $.nextTick();
+        const child = $container.children().first();
+        expect(child.attr('data-atom-key')).toBe('1');
+        expect(child.prop('tagName').toLowerCase()).toBe('fb:like');
+      } finally {
+        $container.remove();
+      }
+    });
   });
 });

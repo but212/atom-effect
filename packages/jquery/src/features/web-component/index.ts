@@ -196,20 +196,18 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         registry.registerShadow(element, sr);
       }
 
-      const rootNode = (root ?? element) as Node & { [CLEANUP_MARKER]?: boolean };
+      const rootNode = (root ?? element) as (Element | ShadowRoot) & { [CLEANUP_MARKER]?: boolean };
       state.root = rootNode;
 
       if (!rootNode[CLEANUP_MARKER]) {
-        enableAutoCleanup(rootNode as Element);
+        enableAutoCleanup(rootNode);
         rootNode[CLEANUP_MARKER] = true;
-        if (sr) {
-          state.effects.push({
-            dispose: () => {
-              disableAutoCleanupFor(rootNode as Element);
-              rootNode[CLEANUP_MARKER] = false;
-            },
-          });
-        }
+        state.effects.push({
+          dispose: () => {
+            disableAutoCleanupFor(rootNode);
+            rootNode[CLEANUP_MARKER] = false;
+          },
+        });
       }
 
       if (!state.slotsAtom) {
