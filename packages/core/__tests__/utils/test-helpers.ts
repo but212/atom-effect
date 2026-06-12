@@ -24,5 +24,4 @@ export function seededRandom(seed: number): () => number {
 }
 
 // Internal structure test helpers
-// biome-ignore lint/suspicious/noExplicitAny: Internal tests need access to private properties
-export const getNodeVersion = (node: any): number => node.version;
+export const getNodeVersion = (node: unknown): number => (node as { version: number }).version;

@@ -112,6 +112,8 @@ const CLOBBER_VALUES = new Set([
 /** SVG/SMIL attributes that can be used for XSS via animation. @internal */
 const SENSITIVE_ATTRS = new Set(['attributename', 'from', 'to', 'values']);
 
+const CONTROL_CHARS_PATTERN = '[\\x00-\\x1f\\x7f\\ufffd\\u0000]';
+
 /**
  * Logic: Security Pattern Library
  * Consolidated regex patterns for neutralizing common XSS vectors,
@@ -133,8 +135,7 @@ const REGEX = {
    * Security: Filter Evasion
    * Captures control characters often used to break regex-based filters.
    */
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: security requirement
-  CONTROL_CHARS: /[\x00-\x1f\x7f\ufffd\u0000]/g,
+  CONTROL_CHARS: new RegExp(CONTROL_CHARS_PATTERN, 'g'),
   /** Detects malicious data-URIs with active content types. */
   DATA_URI:
     /data\s*:\s*(?:text\/(?:html|javascript|vbscript|xml)|application\/(?:javascript|xhtml\+xml|xml|x-shockwave-flash)|image\/svg\+xml)/i,

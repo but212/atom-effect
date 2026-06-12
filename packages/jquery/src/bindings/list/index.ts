@@ -172,8 +172,16 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
     const spaceIdx = trimmed.indexOf(' ');
     const type = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
     const selector = spaceIdx === -1 ? '> *' : trimmed.slice(spaceIdx + 1).trim() || '> *';
-    // biome-ignore lint/suspicious/noExplicitAny: cast to generic callback with any arguments
-    return { type, selector, callback: callback as (...args: any[]) => any };
+    return {
+      type,
+      selector,
+      callback: callback as (
+        this: unknown,
+        item: unknown,
+        index: number,
+        e: JQuery.TriggeredEvent
+      ) => void,
+    };
   });
 }
 

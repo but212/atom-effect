@@ -344,7 +344,6 @@ export class RouterImpl implements Router {
     if (this.#isDestroyed) return;
     this.#isDestroyed = true;
     runRendererCleanups(this.#renderer);
-    // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
     this.#cleanups.forEach((fn: () => void) => Result.tryCatch(fn));
     this.#cleanups.dispose();
   }

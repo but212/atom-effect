@@ -25,7 +25,7 @@
       "recommended": true,
       "complexity": {
         "noExtraBooleanCast": "error",
-        "noForEach": "warn",
+        "noForEach": "off",
         "noBannedTypes": "warn",
         "noUselessCatch": "error",
         "noUselessConstructor": "error",

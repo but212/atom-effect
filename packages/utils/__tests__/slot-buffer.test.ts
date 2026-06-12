@@ -337,7 +337,6 @@ describe('SlotBuffer', () => {
       expect(buf.length).toBe(1);
 
       const items: string[] = [];
-      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => items.push(item));
       expect(items).toEqual(['b']);
       expect(buf.has('b')).toBe(true);
@@ -379,7 +378,6 @@ describe('SlotBuffer', () => {
       buf.remove(3);
 
       const collected: number[] = [];
-      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => collected.push(item));
 
       expect(collected).toEqual([0, 2, 4]);
@@ -393,7 +391,6 @@ describe('SlotBuffer', () => {
       buf.remove(4); // index 4 (overflow) becomes null
 
       const collected: number[] = [];
-      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => collected.push(item));
 
       expect(collected).toEqual([0, 1, 2, 3, 5]);
@@ -405,7 +402,6 @@ describe('SlotBuffer', () => {
       buf.push(20);
 
       const items: number[] = [];
-      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => {
         items.push(item);
         if (item === 10) {
@@ -424,7 +420,6 @@ describe('SlotBuffer', () => {
       buf.remove(20); // [10, null, 30]
 
       const items: number[] = [];
-      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach((item) => {
         items.push(item);
         if (item === 10) {
@@ -438,7 +433,6 @@ describe('SlotBuffer', () => {
     it('forEach() should do nothing on empty buffer', () => {
       const buf = new SlotBuffer<number>();
       let count = 0;
-      // biome-ignore lint/complexity/noForEach: testing SlotBuffer.forEach method
       buf.forEach(() => {
         count++;
       });

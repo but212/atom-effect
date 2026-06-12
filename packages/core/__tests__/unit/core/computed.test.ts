@@ -563,8 +563,7 @@ describe('Computed', () => {
       const c = computed(() => 1);
       c.dispose();
       const unsub = c.subscribe(() => {});
-      // biome-ignore lint/suspicious/noExplicitAny: Accessing internal slots for verification
-      expect((c as any)._slots).toBeNull();
+      expect((c as unknown as { _slots: unknown })._slots).toBeNull();
       unsub();
     });
 
