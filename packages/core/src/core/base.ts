@@ -13,6 +13,7 @@
 
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import {
+  COMPUTED_STATE_FLAGS,
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
   IS_DEV,
@@ -38,7 +39,14 @@ import type {
 } from '@/types';
 import { AtomError, generateId, nextSmi, wrapError } from '@/utils';
 
-import { BUFFER_FLAGS, claimExisting, depBufferTruncateFrom, insertNew } from './buffers';
+import {
+  BUFFER_FLAGS,
+  claimExisting,
+  depBufferTruncateFrom,
+  insertNew,
+  isBufferDirty,
+  isBufferShallowDirty,
+} from './buffers';
 
 import { nextEpoch } from './scheduler';
 
@@ -92,6 +100,14 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
 }
 
 /** @internal */
+export function isSubscriberTarget(listener: unknown): listener is SubscriberTarget<unknown> {
+  return (
+    typeof listener === 'function' ||
+    (listener != null && typeof (listener as Subscriber).execute === 'function')
+  );
+}
+
+/** @internal */
 export function createTrackingContext(): TrackingContext {
   return { stack: [], current: null };
 }
@@ -107,7 +123,9 @@ export function pushTrackingSubscriber(
 
 /** @internal */
 export function popTrackingSubscriber(context: TrackingContext): void {
-  restoreTrackingDepth(context, context.stack.length - 1);
+  const stack = context.stack;
+  stack.pop();
+  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
 }
 
 /**
@@ -115,7 +133,9 @@ export function popTrackingSubscriber(context: TrackingContext): void {
  * @internal
  */
 export function rollbackTrackingSubscriber(context: TrackingContext, depth: number): void {
-  restoreTrackingDepth(context, depth);
+  const stack = context.stack;
+  stack.length = Math.max(0, Math.min(depth, stack.length));
+  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
 }
 
 /**
@@ -140,16 +160,9 @@ export function runInTrackingContext<T>(
 }
 
 /** @internal */
-export function restoreTrackingDepth(context: TrackingContext, depth: number): void {
-  const stack = context.stack;
-  const nextDepth = Math.max(0, Math.min(depth, stack.length));
-  stack.length = nextDepth;
-  context.current = stack[nextDepth - 1] ?? null;
-}
-
-/** @internal */
 export function resetTrackingContext(context: TrackingContext): void {
-  restoreTrackingDepth(context, 0);
+  context.stack.length = 0;
+  context.current = null;
 }
 
 /**
@@ -215,7 +228,7 @@ export function createDependencyLink(
 export function nodeTrackDependency(
   tracker: DependencyTracker & ReactiveDependencyTracker,
   dep: Dependency,
-  notifyCallback: (() => void) | Subscriber
+  notifyCallback: () => void
 ): void {
   if (!tracker._depSlots) return;
 
@@ -262,7 +275,10 @@ export function nodeSubscribe<T>(
   node: ReactiveNode<T>,
   listener: SubscriberTarget<T>
 ): Result<() => void, Error> {
-  if (!isSubscriberTarget(listener)) {
+  const isFn = typeof listener === 'function';
+  const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
+
+  if (!isFn && !isObj) {
     return Result.err(
       wrapError(
         new TypeError('Invalid subscriber'),
@@ -290,14 +306,6 @@ export function nodeSubscribe<T>(
       l = undefined;
     }
   });
-}
-
-/** @internal */
-export function isSubscriberTarget(listener: unknown): listener is SubscriberTarget<unknown> {
-  return (
-    typeof listener === 'function' ||
-    (listener != null && typeof (listener as Subscriber).execute === 'function')
-  );
 }
 
 /** @internal */
@@ -438,7 +446,27 @@ export function nodeHandleError<T, E extends Error>(
   nodeNotifySubscribers(node, undefined, undefined);
 }
 
+/** @internal - Checks computed flag. */
+export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
+  return (node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
+}
+
+/** @internal - Checks if the slot buffer is locked during notification. */
+export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
+  return node._slots?.isLocked ?? false;
+}
+
 /** @internal - Returns active listener count. */
 export function nodeSubscriberCount<T>(node: ReactiveNode<T>): number {
   return node._slots?.size ?? 0;
+}
+
+/** @internal - Deep check for upstream changes. */
+export function nodeIsDirty(node: ReactiveDependencyTracker): boolean {
+  return isBufferDirty(node);
+}
+
+/** @internal - Shallow check for upstream signals. */
+export function nodeIsShallowDirty(node: ReactiveDependencyTracker): boolean {
+  return isBufferShallowDirty(node);
 }
