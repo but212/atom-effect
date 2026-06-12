@@ -12,7 +12,7 @@
 import type { EffectObject } from '@but212/atom-effect';
 import $ from 'jquery';
 import type { ListKey } from '@/types';
-import { setAtomKey } from './utils';
+import { cleanupNodes, setAtomKey } from './utils';
 
 /**
  * Represents the state of a single list item at a point in time.
@@ -112,6 +112,8 @@ export function commitRemoval<T>(ctx: ListContext<T>, k: ListKey, nodes: Node[])
   const first = nodes[0];
   // Check if the element was re-bound to the list while we were waiting.
   if (first instanceof Element && first.hasAttribute('data-atom-key')) return;
+
+  cleanupNodes(nodes);
 
   for (let i = 0; i < nodes.length; i++) {
     const el = nodes[i];

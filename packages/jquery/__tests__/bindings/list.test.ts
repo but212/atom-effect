@@ -758,5 +758,33 @@ describe('$.atomList (Integration)', () => {
         $container.remove();
       }
     });
+
+    it('should call cleanupNodes on commitRemoval to prevent memory leaks', async () => {
+      const list = $.atom(['item1']);
+      const $container = $('<div>').appendTo(document.body);
+
+      $container.atomList(list, {
+        key: (item) => item,
+        render: (item) => `<span class="item">${item}</span>`,
+      });
+      await $.nextTick();
+
+      const $item = $container.find('.item');
+      const itemEl = $item[0] as HTMLElement;
+
+      const atom = $.atom('initial');
+      $item.atomText(atom);
+      await $.nextTick();
+
+      expect(registry.hasBind(itemEl)).toBe(true);
+
+      list.value = [];
+      await $.nextTick();
+
+      expect($container.find('.item').length).toBe(0);
+      expect(registry.hasBind(itemEl)).toBe(false);
+
+      $container.remove();
+    });
   });
 });
