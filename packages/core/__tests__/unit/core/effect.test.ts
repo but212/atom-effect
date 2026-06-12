@@ -648,5 +648,20 @@ describe('Effect', () => {
       expect(e.executionCount).toBe(initialCount + 1);
       e.dispose();
     });
+
+    it('should not log errors twice when infinite loop is detected', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const a = atom(0);
+      const _e = effect(() => {
+        a.value;
+        a.value = a.value + 1;
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      consoleError.mockRestore();
+    });
   });
 });

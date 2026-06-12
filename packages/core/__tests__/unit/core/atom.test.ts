@@ -256,6 +256,8 @@ describe('Atom', () => {
       const unsub = a.subscribe(() => {});
       expect(a.subscriberCount()).toBe(0);
       expect(() => unsub()).not.toThrow();
+      // biome-ignore lint/suspicious/noExplicitAny: Accessing internal slots for verification
+      expect((a as any)._slots).toBeNull();
     });
 
     it('should return undefined on read access after disposal', () => {

@@ -559,6 +559,15 @@ describe('Computed', () => {
       expect(() => c.value).toThrow(ComputedError);
     });
 
+    it('should not allocate _slots or register target when subscribing to a disposed computed', () => {
+      const c = computed(() => 1);
+      c.dispose();
+      const unsub = c.subscribe(() => {});
+      // biome-ignore lint/suspicious/noExplicitAny: Accessing internal slots for verification
+      expect((c as any)._slots).toBeNull();
+      unsub();
+    });
+
     it('should propagate notifications even when multiple dependencies change before read', async () => {
       const a = atom(1);
       const b = atom(10);

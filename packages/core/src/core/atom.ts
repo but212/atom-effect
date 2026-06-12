@@ -11,12 +11,35 @@
  * as data sources for Computeds and Effects.
  */
 
+import type { SlotBuffer } from '@but212/atom-effect-utils';
 import { Result } from '@but212/atom-effect-utils';
-import { ATOM_STATE_FLAGS, BRAND, BrandFlags, DEFAULT_EQUAL, IS_DEV } from '@/constants';
-import { BaseNode, nextVersion, nodeNotifySubscribers, trackingContext } from '@/core/base';
-import type { AtomOptions, ReactiveNode, WritableAtom } from '@/types';
-import { AtomError, debug } from '@/utils';
-
+import {
+  ATOM_STATE_FLAGS,
+  BRAND,
+  BrandFlags,
+  DEFAULT_EQUAL,
+  EPOCH_CONSTANTS,
+  ERROR_MESSAGES,
+  IS_DEV,
+  KIND,
+  SMI_MAX,
+} from '@/constants';
+import {
+  nextVersion,
+  nodeNotifySubscribers,
+  nodeSubscribe,
+  nodeSubscriberCount,
+  trackingContext,
+} from '@/core/base';
+import type {
+  AtomOptions,
+  DependencyId,
+  ReactiveNode,
+  Subscriber,
+  SubscriberTarget,
+  WritableAtom,
+} from '@/types';
+import { AtomError, debug, generateId, wrapError } from '@/utils';
 import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 
 /**
@@ -28,25 +51,57 @@ import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
  *
  * @internal
  */
-class AtomImpl<T> extends BaseNode<T> implements WritableAtom<T>, ReactiveNode<T> {
+class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
+  flags: number = 0;
+  version: number = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _nextEpoch: number | undefined = undefined;
+  _trackEpoch: number = 0;
+  _trackCount: number = 0;
+  _error: Error | null = null;
+  _k: typeof KIND.Obj = KIND.Obj;
+  readonly id: DependencyId = generateId() & SMI_MAX;
+
+  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
+
   #value: T;
   #pendingOldValue: T | undefined;
   #equal: (a: T, b: T) => boolean;
-  _nextEpoch: number | undefined = undefined;
 
   /** @internal */
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
 
   constructor(initialValue: T, options?: AtomOptions<T>) {
-    let initialFlags = 0;
-    if (options?.sync) {
-      initialFlags |= ATOM_STATE_FLAGS.SYNC;
-    }
-    super(initialFlags);
     this.#value = initialValue;
     this.#equal = options?.equal ?? DEFAULT_EQUAL;
 
+    if (options?.sync) {
+      this.flags |= ATOM_STATE_FLAGS.SYNC;
+    }
+
     if (IS_DEV) debug.attachDebugInfo(this, 'atom', this.id, options?.name);
+  }
+
+  // ReactiveNode Personality Traits (Declarative Data)
+  readonly isComputed = false;
+  readonly isRejected = false;
+  readonly hasError = false;
+
+  get isDisposed(): boolean {
+    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
+  }
+  get isNotifying(): boolean {
+    return this._slots?.isLocked ?? false;
+  }
+
+  /** @internal */
+  get isNotificationScheduled(): boolean {
+    return (this.flags & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED) !== 0;
+  }
+
+  /** @internal */
+  get isSync(): boolean {
+    return (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0;
   }
 
   /**
@@ -80,6 +135,37 @@ class AtomImpl<T> extends BaseNode<T> implements WritableAtom<T>, ReactiveNode<T
     if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.#scheduleNotification(oldValue);
+  }
+
+  /**
+   * Attaches a listener that executes when the atom value changes.
+   *
+   * @param listener - Callback receiving the new and previous values.
+   * @returns A disposal function to unsubscribe the listener.
+   */
+  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
+    const isFn = typeof listener === 'function';
+    const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
+
+    if (!isFn && !isObj) {
+      throw wrapError(
+        new TypeError('Invalid subscriber'),
+        AtomError,
+        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
+      );
+    }
+    if (this.isDisposed) {
+      return () => {};
+    }
+    const unsub = Result.unwrap(nodeSubscribe(this, listener));
+    return unsub;
+  }
+
+  /**
+   * @returns The number of active subscribers currently tracking this atom.
+   */
+  subscriberCount(): number {
+    return nodeSubscriberCount(this);
   }
 
   /**
