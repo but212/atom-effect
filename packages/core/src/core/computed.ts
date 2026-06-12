@@ -37,7 +37,6 @@ import {
   nodeSubscribe,
   nodeSubscriberCount,
   nodeTrackDependency,
-  rollbackTrackingSubscriber,
   runInTrackingContext,
   trackingContext,
   untracked,
@@ -56,15 +55,7 @@ import type {
   Subscriber,
   SubscriberTarget,
 } from '@/types';
-import {
-  AtomError,
-  ComputedError,
-  debug,
-  generateId,
-  mergeAtomValues,
-  NO_DEFAULT_VALUE,
-  wrapError,
-} from '@/utils';
+import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
 
@@ -345,22 +336,8 @@ class ComputedAtomImpl<T>
     return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
   }
 
-  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    const isFn = typeof listener === 'function';
-    const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
-
-    if (!isFn && !isObj) {
-      throw wrapError(
-        new TypeError('Invalid subscriber'),
-        AtomError,
-        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
-      );
-    }
-    if (this.isDisposed) {
-      return () => {};
-    }
-    const unsub = Result.unwrap(nodeSubscribe(this, listener));
-    return unsub;
+  subscribe(listener: SubscriberTarget<T>): () => void {
+    return Result.unwrap(nodeSubscribe(this, listener));
   }
 
   subscriberCount(): number {
@@ -412,7 +389,6 @@ class ComputedAtomImpl<T>
 
     this.flags =
       (this.flags & ~COMPUTED_STATE_FLAGS.FORCE_COMPUTE) | COMPUTED_STATE_FLAGS.RECOMPUTING;
-    const prevDepth = trackingContext.stack.length;
 
     try {
       nodeStartTracking(this);
@@ -426,11 +402,8 @@ class ComputedAtomImpl<T>
         val = runInTrackingContext(trackingContext, this, this.#computation);
       } catch (e) {
         if (e instanceof RangeError || e instanceof ReferenceError || e instanceof SyntaxError) {
-          rollbackTrackingSubscriber(trackingContext, prevDepth);
           throw e;
         }
-        // Impact: Preserves tracking context integrity if the computation fails.
-        rollbackTrackingSubscriber(trackingContext, prevDepth);
         hasError = true;
         errorToThrow = e;
       }

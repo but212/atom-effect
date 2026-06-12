@@ -80,31 +80,12 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
   }
 
   subscribe(listener: SubscriberTarget<T>): () => void {
-    if (!isSubscriberTarget(listener)) {
-      return Result.unwrap(nodeSubscribe(this, listener));
-    }
-    if (this.isDisposed) {
-      return () => {};
-    }
-    return this._subscribe(listener);
-  }
-
-  /** @internal */
-  _subscribe(listener: SubscriberTarget<T>): () => void {
     return Result.unwrap(nodeSubscribe(this, listener));
   }
 
   subscriberCount(): number {
     return nodeSubscriberCount(this);
   }
-}
-
-/** @internal */
-export function isSubscriberTarget(listener: unknown): listener is SubscriberTarget<unknown> {
-  return (
-    typeof listener === 'function' ||
-    (listener != null && typeof (listener as Subscriber).execute === 'function')
-  );
 }
 
 /** @internal */
@@ -286,6 +267,10 @@ export function nodeSubscribe<T>(
         ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
       )
     );
+  }
+
+  if ((node.flags & STATE_FLAGS.DISPOSED) !== 0) {
+    return Result.ok(() => {});
   }
 
   node._slots ??= new SlotBuffer<SubscriberTarget<T>>();

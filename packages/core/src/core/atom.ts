@@ -19,7 +19,6 @@ import {
   BrandFlags,
   DEFAULT_EQUAL,
   EPOCH_CONSTANTS,
-  ERROR_MESSAGES,
   IS_DEV,
   KIND,
   SMI_MAX,
@@ -35,11 +34,10 @@ import type {
   AtomOptions,
   DependencyId,
   ReactiveNode,
-  Subscriber,
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
-import { AtomError, debug, generateId, wrapError } from '@/utils';
+import { AtomError, debug, generateId } from '@/utils';
 import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 
 /**
@@ -143,22 +141,8 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * @param listener - Callback receiving the new and previous values.
    * @returns A disposal function to unsubscribe the listener.
    */
-  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void {
-    const isFn = typeof listener === 'function';
-    const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
-
-    if (!isFn && !isObj) {
-      throw wrapError(
-        new TypeError('Invalid subscriber'),
-        AtomError,
-        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
-      );
-    }
-    if (this.isDisposed) {
-      return () => {};
-    }
-    const unsub = Result.unwrap(nodeSubscribe(this, listener));
-    return unsub;
+  subscribe(listener: SubscriberTarget<T>): () => void {
+    return Result.unwrap(nodeSubscribe(this, listener));
   }
 
   /**

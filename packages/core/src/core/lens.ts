@@ -254,11 +254,7 @@ class LensImpl<T extends object, P extends string>
       this.#prevValue = this.peek();
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
     }
-    const result = nodeSubscribe(this, listener);
-    if (Result.isErr(result)) {
-      throw result.error;
-    }
-    const innerUnsub = result.value;
+    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
     if (this.isDisposed) {
       innerUnsub();
       this.#sharedUnsub?.();
@@ -402,11 +398,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
         this.#unsubs.push(lens.subscribe(notify));
       }
     }
-    const result = nodeSubscribe(this, listener);
-    if (Result.isErr(result)) {
-      throw result.error;
-    }
-    const innerUnsub = result.value;
+    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
     if (this.isDisposed) {
       innerUnsub();
       for (const unsub of this.#unsubs) unsub();
