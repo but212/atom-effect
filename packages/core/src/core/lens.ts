@@ -250,20 +250,13 @@ class LensImpl<T extends object, P extends string>
   }
 
   subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
-    if (nodeSubscriberCount(this) === 0) {
+    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
+    if (this.isDisposed) {
+      return innerUnsub;
+    }
+    if (nodeSubscriberCount(this) === 1) {
       this.#prevValue = this.peek();
       this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
-    }
-    const result = nodeSubscribe(this, listener);
-    if (Result.isErr(result)) {
-      throw result.error;
-    }
-    const innerUnsub = result.value;
-    if (this.isDisposed) {
-      innerUnsub();
-      this.#sharedUnsub?.();
-      this.#sharedUnsub = null;
-      return () => {};
     }
     return () => {
       innerUnsub();
@@ -395,23 +388,16 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
-    if (nodeSubscriberCount(this) === 0) {
+    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
+    if (this.isDisposed) {
+      return innerUnsub;
+    }
+    if (nodeSubscriberCount(this) === 1) {
       this.#prevValue = this.peek();
       const notify = () => this.#notify();
       for (const lens of this.#lenses) {
         this.#unsubs.push(lens.subscribe(notify));
       }
-    }
-    const result = nodeSubscribe(this, listener);
-    if (Result.isErr(result)) {
-      throw result.error;
-    }
-    const innerUnsub = result.value;
-    if (this.isDisposed) {
-      innerUnsub();
-      for (const unsub of this.#unsubs) unsub();
-      this.#unsubs.length = 0;
-      return () => {};
     }
     return () => {
       innerUnsub();

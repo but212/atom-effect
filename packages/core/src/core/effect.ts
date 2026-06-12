@@ -31,7 +31,6 @@ import {
   nodeIsDirty,
   nodeStartTracking,
   nodeTrackDependency,
-  rollbackTrackingSubscriber,
   runInTrackingContext,
   trackingContext,
 } from '@/core/base';
@@ -174,15 +173,12 @@ class EffectImpl
 
     nodeStartTracking(this);
     prepareTracking(this);
-    const prevDepth = trackingContext.stack.length;
 
     try {
       const val = runInTrackingContext(trackingContext, this, this.#fn);
       nodeCommitDeps(this);
       this.#handleResult(val);
     } catch (e) {
-      // Impact: Preserves tracking context integrity if the effect crashes.
-      rollbackTrackingSubscriber(trackingContext, prevDepth);
       this.#handleExecutionError(e);
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
