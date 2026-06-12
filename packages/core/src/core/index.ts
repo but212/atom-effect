@@ -16,7 +16,6 @@ export { atom } from './atom';
 export {
   createDependencyLink,
   nextVersion,
-  rollbackTrackingSubscriber,
   runInTrackingContext,
   trackingContext,
   untracked,

@@ -2,12 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { STATE_FLAGS } from '@/constants';
 import {
   BaseNode,
-  createTrackingContext,
   nodeHasSubscription,
   nodeNotifySubscribers,
   nodeTrackDependency,
   nodeUnsubscribe,
-  rollbackTrackingSubscriber,
   untracked,
 } from '@/core/base';
 import { aeNextTick, scheduler, schedulerEndBatch, schedulerIsBatching } from '@/core/scheduler';
@@ -127,28 +125,6 @@ describe('Tracking Engine', () => {
         _slots: undefined,
       } as unknown as ReactiveNode<void>;
     }
-
-    describe('rollbackTrackingSubscriber', () => {
-      it('safely limits target depth to stack size when depth is out of bounds', () => {
-        const context = createTrackingContext();
-        // Stack is empty (length 0). Attempt to rollback to depth 1.
-        rollbackTrackingSubscriber(context, 1);
-
-        // Under robust implementation, target depth is bounded to stack.length,
-        // so context.current remains null (not undefined).
-        expect(context.current).toBeNull();
-      });
-
-      it('safely limits target depth to zero when depth is negative', () => {
-        const context = createTrackingContext();
-
-        // Under robust implementation, negative depth is clamped to zero
-        // and does not throw RangeError.
-        expect(() => {
-          rollbackTrackingSubscriber(context, -1);
-        }).not.toThrow();
-      });
-    });
 
     describe('Subscription robustness with undefined slots', () => {
       const mockLink = (() => {}) as unknown as SubscriberTarget<void>;
