@@ -7,6 +7,26 @@
 #### Breaking Changes
 
 - **Error Handling**: Removed deprecated `AtomError.getChain()` and `AtomError.toJSON()` instance methods.
+  
+  **How to Migrate?**
+  
+  Replace instance method calls with standalone functions imported from the core package.
+  
+  *Before:*
+
+  ```typescript
+  const chain = error.getChain();
+  const json = error.toJSON();
+  ```
+  
+  *After:*
+
+  ```typescript
+  import { getErrorChain, serializeError } from '@but212/atom-effect';
+  
+  const chain = getErrorChain(error);
+  const json = serializeError(error);
+  ```
 
 ### jQuery
 
@@ -14,8 +34,32 @@
 
 - **Web Component Architecture & DI**: Overhauled the Web Component architecture to follow a minimalist, stateless design.
   - **Explicit Setup Required**: The engine no longer monitors the DOM to automatically trigger `setup()` for components with static properties (`aejStyles`, `aejBind`, etc.). You must now explicitly call `this.aej.setup()` inside `connectedCallback()`.
-  - **Stateless DI (DOM Traversal)**: Dependency Injection (`injectAtom`, `provideAtom`) now resolves contexts using synchronous DOM traversal (`parentNode` and `ShadowRoot.host`) instead of custom event bubbling (`aej:context-request`). Ensure consumers are structural DOM descendants of their providers.
+
+    *How to Migrate:*
+
+    ```typescript
+    class MyComponent extends HTMLElement {
+      static aejStyles = [':host { color: red; }'];
+      private aej = $.useAtomComponent(this);
+
+      connectedCallback() {
+        this.attachShadow({ mode: 'open' }); // if needed
+        this.aej.setup(); // EXPLICIT CALL REQUIRED
+      }
+    }
+    ```
+
+  - **Stateless DI (DOM Traversal)**: Dependency Injection (`injectAtom`, `provideAtom`) now resolves contexts using synchronous DOM traversal (`parentNode` and `ShadowRoot.host`) instead of custom event bubbling (`aej:context-request`). Ensure consumers are structural DOM descendants of their providers, and stop relying on `aej:context-request` custom events.
   - **Strict Type Safety for Proxies**: `injectAtom` and `createContextProxy` now return `WritableAtom<T | null> | null` (previously `WritableAtom<T> | null`), requiring explicit handling of nullable atoms.
+
+    *How to Migrate:*
+
+    ```typescript
+    const themeProxy = $.injectAtom<string>(this, 'theme');
+    if (themeProxy && themeProxy.value !== null) {
+      console.log(themeProxy.value.toUpperCase());
+    }
+    ```
 
 ## [0.33.1]
 
@@ -107,8 +151,19 @@
 
 #### Breaking Changes
 
-- **Packaging**: Externalized `@but212/atom-effect` in ESM and CJS library builds. It must now be provided as a peer dependency.
+- **Packaging**: Externalized `@but212/atom-effect` in ESM and CJS library builds. It must now be provided as a peer dependency. Make sure `@but212/atom-effect` is installed as a peer dependency in your project.
 - **CDN**: Updated the default entry point for CDNs. Use the explicit path to the UMD bundle instead of the base package URL.
+  
+  *How to Migrate:*
+  Update your `<script>` tags to use the explicit UMD bundle:
+
+  ```html
+  <!-- Before -->
+  <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/index.js"></script>
+
+  <!-- After (Recommended) -->
+  <script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/dist/atom-effect-jquery.min.js"></script>
+  ```
 
 ## [0.32.1]
 
