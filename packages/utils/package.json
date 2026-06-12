@@ -21,6 +21,8 @@
     "clean:build": "rimraf dist",
     "dev": "vite",
     "test": "vitest run",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "bench": "vitest bench --config vitest.bench.config.ts",
     "bench:all": "pnpm run bench",
     "typecheck": "tsc --noEmit"

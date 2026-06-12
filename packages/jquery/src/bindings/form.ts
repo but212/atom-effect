@@ -20,7 +20,9 @@ import {
   untracked,
   type WritableAtom,
 } from '@but212/atom-effect';
+import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
+import { getOrCreateRootObserver } from '@/core/observer';
 import { registry } from '@/core/registry';
 import { INTERNAL_HANDLER } from '@/core/symbols';
 import type { FormOptions } from '@/types';
@@ -111,18 +113,18 @@ function createInterceptedLens<T extends object>(
       if (prop === 'value') {
         let transformed = val;
         if (transform) {
-          try {
-            transformed = transform(name, val);
-          } catch (err) {
-            console.error(`[bindForm] Transform error in field "${name}":`, err);
+          const res = Result.tryCatch(() => transform(name, val));
+          if (Result.isErr(res)) {
+            console.error(`[bindForm] Transform error in field "${name}":`, res.error);
+          } else {
+            transformed = res.value;
           }
         }
         target.value = transformed as PathValue<T, Paths<T>>;
         if (onChange) {
-          try {
-            untracked(() => onChange(name, transformed));
-          } catch (err) {
-            console.error(`[bindForm] onChange error in field "${name}":`, err);
+          const res = Result.tryCatch(() => untracked(() => onChange(name, transformed)));
+          if (Result.isErr(res)) {
+            console.error(`[bindForm] onChange error in field "${name}":`, res.error);
           }
         }
         return true;
@@ -146,13 +148,14 @@ function syncValidationEffect(
   validate: (v: unknown) => string | boolean | undefined
 ) {
   return effect(() => {
-    try {
-      const res = validate(atom.value);
-      const msg = typeof res === 'string' ? res : res === false ? 'Invalid' : '';
-      (control as HTMLInputElement).setCustomValidity?.(msg);
-    } catch (err) {
-      console.error(`Validation error in field "${name}":`, err);
+    const res = Result.tryCatch(() => validate(atom.value));
+    if (Result.isErr(res)) {
+      console.error(`Validation error in field "${name}":`, res.error);
       (control as HTMLInputElement).setCustomValidity?.('Validation failed');
+    } else {
+      const val = res.value;
+      const msg = typeof val === 'string' ? val : val === false ? 'Invalid' : '';
+      (control as HTMLInputElement).setCustomValidity?.(msg);
     }
   });
 }
@@ -319,26 +322,16 @@ export function bindForm<T extends object>(
 
   bindSubtree(form);
 
-  const observer = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      if (m.type === 'childList') {
-        for (const node of m.addedNodes) {
-          if (node.nodeType === 1) {
-            bindSubtree(node as Element);
-          }
-        }
-      } else if (m.attributeName === 'name') {
-        bindSubtree(m.target as Element);
-      }
+  const rootObserver = getOrCreateRootObserver(form);
+  const unsubAdded = rootObserver.onNodeAdded(SELECTOR, (el) => bindField(el));
+  const unsubAttr = rootObserver.onAttributeChanged('name', (el) => {
+    if (el.matches(SELECTOR)) {
+      bindField(el);
     }
   });
 
-  observer.observe(form, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['name'],
+  registry.onCleanup(form, () => {
+    unsubAdded();
+    unsubAttr();
   });
-
-  registry.onCleanup(form, () => observer.disconnect());
 }

@@ -7,10 +7,9 @@
  */
 
 import { untracked } from '@but212/atom-effect';
-import { Option, Result } from '@but212/atom-effect-utils';
 import { normalizePath, parseQuery, resolveAnchorPath, splitPath } from '@/core/navigation';
 import type { RouteDefinition, Router } from '@/types';
-import type { MatchResult, UrlAdapter } from './types';
+import type { MatchResult, NavigationResult, UrlAdapter } from './types';
 
 /**
  * Logic: Modern History API Adapter
@@ -37,9 +36,13 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
       commit: (fullPath) => {
         const { route, query } = splitPath(fullPath);
         const url = new URL(route, `${location.origin}${base}/`.replace(/\/+$/, '/'));
-        Option.map(query, (q) => (url.search = q));
+        if (query !== null) url.search = query;
         const urlStr = url.pathname + url.search;
-        Result.tryCatch(() => history.pushState(null, '', urlStr));
+        try {
+          history.pushState(null, '', urlStr);
+        } catch {
+          /* ignore */
+        }
         return {
           path: normalizePath(route),
           query: Object.fromEntries(url.searchParams),
@@ -48,7 +51,11 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
       },
       revert: (prev) => {
         if (location.pathname + location.search !== prev) {
-          Result.tryCatch(() => history.replaceState(null, '', prev));
+          try {
+            history.replaceState(null, '', prev);
+          } catch {
+            /* ignore */
+          }
         }
       },
       resolveAnchor: (el) => resolveAnchorPath(el, base),
@@ -62,13 +69,13 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
   return {
     get: () => {
       const { route, query } = splitPath(location.hash.slice(1));
-      return { path: route, query: parseQuery(Option.unwrapOr(query, '')), url: location.hash };
+      return { path: route, query: parseQuery(query || ''), url: location.hash };
     },
     commit: (fullPath) => {
       const { route, query } = splitPath(fullPath);
-      const url = `#${Option.isSome(query) ? `${route}?${Option.unwrap(query)}` : route}`;
+      const url = `#${query === null ? route : `${route}?${query}`}`;
       location.hash = url;
-      return { path: normalizePath(route), query: parseQuery(Option.unwrapOr(query, '')), url };
+      return { path: normalizePath(route), query: parseQuery(query || ''), url };
     },
     revert: (prev) => {
       if (location.hash !== prev) location.hash = prev;
@@ -137,7 +144,7 @@ export function createRouteMatcher(routes: Record<string, RouteDefinition>): Rou
 export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
   const exactDef = matcher.exact.get(path);
   if (exactDef) {
-    return Option.some({ route: { pattern: path, def: exactDef }, params: {} });
+    return { route: { pattern: path, def: exactDef }, params: {} };
   }
   for (let i = 0, len = matcher.dynamic.length; i < len; i++) {
     const item = matcher.dynamic[i];
@@ -159,10 +166,10 @@ export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
         }
         params[name] = val;
       }
-      return Option.some({ route: { pattern: item.pattern, def: item.def }, params });
+      return { route: { pattern: item.pattern, def: item.def }, params };
     }
   }
-  return Option.none;
+  return null;
 }
 
 /**
@@ -170,10 +177,8 @@ export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
  * Finds the canonical route pattern for a given resolved path.
  */
 export function getRoutePattern(matcher: RouteMatcher, path: string): string {
-  return Option.unwrapOr(
-    Option.map(matchRoute(matcher, path), (m) => m.route.pattern),
-    ''
-  );
+  const match = matchRoute(matcher, path);
+  return match === null ? '' : match.route.pattern;
 }
 
 /**
@@ -189,9 +194,13 @@ export function resolveRoute(
 ) {
   const normalized = normalizePath(path);
   const match = matchRoute(matcher, normalized);
-  if (Option.isSome(match)) {
-    const m = Option.unwrap(match);
-    return { def: m.route.def, pattern: m.route.pattern, params: m.params, isMatch: true };
+  if (match !== null) {
+    return {
+      def: match.route.def,
+      pattern: match.route.pattern,
+      params: match.params,
+      isMatch: true,
+    };
   }
   const fallback = notFoundPath ? routes[notFoundPath] : undefined;
   return { def: fallback, pattern: normalized, params: {}, isMatch: false };
@@ -211,7 +220,7 @@ export function resolveNavigation(
   path: string,
   query: Record<string, string>,
   router: Router
-) {
+): NavigationResult {
   const {
     def,
     pattern: routeName,

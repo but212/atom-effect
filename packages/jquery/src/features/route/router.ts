@@ -14,7 +14,7 @@ import {
   type ReadonlyAtom,
   untracked,
 } from '@but212/atom-effect';
-import { Option, Result, SlotBuffer, shallowEqual } from '@but212/atom-effect-utils';
+import { Result, SlotBuffer, shallowEqual } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_ROUTE } from '@/constants';
 import { navCoordinator, normalizePath, parseQuery, splitPath } from '@/core/navigation';
@@ -61,15 +61,13 @@ export class RouterImpl implements Router {
 
   /**
    * Logic: Internal State Management
-   * Tracks transient flags and metadata that are hidden from the public API
-   * to ensure stable transitions and prevent feedback loops.
+   * Transient flags and metadata managed natively to avoid Atom overhead
+   * for strictly internal, non-reactive transitions.
    */
-  readonly #stateAtom = createAtom({
-    isDestroyed: false,
-    isTransitioning: false,
-    previousUrl: '',
-    currentDef: undefined as RouteDefinition | undefined,
-  });
+  #isDestroyed = false;
+  #isTransitioning = false;
+  #previousUrl = '';
+  #currentDef: RouteDefinition | undefined;
 
   readonly #cleanups = new SlotBuffer<() => void>();
 
@@ -113,7 +111,7 @@ export class RouterImpl implements Router {
     this.#renderer = createRouteRenderer(this.#$target, this.#config, this.#urlAdapter);
 
     const initState = this.#urlAdapter.get();
-    this.#stateAtom.value = { ...this.#stateAtom.peek(), previousUrl: initState.url };
+    this.#previousUrl = initState.url;
 
     const resolved = resolveNavigation(
       this.#matcher,
@@ -124,7 +122,7 @@ export class RouterImpl implements Router {
     );
 
     const initial = resolved.success
-      ? resolved
+      ? { path: resolved.path, query: resolved.query, params: resolved.params }
       : { path: this.#config.default, query: {}, params: {} };
 
     this.#locationAtom = createAtom({
@@ -218,8 +216,7 @@ export class RouterImpl implements Router {
     to: string | Partial<RouteLocation>,
     query: Record<string, string> = {}
   ): Promise<void> {
-    const state = this.#stateAtom.peek();
-    if (state.isDestroyed || !this.#canLeave()) return;
+    if (this.#isDestroyed || !this.#canLeave()) return;
 
     let targetPath: string;
     let targetQuery: Record<string, string> = query;
@@ -227,8 +224,8 @@ export class RouterImpl implements Router {
     if (typeof to === 'string') {
       const { route: routePart, query: queryPart } = splitPath(to);
       targetPath = routePart || this.#config.default;
-      if (Option.isSome(queryPart)) {
-        targetQuery = { ...parseQuery(Option.unwrap(queryPart)), ...query };
+      if (queryPart !== null) {
+        targetQuery = { ...parseQuery(queryPart), ...query };
       }
     } else {
       targetPath = to.path || this.currentRoute.peek();
@@ -243,7 +240,7 @@ export class RouterImpl implements Router {
     // Logic: Transition Guard
     // Setting `isTransitioning` prevents `handleBrowserSync` from reacting
     // to the URL change we are about to trigger manually.
-    this.#stateAtom.value = { ...state, isTransitioning: true };
+    this.#isTransitioning = true;
     try {
       const nextState = this.#urlAdapter.commit(fullPath);
       const resolved = resolveNavigation(
@@ -254,23 +251,22 @@ export class RouterImpl implements Router {
         this
       );
       if (resolved.success) {
-        this.#updateState(resolved.path ?? '', resolved.query ?? {}, resolved.params ?? {});
+        this.#updateState(resolved.path, resolved.query, resolved.params);
       } else {
         // Revert: Navigation rejected by an 'onEnter' guard.
-        this.#urlAdapter.revert(state.previousUrl);
+        this.#urlAdapter.revert(this.#previousUrl);
       }
     } finally {
-      this.#stateAtom.value = { ...this.#stateAtom.peek(), isTransitioning: false };
+      this.#isTransitioning = false;
     }
   }
 
   #revertUrl(prevUrl: string) {
-    const state = this.#stateAtom.peek();
-    this.#stateAtom.value = { ...state, isTransitioning: true };
+    this.#isTransitioning = true;
     try {
       this.#urlAdapter.revert(prevUrl);
     } finally {
-      this.#stateAtom.value = { ...this.#stateAtom.peek(), isTransitioning: false };
+      this.#isTransitioning = false;
     }
   }
 
@@ -280,16 +276,15 @@ export class RouterImpl implements Router {
    * them against route guards before adoption.
    */
   #handleBrowserSync() {
-    const state = this.#stateAtom.peek();
-    if (state.isDestroyed || state.isTransitioning) return;
+    if (this.#isDestroyed || this.#isTransitioning) return;
 
     const adapterState = this.#urlAdapter.get();
-    if (adapterState.url === state.previousUrl) return;
+    if (adapterState.url === this.#previousUrl) return;
 
     // Constraint: Guard Enforcement
     // If the current view refuses to unmount, we force the browser URL back to the previous state.
     if (!this.#canLeave()) {
-      this.#revertUrl(state.previousUrl);
+      this.#revertUrl(this.#previousUrl);
       return;
     }
 
@@ -302,10 +297,10 @@ export class RouterImpl implements Router {
     );
 
     if (resolved.success) {
-      this.#updateState(resolved.path ?? '', resolved.query ?? {}, resolved.params ?? {});
+      this.#updateState(resolved.path, resolved.query, resolved.params);
     } else {
       // Guard failure on browser-initiated navigation (Back/Forward).
-      this.#revertUrl(state.previousUrl);
+      this.#revertUrl(this.#previousUrl);
     }
   }
 
@@ -327,11 +322,8 @@ export class RouterImpl implements Router {
       return;
     }
 
-    this.#stateAtom.value = {
-      ...this.#stateAtom.peek(),
-      currentDef: def,
-      previousUrl: this.#urlAdapter.get().url,
-    };
+    this.#currentDef = def;
+    this.#previousUrl = this.#urlAdapter.get().url;
     renderRoute(this.#renderer, def, routeName, this.params.peek(), this);
   }
 
@@ -339,8 +331,7 @@ export class RouterImpl implements Router {
    * Executes the unmount guard for the current route.
    */
   #canLeave(): boolean {
-    const state = this.#stateAtom.peek();
-    const def = state.currentDef || this.#config.routes[this.#config.notFound];
+    const def = this.#currentDef || this.#config.routes[this.#config.notFound];
     return def?.onLeave ? untracked(() => def.onLeave?.(this)) !== false : true;
   }
 
@@ -350,9 +341,8 @@ export class RouterImpl implements Router {
    * releases DOM references and registries.
    */
   public destroy(): void {
-    const state = this.#stateAtom.peek();
-    if (state.isDestroyed) return;
-    this.#stateAtom.value = { ...state, isDestroyed: true };
+    if (this.#isDestroyed) return;
+    this.#isDestroyed = true;
     runRendererCleanups(this.#renderer);
     // biome-ignore lint/complexity/noForEach: SlotBuffer optimized iteration
     this.#cleanups.forEach((fn: () => void) => Result.tryCatch(fn));

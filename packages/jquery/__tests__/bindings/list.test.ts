@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ListContext } from '@/bindings/list/context';
+import { createListContext, resolveEventTarget } from '@/bindings/list/context';
+import { applyListBinding } from '@/bindings/list/index';
+import { registry } from '@/core/registry';
 import $ from '@/index';
 
 describe('$.atomList (Integration)', () => {
@@ -630,21 +632,159 @@ describe('$.atomList (Integration)', () => {
         render: (i: unknown) => `<span>${String(i)}</span>`,
       });
     });
+
+    it('should not accumulate cleanup callbacks in registry on multiple bindings', async () => {
+      const list1 = $.atom(['A']);
+      const list2 = $.atom(['B']);
+      const $container = $('<div>').appendTo(document.body);
+
+      const spy = vi.spyOn(registry, 'onCleanup');
+
+      $container.atomList(list1, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+      });
+      await $.nextTick();
+
+      const initialCallCount = spy.mock.calls.length;
+      expect(initialCallCount).toBeGreaterThanOrEqual(1);
+
+      $container.atomList(list2, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+      });
+      await $.nextTick();
+
+      expect(spy.mock.calls.length).toBe(initialCallCount);
+
+      $container.remove();
+      spy.mockRestore();
+    });
   });
 
   describe('Internal Reconciliation Utilities', () => {
     it('ListContext resolveEventTarget out of bounds', () => {
       const $container = $('<div>');
-      const ctx = new ListContext($container, undefined);
+      const ctx = createListContext($container, undefined);
       // snapshots is empty, keyToIndex has key '1' pointing to index 0
       ctx.keyToIndex.set('1', 0);
 
       const el = document.createElement('div');
       el.setAttribute('data-atom-key', '1');
 
-      const result = ctx.resolveEventTarget(el, $container[0] as HTMLElement);
+      const result = resolveEventTarget(ctx, el, $container[0] as HTMLElement);
       // Should be null because snapshots[0] is undefined
       expect(result).toBeNull();
+    });
+  });
+
+  describe('Refactoring Guardrails', () => {
+    it('should abort commitRemoval if the context/effect is disposed during async removal', async () => {
+      const list = $.atom(['item1']);
+      const $container = $('<div>').appendTo(document.body);
+
+      let resolveRemovePromise!: () => void;
+      const removePromise = new Promise<void>((resolve) => {
+        resolveRemovePromise = resolve;
+      });
+
+      const { fx, ctx } = applyListBinding($container[0] as HTMLElement, list, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+        onRemove: () => removePromise,
+      });
+
+      await $.nextTick();
+      expect($container.find('span').length).toBe(1);
+
+      // Trigger removal of item1
+      list.value = [];
+      await $.nextTick();
+
+      // Elements should still be in the DOM because the removePromise hasn't resolved
+      expect($container.find('span').length).toBe(1);
+      expect(ctx.removingKeys.has('item1')).toBe(true);
+
+      // Now dispose the list binding
+      fx.dispose();
+      expect(fx.isDisposed).toBe(true);
+
+      // Resolve the removal promise
+      resolveRemovePromise();
+      await $.nextTick();
+
+      // Since the binding was disposed, commitRemoval should have returned early
+      expect($container.find('span').length).toBe(1);
+      $container.remove();
+    });
+
+    it('should correctly replace element on ForceReplace state using native DOM', async () => {
+      const list = $.atom([{ id: 1, val: 'A' }]);
+      const $container = $('<div>').appendTo(document.body);
+
+      $container.atomList(list, {
+        key: (item) => item.id,
+        render: (item) => `<span>${item.val}</span>`,
+      });
+      await $.nextTick();
+      const firstEl = $container.find('span')[0];
+      expect(firstEl?.textContent).toBe('A');
+
+      // Change the val to trigger ForceReplace
+      list.value = [{ id: 1, val: 'B' }];
+      await $.nextTick();
+
+      const secondEl = $container.find('span')[0];
+      expect(secondEl?.textContent).toBe('B');
+      expect(secondEl).not.toBe(firstEl); // Must be a brand new DOM element
+      expect(firstEl?.parentNode).toBeNull(); // Old element must be detached
+      $container.remove();
+    });
+
+    it('should inject data-atom-key correctly into namespaced html tags', async () => {
+      const items = $.atom([{ id: 1 }]);
+      const $container = $('<div>');
+
+      try {
+        $container.atomList(items, {
+          key: 'id',
+          render: (item) => `<fb:like>test${item.id}</fb:like>`,
+        });
+        await $.nextTick();
+        const child = $container.children().first();
+        expect(child.attr('data-atom-key')).toBe('1');
+        expect(child.prop('tagName').toLowerCase()).toBe('fb:like');
+      } finally {
+        $container.remove();
+      }
+    });
+
+    it('should call cleanupNodes on commitRemoval to prevent memory leaks', async () => {
+      const list = $.atom(['item1']);
+      const $container = $('<div>').appendTo(document.body);
+
+      $container.atomList(list, {
+        key: (item) => item,
+        render: (item) => `<span class="item">${item}</span>`,
+      });
+      await $.nextTick();
+
+      const $item = $container.find('.item');
+      const itemEl = $item[0] as HTMLElement;
+
+      const atom = $.atom('initial');
+      $item.atomText(atom);
+      await $.nextTick();
+
+      expect(registry.hasBind(itemEl)).toBe(true);
+
+      list.value = [];
+      await $.nextTick();
+
+      expect($container.find('.item').length).toBe(0);
+      expect(registry.hasBind(itemEl)).toBe(false);
+
+      $container.remove();
     });
   });
 });

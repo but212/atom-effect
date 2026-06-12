@@ -112,7 +112,10 @@ export interface BindingOptions<T = unknown> {
   /** Binds the element's text content. Can include an optional formatter. */
   text?:
     | AsyncReactiveValue<unknown>
-    | [source: AsyncReactiveValue<unknown>, formatter: (v: unknown) => string];
+    | [
+        source: AsyncReactiveValue<unknown>,
+        formatter?: ((v: unknown) => string) | null | undefined,
+      ];
   /** Binds the element's inner HTML. Use with caution for untrusted content. */
   html?: AsyncReactiveValue<string>;
   /** Toggles CSS classes based on reactive conditions. */
@@ -128,7 +131,7 @@ export interface BindingOptions<T = unknown> {
   /** Hides the element (`display: none`) when the condition is true. */
   hide?: AsyncReactiveValue<boolean>;
   /** Two-way binding for form input values. */
-  val?: WritableAtom<T> | [atom: WritableAtom<T>, options: ValOptions<T>];
+  val?: WritableAtom<T> | [atom: WritableAtom<T>, options?: ValOptions<T> | null | undefined];
   /** Two-way binding for checkbox and radio checked states. */
   checked?: WritableAtom<boolean>;
   /** Orchestrates two-way bindings for an entire form element. */
@@ -137,7 +140,7 @@ export interface BindingOptions<T = unknown> {
     | WritableAtom<unknown>[]
     | [
         atom: WritableAtom<T extends object ? T : unknown> | WritableAtom<unknown>[],
-        options: FormOptions<T extends object ? T : unknown>,
+        options?: FormOptions<T extends object ? T : unknown> | null | undefined,
       ];
   /** Registers event listeners with automatic lifecycle management. */
   on?: Record<string, (e: JQuery.Event) => void>;
@@ -396,30 +399,6 @@ export interface AtomNav {
 }
 
 /**
- * Internal state flags for two-way bindings.
- *
- * Logic: Feedback Loop Protection
- * Prevents recursive update loops between the DOM and reactive atoms
- * during two-way data flow (e.g., IME composition or rapid input events).
- *
- * @internal
- */
-export enum BindingFlags {
-  /** No active synchronization or interaction. */
-  None = 0,
-  /** The input element is currently focused by the user. */
-  Focused = 1 << 0,
-  /** The user is currently performing IME composition. */
-  Composing = 1 << 1,
-  /** Synchronization from DOM to Atom is currently active. */
-  SyncingToAtom = 1 << 2,
-  /** Synchronization from Atom to DOM is currently active. */
-  SyncingToDom = 1 << 3,
-  /** The binding is considered busy and will ignore external updates. */
-  Busy = Composing | SyncingToAtom | SyncingToDom,
-}
-
-/**
  * Options for customizing jQuery core method overrides.
  *
  * @public
@@ -511,7 +490,7 @@ export interface AtomComponentController {
   /** Registers a reactive provider on this element for dependency injection. */
   provideAtom<T = unknown>(key: string | symbol, val: T): void;
   /** Injects a reactive value provided by an ancestor element. */
-  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T> | null;
+  injectAtom<T = unknown>(key: string | symbol): WritableAtom<T | null> | null;
 
   /**
    * Initializes the component's reactive lifecycle and observers.

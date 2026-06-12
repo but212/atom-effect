@@ -497,8 +497,10 @@ describe('Web Component Features', () => {
         'static-styles',
         class extends HTMLElement {
           static aejStyles = [css];
+          aej = $.useAtomComponent(this);
           connectedCallback() {
             this.attachShadow({ mode: 'open' });
+            this.aej.setup();
           }
         }
       );
@@ -517,9 +519,11 @@ describe('Web Component Features', () => {
         'static-bind',
         class extends HTMLElement {
           static aejBind = { user: name };
+          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
             sr.innerHTML = '<span data-aej-bind="user"></span>';
+            this.aej.setup();
           }
         }
       );
@@ -540,6 +544,10 @@ describe('Web Component Features', () => {
         'static-aria',
         class extends HTMLElement {
           static aejAria = { ariaExpanded: expanded };
+          aej = $.useAtomComponent(this);
+          connectedCallback() {
+            this.aej.setup();
+          }
         }
       );
       document.body.appendChild(el);
@@ -560,9 +568,11 @@ describe('Web Component Features', () => {
         'static-parts',
         class extends HTMLElement {
           static aejParts = { box: $.computed(() => ({ active: active.value })) };
+          aej = $.useAtomComponent(this);
           connectedCallback() {
             const sr = this.attachShadow({ mode: 'open' });
             sr.innerHTML = '<div data-aej-part="box"></div>';
+            this.aej.setup();
           }
         }
       );
@@ -585,6 +595,10 @@ describe('Web Component Features', () => {
         'static-dispatch',
         class extends HTMLElement {
           static aejDispatch = { update: count };
+          aej = $.useAtomComponent(this);
+          connectedCallback() {
+            this.aej.setup();
+          }
         }
       );
 
@@ -605,6 +619,10 @@ describe('Web Component Features', () => {
           static formAssociated = true;
           static aejValue = val;
           static aejValidation = (v: string) => (v.length > 3 ? '' : 'too short');
+          aej = $.useAtomComponent(this);
+          connectedCallback() {
+            this.aej.setup();
+          }
         }
       );
       el.setAttribute('name', 'test');
@@ -641,26 +659,7 @@ describe('Web Component Features', () => {
       expect(sheetCache.has('.new-class { color: blue; }')).toBe(true);
     });
 
-    it('should fall back to DOM event discovery if DOM parent walking fails to find context provider', async () => {
-      const consumer = document.createElement('div');
-      document.body.appendChild(consumer);
-
-      // Bind dynamic custom event listener on body (above parent chain) to simulate provider
-      document.body.addEventListener('aej:context-request', (e: Event) => {
-        const { key, callback } = (e as CustomEvent).detail;
-        if (key === 'bubble-key') {
-          e.stopPropagation();
-          callback($.atom('event-injected'));
-        }
-      });
-
-      const injected = $.injectAtom(consumer, 'bubble-key');
-      expect(injected?.value).toBe('event-injected');
-
-      consumer.remove();
-    });
-
-    it('should manage lifecycle and subscriber count in Context Proxy WritableAtom', () => {
+    it('should maintain 0 subscriber count in stateless proxy WritableAtom', () => {
       const host = document.createElement('div');
       document.body.appendChild(host);
       $.provideAtom(host, 'context-proxy-key', $.atom(100));
@@ -670,15 +669,14 @@ describe('Web Component Features', () => {
 
       expect(proxyAtom.subscriberCount()).toBe(0);
 
-      // Subscribe increases retain count
+      // In stateless proxy, subscriber count doesn't track global retainers
       const unsub = proxyAtom.subscribe(() => {});
-      expect(proxyAtom.subscriberCount()).toBe(1);
-
-      unsub();
-      // Dispose cleanups
-      proxyAtom.dispose();
       expect(proxyAtom.subscriberCount()).toBe(0);
 
+      unsub();
+      expect(proxyAtom.subscriberCount()).toBe(0);
+
+      proxyAtom.dispose();
       host.remove();
     });
 
@@ -798,6 +796,34 @@ describe('Web Component Features', () => {
       expect(resolveValue(42)).toBe(42);
       // 2. Getter function
       expect(resolveValue(() => 'getter-output')).toBe('getter-output');
+    });
+
+    it('should disable auto-cleanup on teardown even when shadow root (sr) is null to prevent memory leaks', async () => {
+      const registry = await import('@/core/registry');
+      const parent = document.createElement('div');
+      const child = document.createElement('span');
+      parent.appendChild(child);
+
+      try {
+        $(child).atomText($.atom('val'));
+        expect(registry.registry.hasBind(child)).toBe(true);
+
+        const ctrl = $.useAtomComponent(parent);
+        ctrl.setup();
+
+        ctrl.teardown();
+
+        child.remove();
+        await $.nextTick();
+        await $.nextTick();
+
+        expect(registry.registry.hasBind(child)).toBe(true);
+      } finally {
+        child.remove();
+        parent.remove();
+        registry.registry.cleanup(child);
+        registry.registry.cleanup(parent);
+      }
     });
   });
 });

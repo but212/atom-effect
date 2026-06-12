@@ -122,6 +122,78 @@ $.debug.enabled = true;
 
 ---
 
+## 5. Web Component Architecture & DI (v0.34.0)
+
+### What Changed?
+
+In `@but212/atom-effect-jquery`, the Web Component architecture has been completely overhauled to follow a minimalist, stateless design. We removed global `MutationObserver` magic, event-bubbling-based Dependency Injection (DI), and implicit property setup.
+
+1. **Explicit Setup Required:** The engine no longer secretly watches the DOM to automatically trigger `setup()` for components with static properties (`aejStyles`, `aejBind`, etc.).
+2. **Stateless DI (DOM Traversal):** Dependency Injection (`injectAtom`, `provideAtom`) no longer relies on custom event bubbling (`aej:context-request`). It now uses synchronous DOM traversal (`parentNode` and `ShadowRoot.host`).
+3. **Strict Type Safety for Proxies:** `injectAtom` and the underlying `createContextProxy` now explicitly return `WritableAtom<T | null> | null` (previously `WritableAtom<T> | null`).
+
+### Why?
+
+- Eliminating global `MutationObserver` instances drastically reduces memory overhead, prevents memory leaks, and fixes unpredictable initialization timing.
+- Synchronous DOM traversal is faster, fully deterministic, and avoids event-loop desync issues inherent to custom events.
+- Strict null-checking prevents silent runtime errors when a dependency provider is not found.
+
+### How to Migrate?
+
+#### 1. Explicitly Call `setup()` in `connectedCallback`
+
+If your Web Components relied on static properties (`static aejStyles`, `static aejBind`, etc.) without an explicit `setup()` call, they will no longer initialize automatically. You **must** call `this.aej.setup()` inside `connectedCallback`.
+
+**Before:**
+
+```typescript
+class MyComponent extends HTMLElement {
+  static aejStyles = [':host { color: red; }'];
+  // Engine magically called setup() when appended to DOM
+}
+```
+
+**After:**
+
+```typescript
+class MyComponent extends HTMLElement {
+  static aejStyles = [':host { color: red; }'];
+  private aej = $.useAtomComponent(this);
+
+  connectedCallback() {
+    this.attachShadow({ mode: 'open' }); // if needed
+    this.aej.setup(); // EXPLICIT CALL REQUIRED
+  }
+}
+```
+
+#### 2. Handle Nullable Injected Atoms
+
+If you use `$.injectAtom()`, you must now explicitly handle the case where the returned atom's value is `null`.
+
+**Before:**
+
+```typescript
+const themeProxy = $.injectAtom<string>(this, 'theme');
+// Falsely assumed string. If 'theme' provider didn't exist, this crashed at runtime.
+console.log(themeProxy.value.toUpperCase());
+```
+
+**After:**
+
+```typescript
+const themeProxy = $.injectAtom<string>(this, 'theme');
+if (themeProxy && themeProxy.value !== null) {
+  console.log(themeProxy.value.toUpperCase());
+}
+```
+
+#### 3. Stop Relying on `aej:context-request` Events
+
+If you were manually dispatching or intercepting the `aej:context-request` custom event to hack the DI system, this will no longer work. The DI system strictly resolves by crawling up the DOM tree structurally. Ensure all your consumers are actual DOM descendants of your providers.
+
+---
+
 ## Need Help?
 
 If you encounter any issues during migration, please open an issue on our [GitHub repository](https://github.com/but212/atom-effect/issues).

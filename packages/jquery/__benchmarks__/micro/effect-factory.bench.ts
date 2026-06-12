@@ -50,9 +50,7 @@ describe('Effect Factory: Binding Initialization', () => {
       for (let i = 0; i < 50; i++) {
         val.value = Promise.resolve(`async-${i}`);
       }
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
-      });
+      await $.nextTick();
     },
     { ...microBenchOptions, iterations: 50 }
   );

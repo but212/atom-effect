@@ -1,6 +1,5 @@
 /**
- * Logic: Bitwise Occupancy Table
- * Table for scan of the first free bit in a 4-bit mask.
+ * Logic: Inline slots for fast-lane (0-3) and overflow array for index >= 4.
  */
 const FAST_CAPACITY = 4;
 
@@ -10,12 +9,6 @@ export class SlotBuffer<T> {
 
   /** Actual number of non-null items stored. Used for early-exit in iterations. */
   #actualCount = 0;
-
-  /**
-   * Optimization: 4-bit mask for fast-lane (0-3) occupancy.
-   * bit i = 1 means _si is occupied.
-   */
-  #mask = 0;
 
   /** Fast-lane slots (separate fields for V8 hidden class optimization) */
   #s0: T | null = null;
@@ -57,28 +50,35 @@ export class SlotBuffer<T> {
    */
   at(index: number): T | null {
     if (index < FAST_CAPACITY) {
-      return this.#getFast(index);
+      if (index === 0) return this.#s0;
+      if (index === 1) return this.#s1;
+      if (index === 2) return this.#s2;
+      if (index === 3) return this.#s3;
+    } else {
+      const ov = this.#overflow;
+      if (ov !== null && index < this.#count) {
+        return ov[index - FAST_CAPACITY] ?? null;
+      }
     }
-    const ov = this.#overflow;
-    return ov ? (ov[index - FAST_CAPACITY] ?? null) : null;
+    return null;
   }
 
   /** Return true if the buffer contains the given item. */
   has(item: T): boolean {
+    if (item === null || item === undefined) return false;
     if (this.#actualCount === 0) return false;
 
-    const m = this.#mask;
-    for (let i = 0; i < FAST_CAPACITY; i++) {
-      if (m & (1 << i) && this.#getFast(i) === item) {
-        return true;
-      }
-    }
+    if (this.#s0 === item) return true;
+    if (this.#s1 === item) return true;
+    if (this.#s2 === item) return true;
+    if (this.#s3 === item) return true;
 
-    if (this.#count <= FAST_CAPACITY) return false;
+    const len = this.#count - FAST_CAPACITY;
+    if (len <= 0) return false;
 
     const ov = this.#overflow;
-    if (ov) {
-      for (let i = 0, len = ov.length; i < len; i++) {
+    if (ov !== null) {
+      for (let i = 0; i < len; i++) {
         if (ov[i] === item) return true;
       }
     }
@@ -87,26 +87,29 @@ export class SlotBuffer<T> {
 
   /**
    * Iterates through all non-null items in order.
-   * Optimization: Uses the occupancy mask to skip null slots in the fast lane.
    */
   forEach(fn: (item: T) => void): void {
     if (this.#actualCount === 0) return;
 
     this.lock();
     try {
-      for (let i = 0; i < FAST_CAPACITY; i++) {
-        if (this.#mask & (1 << i)) {
-          fn(this.#getFast(i) as T);
-        }
-      }
+      const s0 = this.#s0;
+      if (s0 !== null) fn(s0);
+      const s1 = this.#s1;
+      if (s1 !== null) fn(s1);
+      const s2 = this.#s2;
+      if (s2 !== null) fn(s2);
+      const s3 = this.#s3;
+      if (s3 !== null) fn(s3);
 
-      if (this.#count <= FAST_CAPACITY) return;
+      const len = this.#count - FAST_CAPACITY;
+      if (len <= 0) return;
 
       const ov = this.#overflow;
-      if (ov) {
-        for (let i = 0, len = ov.length; i < len; i++) {
+      if (ov !== null) {
+        for (let i = 0; i < len; i++) {
           const item = ov[i];
-          if (item != null) fn(item);
+          if (item !== null && item !== undefined) fn(item);
         }
       }
     } finally {
@@ -122,19 +125,23 @@ export class SlotBuffer<T> {
 
     this.lock();
     try {
-      for (let i = 0; i < FAST_CAPACITY; i++) {
-        if (this.#mask & (1 << i) && predicate(this.#getFast(i) as T)) {
-          return true;
-        }
-      }
+      const s0 = this.#s0;
+      if (s0 !== null && predicate(s0)) return true;
+      const s1 = this.#s1;
+      if (s1 !== null && predicate(s1)) return true;
+      const s2 = this.#s2;
+      if (s2 !== null && predicate(s2)) return true;
+      const s3 = this.#s3;
+      if (s3 !== null && predicate(s3)) return true;
 
-      if (this.#count <= FAST_CAPACITY) return false;
+      const len = this.#count - FAST_CAPACITY;
+      if (len <= 0) return false;
 
       const ov = this.#overflow;
-      if (ov) {
-        for (let i = 0, len = ov.length; i < len; i++) {
+      if (ov !== null) {
+        for (let i = 0; i < len; i++) {
           const item = ov[i];
-          if (item != null && predicate(item)) return true;
+          if (item !== null && item !== undefined && predicate(item)) return true;
         }
       }
       return false;
@@ -156,22 +163,23 @@ export class SlotBuffer<T> {
 
   /**
    * Removes an item by identity.
-   * Optimization: Checks fast slots before scanning the overflow array.
    * @returns True if the item was found and removed.
    */
   remove(item: T): boolean {
+    if (item === null || item === undefined) return false;
     if (this.#actualCount === 0) return false;
 
-    const m = this.#mask;
-    for (let i = 0; i < FAST_CAPACITY; i++) {
-      if (m & (1 << i) && this.#getFast(i) === item) {
-        return this.#removeAt(i);
-      }
-    }
+    if (this.#s0 === item) return this.#removeAt(0);
+    if (this.#s1 === item) return this.#removeAt(1);
+    if (this.#s2 === item) return this.#removeAt(2);
+    if (this.#s3 === item) return this.#removeAt(3);
+
+    const len = this.#count - FAST_CAPACITY;
+    if (len <= 0) return false;
 
     const ov = this.#overflow;
-    if (ov) {
-      for (let i = 0, len = ov.length; i < len; i++) {
+    if (ov !== null) {
+      for (let i = 0; i < len; i++) {
         if (ov[i] === item) {
           return this.#removeAt(i + FAST_CAPACITY);
         }
@@ -201,24 +209,24 @@ export class SlotBuffer<T> {
     }
   }
 
-  /**
-   * Efficiently clears all items from the given index to the end.
-   */
   truncateFrom(index: number): void {
     const limit = this.#count;
     if (index >= limit) return;
 
     for (let i = index; i < limit; i++) {
-      if (this.at(i) !== null) this.#actualCount--;
+      if (this.at(i) !== null) {
+        this.#actualCount--;
+      }
     }
 
-    if (index < FAST_CAPACITY) {
-      this.#mask &= (1 << index) - 1;
-      for (let i = index; i < FAST_CAPACITY; i++) {
-        this.#setFast(i, null);
-      }
+    const fastLimit = Math.min(limit, FAST_CAPACITY);
+    for (let i = index; i < fastLimit; i++) {
+      this.#rawWrite(i, null);
+    }
+
+    if (index <= FAST_CAPACITY) {
       this.#overflow = null;
-    } else if (this.#overflow) {
+    } else if (this.#overflow !== null) {
       this.#overflow.length = index - FAST_CAPACITY;
     }
 
@@ -262,7 +270,7 @@ export class SlotBuffer<T> {
       if (writeIdx <= FAST_CAPACITY) this.#overflow = null;
       else ov.length = writeIdx - FAST_CAPACITY;
     }
-    this.#freeIndices = [];
+    this.#freeIndices.length = 0;
     this.#pendingCompact = false;
   }
 
@@ -284,9 +292,8 @@ export class SlotBuffer<T> {
     this.#s0 = this.#s1 = this.#s2 = this.#s3 = null;
     this.#count = 0;
     this.#actualCount = 0;
-    this.#mask = 0;
     this.#overflow = null;
-    this.#freeIndices = [];
+    this.#freeIndices.length = 0;
     this.#pendingCompact = false;
   }
 
@@ -295,37 +302,14 @@ export class SlotBuffer<T> {
     this.clear();
   }
 
-  /** Reads a fast-lane slot (0-3). */
-  #getFast(index: number): T | null {
-    if (index === 0) return this.#s0;
-    if (index === 1) return this.#s1;
-    if (index === 2) return this.#s2;
-    return this.#s3;
-  }
-
-  /** Writes to a fast-lane slot (0-3). */
-  #setFast(index: number, item: T | null): void {
-    if (index === 0) this.#s0 = item;
-    else if (index === 1) this.#s1 = item;
-    else if (index === 2) this.#s2 = item;
-    else this.#s3 = item;
-  }
-
-  /**
-   * Logic: Low-level write that synchronizes the occupancy mask.
-   * Caution: Does not update _actualCount or _count. Use setAt for high-level operations.
-   */
   #rawWrite(index: number, item: T | null): void {
     if (index < FAST_CAPACITY) {
-      const bit = 1 << index;
-      if (item === null) {
-        this.#mask &= ~bit;
-      } else {
-        this.#mask |= bit;
-      }
-      this.#setFast(index, item);
+      if (index === 0) this.#s0 = item;
+      else if (index === 1) this.#s1 = item;
+      else if (index === 2) this.#s2 = item;
+      else this.#s3 = item;
     } else {
-      if (!this.#overflow) this.#overflow = [];
+      if (this.#overflow === null) this.#overflow = [];
       this.#overflow[index - FAST_CAPACITY] = item;
     }
   }
@@ -358,24 +342,14 @@ export class SlotBuffer<T> {
   #shrinkPhysicalSizeFrom(index: number): void {
     if (this.isLocked) return;
     if (index !== this.#count - 1) return;
-    this.#count--;
 
-    if (this.#count > FAST_CAPACITY) {
-      const ov = this.#overflow;
-      if (ov) {
-        while (this.#count > FAST_CAPACITY && ov[this.#count - (FAST_CAPACITY + 1)] == null) {
-          this.#count--;
-        }
-      }
+    while (this.#count > 0 && this.at(this.#count - 1) === null) {
+      this.#count--;
     }
-
     if (this.#count <= FAST_CAPACITY) {
-      // Bitwise Optimization:
-      // Finds the 1-based index of the highest occupied bit in the fast lane mask.
-      // Math.clz32 returns the number of leading zero bits of the 32-bit representation of the mask.
-      // E.g., if mask is 00000000000000000000000000001000 (8), leading zeros is 28. 32 - 28 = 4.
-      // if mask is 0, leading zeros is 32. 32 - 32 = 0.
-      this.#count = 32 - Math.clz32(this.#mask);
+      this.#overflow = null;
+    } else if (this.#overflow !== null) {
+      this.#overflow.length = this.#count - FAST_CAPACITY;
     }
   }
 }

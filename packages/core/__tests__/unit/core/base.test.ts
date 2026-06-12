@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { STATE_FLAGS } from '@/constants';
 import {
+  BaseNode,
   createTrackingContext,
   nodeHasSubscription,
   nodeNotifySubscribers,
@@ -192,6 +194,25 @@ describe('Tracking Engine', () => {
         expect(() => {
           nodeTrackDependency(mockTracker, mockDep, () => {});
         }).not.toThrow();
+      });
+    });
+
+    describe('BaseNode disposed subscription optimization', () => {
+      it('should not allocate _slots or register target when subscribing to a disposed node', () => {
+        class TestNode extends BaseNode<number> {}
+        const node = new TestNode();
+
+        node.flags |= STATE_FLAGS.DISPOSED; // Mark as disposed
+
+        const unsub = node.subscribe(() => {});
+
+        // Under the current buggy implementation, subscribing to a disposed node
+        // allocates node._slots and adds/removes listener, so node._slots is NOT null/undefined.
+        // It should be null/undefined (not allocated) under the optimized implementation.
+        expect(node._slots).toBeNull();
+        expect(node.subscriberCount()).toBe(0);
+
+        unsub();
       });
     });
   });

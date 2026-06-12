@@ -11,8 +11,8 @@
  * and persistent diagnostics.
  */
 
-import { ERROR_STRATEGIES } from '@/constants';
 import type { AtomErrorConstructor, AtomErrorJSON, AtomErrorOptions } from '@/types';
+import { isError } from './type-guards';
 
 /**
  * Role: Base Reactive Error
@@ -67,26 +67,6 @@ export class AtomError extends Error {
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }
-  }
-
-  /**
-   * @deprecated since v0.33.0 — Use standalone `getErrorChain(error)` instead.
-   * Will be removed in v0.34.0.
-   * Migration: Replace `err.getChain()` with `getErrorChain(err)`.
-   * @see getErrorChain
-   */
-  public getChain(): Array<unknown> {
-    return getErrorChain(this);
-  }
-
-  /**
-   * @deprecated since v0.33.0 — Use standalone `serializeError(error)` instead.
-   * Will be removed in v0.34.0.
-   * Migration: Replace `err.toJSON()` with `serializeError(err)`.
-   * @see serializeError
-   */
-  public toJSON(): AtomErrorJSON {
-    return serializeError(this) as AtomErrorJSON;
   }
 
   /**
@@ -187,7 +167,7 @@ export function serializeError(
 
   seen.add(error);
 
-  if (error instanceof Error) {
+  if (isError(error)) {
     const err = error as Error & Record<string, unknown>;
     return {
       name: err.name,
@@ -229,6 +209,82 @@ export function wrapError(
 }
 
 /**
+ * @internal
+ * Optimization: Converts a value to its string representation safely.
+ * Gracefully catches exceptions thrown by null-prototype or custom toString methods.
+ */
+const toStr = (val: unknown, fallback = ''): string => {
+  try {
+    return val == null ? fallback : String(val);
+  } catch {
+    return fallback;
+  }
+};
+
+/**
+ * @internal
+ * Optimization: Converts a value to its string representation safely, yielding undefined if null/empty.
+ * Gracefully catches exceptions thrown by null-prototype or custom toString methods.
+ */
+const toStrOrUndef = (val: unknown): string | undefined => {
+  try {
+    return val == null ? undefined : String(val);
+  } catch {
+    return undefined;
+  }
+};
+
+/** @internal */
+export type ErrorStrategy = {
+  test: (e: unknown) => boolean;
+  fetch: (e: unknown) => {
+    name: string;
+    message: string;
+    recoverable: boolean;
+    code: string | undefined;
+  };
+};
+
+/**
+ * @internal
+ * Logic: Normalization sequence for converting foreign exceptions into system errors.
+ * Handles standard JavaScript errors and cross-context exceptions gracefully.
+ */
+export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
+  {
+    test: (e: unknown): boolean => {
+      try {
+        const tag = (e as Record<string, unknown>)?._tag;
+        return typeof tag === 'string' && tag.endsWith('Error');
+      } catch {
+        return false;
+      }
+    },
+    fetch: (e: unknown) => {
+      const obj = e as Record<string, unknown>;
+      return {
+        name: toStr(obj.name),
+        message: toStr(obj.message),
+        recoverable: !!obj.recoverable,
+        code: toStrOrUndef(obj.code),
+      };
+    },
+  },
+  {
+    test: (e: unknown): e is Error => isError(e),
+    fetch: (e: unknown) => {
+      const err = e as Error & Record<string, unknown>;
+      return {
+        name: err.name,
+        message: err.message,
+        recoverable: typeof err.recoverable === 'boolean' ? err.recoverable : true,
+        code: toStrOrUndef(err.code),
+      };
+    },
+  },
+];
+
+/**
  * Logic: Heuristic Metadata Extraction
  * Iterates through configured strategies to extract meaningful data from
  * non-standard error objects or primitives.
@@ -240,7 +296,7 @@ function getErrorMetadata(error: unknown) {
     ? strategy.fetch(error as never)
     : {
         name: 'Unexpected error',
-        message: String(error),
+        message: toStr(error),
         recoverable: true,
         code: undefined,
       };

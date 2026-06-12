@@ -153,12 +153,13 @@ describe('Chainable Methods: Two-Way Bindings', () => {
     const check = $.atom(true);
     const rA = $.atom(true);
     const rB = $.atom(false);
-    const radioName = 'user[role]';
+    // Guardrail: special characters in radio name (\, ")
+    const radioName = 'user[\\"role\\"]';
 
     const $form = $('<form>').appendTo(document.body);
     const $check = $('<input type="checkbox">').appendTo($form);
-    const $rA = $(`<input type="radio" name="${radioName}" value="A">`).appendTo($form);
-    const $rB = $(`<input type="radio" name="${radioName}" value="B">`).appendTo($form);
+    const $rA = $(`<input type="radio" name='${radioName}' value="A">`).appendTo($form);
+    const $rB = $(`<input type="radio" name='${radioName}' value="B">`).appendTo($form);
 
     $check.atomChecked(check);
     $rA.atomChecked(rA);
@@ -403,6 +404,23 @@ describe('Events & Lifecycle', () => {
     expect(handler).toHaveBeenCalledTimes(1);
 
     $el.remove();
+  });
+
+  it('unpacking handles null or undefined as second argument without crashing', async () => {
+    const el = document.createElement('div');
+    const val = $.atom(10);
+    // Passing null to ensure the unpack logic respects the tuple shape.
+    expect(() => {
+      $(el).atomBind({
+        val: [val, null],
+      });
+    }).not.toThrow();
+
+    expect(() => {
+      $(el).atomBind({
+        val: [val, undefined],
+      });
+    }).not.toThrow();
   });
 
   it('atomUnbind: recursively stops reactivity for root and descendants', async () => {

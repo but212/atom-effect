@@ -9,34 +9,31 @@
  */
 
 import { Option } from './option';
-import { RESULT_SYMBOL } from './symbols';
-import type { Prettify } from './types';
+import { RESULT_BRAND, RESULT_SYMBOL } from './symbols';
 
 type ResultBase = {
-  readonly [RESULT_SYMBOL]: true;
+  readonly [RESULT_SYMBOL]: unknown;
 };
 
 /**
  * Logic: Success Variant
  * Represents a successful computation result holding a value of type T.
  */
-export type Ok<T> = ResultBase &
-  Prettify<{
-    readonly ok: true;
-    readonly value: T;
-    readonly error: undefined;
-  }>;
+export interface Ok<T> extends ResultBase {
+  readonly ok: true;
+  readonly value: T;
+  readonly error: undefined;
+}
 
 /**
  * Logic: Failure Variant
  * Represents a failed computation holding an error of type E.
  */
-export type Err<E> = ResultBase &
-  Prettify<{
-    readonly ok: false;
-    readonly value: undefined;
-    readonly error: E;
-  }>;
+export interface Err<E> extends ResultBase {
+  readonly ok: false;
+  readonly value: undefined;
+  readonly error: E;
+}
 
 /**
  * A discriminated union representing success (Ok) or failure (Err).
@@ -49,9 +46,6 @@ export type Err<E> = ResultBase &
  * @defaultValue `Error` for the generic error type `E` if not specified.
  */
 export type Result<T, E = Error> = Ok<T> | Err<E>;
-
-// Optimization: Private brand symbol to track valid Result instances for secure runtime protocol verification.
-const RESULT_BRAND = Symbol('ResultBrand');
 
 /**
  * Checks if a value is a valid {@link Result} instance.
@@ -100,6 +94,26 @@ function ensureError(error: unknown): Error {
   } catch {
     return new Error('Unknown error', { cause: error });
   }
+}
+
+function fromPredicate<T, U extends T, E = Error>(
+  value: T,
+  predicate: (value: T) => value is U,
+  errorFactory?: () => E
+): Result<U, E>;
+function fromPredicate<T, E = Error>(
+  value: T,
+  predicate: (value: T) => boolean,
+  errorFactory?: () => E
+): Result<T, E>;
+function fromPredicate(
+  value: unknown,
+  predicate: (value: unknown) => boolean,
+  errorFactory?: () => unknown
+): Result<unknown, unknown> {
+  return predicate(value)
+    ? Result.ok(value)
+    : Result.err(errorFactory ? errorFactory() : new Error('Predicate failed'));
 }
 
 /**
@@ -259,15 +273,10 @@ export const Result = {
   map: <T, E, U>(result: Result<T, E>, mapper: (value: T) => U): Result<U, E> => {
     if (!result.ok) return result;
     const mappedValue = mapper(result.value);
-
-    // Optimization: Reuses the original Result instance if the value is unchanged and immutable.
-    // To ensure no in-place mutation has occurred, reuse is only safe for primitive types (implicitly immutable) or frozen objects.
-    const isImmutable =
-      mappedValue === null ||
-      (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
-      Object.isFrozen(mappedValue);
-
-    return Object.is(mappedValue, result.value) && isImmutable
+    return Object.is(mappedValue, result.value) &&
+      (mappedValue === null ||
+        (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+        Object.isFrozen(mappedValue))
       ? (result as unknown as Result<U, E>)
       : Result.ok(mappedValue);
   },
@@ -377,4 +386,51 @@ export const Result = {
       ? Object.is(resultA.value, resultB.value)
       : Object.is(resultA.error, resultB.error);
   },
+
+  /**
+   * Combines an array of Results into a single Result containing an array of successful values.
+   *
+   * Returns the first Err encountered (fail-fast behavior).
+   *
+   * @param results - An array of Result instances.
+   * @returns Result containing an array of successful values, or the first Err.
+   *
+   * @example
+   * const res = Result.all([Result.ok(1), Result.ok(2)]); // Ok([1, 2])
+   */
+  all: <T, E>(results: Result<T, E>[]): Result<T[], E> => {
+    const okValues: T[] = [];
+    for (const res of results) {
+      if (Result.isErr(res)) return res;
+      okValues.push(res.value);
+    }
+    return Result.ok(okValues);
+  },
+
+  /**
+   * Creates a Result from a value based on a predicate function.
+   *
+   * If the predicate evaluates to true, it returns Ok wrapping the value.
+   * Otherwise, it returns Err wrapping the error computed by the errorFactory.
+   *
+   * @param value - The value to evaluate.
+   * @param predicate - The condition function.
+   * @param errorFactory - An optional function generating the error. Defaults to generating a generic Error.
+   * @returns Ok wrapping the value, or Err.
+   *
+   * @example
+   * const res = Result.fromPredicate(42, x => x > 0); // Ok(42)
+   */
+  fromPredicate,
+
+  /**
+   * Alias for {@link Result.tryCatch}.
+   *
+   * @param operation - The synchronous function that might throw.
+   * @returns Ok wrapping the value, or Err wrapping the normalized caught Error.
+   *
+   * @example
+   * const res = Result.fromThrowable(() => { throw new Error('fail'); });
+   */
+  fromThrowable: <T>(operation: () => T): Result<T, Error> => Result.tryCatch(operation),
 };

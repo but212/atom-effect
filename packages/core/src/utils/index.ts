@@ -56,9 +56,11 @@ export {
   AtomError,
   ComputedError,
   EffectError,
+  ERROR_STRATEGIES,
+  type ErrorStrategy,
   getErrorChain,
   SchedulerError,
   serializeError,
   wrapError,
 } from './errors';
-export { isAtom, isComputed, isEffect, isPromise, isWritable } from './type-guards';
+export { isAtom, isComputed, isEffect, isError, isPromise, isWritable } from './type-guards';

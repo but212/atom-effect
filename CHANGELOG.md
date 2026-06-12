@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### jQuery
+
+#### Breaking Changes
+
+- **Web Component Architecture & DI**: Overhauled the Web Component architecture to follow a minimalist, stateless design.
+  - **Explicit Setup Required**: The engine no longer monitors the DOM to automatically trigger `setup()` for components with static properties (`aejStyles`, `aejBind`, etc.). You must now explicitly call `this.aej.setup()` inside `connectedCallback()`.
+  - **Stateless DI (DOM Traversal)**: Dependency Injection (`injectAtom`, `provideAtom`) now resolves contexts using synchronous DOM traversal (`parentNode` and `ShadowRoot.host`) instead of custom event bubbling (`aej:context-request`). Ensure consumers are structural DOM descendants of their providers.
+  - **Strict Type Safety for Proxies**: `injectAtom` and `createContextProxy` now return `WritableAtom<T | null> | null` (previously `WritableAtom<T> | null`), requiring explicit handling of nullable atoms.
+
 ## [0.33.1]
 
 ### jQuery

@@ -26,7 +26,8 @@ import {
   bindVisibility,
 } from '@/bindings/unified';
 import { SYSTEM_BINDING } from '@/constants';
-import { atomEachElement, unpack } from '@/core/dom';
+import { atomEachElement } from '@/core/dom';
+import { registerBatchedEffects, withBatchCollection } from '@/core/effect-factory';
 import { registry } from '@/core/registry';
 import type {
   AsyncReactiveValue,
@@ -332,6 +333,20 @@ interface BindingTask {
   run: (el: HTMLElement, val: unknown) => void;
 }
 
+function unpack<T, O>(val: T | [T, O]): [T, O?] {
+  if (Array.isArray(val) && val.length === 2) {
+    const second = val[1];
+    if (
+      second == null ||
+      typeof second === 'function' ||
+      (typeof second === 'object' && !('value' in second) && !('then' in second))
+    ) {
+      return val as [T, O];
+    }
+  }
+  return [val as T];
+}
+
 /**
  * A registry of specialized binding tasks for the unified `.atomBind()` method.
  *
@@ -406,16 +421,30 @@ const BINDING_TASKS: BindingTask[] = [
  */
 $.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
   const opt = options as Record<string, unknown>;
-  const activeTasks = BINDING_TASKS.filter((task) => opt[task.key] !== undefined);
 
-  if (activeTasks.length === 0) return this;
+  // Optimization: Pre-count active tasks without allocating a filtered array
+  let activeCount = 0;
+  for (let i = 0; i < BINDING_TASKS.length; i++) {
+    const task = BINDING_TASKS[i];
+    if (task !== undefined && opt[task.key] !== undefined) {
+      activeCount++;
+    }
+  }
+
+  if (activeCount === 0) return this;
 
   return atomEachElement(this, (el) => {
-    for (let i = 0; i < activeTasks.length; i++) {
-      const task = activeTasks[i];
-      if (task !== undefined) {
-        task.run(el, opt[task.key]);
+    const tasks = withBatchCollection(() => {
+      for (let i = 0; i < BINDING_TASKS.length; i++) {
+        const task = BINDING_TASKS[i];
+        if (task !== undefined && opt[task.key] !== undefined) {
+          task.run(el, opt[task.key]);
+        }
       }
+    });
+
+    if (tasks.length > 0) {
+      registerBatchedEffects(el, tasks);
     }
   });
 };

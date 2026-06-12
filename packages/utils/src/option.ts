@@ -9,8 +9,7 @@
  * eliminating runtime casting, and maintaining zero-overhead abstraction.
  */
 
-import { OPTION_SYMBOL } from './symbols';
-import type { Prettify } from './types';
+import { OPTION_BRAND, OPTION_SYMBOL } from './symbols';
 
 /**
  * Represents a present value of type T.
@@ -18,11 +17,11 @@ import type { Prettify } from './types';
  * When to use:
  * - When a value is computed or retrieved.
  */
-export type Some<T> = Prettify<{
+export type Some<T> = {
   readonly ok: true;
   readonly value: T;
-  readonly [OPTION_SYMBOL]: true;
-}>;
+  readonly [OPTION_SYMBOL]: unknown;
+};
 
 /**
  * Represents the absence of a value.
@@ -30,11 +29,11 @@ export type Some<T> = Prettify<{
  * When to use:
  * - When a value is absent, unavailable, or deferred.
  */
-export type None = Prettify<{
+export type None = {
   readonly ok: false;
   readonly value: undefined;
-  readonly [OPTION_SYMBOL]: true;
-}>;
+  readonly [OPTION_SYMBOL]: unknown;
+};
 
 /**
  * A discriminated union representing either a value ({@link Some})
@@ -44,9 +43,6 @@ export type None = Prettify<{
  * - For fields, returns, or parameters that may or may not contain a value.
  */
 export type Option<T> = Some<T> | None;
-
-// Optimization: Private brand symbol to track valid Option instances for secure runtime protocol verification.
-const OPTION_BRAND = Symbol('OptionBrand');
 
 /**
  * Checks if a value is a valid {@link Option} instance.
@@ -68,6 +64,12 @@ function assertOption(value: unknown): asserts value is Option<unknown> {
   if (!isOption(value)) {
     throw new Error('Invalid Option instance');
   }
+}
+
+function fromPredicate<T, U extends T>(value: T, predicate: (value: T) => value is U): Option<U>;
+function fromPredicate<T>(value: T, predicate: (value: T) => boolean): Option<T>;
+function fromPredicate(value: unknown, predicate: (value: unknown) => boolean): Option<unknown> {
+  return predicate(value) ? Option.some(value) : Option.none;
 }
 
 /**
@@ -104,7 +106,7 @@ export const Option = {
     value: undefined,
     [OPTION_SYMBOL]: true,
     [OPTION_BRAND]: true,
-  } as const) as Option<never>,
+  } as const) as None,
 
   /**
    * Checks if an Option contains a value.
@@ -225,17 +227,11 @@ export const Option = {
    */
   map: <T, U>(option: Option<T>, mapper: (value: T) => U): Option<U> => {
     if (!option.ok) return option;
-
     const mappedValue = mapper(option.value);
-
-    // Optimization: Reuses the original Option instance if the value is unchanged and immutable.
-    // To ensure no in-place mutation has occurred, reuse is only safe for primitive types (implicitly immutable) or frozen objects.
-    const isImmutable =
-      mappedValue === null ||
-      (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
-      Object.isFrozen(mappedValue);
-
-    return Object.is(mappedValue, option.value) && isImmutable
+    return Object.is(mappedValue, option.value) &&
+      (mappedValue === null ||
+        (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
+        Object.isFrozen(mappedValue))
       ? (option as unknown as Option<U>)
       : Option.some(mappedValue);
   },
@@ -364,4 +360,39 @@ export const Option = {
    * const val = Option.toUndefined(opt);
    */
   toUndefined: <T>(option: Option<T>): T | undefined => (option.ok ? option.value : undefined),
+
+  /**
+   * Combines an array of Options into a single Option containing an array of values.
+   *
+   * If any Option is None, it returns None.
+   *
+   * @param options - An array of Option instances.
+   * @returns Option containing an array of values, or None.
+   *
+   * @example
+   * const combined = Option.all([Option.some(1), Option.some(2)]); // Some([1, 2])
+   */
+  all: <T>(options: Option<T>[]): Option<T[]> => {
+    const result: T[] = [];
+    for (const opt of options) {
+      if (Option.isNone(opt)) return Option.none;
+      result.push(opt.value);
+    }
+    return Option.some(result);
+  },
+
+  /**
+   * Creates an Option from a value based on a predicate function.
+   *
+   * If the predicate evaluates to true, it returns Some wrapping the value.
+   * Otherwise, it returns None.
+   *
+   * @param value - The value to evaluate.
+   * @param predicate - The condition function.
+   * @returns Option wrapping the value, or None.
+   *
+   * @example
+   * const opt = Option.fromPredicate(42, x => x > 0); // Some(42)
+   */
+  fromPredicate,
 };

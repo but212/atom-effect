@@ -617,5 +617,36 @@ describe('Effect', () => {
       expect(onError).toHaveBeenCalled();
       e.dispose();
     });
+
+    it('runs the effect when there are no active dependencies, even if _depSlots.length is non-zero (due to null slots)', async () => {
+      const e = effect(() => {});
+      await vi.runAllTimersAsync();
+
+      const depSlots = (
+        e as unknown as {
+          _depSlots: {
+            lock(): void;
+            unlock(): void;
+            push(item: unknown): number;
+            setAt(index: number, item: unknown): void;
+            length: number;
+            size: number;
+          };
+        }
+      )._depSlots;
+      depSlots.lock();
+      depSlots.push({ node: atom(0), version: 0, unsub: () => {} });
+      depSlots.setAt(0, null);
+      depSlots.unlock();
+
+      expect(depSlots.length).toBe(1);
+      expect(depSlots.size).toBe(0);
+
+      const initialCount = e.executionCount;
+      (e as unknown as { execute(force: boolean): void }).execute(false);
+
+      expect(e.executionCount).toBe(initialCount + 1);
+      e.dispose();
+    });
   });
 });

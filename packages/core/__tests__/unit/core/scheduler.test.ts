@@ -217,7 +217,6 @@ describe('Scheduler Engine', () => {
       );
       expect(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND).toBeGreaterThan(0);
       expect(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT).toBeGreaterThan(0);
-      expect(SCHEDULER_CONFIG.BATCH_QUEUE_SHRINK_THRESHOLD).toBeGreaterThan(0);
     });
 
     it('rejects invalid scheduler callback types', () => {

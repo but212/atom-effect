@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { BaseNode } from '@/core/base';
 import {
   aeNextTick,
   atom,
@@ -287,6 +288,52 @@ describe('Lens System', () => {
       expect(l1.subscriberCount()).toBe(0);
       expect(l2.subscriberCount()).toBe(0);
       expect(merged.subscriberCount()).toBe(0);
+    });
+
+    describe('Disposed Lens Resilience', () => {
+      it('should set isDisposed to true when dispose is called on LensImpl/MergedLensImpl', () => {
+        const store = atom({ x: 1, y: 2 });
+        const lens = atomLens(store, 'x');
+        const merged = mergeLenses(lens);
+
+        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(false);
+        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(false);
+
+        lens.dispose();
+        merged.dispose();
+
+        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(true);
+        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(true);
+      });
+
+      it('should immediately return no-op unsubscribe when subscribing to a disposed LensImpl', () => {
+        const store = atom({ x: 1 });
+        const lens = atomLens(store, 'x');
+
+        lens.dispose();
+
+        const unsub = lens.subscribe(() => {});
+        expect(store.subscriberCount()).toBe(0);
+        expect(lens.subscriberCount()).toBe(0);
+
+        expect(() => unsub()).not.toThrow();
+      });
+
+      it('should immediately return no-op unsubscribe when subscribing to a disposed MergedLensImpl', () => {
+        const store = atom({ x: 1, y: 2 });
+        const l1 = atomLens(store, 'x');
+        const l2 = atomLens(store, 'y');
+        const merged = mergeLenses(l1, l2);
+
+        merged.dispose();
+
+        const unsub = merged.subscribe(() => {});
+        expect(l1.subscriberCount()).toBe(0);
+        expect(l2.subscriberCount()).toBe(0);
+        expect(merged.subscriberCount()).toBe(0);
+
+        expect(() => unsub()).not.toThrow();
+      });
     });
   });
 

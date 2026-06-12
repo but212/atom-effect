@@ -18,15 +18,12 @@ import type { Result } from './result';
  * }
  */
 export function isPromise<T = unknown>(value: unknown): value is PromiseLike<T> {
-  // Optimization: Prioritize native Promise check for speed.
-  if (value instanceof Promise) return true;
-
-  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
-    return false;
-  }
-
-  // Logic: Fallback to duck-typing for cross-library compatibility.
-  return typeof (value as { then: unknown }).then === 'function';
+  return (
+    value instanceof Promise ||
+    (value !== null &&
+      (typeof value === 'object' || typeof value === 'function') &&
+      typeof (value as { then?: unknown }).then === 'function')
+  );
 }
 
 export { isOption } from './option';

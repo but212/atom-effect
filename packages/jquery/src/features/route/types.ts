@@ -6,7 +6,6 @@
  * including URL state snapshots, adapter contracts, and matching results.
  */
 
-import type { Option } from '@but212/atom-effect-utils';
 import type { RouteDefinition } from '@/types';
 
 /**
@@ -53,10 +52,25 @@ export interface CompiledRoute {
 
 /**
  * Logic: Polymorphic Match Result
- * Outcome of a route matching operation, using `Option` to safely represent
- * successful matches (with params) or misses.
+ * Outcome of a route matching operation, using explicit null to safely represent
+ * misses without wrapper object allocations.
  */
-export type MatchResult = Option<{
+export type MatchResult = {
   readonly route: CompiledRoute;
   readonly params: Record<string, string>;
-}>;
+} | null;
+
+/**
+ * Logic: Strict Navigation Outcome
+ * Represents the final state of a navigation attempt. Uses a discriminated union
+ * to eliminate impossible states where path exists but success is false.
+ */
+export type NavigationResult =
+  | { readonly success: false }
+  | {
+      readonly success: true;
+      readonly path: string;
+      readonly query: Record<string, string>;
+      readonly params: Record<string, string>;
+      readonly def: RouteDefinition | undefined;
+    };

@@ -1,7 +1,7 @@
 /**
  * Number of times to repeat the operation within a single benchmark iteration.
  */
-export const REPEATS = 100;
+export const REPEATS = 10;
 
 export let _sink: unknown;
 

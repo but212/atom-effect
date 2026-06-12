@@ -158,5 +158,28 @@ describe('Effect Factory', () => {
       expect(errorSpy).toHaveBeenCalled();
       errorSpy.mockRestore();
     });
+
+    it('handles falsy static values correctly in batched effects', async () => {
+      const registry = await import('@/core/registry');
+      const el = document.createElement('div');
+      const el2 = document.createElement('div');
+
+      try {
+        $(el).atomBind({
+          show: false,
+        });
+        expect(el.style.display).toBe('none');
+
+        $(el2).atomBind({
+          class: {
+            active: false,
+          },
+        });
+        expect($(el2).hasClass('active')).toBe(false);
+      } finally {
+        registry.registry.cleanup(el);
+        registry.registry.cleanup(el2);
+      }
+    });
   });
 });
