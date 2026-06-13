@@ -19,8 +19,10 @@ describe('Effect', () => {
 
   describe('Validation & Initialization', () => {
     it('rejects invalid constructor inputs', () => {
-      expect(() => effect(null as unknown as () => void)).toThrow(EffectError);
-      expect(() => effect('invalid' as unknown as () => void)).toThrow(EffectError);
+      // @ts-expect-error Testing invalid constructor input
+      expect(() => effect(null)).toThrow(EffectError);
+      // @ts-expect-error Testing invalid constructor input
+      expect(() => effect('invalid')).toThrow(EffectError);
     });
 
     it('maintains correct initial state', async () => {
@@ -286,7 +288,8 @@ describe('Effect', () => {
     });
 
     it('gracefully handles missing or invalid cleanup returns', async () => {
-      const e = effect(() => 'invalid' as unknown as () => void);
+      // @ts-expect-error Testing invalid cleanup return
+      const e = effect(() => 'invalid');
       await vi.runAllTimersAsync();
       expect(() => e.dispose()).not.toThrow();
     });
@@ -622,18 +625,7 @@ describe('Effect', () => {
       const e = effect(() => {});
       await vi.runAllTimersAsync();
 
-      const depSlots = (
-        e as unknown as {
-          _depSlots: {
-            lock(): void;
-            unlock(): void;
-            push(item: unknown): number;
-            setAt(index: number, item: unknown): void;
-            length: number;
-            size: number;
-          };
-        }
-      )._depSlots;
+      const depSlots = Reflect.get(e, '_depSlots');
       depSlots.lock();
       depSlots.push({ node: atom(0), version: 0, unsub: () => {} });
       depSlots.setAt(0, null);
@@ -643,7 +635,7 @@ describe('Effect', () => {
       expect(depSlots.size).toBe(0);
 
       const initialCount = e.executionCount;
-      (e as unknown as { execute(force: boolean): void }).execute(false);
+      Reflect.get(e, 'execute').call(e, false);
 
       expect(e.executionCount).toBe(initialCount + 1);
       e.dispose();

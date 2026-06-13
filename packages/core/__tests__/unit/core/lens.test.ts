@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { BaseNode } from '@/core/base';
 import {
   aeNextTick,
   atom,
@@ -296,14 +295,14 @@ describe('Lens System', () => {
         const lens = atomLens(store, 'x');
         const merged = mergeLenses(lens);
 
-        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(false);
-        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(false);
+        expect(Reflect.get(lens, 'isDisposed')).toBe(false);
+        expect(Reflect.get(merged, 'isDisposed')).toBe(false);
 
         lens.dispose();
         merged.dispose();
 
-        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(true);
-        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(true);
+        expect(Reflect.get(lens, 'isDisposed')).toBe(true);
+        expect(Reflect.get(merged, 'isDisposed')).toBe(true);
       });
 
       it('should immediately return no-op unsubscribe when subscribing to a disposed LensImpl', () => {
@@ -399,7 +398,7 @@ describe('Lens System', () => {
       expect(merged.subscriberCount()).toBe(1);
 
       // Setting merged value
-      (merged as { value: unknown }).value = { x: 3, y: 4 };
+      Reflect.set(merged, 'value', { x: 3, y: 4 });
 
       mergedUnsub();
       expect(merged.subscriberCount()).toBe(0);
@@ -414,7 +413,7 @@ describe('Lens System', () => {
       for (const path of malicious) {
         const l = unsafeAtomLens(store, path);
         l.value = 'evil';
-        expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+        expect(Reflect.get({}, 'polluted')).toBeUndefined();
       }
     });
 

@@ -49,6 +49,8 @@ import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
  *
  * @internal
  */
+const NO_VALUE = Symbol('Atom.NoValue');
+
 class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   flags: number = 0;
   version: number = 0;
@@ -63,7 +65,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
 
   #value: T;
-  #pendingOldValue: T | undefined;
+  #pendingOldValue: T | typeof NO_VALUE = NO_VALUE;
   #equal: (a: T, b: T) => boolean;
 
   /** @internal */
@@ -195,10 +197,14 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
       (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
 
     while ((this.flags & MASK) === SCHED) {
-      const prev = this.#pendingOldValue as T;
+      const prev = this.#pendingOldValue;
+      if (prev === NO_VALUE) {
+        this.flags &= ~SCHED;
+        break;
+      }
       const next = this.#value;
 
-      this.#pendingOldValue = undefined;
+      this.#pendingOldValue = NO_VALUE;
       this.flags &= ~SCHED;
 
       if (!this.#equal(next, prev)) {
@@ -243,7 +249,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 
     // Reason: Release references immediately to facilitate efficient GC.
     this.#value = undefined as T;
-    this.#pendingOldValue = undefined;
+    this.#pendingOldValue = NO_VALUE;
     this.#equal = DEFAULT_EQUAL;
   }
 }

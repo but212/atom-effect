@@ -156,7 +156,7 @@ describe('Tracking Engine', () => {
         const mockTracker = {
           _trackEpoch: 1,
           _trackCount: 0,
-        } as DependencyTracker & ReactiveDependencyTracker;
+        } as unknown as DependencyTracker & ReactiveDependencyTracker;
 
         const mockDep = {
           _lastSeenEpoch: 0,

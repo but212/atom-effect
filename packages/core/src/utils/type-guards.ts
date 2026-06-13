@@ -14,14 +14,6 @@ import { BRAND, BrandFlags } from '@/constants';
 import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/types';
 
 /**
- * Role: Internal interface for reactive nodes that carry diagnostic branding.
- * @internal
- */
-interface Branded {
-  [BRAND]?: number;
-}
-
-/**
  * Logic: Bitwise Branding
  * Validates whether an object or function possesses a specific reactive flag.
  *
@@ -32,10 +24,11 @@ interface Branded {
  * @internal
  */
 function isBranded<T>(obj: unknown, flag: number): obj is T {
-  if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) return false;
-
-  const brand = (obj as Branded)[BRAND];
-  return brand !== undefined && (brand & flag) !== 0;
+  if (obj && (typeof obj === 'object' || typeof obj === 'function')) {
+    const brand = BRAND in obj ? Reflect.get(obj, BRAND) : undefined;
+    return typeof brand === 'number' && (brand & flag) !== 0;
+  }
+  return false;
 }
 
 /**

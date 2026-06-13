@@ -28,8 +28,10 @@ describe('Computed', () => {
       expect(c).toBeDefined();
 
       // Invalid arguments validation
-      expect(() => computed(null as unknown as () => void)).toThrow(ComputedError);
-      expect(() => c.subscribe(null as unknown as () => void)).toThrow(AtomError);
+      // @ts-expect-error Testing invalid computation function
+      expect(() => computed(null)).toThrow(ComputedError);
+      // @ts-expect-error Testing invalid subscriber
+      expect(() => c.subscribe(null)).toThrow(AtomError);
     });
 
     it('should evaluate lazily and cache results', async () => {
@@ -205,7 +207,7 @@ describe('Computed', () => {
       }
 
       expect(firstError).toBeDefined();
-      expect((firstError as Error).message).not.toContain('Circular dependency');
+      expect(Reflect.get(firstError as object, 'message')).not.toContain('Circular dependency');
 
       // Second evaluation: should still fail due to stack overflow,
       // NOT because of 'Circular dependency detected' which indicates state corruption.
@@ -217,7 +219,7 @@ describe('Computed', () => {
       }
 
       expect(secondError).toBeDefined();
-      expect((secondError as Error).message).not.toContain('Circular dependency');
+      expect(Reflect.get(secondError as object, 'message')).not.toContain('Circular dependency');
     });
 
     it('should recover from system error (ReferenceError) and maintain tracking context integrity', async () => {
@@ -563,7 +565,7 @@ describe('Computed', () => {
       const c = computed(() => 1);
       c.dispose();
       const unsub = c.subscribe(() => {});
-      expect((c as unknown as { _slots: unknown })._slots).toBeNull();
+      expect(Reflect.get(c, '_slots')).toBeNull();
       unsub();
     });
 
@@ -644,8 +646,8 @@ describe('Computed', () => {
     });
 
     it('mergeAtoms should handle or reject atoms with primitive values', () => {
-      const a = atom(42 as unknown as Record<string, unknown>);
-      const b = atom('hello' as unknown as Record<string, unknown>);
+      const a = atom(42);
+      const b = atom('hello');
       const merged = mergeAtoms(a, b);
 
       // The merged value should either contain the primitive values

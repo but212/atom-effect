@@ -33,7 +33,6 @@ import type {
   ReactiveDependencyTracker,
   ReactiveNode,
   ReactiveNodeBase,
-  Subscriber,
   SubscriberTarget,
   TrackingContext,
 } from '@/types';
@@ -247,7 +246,7 @@ export function nodeSubscribe<T>(
   listener: SubscriberTarget<T>
 ): Result<() => void, Error> {
   const isFn = typeof listener === 'function';
-  const isObj = listener != null && typeof (listener as Subscriber).execute === 'function';
+  const isObj = !isFn && listener != null && typeof listener.execute === 'function';
 
   if (!isFn && !isObj) {
     return Result.err(
@@ -392,14 +391,14 @@ export function nodeCommitDeps(node: DependencyTracker & ReactiveDependencyTrack
  *
  * @internal
  */
-export function nodeHandleError<T, E extends Error>(
+export function nodeHandleError<T>(
   node: ReactiveNode<T> & { isComputed?: boolean; isRejected?: boolean; version: number },
   error: unknown,
   ErrorClass: AtomErrorConstructor,
   message: string,
-  onError?: ((error: E) => void) | null
+  onError?: ((error: Error) => void) | ((error: unknown) => void) | null
 ): void {
-  const wrappedError = wrapError(error, ErrorClass, message) as unknown as E;
+  const wrappedError = wrapError(error, ErrorClass, message);
 
   if (node.isComputed) {
     if (!node.isRejected || node._error !== wrappedError) {

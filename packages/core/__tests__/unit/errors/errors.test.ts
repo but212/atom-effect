@@ -114,7 +114,7 @@ describe('Error Handling System', () => {
       // Circularity protection
       const err1 = new AtomError('1');
       const err2 = new AtomError('2', { cause: err1 });
-      (err1 as { cause: unknown }).cause = err2;
+      Reflect.set(err1, 'cause', err2);
 
       const chain = getErrorChain(err1);
       expect(chain).toHaveLength(2);
@@ -132,7 +132,7 @@ describe('Error Handling System', () => {
       const json = serializeError(top) as AtomErrorJSON;
 
       expect(json.message).toBe('top');
-      const mid = json.cause as { code?: string; cause?: { name?: string; stack?: string } };
+      const mid = Reflect.get(json as object, 'cause');
       expect(mid.code).toBe('C1');
       expect(mid.cause?.name).toBe('TypeError');
       expect(mid.cause?.stack).toBeDefined();
