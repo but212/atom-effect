@@ -135,9 +135,7 @@ describe('Debug Module (Black-box)', () => {
       expect(() =>
         $.debug.domUpdated('[UI]', null as unknown as Element, 'test', 'val')
       ).not.toThrow();
-      expect(() =>
-        $.debug.domUpdated('[UI]', {} as unknown as Element, 'test', 'val')
-      ).not.toThrow();
+      expect(() => $.debug.domUpdated('[UI]', {} as Element, 'test', 'val')).not.toThrow();
       expect(logSpy).not.toHaveBeenCalled();
     });
   });

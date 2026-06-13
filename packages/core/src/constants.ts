@@ -197,14 +197,11 @@ export const IS_DEV = (() => {
   try {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') return true;
     if (typeof __DEV__ !== 'undefined' && __DEV__) return true;
-    if (
-      typeof import.meta !== 'undefined' &&
-      (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV
-    )
+    if (typeof import.meta !== 'undefined' && (import.meta as { env?: { DEV?: boolean } }).env?.DEV)
       return true;
     if (
       typeof globalThis !== 'undefined' &&
-      (globalThis as unknown as { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__
+      (globalThis as { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__
     )
       return true;
     if (

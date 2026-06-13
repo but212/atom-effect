@@ -98,9 +98,9 @@ export function handleEmpty<T>(
 
   if (empty && !ctx.$emptyEl) {
     const raw = typeof empty === 'string' ? $.parseHTML(sanitizeHtml(empty)) : empty;
-    ctx.$emptyEl = ($(raw as Element | Element[] | JQuery) as unknown as JQuery).appendTo(
+    ctx.$emptyEl = ($(raw as Element | Element[] | JQuery) as JQuery).appendTo(
       $container
-    ) as unknown as JQuery;
+    ) as JQuery;
   }
 
   ctx.keyToIndex.clear();

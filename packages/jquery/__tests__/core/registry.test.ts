@@ -293,7 +293,7 @@ describe('Binding Registry', () => {
       registry.registerShadow(hostEl, shadow);
       registry.markHost(hostEl);
 
-      const $child = $('<span>').appendTo(shadow as unknown as DocumentFragment);
+      const $child = $('<span>').appendTo(shadow as DocumentFragment);
       const atom = $.atom('v1');
       $child.atomText(atom);
       await $.nextTick();

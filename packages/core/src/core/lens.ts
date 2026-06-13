@@ -342,9 +342,9 @@ export function atomLens<T extends object, P extends Paths<T>>(
     return atomLens(
       parent._root,
       `${parent._path}.${path as string}` as Paths<Record<string, unknown>>
-    ) as unknown as WritableAtom<PathValue<T, P>>;
+    ) as WritableAtom<PathValue<T, P>>;
   }
-  return new LensImpl(atom, path as string) as unknown as WritableAtom<PathValue<T, P>>;
+  return new LensImpl(atom, path as string) as WritableAtom<PathValue<T, P>>;
 }
 
 /**

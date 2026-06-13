@@ -127,9 +127,7 @@ function createChainableMethod<V, O = V>(
     extra?: unknown
   ): JQuery {
     const resolvedValue =
-      transformValue && value !== undefined
-        ? transformValue(value, extra)
-        : (value as unknown as O);
+      transformValue && value !== undefined ? transformValue(value, extra) : (value as O);
     const map = resolveArgs<O>(keyOrMap as string | Record<string, O>, resolvedValue);
     if (!map) {
       console.warn(`${SYSTEM_BINDING.PREFIX} ${errorMsg}`);
@@ -309,7 +307,7 @@ $.fn.atomForm = function <T extends object>(
 ): JQuery {
   return atomEachElement(this, (el) => {
     if (el instanceof HTMLFormElement) {
-      bindForm(el, atom as WritableAtom<object>, options as unknown as FormOptions<unknown>);
+      bindForm(el, atom as WritableAtom<object>, options as FormOptions<unknown>);
     } else {
       debug.warn(SYSTEM_BINDING.PREFIX, 'Skipping non-Form element for atomForm');
     }

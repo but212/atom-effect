@@ -34,7 +34,7 @@ describe('Atom', () => {
       expect(atom(null).value).toBeNull();
 
       for (const sub of ['invalid', null, {}]) {
-        expect(() => a.subscribe(sub as unknown as () => void)).toThrow(AtomError);
+        expect(() => a.subscribe(sub as () => void)).toThrow(AtomError);
       }
 
       // Valid subscriber with execute method should not throw

@@ -131,7 +131,7 @@ function createInterceptedLens<T extends object>(
       }
       return Reflect.set(target, prop, val, target);
     },
-  }) as unknown as WritableAtom<unknown>;
+  }) as WritableAtom<unknown>;
 }
 
 /**

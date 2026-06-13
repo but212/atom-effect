@@ -30,7 +30,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
       return Object.assign(deferred.promise(), xhr);
     }
 
-    return $.Deferred<unknown, unknown, unknown>().reject(xhr).promise() as unknown as JQuery.jqXHR;
+    return $.Deferred<unknown, unknown, unknown>().reject(xhr).promise() as JQuery.jqXHR;
   });
 }
 

@@ -141,9 +141,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         const key = name === 'default' ? '' : name;
         let lens = state.slotLenses.get(key);
         if (!lens) {
-          lens = $.computed(() => state.slotsAtom?.value?.[key] ?? []) as unknown as WritableAtom<
-            Node[]
-          >;
+          lens = $.computed(() => state.slotsAtom?.value?.[key] ?? []) as WritableAtom<Node[]>;
           state.slotLenses.set(key, lens);
         }
         return lens;
@@ -152,10 +150,10 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 
     $: ((selector, context) => {
       const ctx = context ?? state.root ?? element;
-      if (typeof selector !== 'string') return $(selector) as unknown as JQuery;
+      if (typeof selector !== 'string') return $(selector) as JQuery;
       return ctx instanceof DocumentFragment
-        ? ($(ctx.querySelectorAll(selector)) as unknown as JQuery)
-        : ($(selector, ctx as Element) as unknown as JQuery);
+        ? ($(ctx.querySelectorAll(selector)) as JQuery)
+        : ($(selector, ctx as Element) as JQuery);
     }) as JQueryScopedSelector,
 
     provideAtom: (key: string | symbol, val: unknown) => provideAtom(element, key, val),
@@ -290,7 +288,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       state.dispose();
       registry.cleanupTree(element);
     },
-  } as unknown as AtomComponentController;
+  } as AtomComponentController;
 
   registry.setTeardown(element, () => controller.teardown());
   internal.controller = controller;
