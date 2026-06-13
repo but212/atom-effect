@@ -150,10 +150,10 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 
     $: ((selector, context) => {
       const ctx = context ?? state.root ?? element;
-      if (typeof selector !== 'string') return $(selector) as JQuery;
+      if (typeof selector !== 'string') return $(selector);
       return ctx instanceof DocumentFragment
-        ? ($(ctx.querySelectorAll(selector)) as JQuery)
-        : ($(selector, ctx as Element) as JQuery);
+        ? $(ctx.querySelectorAll(selector))
+        : $(selector, ctx as Element);
     }) as JQueryScopedSelector,
 
     provideAtom: (key: string | symbol, val: unknown) => provideAtom(element, key, val),
