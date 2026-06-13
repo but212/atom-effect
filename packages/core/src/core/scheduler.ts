@@ -151,9 +151,12 @@ class ReactiveScheduler implements SchedulerState {
           if (res !== undefined && Result.isErr(res)) {
             const err = res.error;
             console.error(
-              new SchedulerError(`Error occurred during scheduler execution: ${err.message}`, {
-                cause: err,
-              })
+              new SchedulerError(
+                `Error occurred during scheduler execution: ${err?.message || String(err)}`,
+                {
+                  cause: err,
+                }
+              )
             );
           }
         }

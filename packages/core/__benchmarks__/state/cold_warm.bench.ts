@@ -17,7 +17,7 @@ import {
 
 describe('Cold Start: First Evaluation', () => {
   bench(
-    `[Vanilla] object allocation (baseline) (x\${REPEATS})`,
+    `[Vanilla] object allocation (baseline) (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         keep({ value: Math.random() });
@@ -27,7 +27,7 @@ describe('Cold Start: First Evaluation', () => {
   );
 
   bench(
-    `[Atom] creation + first .value read (x\${REPEATS})`,
+    `[Atom] creation + first .value read (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(Math.random());
@@ -38,7 +38,7 @@ describe('Cold Start: First Evaluation', () => {
   );
 
   bench(
-    `[Vanilla] function call (computed baseline) (x\${REPEATS})`,
+    `[Vanilla] function call (computed baseline) (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const x = Math.random();
@@ -49,7 +49,7 @@ describe('Cold Start: First Evaluation', () => {
   );
 
   bench(
-    `[Atom] lazy computed creation + first eval (x\${REPEATS})`,
+    `[Atom] lazy computed creation + first eval (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(Math.random());
@@ -61,7 +61,7 @@ describe('Cold Start: First Evaluation', () => {
   );
 
   bench(
-    `[Atom] eager computed creation + first eval (x\${REPEATS})`,
+    `[Atom] eager computed creation + first eval (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(Math.random());
@@ -73,7 +73,7 @@ describe('Cold Start: First Evaluation', () => {
   );
 
   bench(
-    `[Atom] effect creation + first run + dispose (x\${REPEATS})`,
+    `[Atom] effect creation + first run + dispose (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const a = atom(Math.random());
@@ -94,7 +94,7 @@ describe('Steady State: Repeated Operations', () => {
   }, benchEffectOptions);
 
   bench(
-    `[Vanilla] variable write + read (x\${REPEATS})`,
+    `[Vanilla] variable write + read (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         let x = 0;
@@ -106,7 +106,7 @@ describe('Steady State: Repeated Operations', () => {
   );
 
   bench(
-    `[Atom] atom write + computed propagation (x\${REPEATS})`,
+    `[Atom] atom write + computed propagation (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         warmAtom.value = Math.random();
@@ -118,7 +118,7 @@ describe('Steady State: Repeated Operations', () => {
   );
 
   bench(
-    `[Atom] atom read only — warm cache (x\${REPEATS})`,
+    `[Atom] atom read only — warm cache (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         keep(warmAtom.value);
@@ -128,7 +128,7 @@ describe('Steady State: Repeated Operations', () => {
   );
 
   bench(
-    `[Atom] computed read only — warm cache hit (x\${REPEATS})`,
+    `[Atom] computed read only — warm cache hit (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         keep(warmComputed.value);
@@ -140,7 +140,7 @@ describe('Steady State: Repeated Operations', () => {
 
 describe('Cold vs Warm: Computed Cache', () => {
   bench(
-    `[Cold] new computed each iteration (x\${REPEATS})`,
+    `[Cold] new computed each iteration (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const source = atom(0);
@@ -159,7 +159,7 @@ describe('Cold vs Warm: Computed Cache', () => {
   missComputed.subscribe(() => {}); // activate
 
   bench(
-    `[Warm] reuse computed — cache hit (source unchanged) (x\${REPEATS})`,
+    `[Warm] reuse computed — cache hit (source unchanged) (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         keep(cachedComputed.value);
@@ -169,7 +169,7 @@ describe('Cold vs Warm: Computed Cache', () => {
   );
 
   bench(
-    `[Warm] reuse computed — cache miss (source changed) (x\${REPEATS})`,
+    `[Warm] reuse computed — cache miss (source changed) (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         missSource.value = missSource.peek() === 0 ? 1 : 0;
@@ -184,7 +184,7 @@ describe('Cold vs Warm: Effect Subscription', () => {
   const src = atom(0);
 
   bench(
-    `[Cold] effect create + first run + dispose (x\${REPEATS})`,
+    `[Cold] effect create + first run + dispose (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const e = effect(() => keep(src.value), benchEffectOptions);
