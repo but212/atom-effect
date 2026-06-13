@@ -84,7 +84,7 @@ export function initAEJ(config: AEJConfig = {}): void {
 // Automatically initializes the library on DOM ready to support traditional
 // JQuery script tag usage. Can be disabled via global configuration.
 $(() => {
-  const win = window as unknown as { AEJ_NO_AUTO_INIT?: boolean };
+  const win = window as { AEJ_NO_AUTO_INIT?: boolean };
   if (!win.AEJ_NO_AUTO_INIT) initAEJ();
 });
 

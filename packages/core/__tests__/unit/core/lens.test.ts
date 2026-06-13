@@ -14,7 +14,7 @@ function unsafeAtomLens<T extends object, V = unknown>(
   atom: WritableAtom<T>,
   path: string
 ): WritableAtom<V> {
-  return atomLens(atom, path as never) as unknown as WritableAtom<V>;
+  return atomLens(atom, path as never) as WritableAtom<V>;
 }
 
 function setupReentrantSubscription<T, U>(source: WritableAtom<T>, subscribeTo: WritableAtom<U>) {
@@ -399,7 +399,7 @@ describe('Lens System', () => {
       expect(merged.subscriberCount()).toBe(1);
 
       // Setting merged value
-      (merged as unknown as { value: unknown }).value = { x: 3, y: 4 };
+      (merged as { value: unknown }).value = { x: 3, y: 4 };
 
       mergedUnsub();
       expect(merged.subscriberCount()).toBe(0);

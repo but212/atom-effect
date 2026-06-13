@@ -210,7 +210,7 @@ describe('Result<T, E>', () => {
           value: 42,
           error: undefined,
           [RESULT_SYMBOL]: true,
-        } as unknown as Result<number, unknown>;
+        } as Result<number, unknown>;
 
         expect(() => Result.andThen(ok, () => spoofedResult)).toThrow('Invalid Result instance');
       });
@@ -292,9 +292,7 @@ describe('Result<T, E>', () => {
         error: undefined,
         [RESULT_SYMBOL]: true,
       };
-      expect(Result.equals(Result.ok(42), spoofed as unknown as Result<unknown, unknown>)).toBe(
-        false
-      );
+      expect(Result.equals(Result.ok(42), spoofed as Result<unknown, unknown>)).toBe(false);
     });
 
     it('Result.equals() should return true when comparing a Result instance to itself', () => {
@@ -305,10 +303,7 @@ describe('Result<T, E>', () => {
     it('Result.equals() should evaluate to false for identical non-Result objects', () => {
       const nonRes = { ok: true, value: 42, error: undefined };
       expect(
-        Result.equals(
-          nonRes as unknown as Result<unknown, unknown>,
-          nonRes as unknown as Result<unknown, unknown>
-        )
+        Result.equals(nonRes as Result<unknown, unknown>, nonRes as Result<unknown, unknown>)
       ).toBe(false);
     });
   });

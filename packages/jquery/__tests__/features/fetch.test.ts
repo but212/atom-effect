@@ -137,7 +137,7 @@ describe('$.atomFetch', () => {
       expect(data.lastError?.message).toContain('Network Error: Internal Server Error (500)');
 
       // Error is wrapped by ComputedAtom core logic, extracting it from .cause
-      const originalError = (data.lastError as unknown as { cause: FetchError }).cause;
+      const originalError = (data.lastError as { cause: FetchError }).cause;
       expect(originalError).toBeDefined();
       expect(originalError.jqXHR).toBe(jqXhrError);
       expect(onError).toHaveBeenCalledWith(originalError);

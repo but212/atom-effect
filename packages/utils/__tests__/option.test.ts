@@ -8,7 +8,7 @@ describe('Option<T>', () => {
     ok: true,
     value: 42,
     [OPTION_SYMBOL]: true,
-  } as unknown as Option<number>;
+  } as Option<number>;
 
   describe('Factories & Constructors', () => {
     it('Option.some() should wrap any present value', () => {
@@ -202,9 +202,7 @@ describe('Option<T>', () => {
 
       expect(Option.equals(opt, invalidOptionShape)).toBe(false);
       expect(Option.equals(invalidOptionShape, opt)).toBe(false);
-      expect(
-        Option.equals(nonOpt as unknown as Option<unknown>, nonOpt as unknown as Option<unknown>)
-      ).toBe(false);
+      expect(Option.equals(nonOpt as Option<unknown>, nonOpt as Option<unknown>)).toBe(false);
     });
   });
 

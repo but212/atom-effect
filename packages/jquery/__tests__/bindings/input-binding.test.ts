@@ -98,7 +98,7 @@ describe('Input Bindings (Two-way)', () => {
         const [name, val] = args;
         if (name === 'checked' && val !== undefined) $(this).trigger('change');
         return res;
-      } as unknown as typeof $.fn.prop;
+      } as typeof $.fn.prop;
 
       isChecked.value = false;
       await $.nextTick();
@@ -374,7 +374,7 @@ describe('Input Bindings (Two-way)', () => {
       $sel.atomVal(list, {
         format: (v) => {
           formattedValue = v;
-          return v as unknown as string;
+          return v as string;
         },
       });
       await $.nextTick();

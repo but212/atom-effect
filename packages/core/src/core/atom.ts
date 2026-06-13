@@ -108,7 +108,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * a dependent of this atom.
    */
   get value(): T {
-    if (this.isDisposed) return undefined as unknown as T;
+    if (this.isDisposed) return undefined as T;
     const ctx = trackingContext.current;
     if (ctx) ctx.addDependency(this);
     return this.#value;

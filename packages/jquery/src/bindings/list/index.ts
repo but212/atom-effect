@@ -64,7 +64,7 @@ export function applyListBinding<T>(
 
   // 2. Optimization: Pre-calculate lookup strategies to minimize work inside the effect loop.
   const getKey: ListKeyFn<T> =
-    typeof key === 'function' ? key : (item: T) => item[key as keyof T] as unknown as ListKey;
+    typeof key === 'function' ? key : (item: T) => item[key as keyof T] as ListKey;
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 

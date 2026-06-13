@@ -89,7 +89,7 @@ export const Option = {
    * const opt = Option.some(42);
    */
   some: <T>(value: T): Some<T> =>
-    ({ ok: true, value, [OPTION_SYMBOL]: true, [OPTION_BRAND]: true }) as unknown as Some<T>,
+    ({ ok: true, value, [OPTION_SYMBOL]: true, [OPTION_BRAND]: true }) as Some<T>,
 
   /**
    * An Option instance representing the absence of a value.

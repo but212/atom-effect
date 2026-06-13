@@ -152,8 +152,8 @@ export function registerReactiveEffect<T>(
 ): void {
   if (activeBatchCollector) {
     activeBatchCollector.push({
-      source: source as unknown as AsyncReactiveValue<unknown>,
-      updater: updater as unknown as (val: unknown) => void,
+      source: source as AsyncReactiveValue<unknown>,
+      updater: updater as (val: unknown) => void,
       debugType,
     });
     return;
@@ -189,8 +189,8 @@ export function registerMapEffect<T>(
 ): void {
   if (activeBatchCollector) {
     activeBatchCollector.push({
-      sourceMap: sourceMap as unknown as Record<string, AsyncReactiveValue<unknown>>,
-      updater: updater as unknown as (val: unknown) => void,
+      sourceMap: sourceMap as Record<string, AsyncReactiveValue<unknown>>,
+      updater: updater as (val: unknown) => void,
       debugType,
     });
     return;

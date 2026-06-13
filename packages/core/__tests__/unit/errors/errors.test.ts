@@ -110,7 +110,7 @@ describe('Error Handling System', () => {
       // Circularity protection
       const err1 = new AtomError('1');
       const err2 = new AtomError('2', { cause: err1 });
-      (err1 as unknown as { cause: unknown }).cause = err2;
+      (err1 as { cause: unknown }).cause = err2;
 
       const chain = getErrorChain(err1);
       expect(chain).toHaveLength(2);

@@ -8,7 +8,7 @@ type DependencyId = DebugNode['id'];
  * Creates a mock node structure with a specific ID for debug system testing.
  */
 const createMockNode = (id: number): DebugNode => ({
-  id: id as unknown as DependencyId,
+  id: id as DependencyId,
 });
 
 describe('Debug System', () => {
@@ -84,7 +84,7 @@ describe('Debug System', () => {
 
     it('should handle registering invalid nodes without id gracefully without throwing TypeError', () => {
       expect(() => {
-        debug.registerNode({} as unknown as DebugNode);
+        debug.registerNode({} as DebugNode);
       }).not.toThrow();
     });
 
@@ -93,14 +93,14 @@ describe('Debug System', () => {
       debug.registerNode(mockNode);
       expect(debug.getDebugName(mockNode)).toBe('unknown_999');
 
-      debug.attachDebugInfo(mockNode, 'atom', 999 as unknown as DependencyId);
+      debug.attachDebugInfo(mockNode, 'atom', 999 as DependencyId);
       expect(debug.getDebugName(mockNode)).toBe('atom_999');
     });
 
     it('should not register nodes when debug is disabled', () => {
       debug.enabled = false;
       const node = track(atom(1, { name: 'Ignored_Node' }));
-      const id = (node as unknown as { id: DependencyId }).id;
+      const id = (node as { id: DependencyId }).id;
       debug.registerNode(node);
 
       debug.enabled = true;

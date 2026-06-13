@@ -88,12 +88,12 @@ describe('Computed', () => {
       });
 
       c.value; // initial: { v: 0 }
-      const v1 = (c as unknown as { version: number }).version;
+      const v1 = (c as { version: number }).version;
 
       src.value = 2; // still { v: 0 }
       await aeNextTick();
       c.value;
-      const v2 = (c as unknown as { version: number }).version;
+      const v2 = (c as { version: number }).version;
 
       // Version should not change since the computed result is "equal"
       expect(fn).toHaveBeenCalledTimes(2);

@@ -20,7 +20,7 @@ describe('DOM Core Utilities', () => {
       const atom = $.atom('val');
 
       // Should not throw and only update the div
-      $([div, text] as unknown as HTMLElement[]).atomText(atom);
+      $([div, text] as HTMLElement[]).atomText(atom);
 
       expect(div.textContent).toBe('val');
     });

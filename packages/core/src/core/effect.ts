@@ -199,7 +199,7 @@ class EffectImpl
     if (!(force || this._depSlots.size === 0 || nodeIsDirty(this))) return Result.ok(false);
 
     const budgetRes = this.#validateBudget();
-    if (Result.isErr(budgetRes)) return budgetRes as unknown as Result<boolean, Error>;
+    if (Result.isErr(budgetRes)) return budgetRes;
     if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
@@ -298,7 +298,7 @@ class EffectImpl
     const globalCount = scheduler.incrementFlushExecutionCount();
     if (Result.isErr(globalCount)) {
       this.dispose();
-      return globalCount as unknown as Result<void, Error>;
+      return globalCount;
     }
 
     this.#totalExecutions++;

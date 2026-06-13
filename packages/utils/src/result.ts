@@ -149,7 +149,7 @@ export const Result = {
           error: undefined,
           [RESULT_SYMBOL]: true,
           [RESULT_BRAND]: true,
-        } as unknown as Result<T, E>),
+        } as Result<T, E>),
 
   /**
    * Creates a failed Result.
@@ -170,7 +170,7 @@ export const Result = {
       error,
       [RESULT_SYMBOL]: true,
       [RESULT_BRAND]: true,
-    }) as unknown as Result<T, E>,
+    }) as Result<T, E>,
 
   /**
    * Type guard to check if a Result contains a value (Ok).
