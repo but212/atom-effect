@@ -178,7 +178,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
 export function getPathValue(source: unknown, parts: string[]): unknown {
   let res = source;
   for (const part of parts) {
-    if (res == null) return undefined;
+    if (res == null || isForbiddenKey(part)) return undefined;
     res = res instanceof Map ? res.get(part) : (res as Record<string, unknown>)[part];
   }
   return res;
@@ -221,7 +221,6 @@ class LensImpl<T extends object, P extends string>
   #root: WritableAtom<T>;
   #path: P;
   #parts: string[];
-  #isDangerous: boolean;
   #sharedUnsub: (() => void) | null = null;
   #prevValue: PathValue<T, P> | undefined;
 
@@ -230,7 +229,6 @@ class LensImpl<T extends object, P extends string>
     this.#root = root;
     this.#path = path;
     this.#parts = path.split('.');
-    this.#isDangerous = this.#parts.some(isForbiddenKey);
     debug.attachDebugInfo(this, 'lens', this.id, path);
   }
 
@@ -239,7 +237,6 @@ class LensImpl<T extends object, P extends string>
   }
 
   set value(newVal: PathValue<T, P>) {
-    if (this.#isDangerous) return;
     const cur = this.#root.peek();
     const next = setDeepValue(cur, this.#parts, 0, newVal);
     if (next !== cur) this.#root.value = next as T;
@@ -280,7 +277,7 @@ class LensImpl<T extends object, P extends string>
   }
 
   #getValue(source: T): PathValue<T, P> {
-    return (this.#isDangerous ? undefined : getPathValue(source, this.#parts)) as PathValue<T, P>;
+    return getPathValue(source, this.#parts) as PathValue<T, P>;
   }
 
   #notify(): void {
