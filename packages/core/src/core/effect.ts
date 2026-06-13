@@ -275,7 +275,7 @@ class EffectImpl
     try {
       fn();
     } catch (e) {
-      this.#handleExecutionError(e as Error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+      this.#handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
     }
   }
 

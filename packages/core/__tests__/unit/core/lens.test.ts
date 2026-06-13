@@ -370,7 +370,7 @@ describe('Lens System', () => {
 
       nameLens.value = 'Bob';
       expect(store.value.user).toBeInstanceOf(User);
-      expect((store.value.user as User).greet()).toBe('Hi Bob');
+      expect(store.value.user.greet()).toBe('Hi Bob');
     });
   });
 

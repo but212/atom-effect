@@ -22,10 +22,14 @@ import {
   SchedulerError,
   serializeError,
 } from '@/index';
-import { ERROR_STRATEGIES, type ErrorStrategy } from '@/utils';
+import { ERROR_STRATEGIES } from '@/utils';
 
 describe('Error Handling System', () => {
-  const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES as [ErrorStrategy, ErrorStrategy];
+  const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES;
+
+  if (brandStrategy === undefined || fallbackStrategy === undefined) {
+    throw new Error('ERROR_STRATEGIES must contain at least two strategies for testing');
+  }
 
   // ── Error Classes & Hierarchy ─────────────────────────────────────────────
 

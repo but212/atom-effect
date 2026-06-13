@@ -2,13 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom, computed, runtimeDebug as debug, effect } from '@/index';
 
 type DebugNode = Parameters<typeof debug.registerNode>[0];
-type DependencyId = DebugNode['id'];
 
 /**
  * Creates a mock node structure with a specific ID for debug system testing.
  */
 const createMockNode = (id: number): DebugNode => ({
-  id: id as DependencyId,
+  id: id,
 });
 
 describe('Debug System', () => {
@@ -93,14 +92,14 @@ describe('Debug System', () => {
       debug.registerNode(mockNode);
       expect(debug.getDebugName(mockNode)).toBe('unknown_999');
 
-      debug.attachDebugInfo(mockNode, 'atom', 999 as DependencyId);
+      debug.attachDebugInfo(mockNode, 'atom', 999);
       expect(debug.getDebugName(mockNode)).toBe('atom_999');
     });
 
     it('should not register nodes when debug is disabled', () => {
       debug.enabled = false;
       const node = track(atom(1, { name: 'Ignored_Node' }));
-      const id = (node as { id: DependencyId }).id;
+      const id = node.id;
       debug.registerNode(node);
 
       debug.enabled = true;

@@ -417,7 +417,7 @@ class ComputedAtomImpl<T>
       if (hasError) {
         this.#handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
       } else if (isPromise(val)) {
-        this.#handleAsyncComputation(val as Promise<T>);
+        this.#handleAsyncComputation(val);
       } else {
         this.#finalizeResolution(val as T);
       }
