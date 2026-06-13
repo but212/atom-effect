@@ -10,13 +10,7 @@ import {
 } from '@/core/base';
 import { aeNextTick, scheduler, schedulerEndBatch, schedulerIsBatching } from '@/core/scheduler';
 import { atom, computed, effect } from '@/index';
-import type {
-  Dependency,
-  DependencyTracker,
-  ReactiveDependencyTracker,
-  ReactiveNode,
-  SubscriberTarget,
-} from '@/types';
+import type { ReactiveNode, SubscriberTarget } from '@/types';
 import { sleep } from '../../utils/test-helpers';
 
 describe('Tracking Engine', () => {
@@ -123,7 +117,7 @@ describe('Tracking Engine', () => {
     function createMockNodeWithUndefinedSlots(): ReactiveNode<void> {
       return {
         _slots: undefined,
-      } as unknown as ReactiveNode<void>;
+      } as never;
     }
 
     describe('Subscription robustness with undefined slots', () => {
@@ -156,14 +150,14 @@ describe('Tracking Engine', () => {
         const mockTracker = {
           _trackEpoch: 1,
           _trackCount: 0,
-        } as DependencyTracker & ReactiveDependencyTracker;
+        } as never;
 
         const mockDep = {
           _lastSeenEpoch: 0,
           version: 1,
           isComputed: false,
           subscribe: () => () => {},
-        } as unknown as Dependency;
+        } as never;
 
         // Under robust implementation, if deps buffer is null/undefined, it returns early
         // instead of crashing on tracker._storage.deps! assertion.

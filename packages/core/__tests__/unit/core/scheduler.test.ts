@@ -220,9 +220,8 @@ describe('Scheduler Engine', () => {
     });
 
     it('rejects invalid scheduler callback types', () => {
-      expect(() => schedulerSchedule(scheduler, null as unknown as () => void)).toThrow(
-        SchedulerError
-      );
+      // @ts-expect-error Testing invalid callback type
+      expect(() => schedulerSchedule(scheduler, null)).toThrow(SchedulerError);
     });
 
     it('warns on unbalanced endBatch calls', () => {

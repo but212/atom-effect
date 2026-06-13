@@ -16,6 +16,12 @@ import type { AtomError } from '@/utils/errors';
 export type DependencyId = number;
 
 /**
+ * Represents an object identifiable by a unique DependencyId, typically used in debugging/diagnostics.
+ * @internal
+ */
+export type IdentifiableNode = object & { id: DependencyId };
+
+/**
  * Interface for objects requiring explicit resource release.
  */
 export interface Disposable {
@@ -74,12 +80,6 @@ export interface AtomErrorOptions {
 export type AtomErrorConstructor = new (message: string, options?: AtomErrorOptions) => AtomError;
 
 /**
- * A unique identity required to distinguish between an intentional
- * 'undefined' value and a property that has not been initialized.
- */
-export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');
-
-/**
  * Represents any source of state that can be observed by subscribers.
  */
 export interface Dependency<T = unknown> {
@@ -94,6 +94,8 @@ export interface Dependency<T = unknown> {
   /** @internal */
   _lastSeenEpoch: number;
   /** @internal */
+  _error?: Error | null;
+  /** @internal */
   readonly isComputed: boolean;
   /** @internal */
   readonly hasError: boolean;
@@ -101,7 +103,7 @@ export interface Dependency<T = unknown> {
    * Establishes a link between this dependency and a subscriber.
    * Returns a cleanup handle to sever the connection.
    */
-  subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void;
+  subscribe(listener: SubscriberTarget<T>): () => void;
   /** Retrieves the value without triggering dependency tracking. */
   peek(): T;
   /** The current value of the node. */
@@ -362,11 +364,11 @@ export interface DebugConfig {
   warnInfiniteLoop: boolean;
   trackGraph: boolean;
   warn(condition: boolean, message: string): void;
-  attachDebugInfo(obj: object, type: string, id: DependencyId, customName?: string): void;
+  attachDebugInfo(obj: IdentifiableNode, type: string, id: DependencyId, customName?: string): void;
   getDebugName(obj: object | null | undefined): string | undefined;
   getDebugType(obj: object | null | undefined): string | undefined;
   trackUpdate(id: DependencyId, name?: string): void;
-  registerNode(node: object & { id: DependencyId }): void;
+  registerNode(node: IdentifiableNode): void;
   trackEvaluationFailure(id: DependencyId): void;
   dumpGraph(): Record<string, unknown>[];
 }

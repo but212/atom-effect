@@ -13,6 +13,17 @@
 
 import type { SchedulerConfig } from './types';
 
+declare global {
+  var __DEV__: boolean | undefined;
+  var __ATOM_DEBUG__: boolean | undefined;
+
+  interface ImportMeta {
+    readonly env?: {
+      readonly DEV?: boolean;
+    };
+  }
+}
+
 /**
  * The unique symbol representing the branding metadata property on all reactive primitives.
  *
@@ -197,13 +208,8 @@ export const IS_DEV = (() => {
   try {
     if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') return true;
     if (typeof __DEV__ !== 'undefined' && __DEV__) return true;
-    if (typeof import.meta !== 'undefined' && (import.meta as { env?: { DEV?: boolean } }).env?.DEV)
-      return true;
-    if (
-      typeof globalThis !== 'undefined' &&
-      (globalThis as { __ATOM_DEBUG__?: boolean }).__ATOM_DEBUG__
-    )
-      return true;
+    if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) return true;
+    if (typeof globalThis !== 'undefined' && globalThis.__ATOM_DEBUG__) return true;
     if (
       typeof sessionStorage !== 'undefined' &&
       sessionStorage.getItem('__ATOM_DEBUG__') === 'true'
@@ -212,8 +218,6 @@ export const IS_DEV = (() => {
   } catch {}
   return false;
 })();
-
-declare const __DEV__: boolean;
 
 /**
  * @internal
@@ -367,3 +371,9 @@ export const ERROR_MESSAGES = {
   SCHEDULER_END_BATCH_WITHOUT_START: 'endBatch() called without matching startBatch(). Ignoring.',
   BATCH_CALLBACK_MUST_BE_FUNCTION: 'Batch callback must be a function',
 } as const;
+
+/**
+ * A unique identity required to distinguish between an intentional
+ * 'undefined' value and a property that has not been initialized.
+ */
+export const NO_DEFAULT_VALUE = Symbol('AtomEffect.NoDefaultValue');

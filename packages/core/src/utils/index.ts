@@ -50,7 +50,7 @@ export function mergeAtomValues<T extends Dependency<unknown>[]>(
   return result;
 }
 
-export { NO_DEFAULT_VALUE } from '@/types';
+export { NO_DEFAULT_VALUE } from '@/constants';
 export { debug, generateId } from './debug';
 export {
   AtomError,
