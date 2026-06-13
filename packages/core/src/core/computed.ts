@@ -66,10 +66,12 @@ import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buff
  * @internal
  */
 export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracker): boolean {
+  const asyncState = flags & STATE_MASKS.ASYNC_MASK;
   return (
-    (flags & STATE_MASKS.COMPUTED_RECOMPUTE_NEEDED_MASK) !== 0 ||
+    (flags & COMPUTED_STATE_FLAGS.FORCE_COMPUTE) !== 0 ||
+    asyncState === COMPUTED_STATE_FLAGS.IDLE ||
     isBufferDirty(tracker) ||
-    ((flags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0 && tracker._depSlots.size === 0)
+    (asyncState === COMPUTED_STATE_FLAGS.RESOLVED && tracker._depSlots.size === 0)
   );
 }
 
@@ -87,9 +89,9 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
-    if ((node.flags & STATE_MASKS.ERROR_MASK) !== 0) {
+    if ((node.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) {
       collected.push(
-        node._error ?? new Error('Internal Inconsistency: MASK_ERROR flag set but error is null')
+        node._error ?? new Error('Internal Inconsistency: REJECTED flag set but error is null')
       );
       if (stopOnFirst) return true;
     }
@@ -197,7 +199,7 @@ class ComputedAtomImpl<T>
   }
   get isRejected(): boolean {
     trackingContext.current?.addDependency(this);
-    return (this.flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0;
+    return (this.flags & STATE_MASKS.ASYNC_MASK) === COMPUTED_STATE_FLAGS.REJECTED;
   }
   get isRecomputing(): boolean {
     return (this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
@@ -243,13 +245,13 @@ class ComputedAtomImpl<T>
     }
 
     const nextFlags = this.flags;
-    if ((nextFlags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return Result.ok(this.#value);
+    const asyncState = nextFlags & STATE_MASKS.ASYNC_MASK;
+    if (asyncState === COMPUTED_STATE_FLAGS.RESOLVED) return Result.ok(this.#value);
 
     const hasDefault = this.#defaultValue !== (NO_DEFAULT_VALUE as T);
-    if ((nextFlags & STATE_MASKS.ASYNC_UNRESOLVED_MASK) === 0) return Result.ok(this.#value);
     if (hasDefault) return Result.ok(this.#defaultValue);
 
-    if ((nextFlags & COMPUTED_STATE_FLAGS.REJECTED) !== 0) {
+    if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
       return Result.err(this._error ?? new Error('REJECTED without error'));
     }
 
@@ -263,9 +265,8 @@ class ComputedAtomImpl<T>
    */
   #isStable(): boolean {
     const STABLE_MASK =
-      COMPUTED_STATE_FLAGS.RESOLVED |
+      STATE_MASKS.ASYNC_MASK |
       COMPUTED_STATE_FLAGS.DIRTY |
-      COMPUTED_STATE_FLAGS.IDLE |
       COMPUTED_STATE_FLAGS.DISPOSED |
       COMPUTED_STATE_FLAGS.RECOMPUTING;
     return (this.flags & STABLE_MASK) === COMPUTED_STATE_FLAGS.RESOLVED;
@@ -283,10 +284,10 @@ class ComputedAtomImpl<T>
    */
   get state(): AsyncStateType {
     trackingContext.current?.addDependency(this);
-    const flags = this.flags;
-    if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0) return AsyncState.RESOLVED;
-    if ((flags & COMPUTED_STATE_FLAGS.PENDING) !== 0) return AsyncState.PENDING;
-    if ((flags & COMPUTED_STATE_FLAGS.REJECTED) !== 0) return AsyncState.REJECTED;
+    const asyncState = this.flags & STATE_MASKS.ASYNC_MASK;
+    if (asyncState === COMPUTED_STATE_FLAGS.RESOLVED) return AsyncState.RESOLVED;
+    if (asyncState === COMPUTED_STATE_FLAGS.PENDING) return AsyncState.PENDING;
+    if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) return AsyncState.REJECTED;
     return AsyncState.IDLE;
   }
 
@@ -298,7 +299,7 @@ class ComputedAtomImpl<T>
   get hasError(): boolean {
     trackingContext.current?.addDependency(this);
 
-    if ((this.flags & STATE_MASKS.ERROR_MASK) !== 0) return true;
+    if ((this.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) return true;
     if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
 
     return untracked(() => collectErrorsRecursive(this, true).length > 0);
@@ -328,12 +329,12 @@ class ComputedAtomImpl<T>
 
   get isPending(): boolean {
     trackingContext.current?.addDependency(this);
-    return (this.flags & COMPUTED_STATE_FLAGS.PENDING) !== 0;
+    return (this.flags & STATE_MASKS.ASYNC_MASK) === COMPUTED_STATE_FLAGS.PENDING;
   }
 
   get isResolved(): boolean {
     trackingContext.current?.addDependency(this);
-    return (this.flags & COMPUTED_STATE_FLAGS.RESOLVED) !== 0;
+    return (this.flags & STATE_MASKS.ASYNC_MASK) === COMPUTED_STATE_FLAGS.RESOLVED;
   }
 
   subscribe(listener: SubscriberTarget<T>): () => void {
@@ -364,7 +365,10 @@ class ComputedAtomImpl<T>
 
     this._slots?.clear();
     this.flags =
-      COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+      COMPUTED_STATE_FLAGS.DISPOSED |
+      COMPUTED_STATE_FLAGS.IS_COMPUTED |
+      COMPUTED_STATE_FLAGS.DIRTY |
+      COMPUTED_STATE_FLAGS.IDLE;
 
     this._error = null;
   }
@@ -458,7 +462,7 @@ class ComputedAtomImpl<T>
     nodeHandleError(this, error, ComputedError, message, this.#onError);
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
-      (COMPUTED_STATE_FLAGS.REJECTED | COMPUTED_STATE_FLAGS.HAS_ERROR);
+      COMPUTED_STATE_FLAGS.REJECTED;
     if (shouldThrow) throw this._error;
   }
 
@@ -469,7 +473,8 @@ class ComputedAtomImpl<T>
    */
   #finalizeResolution(value: T): void {
     const flags = this.flags;
-    if ((flags & COMPUTED_STATE_FLAGS.RESOLVED) === 0 || !this.#equal(this.#value, value)) {
+    const asyncState = flags & STATE_MASKS.ASYNC_MASK;
+    if (asyncState !== COMPUTED_STATE_FLAGS.RESOLVED || !this.#equal(this.#value, value)) {
       this.version = nextVersion(this.version);
     }
 
