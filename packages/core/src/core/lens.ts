@@ -144,13 +144,13 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
     return next;
   }
   if (container instanceof Map) {
-    return new Map(container as Map<unknown, unknown>).set(key, value);
+    return new Map(container).set(key, value);
   }
   const proto = Object.getPrototypeOf(container);
   if (proto === Object.prototype || proto === null) {
     return { ...container, [key]: value };
   }
-  const next = Object.assign(Object.create(proto), container) as Record<string, unknown>;
+  const next = Object.assign(Object.create(proto), container);
   next[key] = value;
   return next;
 }
@@ -168,7 +168,7 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
   const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  return DEFAULT_EQUAL(oldVal, newVal) ? obj : cloneAndSet(obj as object, key, newVal);
+  return DEFAULT_EQUAL(oldVal, newVal) ? obj : cloneAndSet(obj, key, newVal);
 }
 
 /**

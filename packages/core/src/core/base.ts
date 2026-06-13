@@ -329,9 +329,9 @@ export function nodeNotifySubscribers<T>(
       if (sub) {
         try {
           if (typeof sub === 'function') {
-            (sub as (n?: unknown, o?: unknown) => void)(newValue, oldValue);
+            sub(newValue, oldValue);
           } else {
-            (sub as Subscriber).execute();
+            sub.execute();
           }
         } catch (e) {
           console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);

@@ -105,7 +105,7 @@ export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>
     element,
     value,
     (val) => {
-      const sanitized = sanitizeHtml(val as string);
+      const sanitized = sanitizeHtml(val);
       if (prevHtml !== sanitized) {
         registry.cleanupDescendants(element);
         element.innerHTML = sanitized;
@@ -259,7 +259,7 @@ export function bindAttr(
           }
 
           // 2. Validate and Apply
-          if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {
+          if (attrVal !== null && isDangerousUrl(name, attrVal)) {
             console.warn(
               `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
             );
@@ -270,9 +270,9 @@ export function bindAttr(
             if (attrVal === null) {
               element.removeAttribute(name);
             } else {
-              element.setAttribute(name, attrVal as string);
+              element.setAttribute(name, attrVal);
             }
-            prev[name] = attrVal as string | null;
+            prev[name] = attrVal;
           }
         }
       }
@@ -293,7 +293,6 @@ export function bindProp(
   element: HTMLElement,
   propMap: Record<string, AsyncReactiveValue<unknown>>
 ): void {
-  const target = element as unknown as Record<string, unknown>;
   const safeEntries = getSafeEntries(propMap, true);
   const safeMap = Object.fromEntries(safeEntries);
   const previousValues: Record<string, unknown> = {};
@@ -314,7 +313,7 @@ export function bindProp(
             continue;
           }
 
-          target[name] = value;
+          Reflect.set(element, name, value);
           previousValues[name] = value;
         }
       }
@@ -390,7 +389,7 @@ function syncRadios(element: HTMLInputElement): void {
     for (let i = 0; i < group.length; i++) {
       const el = group[i];
       if (el && el !== element) {
-        $(el as HTMLElement).trigger('change.atomRadioSync');
+        $(el).trigger('change.atomRadioSync');
       }
     }
   }

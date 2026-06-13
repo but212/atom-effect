@@ -140,7 +140,7 @@ class DevDebugEngine implements DebugConfig {
       this.#registry.set(id, entry);
     }
 
-    this.registerNode(obj as object & { id: DependencyId });
+    this.registerNode(obj as { id: DependencyId });
   }
 
   /**
@@ -266,4 +266,4 @@ let nextId = 1;
  *
  * @returns A unique `DependencyId`.
  */
-export const generateId = (): DependencyId => nextId++ as DependencyId;
+export const generateId = (): DependencyId => nextId++;

@@ -63,8 +63,7 @@ export function applyListBinding<T>(
   }
 
   // 2. Optimization: Pre-calculate lookup strategies to minimize work inside the effect loop.
-  const getKey: ListKeyFn<T> =
-    typeof key === 'function' ? key : (item: T) => item[key as keyof T] as ListKey;
+  const getKey: ListKeyFn<T> = typeof key === 'function' ? key : (item: T) => item[key] as ListKey;
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 
@@ -166,7 +165,7 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
  *
  * @internal
  */
-function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
+function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding<T>[] {
   return Object.entries(events || {}).map(([key, callback]) => {
     const trimmed = key.trim();
     const spaceIdx = trimmed.indexOf(' ');
@@ -175,12 +174,7 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
     return {
       type,
       selector,
-      callback: callback as (
-        this: unknown,
-        item: unknown,
-        index: number,
-        e: JQuery.TriggeredEvent
-      ) => void,
+      callback,
     };
   });
 }
@@ -195,7 +189,11 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding[] {
  *
  * @internal
  */
-function setupEvents<T>(ctx: ListContext<T>, $container: JQuery, bindings: EventBinding[]): void {
+function setupEvents<T>(
+  ctx: ListContext<T>,
+  $container: JQuery,
+  bindings: EventBinding<T>[]
+): void {
   const containerEl = $container[0];
   if (containerEl?.nodeType !== 1) return;
 

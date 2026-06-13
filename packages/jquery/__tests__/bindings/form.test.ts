@@ -358,7 +358,7 @@ describe('Form Binding (atomForm)', () => {
           }
           set value(v) {
             this._value = v;
-            this._internals.setFormValue(v as string);
+            this._internals.setFormValue(v);
           }
           val(v?: unknown) {
             if (v === undefined) return this.value;

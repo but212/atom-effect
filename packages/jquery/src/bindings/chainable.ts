@@ -32,10 +32,8 @@ import { registry } from '@/core/registry';
 import type {
   AsyncReactiveValue,
   BindingOptions,
-  CssBindings,
   CssValue,
   FormOptions,
-  PrimitiveValue,
   ValOptions,
   WritableAtom,
 } from '@/types';
@@ -180,10 +178,7 @@ $.fn.atomAttr = createChainableMethod(bindAttr, SYSTEM_BINDING.ERRORS.MISSING_SO
  * $('.input').atomProp('disabled', disabledAtom);
  * ```
  */
-$.fn.atomProp = createChainableMethod(
-  bindProp as (el: HTMLElement, map: Record<string, AsyncReactiveValue<unknown>>) => void,
-  SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomProp')
-);
+$.fn.atomProp = createChainableMethod(bindProp, SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomProp'));
 
 /**
  * Binds inline CSS properties to reactive sources.
@@ -267,9 +262,7 @@ $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
  * ```
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
-  return atomEachElement(this, (el) =>
-    bindVal(el, atom as WritableAtom<unknown>, options as ValOptions<unknown>)
-  );
+  return atomEachElement(this, (el) => bindVal(el, atom, options as ValOptions<unknown>));
 };
 
 /**
@@ -307,7 +300,7 @@ $.fn.atomForm = function <T extends object>(
 ): JQuery {
   return atomEachElement(this, (el) => {
     if (el instanceof HTMLFormElement) {
-      bindForm(el, atom as WritableAtom<object>, options as FormOptions<unknown>);
+      bindForm(el, atom, options as FormOptions<unknown>);
     } else {
       debug.warn(SYSTEM_BINDING.PREFIX, 'Skipping non-Form element for atomForm');
     }
@@ -325,12 +318,6 @@ $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQue
   return atomEachElement(this, (el) => bindOn(el, event, handler));
 };
 
-/** @internal */
-interface BindingTask {
-  key: keyof BindingOptions<unknown>;
-  run: (el: HTMLElement, val: unknown) => void;
-}
-
 function unpack<T, O>(val: T | [T, O]): [T, O?] {
   if (Array.isArray(val) && val.length === 2) {
     const second = val[1];
@@ -346,55 +333,6 @@ function unpack<T, O>(val: T | [T, O]): [T, O?] {
 }
 
 /**
- * A registry of specialized binding tasks for the unified `.atomBind()` method.
- *
- * Optimization: Deterministic Execution Order
- * The order ensures consistent rendering results (e.g., text content is set
- * before class toggling) to avoid visual glitches.
- * @internal
- */
-const BINDING_TASKS: BindingTask[] = [
-  {
-    key: 'text',
-    run: (el, v) =>
-      bindText(el, ...(unpack(v) as [AsyncReactiveValue<unknown>, (v: unknown) => string])),
-  },
-  { key: 'html', run: (el, v) => bindHtml(el, v as AsyncReactiveValue<string>) },
-  {
-    key: 'class',
-    run: (el, v) => bindClass(el, v as Record<string, AsyncReactiveValue<boolean>>),
-  },
-  { key: 'css', run: (el, v) => bindCss(el, v as CssBindings) },
-  {
-    key: 'attr',
-    run: (el, v) => bindAttr(el, v as Record<string, AsyncReactiveValue<PrimitiveValue>>),
-  },
-  {
-    key: 'prop',
-    run: (el, v) => bindProp(el, v as Record<string, AsyncReactiveValue<unknown>>),
-  },
-  { key: 'show', run: (el, v) => bindVisibility(el, v as AsyncReactiveValue<boolean>, false) },
-  { key: 'hide', run: (el, v) => bindVisibility(el, v as AsyncReactiveValue<boolean>, true) },
-  {
-    key: 'val',
-    run: (el, v) => bindVal(el, ...(unpack(v) as [WritableAtom<unknown>, ValOptions<unknown>])),
-  },
-  { key: 'checked', run: (el, v) => bindChecked(el, v as WritableAtom<boolean>) },
-  {
-    key: 'form',
-    run: (el, v) => {
-      if (el instanceof HTMLFormElement) {
-        bindForm(
-          el,
-          ...(unpack(v) as [WritableAtom<object> | WritableAtom<unknown>[], FormOptions<unknown>])
-        );
-      }
-    },
-  },
-  { key: 'on', run: (el, v) => bindEvents(el, v as Record<string, (e: JQuery.Event) => void>) },
-];
-
-/**
  * A unified entry point for declaring multiple reactive bindings in a single call.
  *
  * When to use:
@@ -402,8 +340,7 @@ const BINDING_TASKS: BindingTask[] = [
  * - Suitable for maintaining organized declarations in complex UIs.
  *
  * Logic: Task Orchestration
- * Iterates through the provided configuration and executes the corresponding
- * binding tasks in a predefined, deterministic order.
+ * Executes the corresponding binding tasks in a predefined, deterministic order.
  *
  * @param options - A configuration object defining multiple bindings.
  * @returns The original jQuery collection for chaining.
@@ -417,27 +354,74 @@ const BINDING_TASKS: BindingTask[] = [
  * });
  * ```
  */
-$.fn.atomBind = function <T>(this: JQuery, options: BindingOptions<T>): JQuery {
-  const opt = options as Record<string, unknown>;
+$.fn.atomBind = function <T, TText>(this: JQuery, options: BindingOptions<T, TText>): JQuery {
+  const opt = options;
 
-  // Optimization: Pre-count active tasks without allocating a filtered array
-  let activeCount = 0;
-  for (let i = 0; i < BINDING_TASKS.length; i++) {
-    const task = BINDING_TASKS[i];
-    if (task !== undefined && opt[task.key] !== undefined) {
-      activeCount++;
-    }
-  }
+  const hasActive =
+    opt.text !== undefined ||
+    opt.html !== undefined ||
+    opt.class !== undefined ||
+    opt.css !== undefined ||
+    opt.attr !== undefined ||
+    opt.prop !== undefined ||
+    opt.show !== undefined ||
+    opt.hide !== undefined ||
+    opt.val !== undefined ||
+    opt.checked !== undefined ||
+    opt.form !== undefined ||
+    opt.on !== undefined;
 
-  if (activeCount === 0) return this;
+  if (!hasActive) return this;
 
   return atomEachElement(this, (el) => {
     const tasks = withBatchCollection(() => {
-      for (let i = 0; i < BINDING_TASKS.length; i++) {
-        const task = BINDING_TASKS[i];
-        if (task !== undefined && opt[task.key] !== undefined) {
-          task.run(el, opt[task.key]);
-        }
+      if (opt.text !== undefined) {
+        const [src, formatter] = unpack(opt.text as unknown) as [
+          AsyncReactiveValue<unknown>,
+          (((v: unknown) => string) | null)?,
+        ];
+        bindText(el, src, formatter || undefined);
+      }
+      if (opt.html !== undefined) {
+        bindHtml(el, opt.html);
+      }
+      if (opt.class !== undefined) {
+        bindClass(el, opt.class);
+      }
+      if (opt.css !== undefined) {
+        bindCss(el, opt.css);
+      }
+      if (opt.attr !== undefined) {
+        bindAttr(el, opt.attr);
+      }
+      if (opt.prop !== undefined) {
+        bindProp(el, opt.prop);
+      }
+      if (opt.show !== undefined) {
+        bindVisibility(el, opt.show, false);
+      }
+      if (opt.hide !== undefined) {
+        bindVisibility(el, opt.hide, true);
+      }
+      if (opt.val !== undefined) {
+        const [atom, valOpts] = unpack(opt.val as unknown) as [
+          WritableAtom<unknown>,
+          ValOptions<unknown>?,
+        ];
+        bindVal(el, atom, valOpts);
+      }
+      if (opt.checked !== undefined) {
+        bindChecked(el, opt.checked);
+      }
+      if (opt.form !== undefined && el instanceof HTMLFormElement) {
+        const [atomOrArr, formOpts] = unpack(opt.form as unknown) as [
+          WritableAtom<object> | WritableAtom<unknown>[],
+          FormOptions<unknown>?,
+        ];
+        bindForm(el, atomOrArr, formOpts);
+      }
+      if (opt.on !== undefined) {
+        bindEvents(el, opt.on);
       }
     });
 

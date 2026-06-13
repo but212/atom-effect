@@ -88,12 +88,12 @@ describe('Computed', () => {
       });
 
       c.value; // initial: { v: 0 }
-      const v1 = (c as { version: number }).version;
+      const v1 = c.version;
 
       src.value = 2; // still { v: 0 }
       await aeNextTick();
       c.value;
-      const v2 = (c as { version: number }).version;
+      const v2 = c.version;
 
       // Version should not change since the computed result is "equal"
       expect(fn).toHaveBeenCalledTimes(2);
@@ -651,7 +651,7 @@ describe('Computed', () => {
       // The merged value should either contain the primitive values
       // or throw an error — silently returning {} is incorrect
       const result = merged.value;
-      expect(Object.keys(result as object).length).toBeGreaterThan(0);
+      expect(Object.keys(result).length).toBeGreaterThan(0);
     });
   });
 });

@@ -248,9 +248,9 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   }
 }
 
-function validateAtomOptions<T>(options: unknown): Result<void, Error> {
+function validateAtomOptions<T>(options: AtomOptions<T>): Result<void, Error> {
   if (options != null && typeof options === 'object') {
-    const opts = options as AtomOptions<T>;
+    const opts = options;
     if (opts.equal !== undefined && typeof opts.equal !== 'function') {
       return Result.err(new AtomError('options.equal must be a function'));
     }

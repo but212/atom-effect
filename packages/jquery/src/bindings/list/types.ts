@@ -119,8 +119,8 @@ export interface PlaceCallbacks<T> {
  * Normalization table for delegated event listeners.
  * @internal
  */
-export interface EventBinding {
+export interface EventBinding<T = unknown> {
   type: string;
   selector: string;
-  callback: (this: unknown, item: unknown, index: number, e: JQuery.TriggeredEvent) => void;
+  callback: (this: HTMLElement, item: T, index: number, e: JQuery.TriggeredEvent) => void;
 }

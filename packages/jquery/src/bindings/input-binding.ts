@@ -220,9 +220,7 @@ export function applyInputBinding<T>(
     .map((n) => n + eventNamespace)
     .join(' ');
 
-  $(element)
-    .on(`blur${eventNamespace}`, handleBlur)
-    .on(eventNames, handleInput as JQuery.EventHandler<HTMLElement>);
+  $(element).on(`blur${eventNamespace}`, handleBlur).on(eventNames, handleInput);
 
   return {
     reactiveEffect: effect(syncToDom),

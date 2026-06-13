@@ -12,7 +12,7 @@ function defineAndCreate<T extends HTMLElement>(
 ): AtomComponentElement<T> {
   const name = `${tagPrefix}-${Math.random().toString(36).slice(2, 7)}`;
   customElements.define(name, klass);
-  const el = document.createElement(name) as T;
+  const el = document.createElement(name);
   const aej = $.useAtomComponent(el);
   return Object.assign(el, { aej }) as AtomComponentElement<T>;
 }

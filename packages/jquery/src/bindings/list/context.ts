@@ -14,6 +14,11 @@ import $ from 'jquery';
 import type { ListKey } from '@/types';
 import { cleanupNodes, setAtomKey } from './utils';
 
+const getAttribute = Function.prototype.call.bind(Element.prototype.getAttribute) as (
+  el: Element,
+  name: string
+) => string | null;
+
 /**
  * Represents the state of a single list item at a point in time.
  * Used by the reconciler to calculate moves, updates, and removals.
@@ -73,7 +78,7 @@ export function createListContext<T>(
  * Retrieves the index of a key, handling string-to-number normalization.
  */
 export function getIndex<T>(ctx: ListContext<T>, key: string): number | undefined {
-  const idx = ctx.keyToIndex.get(key as ListKey);
+  const idx = ctx.keyToIndex.get(key);
   if (idx !== undefined) return idx;
   const n = Number(key);
   return Number.isNaN(n) ? undefined : ctx.keyToIndex.get(n);
@@ -135,7 +140,7 @@ export function resolveEventTarget<T>(
 ): { target: HTMLElement; index: number; item: T } | null {
   let current: Element | null = start;
   while (current && current !== container) {
-    const rawKey = current.getAttribute('data-atom-key');
+    const rawKey = getAttribute(current, 'data-atom-key');
     if (rawKey !== null) {
       const index = getIndex(ctx, rawKey);
       if (index !== undefined) {
