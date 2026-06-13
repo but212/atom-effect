@@ -889,7 +889,7 @@ declare global {
      * });
      * ```
      */
-    atomBind<T, TText>(opts: BindingOptions<T, TText>): this;
+    atomBind<T = unknown, TText = unknown>(opts: BindingOptions<T, TText>): this;
 
     /**
      * Synchronizes an element's children with a reactive list source.
