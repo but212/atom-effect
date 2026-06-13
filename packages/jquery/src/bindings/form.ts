@@ -120,7 +120,7 @@ function createInterceptedLens<T extends object>(
             transformed = res.value;
           }
         }
-        target.value = transformed as PathValue<T, Paths<T>>;
+        target.value = transformed;
         if (onChange) {
           const res = Result.tryCatch(() => untracked(() => onChange(name, transformed)));
           if (Result.isErr(res)) {
@@ -131,7 +131,7 @@ function createInterceptedLens<T extends object>(
       }
       return Reflect.set(target, prop, val, target);
     },
-  }) as WritableAtom<unknown>;
+  });
 }
 
 /**
@@ -212,7 +212,7 @@ export function bindForm<T extends object>(
   atom: WritableAtom<T> | WritableAtom<unknown>[],
   options: FormOptions<unknown> = {}
 ): void {
-  const targetAtom = (Array.isArray(atom) ? mergeLenses(...atom) : atom) as WritableAtom<T>;
+  const targetAtom = Array.isArray(atom) ? mergeLenses(...atom) : atom;
   registry.cleanup(form);
 
   const entries = new Map<string, FieldEntry>();
@@ -221,7 +221,7 @@ export function bindForm<T extends object>(
   const unbindField = (el: Element, name: string): void => {
     const entry = entries.get(name);
     if (entry && --entry.refCount <= 0) {
-      const disposableAtom = entry.atom as Partial<{ dispose: () => void }>;
+      const disposableAtom = entry.atom;
       if (typeof disposableAtom.dispose === 'function') {
         disposableAtom.dispose();
       }
@@ -254,7 +254,7 @@ export function bindForm<T extends object>(
     const validate = options.validation?.[name];
     if (!validate) return;
 
-    registry.trackEffect(control, syncValidationEffect(control as Element, name, atom, validate));
+    registry.trackEffect(control, syncValidationEffect(control, name, atom, validate));
   };
 
   const bindToggle = (

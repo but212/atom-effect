@@ -35,7 +35,7 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
       vi.spyOn($, 'ajax').mockImplementation(
         () =>
           new Promise((resolve) => {
-            resolveAjax = resolve as (v: { name: string }[]) => void;
+            resolveAjax = resolve;
           }) as unknown as JQuery.jqXHR
       );
 

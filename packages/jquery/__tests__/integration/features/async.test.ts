@@ -23,7 +23,7 @@ describe('Async Binding Integration', () => {
 
     $el.atomText(atom);
 
-    await (atom.value as Promise<string>);
+    await atom.value;
     await $.nextTick();
     expect($el.text()).toBe('Initial Async');
 

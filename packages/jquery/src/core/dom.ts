@@ -18,7 +18,7 @@
  */
 export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQuery {
   for (const node of jq) {
-    if (node.nodeType === Node.ELEMENT_NODE) fn(node as HTMLElement);
+    if (node.nodeType === Node.ELEMENT_NODE) fn(node);
   }
   return jq;
 }

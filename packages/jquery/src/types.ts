@@ -108,13 +108,27 @@ export type CssBindings = Record<string, CssValue>;
  *   on: { click: () => console.log('Clicked!') }
  * });
  */
-export interface BindingOptions<T = unknown> {
+/** @internal */
+export type UnwrapAsyncReactiveValue<T> =
+  T extends ReadonlyAtom<infer U>
+    ? U extends Promise<infer P>
+      ? P
+      : U
+    : T extends Promise<infer U>
+      ? U
+      : T extends () => infer U
+        ? U extends Promise<infer P>
+          ? P
+          : U
+        : T;
+
+export interface BindingOptions<T = unknown, TText = unknown> {
   /** Binds the element's text content. Can include an optional formatter. */
   text?:
-    | AsyncReactiveValue<unknown>
+    | TText
     | [
-        source: AsyncReactiveValue<unknown>,
-        formatter?: ((v: unknown) => string) | null | undefined,
+        source: TText,
+        formatter?: ((v: UnwrapAsyncReactiveValue<TText>) => string) | null | undefined,
       ];
   /** Binds the element's inner HTML. Use with caution for untrusted content. */
   html?: AsyncReactiveValue<string>;
