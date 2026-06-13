@@ -47,7 +47,7 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
       flags: 0,
       _lastSeenEpoch: -1,
       subscribe: vi.fn(() => vi.fn()),
-    }) as never;
+    }) as unknown as Dependency;
 
   describe('Basic Operations', () => {
     it('claimExisting: should swap and relocate dependencies correctly', () => {
@@ -153,7 +153,7 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
           throw new RangeError('Maximum call stack size exceeded');
         },
         subscribe: vi.fn(() => vi.fn()),
-      } as never;
+      } as unknown as Dependency;
 
       depBufferPush(buf, createLink(systemErrorDep, 1));
 
@@ -172,7 +172,7 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
           throw new Error('Custom computation error');
         },
         subscribe: vi.fn(() => vi.fn()),
-      } as never;
+      } as unknown as Dependency;
 
       depBufferPush(buf, createLink(customErrorDep, 1));
 

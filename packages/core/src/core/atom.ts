@@ -198,15 +198,17 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 
     while ((this.flags & MASK) === SCHED) {
       const prev = this.#pendingOldValue;
-      if (prev !== NO_VALUE) {
-        const next = this.#value;
-
-        this.#pendingOldValue = NO_VALUE;
+      if (prev === NO_VALUE) {
         this.flags &= ~SCHED;
+        break;
+      }
+      const next = this.#value;
 
-        if (!this.#equal(next, prev)) {
-          nodeNotifySubscribers(this, next, prev);
-        }
+      this.#pendingOldValue = NO_VALUE;
+      this.flags &= ~SCHED;
+
+      if (!this.#equal(next, prev)) {
+        nodeNotifySubscribers(this, next, prev);
       }
 
       // Logic: Batching Control

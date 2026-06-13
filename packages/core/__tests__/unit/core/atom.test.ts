@@ -3,6 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ATOM_STATE_FLAGS } from '@/constants';
 import { AtomError, aeNextTick, atom, batch, computed, globalScheduler } from '@/index';
 
 describe('Atom', () => {
@@ -370,6 +371,21 @@ describe('Atom', () => {
 
       // Should have 6 errors logged
       expect(consoleError).toHaveBeenCalledTimes(6);
+    });
+  });
+
+  describe('Infinite Loop Protection', () => {
+    it('should break out of flushNotifications and clear the scheduled flag when prev is NO_VALUE', () => {
+      const a = atom(42);
+
+      const currentFlags = Reflect.get(a, 'flags') as number;
+      Reflect.set(a, 'flags', currentFlags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED);
+
+      expect(() => {
+        Reflect.get(a, 'execute').call(a);
+      }).not.toThrow();
+
+      expect((Reflect.get(a, 'flags') as number) & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED).toBe(0);
     });
   });
 });
