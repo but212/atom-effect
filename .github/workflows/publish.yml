@@ -23,13 +23,13 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           install-playwright: "false"
 
+      - name: Verify Version and Extract Changelog
+        run: node .github/scripts/release-helper.js
+
       - name: Build and Typecheck
         run: |
           pnpm build
           pnpm typecheck
-
-      - name: Verify Version and Extract Changelog
-        run: node .github/scripts/release-helper.js
 
       - name: Publish to NPM
         run: pnpm -r publish --no-git-checks --provenance --access public
