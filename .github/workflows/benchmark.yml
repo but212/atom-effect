@@ -5,8 +5,30 @@ on:
     branches: [main]
 
 jobs:
+  setup:
+    name: Setup & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup
+        with:
+          install-playwright: "false"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-artifacts
+          path: |
+            packages/*/dist
+            packages/configs/dist
+
   benchmark:
     name: ${{ matrix.package }} (${{ matrix.type }})
+    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,8 +58,11 @@ jobs:
         with:
           install-playwright: ${{ matrix.playwright || 'false' }}
 
-      - name: Build
-        run: pnpm build
+      - name: Download build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: build-artifacts
+          path: .
 
       - name: Run benchmark
         working-directory: packages/${{ matrix.package }}
