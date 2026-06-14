@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import $ from '@/index';
+import { createMockJqXHR } from '../utils/test-helpers';
 
 describe('First-class Asynchronous Objects (AEJ)', () => {
   let $fixture: JQuery;
@@ -32,11 +33,12 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
   describe('Scenario 1: Temporal Awareness (Metadata Binding)', () => {
     it('should react to isPending and hasError state in atomBind', async () => {
       let resolveAjax!: (v: { name: string }[]) => void;
-      vi.spyOn($, 'ajax').mockImplementation(
-        () =>
+      vi.spyOn($, 'ajax').mockImplementation(() =>
+        createMockJqXHR(
           new Promise((resolve) => {
             resolveAjax = resolve;
-          }) as unknown as JQuery.jqXHR
+          })
+        )
       );
 
       $fixture.html(`
@@ -100,13 +102,13 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
       vi.spyOn($, 'ajax').mockImplementation((opts) => {
         const abortSpy = vi.fn();
         abortSpies.push(abortSpy);
-        return Object.assign(
+        return createMockJqXHR(
           new Promise((resolve) => {
             // Simulate network delay
             setTimeout(() => resolve([{ name: `Result for ${opts?.url}` }]), 50);
           }),
           { abort: abortSpy }
-        ) as unknown as JQuery.jqXHR;
+        );
       });
 
       const searchResult = $.atomFetch(() => `/api/search?q=${keyword.value}`, {

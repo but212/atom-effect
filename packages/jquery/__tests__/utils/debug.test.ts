@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
+import { castTo } from './test-helpers';
 
 describe('Debug Module (Black-box)', () => {
   const logSpy = vi.fn();
@@ -62,9 +63,7 @@ describe('Debug Module (Black-box)', () => {
 
       const htmlEl = Object.assign(document.createElement('div'), { id: 'app' });
       const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      const jqEl = Object.assign([document.createElement('span')], {
-        jquery: '3.x',
-      }) as unknown as JQuery;
+      const jqEl = $('<span>');
 
       const jqElement = jqEl[0];
       if (!jqElement) throw new Error('JQuery element not found');
@@ -102,7 +101,7 @@ describe('Debug Module (Black-box)', () => {
       const textNode = document.createTextNode('text node');
 
       $.debug.domUpdated('[SKIP]', disconnected, 'text', 'v1');
-      $.debug.domUpdated('[SKIP]', textNode as unknown as Element, 'text', 'v2');
+      $.debug.domUpdated('[SKIP]', castTo<Element>(textNode), 'text', 'v2');
 
       expect(logSpy).not.toHaveBeenCalled();
       expect(disconnected.hasAttribute('data-atom-debug')).toBe(false);
@@ -132,10 +131,8 @@ describe('Debug Module (Black-box)', () => {
       $.debug.enabled = true;
 
       // Passing invalid types should not throw ReferenceErrors or crash the system
-      expect(() =>
-        $.debug.domUpdated('[UI]', null as unknown as Element, 'test', 'val')
-      ).not.toThrow();
-      expect(() => $.debug.domUpdated('[UI]', {} as Element, 'test', 'val')).not.toThrow();
+      expect(() => $.debug.domUpdated('[UI]', castTo<Element>(null), 'test', 'val')).not.toThrow();
+      expect(() => $.debug.domUpdated('[UI]', castTo<Element>({}), 'test', 'val')).not.toThrow();
       expect(logSpy).not.toHaveBeenCalled();
     });
   });

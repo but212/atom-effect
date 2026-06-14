@@ -197,11 +197,11 @@ $.fn.atomProp = createChainableMethod(bindProp, SYSTEM_BINDING.ERRORS.MISSING_SO
  * $('.box').atomCss('width', widthAtom, 'px');
  * ```
  */
-$.fn.atomCss = createChainableMethod<AsyncReactiveValue<string | number> | CssValue, CssValue>(
+$.fn.atomCss = createChainableMethod<CssValue, CssValue>(
   bindCss,
   SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomCss'),
   (source, unit) =>
-    unit ? [source as AsyncReactiveValue<number>, unit as string] : (source as CssValue)
+    unit === undefined ? source : [source as AsyncReactiveValue<number>, String(unit)]
 );
 
 /**
@@ -262,7 +262,7 @@ $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
  * ```
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
-  return atomEachElement(this, (el) => bindVal(el, atom, options as ValOptions<unknown>));
+  return atomEachElement(this, (el) => bindVal(el, atom, options));
 };
 
 /**
@@ -300,7 +300,7 @@ $.fn.atomForm = function <T extends object>(
 ): JQuery {
   return atomEachElement(this, (el) => {
     if (el instanceof HTMLFormElement) {
-      bindForm(el, atom, options as FormOptions<unknown>);
+      bindForm(el, atom, options);
     } else {
       debug.warn(SYSTEM_BINDING.PREFIX, 'Skipping non-Form element for atomForm');
     }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 import { disableAutoCleanup } from '@/core/registry';
 import $ from '@/index';
+import { castTo } from '../utils/test-helpers';
 
 describe('jQuery Patch (Lifecycle & Events)', () => {
   beforeEach(() => {
@@ -200,12 +201,12 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
 
     it('should handle null/undefined nodes in target collections during remove/detach without throwing', () => {
       const $el = $('<span>').appendTo(document.body);
-      const $mixed = $el.add(null as unknown as Element);
+      const $mixed = $el.add(castTo<Element>(null));
 
       expect(() => $mixed.remove()).not.toThrow();
 
       const $el2 = $('<span>').appendTo(document.body);
-      const $mixed2 = $el2.add(undefined as unknown as Element);
+      const $mixed2 = $el2.add(castTo<Element>(undefined));
       expect(() => $mixed2.detach()).not.toThrow();
 
       $el.remove();
