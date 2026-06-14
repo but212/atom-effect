@@ -2,9 +2,9 @@
 
 This directory contains utility scripts to automate maintenance and lifecycle tasks across the `atom-effect` monorepo.
 
-## Benchmark Docs Updater (`update-benchmarks.cjs`)
+## Benchmark Docs Updater (`update-benchmarks.js`)
 
-The `update-benchmarks.cjs` script automates parsing raw Vitest benchmark execution logs and surgically updating the performance tables across all monorepo package documentations.
+The `update-benchmarks.js` script automates parsing raw Vitest benchmark execution logs and surgically updating the performance tables across all monorepo package documentations.
 
 ### How It Works
 
@@ -30,7 +30,7 @@ Ensure the raw benchmark logs are located at the root of the workspace:
 Run the script from the monorepo root directory:
 
 ```bash
-node scripts/update-benchmarks.cjs
+node scripts/update-benchmarks.js
 ```
 
 ### Affected Documentation Files
