@@ -472,6 +472,15 @@ describe('Lens System', () => {
   });
 
   describe('getPathValue', () => {
+    it('should retrieve properties from standard objects', () => {
+      expect(getPathValue({ a: { b: 42 } }, ['a', 'b'])).toBe(42);
+    });
+
+    it('should retrieve properties from Map instances', () => {
+      const map = new Map<string, unknown>([['key', 'map-value']]);
+      expect(getPathValue(map, ['key'])).toBe('map-value');
+    });
+
     it('should retrieve properties from functions', () => {
       const func = Object.assign(() => {}, { customProp: 'hello-func' });
       expect(getPathValue(func, ['customProp'])).toBe('hello-func');
@@ -479,6 +488,21 @@ describe('Lens System', () => {
 
     it('should retrieve prototype properties from primitives', () => {
       expect(getPathValue('hello', ['length'])).toBe(5);
+      expect(getPathValue(true, ['toString'])).toBeTypeOf('function');
+    });
+
+    it('should return undefined for nullish values or missing paths', () => {
+      expect(getPathValue(null, ['a'])).toBeUndefined();
+      expect(getPathValue(undefined, ['a'])).toBeUndefined();
+      expect(getPathValue({}, ['a'])).toBeUndefined();
+      expect(getPathValue('hello', ['invalidProp'])).toBeUndefined();
+    });
+
+    it('should block and return undefined for forbidden keys', () => {
+      const obj = {};
+      expect(getPathValue(obj, ['__proto__'])).toBeUndefined();
+      expect(getPathValue(obj, ['constructor'])).toBeUndefined();
+      expect(getPathValue(obj, ['prototype'])).toBeUndefined();
     });
   });
 });

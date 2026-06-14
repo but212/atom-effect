@@ -184,9 +184,10 @@ export function getPathValue(source: unknown, parts: string[]): any {
     res =
       res instanceof Map
         ? res.get(part)
-        : typeof res === 'object' || typeof res === 'function'
-          ? Reflect.get(res, part)
-          : Reflect.get(Object(res), part);
+        : Reflect.get(
+            typeof res === 'object' || typeof res === 'function' ? res : Object(res),
+            part
+          );
   }
   return res;
 }
