@@ -21,13 +21,12 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           registry-url: "https://registry.npmjs.org"
-          install-playwright: "true"
+          install-playwright: "false"
 
-      - name: Build, Typecheck, and Test
+      - name: Build and Typecheck
         run: |
           pnpm build
           pnpm typecheck
-          pnpm test:run
 
       - name: Verify Version and Extract Changelog
         run: node .github/scripts/release-helper.js

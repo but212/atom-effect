@@ -3,6 +3,7 @@ name: Benchmark
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   benchmark:
@@ -63,18 +64,12 @@ jobs:
         with:
           pattern: benchmark-raw-*
           merge-multiple: true
-          path: .
+          path: results-merged/
 
       - name: Upload merged results
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
-          path: |
-            core-macro.txt
-            core-micro.txt
-            core-realistic.txt
-            core-state.txt
-            jquery-macro.txt
-            jquery-micro.txt
-            utils-all.txt
+          path: results-merged/
+
 
