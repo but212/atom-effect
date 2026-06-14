@@ -8,7 +8,10 @@ import { microBenchOptions, withContainer } from '../utils/setup';
 
 describe('List Diffing: Reconciliation computation overhead (1000 items)', () => {
   const baseItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, val: `Item ${i}` }));
-  const newItems = Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, val: `New Item ${i}` }));
+  const newItems = Array.from({ length: 100 }, (_, i) => ({
+    id: 1000 + i,
+    val: `New Item ${i}`,
+  }));
 
   const cases = [
     { name: 'No-op (Same reference, no diffing)', next: baseItems },

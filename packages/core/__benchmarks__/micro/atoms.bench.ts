@@ -11,7 +11,10 @@ describe('Atoms: Core Operations', () => {
   const creationCases = [
     { name: 'baseline: plain object creation', create: (i: number) => ({ value: i }) },
     { name: 'creation: primitive atom', create: (i: number) => atom(i) },
-    { name: 'baseline: nested object creation', create: (i: number) => ({ value: { count: i } }) },
+    {
+      name: 'baseline: nested object creation',
+      create: (i: number) => ({ value: { count: i } }),
+    },
     { name: 'creation: object atom', create: (i: number) => atom({ count: i }) },
   ];
 

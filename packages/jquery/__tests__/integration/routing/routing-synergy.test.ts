@@ -366,7 +366,10 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
               $.route({
                 target: $el.find('#sub'),
                 routes: {
-                  home: { title: 'Route Title', render: (el) => $(el).html('<div>Home</div>') },
+                  home: {
+                    title: 'Route Title',
+                    render: (el) => $(el).html('<div>Home</div>'),
+                  },
                 },
                 default: 'home',
               })

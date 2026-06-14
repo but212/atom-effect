@@ -31,8 +31,16 @@ const sortGridData = (rows: DataGridRow[], direction: 'asc' | 'desc') =>
 
 const initialLargeState = {
   users: Array.from({ length: 1000 }, (_, id) => ({ id, name: `U ${id}` })),
-  posts: Array.from({ length: 5000 }, (_, id) => ({ id, userId: id % 1000, content: `P ${id}` })),
-  comments: Array.from({ length: 4000 }, (_, id) => ({ id, postId: id % 5000, text: `C ${id}` })),
+  posts: Array.from({ length: 5000 }, (_, id) => ({
+    id,
+    userId: id % 1000,
+    content: `P ${id}`,
+  })),
+  comments: Array.from({ length: 4000 }, (_, id) => ({
+    id,
+    postId: id % 5000,
+    text: `C ${id}`,
+  })),
 };
 
 describe('Todo App: Comprehensive Workflow', () => {

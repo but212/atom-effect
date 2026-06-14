@@ -34,7 +34,10 @@ describe('Scheduler: aeNextTick', () => {
   const promises = new Array<Promise<void>>(REPEATS);
 
   const asyncParallelCases = [
-    { name: `baseline: schedule ${REPEATS} native microtasks`, schedule: () => Promise.resolve() },
+    {
+      name: `baseline: schedule ${REPEATS} native microtasks`,
+      schedule: () => Promise.resolve(),
+    },
     { name: `schedule ${REPEATS} microtasks`, schedule: () => aeNextTick() },
   ];
 

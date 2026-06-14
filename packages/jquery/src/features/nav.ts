@@ -323,7 +323,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   // Browser Event Subscriptions
   win.addEventListener('popstate', handlePopState, { signal: _lifecycleController.signal });
-  win.document.addEventListener('click', handleLinkClick, { signal: _lifecycleController.signal });
+  win.document.addEventListener('click', handleLinkClick, {
+    signal: _lifecycleController.signal,
+  });
 
   const isPending = $.computed(() => content.isPending || pendingHooks.value > 0, {
     name: 'nav:isPending',
