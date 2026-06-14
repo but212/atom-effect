@@ -70,8 +70,35 @@ jobs:
           mkdir -p ../../results
           pnpm bench:${{ matrix.type }} > ../../results/${{ matrix.package }}-${{ matrix.type }}.txt
 
-      - name: Upload results
+      - name: Upload temporary result
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-raw-${{ matrix.package }}-${{ matrix.type }}
+          path: results/${{ matrix.package }}-${{ matrix.type }}.txt
+
+  collect-results:
+    name: Collect Results
+    needs: benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all raw results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: benchmark-raw-*
+          merge-multiple: true
+          path: .
+
+      - name: Upload merged results
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
-          path: results/
+          path: |
+            core-macro.txt
+            core-micro.txt
+            core-realistic.txt
+            core-state.txt
+            jquery-macro.txt
+            jquery-micro.txt
+            utils-all.txt
