@@ -2,6 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DebugPortal } from '@/features/web-component/engine';
 import $ from '@/index';
 
+declare global {
+  interface Window {
+    __AEJ_INTERNAL__?: DebugPortal;
+  }
+}
+
 describe('Web Components Synergy (useAtomComponent)', () => {
   const createdElements: HTMLElement[] = [];
 
@@ -202,9 +208,10 @@ describe('Web Components Synergy (useAtomComponent)', () => {
     it('should have honest comments for sheetCache (FIFO instead of LRU)', () => {
       // This is more of a documentation check, but we can verify behavior
       $.debug.enabled = true;
-      const internal = (window as unknown as { __AEJ_INTERNAL__: DebugPortal }).__AEJ_INTERNAL__;
-      const cache = internal.sheetCache;
-      cache.clear();
+       const internal = window.__AEJ_INTERNAL__;
+       if (!internal) throw new Error('Debug portal not available on window');
+       const cache = internal.sheetCache;
+       cache.clear();
 
       // We need to trigger getOrCreateSheet. It's internal.
       // But useAtomComponent.setup uses it via styles.

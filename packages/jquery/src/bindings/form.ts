@@ -24,8 +24,8 @@ import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { getOrCreateRootObserver } from '@/core/observer';
 import { registry } from '@/core/registry';
-import { INTERNAL_HANDLER } from '@/core/symbols';
-import type { FormOptions } from '@/types';
+import { markInternal } from '@/core/symbols';
+import type { FormOptions, ValOptions } from '@/types';
 import { normalizePath } from '@/utils';
 import { bindVal } from './unified';
 
@@ -97,10 +97,10 @@ function isToggleChecked(v: unknown, val: string, isCheck: boolean): boolean {
  *
  * @internal
  */
-function createInterceptedLens<T extends object>(
+function createInterceptedLens<T extends object, U>(
   name: string,
   baseLens: WritableAtom<PathValue<T, Paths<T>>>,
-  options: FormOptions<unknown>
+  options: FormOptions<U>
 ): WritableAtom<unknown> {
   const { transform, onChange } = options;
   return new Proxy(baseLens, {
@@ -207,10 +207,10 @@ function syncToggleEffect(
  * });
  * ```
  */
-export function bindForm<T extends object>(
+export function bindForm<T extends object, U = unknown>(
   form: HTMLFormElement,
   atom: WritableAtom<T> | WritableAtom<unknown>[],
-  options: FormOptions<unknown> = {}
+  options: FormOptions<U> = {}
 ): void {
   const targetAtom = Array.isArray(atom) ? mergeLenses(...atom) : atom;
   registry.cleanup(form);
@@ -267,7 +267,7 @@ export function bindForm<T extends object>(
       atom.value = getNextToggleValue(atom.peek(), el.checked, val, isCheck);
     };
 
-    (handler as unknown as { [INTERNAL_HANDLER]: boolean })[INTERNAL_HANDLER] = true;
+    markInternal(handler);
     $(el).on('change', handler);
     registry.onCleanup(el, () => $(el).off('change', handler));
 
@@ -275,9 +275,13 @@ export function bindForm<T extends object>(
   };
 
   const bindField = (el: Element): void => {
-    const control = el as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    const name = control.name || el.getAttribute('name');
+    if (!(el instanceof HTMLElement)) return;
+    const name =
+      el.getAttribute('name') ||
+      ('name' in el ? String((el as Record<string, unknown>).name) : undefined);
     if (!name) return;
+
+    const control = el as HTMLElement & { name?: string; value?: string; type?: string };
 
     const oldName = names.get(control);
     if (oldName === name) return;
@@ -297,7 +301,10 @@ export function bindForm<T extends object>(
     ) {
       bindToggle(control, entry.atom, control.value, control.type === 'checkbox');
     } else {
-      bindVal(control, entry.atom, options);
+      const valOpts: ValOptions<unknown> = {};
+      if (options.debounce !== undefined) valOpts.debounce = options.debounce;
+      if (options.event !== undefined) valOpts.event = options.event;
+      bindVal(control, entry.atom, valOpts);
     }
 
     applyValidation(control, name, entry.atom);

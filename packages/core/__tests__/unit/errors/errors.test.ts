@@ -7,7 +7,6 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import {
   AtomError,
-  type AtomErrorJSON,
   atom,
   ComputedError,
   computed,
@@ -129,7 +128,7 @@ describe('Error Handling System', () => {
           code: 'C1',
         }),
       });
-      const json = serializeError(top) as AtomErrorJSON;
+      const json = serializeError(top);
 
       expect(json.message).toBe('top');
       const mid = Reflect.get(json as object, 'cause');
@@ -155,7 +154,7 @@ describe('Error Handling System', () => {
 
     it('should respect custom recoverable properties on standard Error objects in fallback strategy', () => {
       const stdError = new Error('Some standard error');
-      (stdError as Error & { recoverable?: boolean }).recoverable = false;
+      (stdError as { recoverable?: boolean }).recoverable = false;
 
       expect(fallbackStrategy.test(stdError)).toBe(true);
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
+import { createMockJqXHR } from '../../utils/test-helpers';
 
 /**
  * HTML Templates for Integration Tests
@@ -32,7 +33,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
     const url = settings?.url || '';
     const response = Object.entries(responses).find(([pattern]) => url.includes(pattern))?.[1];
 
-    const xhr = {
+    const xhr = createMockJqXHR(Promise.resolve(), {
       getResponseHeader: (name: string) => {
         if (name === 'X-PJAX-URL') {
           return typeof response === 'object' ? response.url || url : url;
@@ -42,7 +43,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
       abort: vi.fn(),
       status: 200,
       statusText: 'OK',
-    } as unknown as JQuery.jqXHR;
+    });
 
     const deferred = $.Deferred<unknown, unknown, unknown>();
 

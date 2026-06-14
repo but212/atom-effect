@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
+import { createMockJqXHR } from '../../utils/test-helpers';
 import type { AtomNav } from '@/types';
 
 /**
@@ -10,7 +11,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
     const url = settings?.url || '';
     const response = Object.entries(responses).find(([pattern]) => url.includes(pattern))?.[1];
 
-    const xhr = {
+    const xhr = createMockJqXHR(Promise.resolve(), {
       getResponseHeader: (name: string) => {
         if (name === 'X-PJAX-URL') {
           return typeof response === 'object' ? response.url || url : url;
@@ -20,7 +21,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
       abort: vi.fn(),
       status: 200,
       statusText: 'OK',
-    } as unknown as JQuery.jqXHR;
+    });
 
     const deferred = $.Deferred<unknown, unknown, unknown>();
 
@@ -394,7 +395,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       // Single unified spy to prevent mock overriding collisions
       vi.spyOn($, 'ajax').mockImplementation((settings?: JQuery.AjaxSettings) => {
         const url = settings?.url || '';
-        const xhr = {
+        const xhr = createMockJqXHR(Promise.resolve(), {
           getResponseHeader: () => null,
           abort: () => {
             if (url.includes('/api')) {
@@ -403,7 +404,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
           },
           status: 200,
           statusText: 'OK',
-        } as unknown as JQuery.jqXHR;
+        });
 
         const deferred = $.Deferred<unknown, unknown, unknown>();
 

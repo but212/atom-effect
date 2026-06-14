@@ -39,7 +39,7 @@ describe('Result<T, E>', () => {
 
     it('Result.fromPredicate() should narrow type when predicate is a type guard', () => {
       const isString = (x: unknown): x is string => typeof x === 'string';
-      const res = Result.fromPredicate('hello' as unknown, isString);
+      const res = Result.fromPredicate<unknown, string>('hello', isString);
       expect(Result.unwrap(res)).toBe('hello');
     });
 

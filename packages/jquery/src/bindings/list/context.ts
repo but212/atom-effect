@@ -14,11 +14,6 @@ import $ from 'jquery';
 import type { ListKey } from '@/types';
 import { cleanupNodes, setAtomKey } from './utils';
 
-const getAttribute = Function.prototype.call.bind(Element.prototype.getAttribute) as (
-  el: Element,
-  name: string
-) => string | null;
-
 /**
  * Represents the state of a single list item at a point in time.
  * Used by the reconciler to calculate moves, updates, and removals.
@@ -47,7 +42,7 @@ export interface ListContext<T> {
   /** Inverse lookup for O(1) index retrieval from a key. */
   keyToIndex: Map<ListKey, number>;
   /** Cached reference to the placeholder element shown when the list is empty. */
-  $emptyEl: JQuery | null;
+  $emptyEl: JQuery<Element> | null;
   /** The reactive effect controlling this list. Needed to check disposal state during async tasks. */
   fx: EffectObject | undefined;
   /** Target container element. */
@@ -140,13 +135,13 @@ export function resolveEventTarget<T>(
 ): { target: HTMLElement; index: number; item: T } | null {
   let current: Element | null = start;
   while (current && current !== container) {
-    const rawKey = getAttribute(current, 'data-atom-key');
+    const rawKey = current.getAttribute('data-atom-key');
     if (rawKey !== null) {
       const index = getIndex(ctx, rawKey);
       if (index !== undefined) {
         const snapshot = ctx.snapshots[index];
-        if (snapshot) {
-          return { target: current as HTMLElement, index, item: snapshot.item };
+        if (snapshot && current instanceof HTMLElement) {
+          return { target: current, index, item: snapshot.item };
         }
       }
     }

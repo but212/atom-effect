@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import $ from '@/index';
+import { createMockJqXHR } from '../utils/test-helpers';
 
 describe('First-class Asynchronous Objects (AEJ)', () => {
   let $fixture: JQuery;
@@ -34,9 +35,11 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
       let resolveAjax!: (v: { name: string }[]) => void;
       vi.spyOn($, 'ajax').mockImplementation(
         () =>
-          new Promise((resolve) => {
-            resolveAjax = resolve;
-          }) as unknown as JQuery.jqXHR
+          createMockJqXHR(
+            new Promise((resolve) => {
+              resolveAjax = resolve;
+            })
+          )
       );
 
       $fixture.html(`
@@ -100,13 +103,13 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
       vi.spyOn($, 'ajax').mockImplementation((opts) => {
         const abortSpy = vi.fn();
         abortSpies.push(abortSpy);
-        return Object.assign(
+        return createMockJqXHR(
           new Promise((resolve) => {
             // Simulate network delay
             setTimeout(() => resolve([{ name: `Result for ${opts?.url}` }]), 50);
           }),
           { abort: abortSpy }
-        ) as unknown as JQuery.jqXHR;
+        );
       });
 
       const searchResult = $.atomFetch(() => `/api/search?q=${keyword.value}`, {

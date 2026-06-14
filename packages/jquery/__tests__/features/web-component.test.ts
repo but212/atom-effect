@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HYDRATION_MARKER } from '@/core/symbols';
 import $ from '@/index';
+import { castTo } from '../utils/test-helpers';
 import type { AtomComponentElement } from '@/types';
 
 // ─── Test Utilities ─────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ describe('Web Component Features', () => {
       const ctrl = $.useAtomComponent(el);
       ctrl.setup(el.attachShadow({ mode: 'open' }));
 
-      const conflict = document.createElement('div') as unknown as ShadowRoot;
+      const conflict = castTo<ShadowRoot>(document.createElement('div'));
       expect(() => ctrl.setup(conflict)).toThrow(/teardown/i);
     });
   });

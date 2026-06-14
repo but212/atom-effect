@@ -12,7 +12,7 @@ import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
 import { registerMapEffect, registerReactiveEffect } from '@/core/effect-factory';
 import { registry } from '@/core/registry';
-import { INTERNAL_HANDLER } from '@/core/symbols';
+import { markInternal } from '@/core/symbols';
 import type {
   AsyncReactiveValue,
   BindingOptions,
@@ -354,10 +354,10 @@ export function bindVisibility(
  * When to use:
  * - Implement two-way sync for inputs, selects, and textareas.
  */
-export function bindVal(
+export function bindVal<T>(
   element: HTMLElement,
-  atom: WritableAtom<unknown>,
-  options: ValOptions<unknown> = {}
+  atom: WritableAtom<T>,
+  options: ValOptions<T> = {}
 ): void {
   const tagName = element.tagName.toLowerCase();
   const isValidTag =
@@ -385,11 +385,13 @@ function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
     const root = element.form || element.getRootNode();
     const safeName = element.name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const group = (root as ParentNode).querySelectorAll(`input[type="radio"][name="${safeName}"]`);
-    for (let i = 0; i < group.length; i++) {
-      const el = group[i];
-      if (el && el !== element) {
-        $(el).trigger('change.atomRadioSync');
+    if (root instanceof Document || root instanceof DocumentFragment || root instanceof Element) {
+      const group = root.querySelectorAll(`input[type="radio"][name="${safeName}"]`);
+      for (let i = 0; i < group.length; i++) {
+        const el = group[i];
+        if (el && el !== element) {
+          $(el).trigger('change.atomRadioSync');
+        }
       }
     }
   }
@@ -413,7 +415,7 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
       syncRadios(element);
     }
   };
-  (onChange as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+  markInternal(onChange);
 
   $element.on('change change.atomRadioSync', onChange);
   registry.onCleanup(element, () => {

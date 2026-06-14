@@ -151,6 +151,9 @@ export function getErrorChain(error: unknown): Array<unknown> {
  * @param error - The error or object to serialize.
  * @param seen - @internal Internal set for circular tracking.
  */
+export function serializeError(error: Error, seen?: Set<unknown>): AtomErrorJSON;
+export function serializeError(error: null | undefined, seen?: Set<unknown>): null | undefined;
+export function serializeError(error: unknown, seen?: Set<unknown>): AtomErrorJSON | unknown;
 export function serializeError(
   error: unknown,
   seen: Set<unknown> = new Set()

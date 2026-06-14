@@ -3,6 +3,7 @@ import { createListContext, resolveEventTarget } from '@/bindings/list/context';
 import { applyListBinding } from '@/bindings/list/index';
 import { registry } from '@/core/registry';
 import $ from '@/index';
+import { castTo } from '../utils/test-helpers';
 
 describe('$.atomList (Integration)', () => {
   const EXPANDO = 'data-test-expando';
@@ -623,10 +624,10 @@ describe('$.atomList (Integration)', () => {
     it('atomList delegation and text node container checking', () => {
       // Call atomList on a mock JQuery-like object that has a null/undefined element to cover el falsy branch in index.ts:138
       const list = $.atom(['A']);
-      const mockJq = {
+      const mockJq = castTo<JQuery>({
         length: 1,
         0: null,
-      } as unknown as JQuery;
+      });
       $.fn.atomList.call(mockJq, list, {
         key: (i: unknown) => String(i),
         render: (i: unknown) => `<span>${String(i)}</span>`,

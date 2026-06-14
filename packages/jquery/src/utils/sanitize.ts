@@ -532,4 +532,5 @@ export const isDangerousUrl = (
  * @param val The CSS property value to check.
  * @returns True if dangerous patterns (e.g., expression, javascript) are detected.
  */
-export const isDangerousCssValue = (val: string): boolean => Guard.isDangerousCss(val);
+export const isDangerousCssValue = (val: unknown): boolean =>
+  typeof val === 'string' ? Guard.isDangerousCss(val) : false;

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $, { type AtomNav, type AtomNavOptions } from '@/index';
+import { castTo, createMockJqXHR } from '../utils/test-helpers';
 
 /**
  * Constants & Test Data
@@ -389,13 +390,13 @@ describe('$.atomNav', () => {
 
     it('should fallback to hard reload on AJAX failure', async () => {
       const assignSpy = vi.fn();
-      const mockWin = {
+      const mockWin = castTo<Window & typeof globalThis>({
         location: { ...window.location, assign: assignSpy },
         history: window.history,
         document: window.document,
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      } as unknown as Window & typeof globalThis;
+      });
 
       harness.mockAjax({ data: 'Error', shouldFail: true });
       const nav = await harness.create({ window: mockWin });
@@ -408,7 +409,7 @@ describe('$.atomNav', () => {
       const abortSpy = vi.fn();
       vi.spyOn($, 'ajax').mockImplementation(() => {
         const p = new Promise<string>(() => {});
-        return Object.assign(p, { abort: abortSpy }) as unknown as JQuery.jqXHR;
+        return createMockJqXHR(p, { abort: abortSpy });
       });
 
       const nav = await harness.create();
@@ -424,7 +425,7 @@ describe('$.atomNav', () => {
     });
 
     it('should not crash navigation if previous curRendered.url is invalid/malformed', async () => {
-      const mockWin = {
+      const mockWin = castTo<Window & typeof globalThis>({
         location: window.location,
         history: {
           ...window.history,
@@ -435,7 +436,7 @@ describe('$.atomNav', () => {
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
         scrollTo: vi.fn(),
-      } as unknown as Window & typeof globalThis;
+      });
 
       const nav = await harness.create({ window: mockWin });
 
@@ -538,13 +539,13 @@ describe('$.atomNav', () => {
 
     it('should assign location when navigating to a different origin', async () => {
       const assignSpy = vi.fn();
-      const mockWin = {
+      const mockWin = castTo<Window & typeof globalThis>({
         location: { ...window.location, assign: assignSpy, href: 'http://localhost/' },
         history: window.history,
         document: window.document,
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
-      } as unknown as Window & typeof globalThis;
+      });
 
       const nav = await harness.create({ window: mockWin });
       await nav.navigate('https://google.com');

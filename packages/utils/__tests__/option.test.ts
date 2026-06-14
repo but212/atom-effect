@@ -43,7 +43,7 @@ describe('Option<T>', () => {
 
     it('Option.fromPredicate() should narrow type when predicate is a type guard', () => {
       const isString = (x: unknown): x is string => typeof x === 'string';
-      const result = Option.fromPredicate('hello' as unknown, isString);
+      const result = Option.fromPredicate<unknown, string>('hello', isString);
       expect(Option.unwrap(result)).toBe('hello');
     });
 

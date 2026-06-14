@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOrCreateRootObserver, rootObserversMap } from '@/core/observer';
 import { registry } from '@/core/registry';
 import $, { cleanup, disableAutoCleanup } from '@/index';
+import { castTo } from '../utils/test-helpers';
 
 describe('Binding Registry', () => {
   beforeEach(() => {
@@ -66,11 +67,11 @@ describe('Binding Registry', () => {
       const errorSpy = vi.spyOn($.debug, 'error').mockImplementation(() => {});
       $.debug.enabled = true;
       const el = document.createElement('div');
-      const mockEffect = {
+      const mockEffect = castTo<Parameters<typeof registry.trackEffect>[1]>({
         dispose: () => {
           throw new Error('dispose failed');
         },
-      } as unknown as Parameters<typeof registry.trackEffect>[1];
+      });
       registry.trackEffect(el, mockEffect);
       registry.cleanup(el);
       expect(errorSpy).toHaveBeenCalled();
@@ -113,7 +114,7 @@ describe('Binding Registry', () => {
       const originalBody = document.body;
       const bodySpy = vi
         .spyOn(document, 'body', 'get')
-        .mockReturnValue(null as unknown as HTMLElement);
+        .mockReturnValue(castTo<HTMLElement>(null));
 
       // Simulate early binding (e.g. in <head>)
       const atom = $.atom('v1');
@@ -143,7 +144,7 @@ describe('Binding Registry', () => {
       const originalBody = document.body;
       const bodySpy = vi
         .spyOn(document, 'body', 'get')
-        .mockReturnValue(null as unknown as HTMLElement);
+        .mockReturnValue(castTo<HTMLElement>(null));
 
       // 2. Initialize with autoCleanup allowed, but body is null so it won't schedule immediately.
       $.initAEJ({ autoCleanup: true });
@@ -193,7 +194,7 @@ describe('Binding Registry', () => {
       $.initAEJ({ autoCleanup: { root: shadow } });
 
       const atom = $.atom('active');
-      const $child = $('<span>').appendTo(shadow as unknown as HTMLElement);
+      const $child = $('<span>').appendTo(shadow);
       $child.atomText(atom);
 
       // 1. Cleanup host should reach into shadow
@@ -202,7 +203,7 @@ describe('Binding Registry', () => {
       expect($child.text()).not.toBe('dead');
 
       // 2. Mutation cleanup in shadow
-      const $child2 = $('<span>').appendTo(shadow as unknown as HTMLElement);
+      const $child2 = $('<span>').appendTo(shadow);
       $child2.atomText(atom);
       $child2[0]?.remove();
 

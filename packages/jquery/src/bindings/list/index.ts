@@ -13,7 +13,7 @@
 import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
-import type { ListKey, ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
+import type { ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import { createListContext, disposeContext, type ListContext, resolveEventTarget } from './context';
 import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
@@ -63,7 +63,13 @@ export function applyListBinding<T>(
   }
 
   // 2. Optimization: Pre-calculate lookup strategies to minimize work inside the effect loop.
-  const getKey: ListKeyFn<T> = typeof key === 'function' ? key : (item: T) => item[key] as ListKey;
+  const getKey: ListKeyFn<T> =
+    typeof key === 'function'
+      ? key
+      : (item: T) => {
+          const k = item[key];
+          return typeof k === 'string' || typeof k === 'number' ? k : String(k);
+        };
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 
