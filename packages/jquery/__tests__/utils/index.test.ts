@@ -19,7 +19,10 @@ describe('Utils', () => {
           expected: 'div.foo.bar',
         },
         { el: document.createElement('span'), expected: 'span' },
-        { el: Object.assign(document.createElement('div'), { className: '   ' }), expected: 'div' },
+        {
+          el: Object.assign(document.createElement('div'), { className: '   ' }),
+          expected: 'div',
+        },
         { el: svg, expected: 'svg.foo.bar' },
       ];
 
