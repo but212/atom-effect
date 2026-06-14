@@ -65,18 +65,20 @@ txtFiles.forEach((file) => {
       // Ensure the line contains the 10 numeric metrics columns at the end
       if (parts.length >= 11) {
         const stats = parts.slice(-10);
-        const nameParts = parts.slice(0, -10);
-        const name = nameParts
-          .join(' ')
-          .replace(/^[·\s]+/, '')
-          .trim();
-        const normalized = normalizeName(name);
+        const hz = parseFloat(stats[0].replace(/,/g, ''));
+        const mean = parseFloat(stats[3]);
+        const p99 = parseFloat(stats[5]);
 
-        benchmarkDb[normalized] = {
-          hz: parseFloat(stats[0].replace(/,/g, '')),
-          mean: parseFloat(stats[3]),
-          p99: parseFloat(stats[5]),
-        };
+        if (!Number.isNaN(hz) && !Number.isNaN(mean) && !Number.isNaN(p99)) {
+          const nameParts = parts.slice(0, -10);
+          const name = nameParts
+            .join(' ')
+            .replace(/^[·\s]+/, '')
+            .trim();
+          const normalized = normalizeName(name);
+
+          benchmarkDb[normalized] = { hz, mean, p99 };
+        }
       }
     }
   });
@@ -305,8 +307,8 @@ detailedFiles.forEach((mdFile) => {
   let headerIndexes = null;
   const updated = lines.map((line) => {
     if (line.trim().startsWith('|') && line.includes('|')) {
-      const isHeader =
-        line.toLowerCase().includes('ops/sec') || line.toLowerCase().includes('mean');
+      const lowerLine = line.toLowerCase();
+      const isHeader = lowerLine.includes('ops/sec (hz)') && lowerLine.includes('mean (ms)');
       if (isHeader) {
         const cols = line.split('|').map((c) => c.trim());
         // Find whichever column denotes the case name dynamically
