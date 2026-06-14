@@ -131,9 +131,7 @@ describe('Debug Module (Black-box)', () => {
       $.debug.enabled = true;
 
       // Passing invalid types should not throw ReferenceErrors or crash the system
-      expect(() =>
-        $.debug.domUpdated('[UI]', castTo<Element>(null), 'test', 'val')
-      ).not.toThrow();
+      expect(() => $.debug.domUpdated('[UI]', castTo<Element>(null), 'test', 'val')).not.toThrow();
       expect(() => $.debug.domUpdated('[UI]', castTo<Element>({}), 'test', 'val')).not.toThrow();
       expect(logSpy).not.toHaveBeenCalled();
     });

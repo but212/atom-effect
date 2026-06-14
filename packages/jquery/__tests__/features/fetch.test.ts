@@ -45,13 +45,12 @@ describe('$.atomFetch', () => {
 
     it('should expose accurate isPending/isResolved state', async () => {
       let resolveAjax!: (v: unknown) => void;
-      vi.spyOn($, 'ajax').mockImplementation(
-        () =>
-          createMockJqXHR(
-            new Promise((resolve) => {
-              resolveAjax = resolve;
-            })
-          )
+      vi.spyOn($, 'ajax').mockImplementation(() =>
+        createMockJqXHR(
+          new Promise((resolve) => {
+            resolveAjax = resolve;
+          })
+        )
       );
 
       const data = $.atomFetch('/api/slow', { defaultValue: null });

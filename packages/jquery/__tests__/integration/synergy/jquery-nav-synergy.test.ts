@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
-import { createMockJqXHR } from '../../utils/test-helpers';
 import type { AtomNav } from '@/types';
+import { createMockJqXHR } from '../../utils/test-helpers';
 
 /**
  * Utility to setup AJAX mocks for PJAX/Navigation tests

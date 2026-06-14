@@ -132,7 +132,7 @@ export function resolveEventTarget<T>(
   ctx: ListContext<T>,
   start: Element,
   container: Element
-): { target: HTMLElement; index: number; item: T } | null {
+): { target: Element; index: number; item: T } | null {
   let current: Element | null = start;
   while (current && current !== container) {
     const rawKey = current.getAttribute('data-atom-key');
@@ -140,7 +140,7 @@ export function resolveEventTarget<T>(
       const index = getIndex(ctx, rawKey);
       if (index !== undefined) {
         const snapshot = ctx.snapshots[index];
-        if (snapshot && current instanceof HTMLElement) {
+        if (snapshot) {
           return { target: current, index, item: snapshot.item };
         }
       }

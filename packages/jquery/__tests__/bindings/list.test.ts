@@ -621,6 +621,25 @@ describe('$.atomList (Integration)', () => {
       $container.remove();
     });
 
+    it('should handle list with null or undefined items when key is a string property selector', async () => {
+      const list = $.atom<({ id: number } | null | undefined)[]>([
+        { id: 1 },
+        null,
+        undefined,
+        { id: 2 },
+      ]);
+      const $container = $('<div>').appendTo(document.body);
+
+      $container.atomList(list, {
+        key: 'id' as unknown as keyof ({ id: number } | null | undefined),
+        render: (item) => `<span>${item ? item.id : 'nullish'}</span>`,
+      });
+
+      await $.nextTick();
+      expect($container.find('span').length).toBe(3);
+      $container.remove();
+    });
+
     it('atomList delegation and text node container checking', () => {
       // Call atomList on a mock JQuery-like object that has a null/undefined element to cover el falsy branch in index.ts:138
       const list = $.atom(['A']);
@@ -676,6 +695,22 @@ describe('$.atomList (Integration)', () => {
       const result = resolveEventTarget(ctx, el, $container[0] as HTMLElement);
       // Should be null because snapshots[0] is undefined
       expect(result).toBeNull();
+    });
+
+    it('ListContext resolveEventTarget should work with SVGElement', () => {
+      const $container = $(
+        document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      ) as unknown as JQuery<HTMLElement>;
+      const ctx = createListContext<string>($container, undefined);
+      ctx.keyToIndex.set('key1', 0);
+      ctx.snapshots = [{ key: 'key1', item: 'item1', node: [] }];
+
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      el.setAttribute('data-atom-key', 'key1');
+
+      const result = resolveEventTarget(ctx, el, $container[0] as Element);
+      expect(result).not.toBeNull();
+      expect(result?.item).toBe('item1');
     });
   });
 

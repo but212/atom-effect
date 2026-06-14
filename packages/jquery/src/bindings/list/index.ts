@@ -67,8 +67,8 @@ export function applyListBinding<T>(
     typeof key === 'function'
       ? key
       : (item: T) => {
-          const k = item[key];
-          return typeof k === 'string' || typeof k === 'number' ? k : String(k);
+          const rawVal = item == null ? item : item[key];
+          return typeof rawVal === 'string' || typeof rawVal === 'number' ? rawVal : String(rawVal);
         };
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);

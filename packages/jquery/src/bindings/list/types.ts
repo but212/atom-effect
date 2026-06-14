@@ -122,5 +122,5 @@ export interface PlaceCallbacks<T> {
 export interface EventBinding<T = unknown> {
   type: string;
   selector: string;
-  callback: (this: HTMLElement, item: T, index: number, e: JQuery.TriggeredEvent) => void;
+  callback: (this: Element, item: T, index: number, e: JQuery.TriggeredEvent) => void;
 }

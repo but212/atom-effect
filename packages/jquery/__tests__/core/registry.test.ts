@@ -112,9 +112,7 @@ describe('Binding Registry', () => {
       $.initAEJ({ autoCleanup: false }); // Reset
 
       const originalBody = document.body;
-      const bodySpy = vi
-        .spyOn(document, 'body', 'get')
-        .mockReturnValue(castTo<HTMLElement>(null));
+      const bodySpy = vi.spyOn(document, 'body', 'get').mockReturnValue(castTo<HTMLElement>(null));
 
       // Simulate early binding (e.g. in <head>)
       const atom = $.atom('v1');
@@ -142,9 +140,7 @@ describe('Binding Registry', () => {
       disableAutoCleanup();
 
       const originalBody = document.body;
-      const bodySpy = vi
-        .spyOn(document, 'body', 'get')
-        .mockReturnValue(castTo<HTMLElement>(null));
+      const bodySpy = vi.spyOn(document, 'body', 'get').mockReturnValue(castTo<HTMLElement>(null));
 
       // 2. Initialize with autoCleanup allowed, but body is null so it won't schedule immediately.
       $.initAEJ({ autoCleanup: true });

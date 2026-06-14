@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HYDRATION_MARKER } from '@/core/symbols';
 import $ from '@/index';
-import { castTo } from '../utils/test-helpers';
 import type { AtomComponentElement } from '@/types';
+import { castTo } from '../utils/test-helpers';
 
 // ─── Test Utilities ─────────────────────────────────────────────────────────
 

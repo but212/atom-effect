@@ -207,6 +207,14 @@ function syncToggleEffect(
  * });
  * ```
  */
+function getElementNameProperty(el: HTMLElement): string | undefined {
+  if ('name' in el) {
+    const value = (el as Record<string, unknown>).name;
+    return value == null ? undefined : String(value);
+  }
+  return undefined;
+}
+
 export function bindForm<T extends object, U = unknown>(
   form: HTMLFormElement,
   atom: WritableAtom<T> | WritableAtom<unknown>[],
@@ -276,9 +284,7 @@ export function bindForm<T extends object, U = unknown>(
 
   const bindField = (el: Element): void => {
     if (!(el instanceof HTMLElement)) return;
-    const name =
-      el.getAttribute('name') ||
-      ('name' in el ? String((el as Record<string, unknown>).name) : undefined);
+    const name = el.getAttribute('name') || getElementNameProperty(el);
     if (!name) return;
 
     const control = el as HTMLElement & { name?: string; value?: string; type?: string };
