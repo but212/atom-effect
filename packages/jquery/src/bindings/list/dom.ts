@@ -19,6 +19,14 @@ import { type ListContext, removeNode } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
 import { cleanupNodes } from './utils';
 
+function isJQuery(obj: unknown): obj is JQuery {
+  return obj instanceof $;
+}
+
+function isStringArray(arr: unknown[]): arr is string[] {
+  return arr.every((x) => typeof x === 'string');
+}
+
 /**
  * Helper to inject data-atom-key attribute directly into an HTML string's root element.
  * Performance: Avoids setAttribute DOM calls inside placeItems.
@@ -41,8 +49,8 @@ function getElements(raw: unknown): Node[] {
   if (typeof raw === 'string') {
     return $.parseHTML(raw) || [];
   }
-  if (raw instanceof $) {
-    return (raw as JQuery).get();
+  if (isJQuery(raw)) {
+    return raw.get();
   }
   if (raw instanceof DocumentFragment) {
     return Array.from(raw.childNodes);
@@ -98,9 +106,9 @@ export function handleEmpty<T>(
 
   if (empty && !ctx.$emptyEl) {
     const raw = typeof empty === 'string' ? $.parseHTML(sanitizeHtml(empty)) : empty;
-    ctx.$emptyEl = ($(raw as Element | Element[] | JQuery) as unknown as JQuery).appendTo(
-      $container
-    ) as unknown as JQuery;
+    if (raw) {
+      ctx.$emptyEl = $(raw as Element | ArrayLike<Element> | JQuery<Element>).appendTo($container);
+    }
   }
 
   ctx.keyToIndex.clear();
@@ -134,11 +142,10 @@ export function renderItems<T>(
       })
     : results;
 
-  const isAllStrings = results.every((r) => typeof r === 'string');
-  if (isInitial && isAllStrings && !options.events) {
+  if (isInitial && isStringArray(sanitized) && !options.events) {
     const allNodes = $.parseHTML(sanitized.join(''));
     if (allNodes && allNodes.length === renderCount && allNodes.every((n) => n.nodeType === 1)) {
-      return sanitized as string[];
+      return sanitized;
     }
   }
 
@@ -151,10 +158,9 @@ export function renderItems<T>(
 
     // Fallback: Ensure data-atom-key is set on all Element nodes
     for (const el of nodes) {
-      if (el.nodeType === 1) {
-        const element = el as HTMLElement;
-        if (!element.hasAttribute('data-atom-key')) {
-          element.setAttribute('data-atom-key', String(slot.key));
+      if (el instanceof Element) {
+        if (!el.hasAttribute('data-atom-key')) {
+          el.setAttribute('data-atom-key', String(slot.key));
         }
       }
     }
@@ -225,7 +231,7 @@ export function placeItems<T>(
 
       // Lazy wrapping: JQuery wrapper only allocated if callback exists
       const $el = bind || onAdd ? $(el as HTMLElement) : null;
-      slot.node = [el as HTMLElement];
+      slot.node = [el];
       slot.state = ItemState.Existing;
 
       if (bind && $el) bind($el, item, i);

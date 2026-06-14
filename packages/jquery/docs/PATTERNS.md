@@ -303,8 +303,8 @@ $('#card-root').atomMount(UserCard, { userId: 42 });
 ## 9. Web Components (Custom Elements)
 
 > [!WARNING]
-> **Avoid Shared State in Static Properties**: 
-> Declaring mutable state (such as `$.atom` or `$.computed`) directly within static properties (e.g., `static aejBind = { count: $.atom(0) }`) causes that state to be shared across **all** instances of the Custom Element class. 
+> **Avoid Shared State in Static Properties**:
+> Declaring mutable state (such as `$.atom` or `$.computed`) directly within static properties (e.g., `static aejBind = { count: $.atom(0) }`) causes that state to be shared across **all** instances of the Custom Element class.
 > To ensure each instance has its own isolated reactive state, define atoms as instance properties (e.g., `this.count = $.atom(0)`) and register them via the `setup()` method during connection.
 
 ### Declarative Specification

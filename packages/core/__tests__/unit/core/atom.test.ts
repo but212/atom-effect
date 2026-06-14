@@ -3,6 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ATOM_STATE_FLAGS } from '@/constants';
 import { AtomError, aeNextTick, atom, batch, computed, globalScheduler } from '@/index';
 
 describe('Atom', () => {
@@ -24,7 +25,8 @@ describe('Atom', () => {
     expect(spy).not.toHaveBeenCalled();
 
     // Invalid subscribers
-    expect(() => a.subscribe(null as unknown as () => void)).toThrow(AtomError);
+    // @ts-expect-error Testing invalid subscriber
+    expect(() => a.subscribe(null)).toThrow(AtomError);
   });
 
   describe('Identity, Validation & Initialization', () => {
@@ -33,9 +35,12 @@ describe('Atom', () => {
       expect(a.value).toBe(42);
       expect(atom(null).value).toBeNull();
 
-      for (const sub of ['invalid', null, {}]) {
-        expect(() => a.subscribe(sub as unknown as () => void)).toThrow(AtomError);
-      }
+      // @ts-expect-error
+      expect(() => a.subscribe('invalid')).toThrow(AtomError);
+      // @ts-expect-error
+      expect(() => a.subscribe(null)).toThrow(AtomError);
+      // @ts-expect-error
+      expect(() => a.subscribe({})).toThrow(AtomError);
 
       // Valid subscriber with execute method should not throw
       expect(() => a.subscribe({ execute: vi.fn() })).not.toThrow();
@@ -256,7 +261,7 @@ describe('Atom', () => {
       const unsub = a.subscribe(() => {});
       expect(a.subscriberCount()).toBe(0);
       expect(() => unsub()).not.toThrow();
-      expect((a as unknown as { _slots: unknown })._slots).toBeNull();
+      expect(Reflect.get(a, '_slots')).toBeNull();
     });
 
     it('should return undefined on read access after disposal', () => {
@@ -283,11 +288,7 @@ describe('Atom', () => {
       c.value;
 
       // Access dependencies
-      const slots = (
-        c as unknown as {
-          _depSlots: { length: number; at(i: number): { node: unknown } | undefined } | null;
-        }
-      )._depSlots;
+      const slots = Reflect.get(c, '_depSlots');
       if (slots) {
         for (let i = 0; i < slots.length; i++) {
           const link = slots.at(i);
@@ -370,6 +371,21 @@ describe('Atom', () => {
 
       // Should have 6 errors logged
       expect(consoleError).toHaveBeenCalledTimes(6);
+    });
+  });
+
+  describe('Infinite Loop Protection', () => {
+    it('should break out of flushNotifications and clear the scheduled flag when prev is NO_VALUE', () => {
+      const a = atom(42);
+
+      const currentFlags = Reflect.get(a, 'flags') as number;
+      Reflect.set(a, 'flags', currentFlags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED);
+
+      expect(() => {
+        Reflect.get(a, 'execute').call(a);
+      }).not.toThrow();
+
+      expect((Reflect.get(a, 'flags') as number) & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED).toBe(0);
     });
   });
 });

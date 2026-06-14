@@ -22,7 +22,7 @@ import {
   DEBUG_PREFIX,
   IS_DEV,
 } from '@/constants';
-import type { DebugConfig, DependencyId, NodeMetadata } from '@/types';
+import type { DebugConfig, DependencyId, IdentifiableNode, NodeMetadata } from '@/types';
 
 /** Shared no-op function to reduce memory pressure in production. @internal */
 const noop = () => {};
@@ -109,7 +109,7 @@ class DevDebugEngine implements DebugConfig {
     }
   }
 
-  registerNode(node: object & { id: DependencyId }): void {
+  registerNode(node: IdentifiableNode): void {
     if (!this.enabled || node === null || typeof node !== 'object' || node.id === undefined) {
       return;
     }
@@ -120,7 +120,12 @@ class DevDebugEngine implements DebugConfig {
     this.#finalizer.register(node, id);
   }
 
-  attachDebugInfo(obj: object, type: string, id: DependencyId, customName?: string): void {
+  attachDebugInfo(
+    obj: IdentifiableNode,
+    type: string,
+    id: DependencyId,
+    customName?: string
+  ): void {
     if (!this.enabled) return;
     const hasEntry = this.#registry.has(id);
     if (!hasEntry && customName === undefined && !this.trackGraph) return;
@@ -140,7 +145,7 @@ class DevDebugEngine implements DebugConfig {
       this.#registry.set(id, entry);
     }
 
-    this.registerNode(obj as object & { id: DependencyId });
+    this.registerNode(obj);
   }
 
   /**
@@ -247,9 +252,13 @@ export const debug: DebugConfig = IS_DEV ? new DevDebugEngine() : ProdDebugContr
  * Individual exports for direct usage (proxied to the debug singleton).
  */
 export const warn = (cond: boolean, msg: string) => debug.warn(cond, msg);
-export const registerNode = (node: object & { id: DependencyId }) => debug.registerNode(node);
-export const attachDebugInfo = (obj: object, type: string, id: DependencyId, customName?: string) =>
-  debug.attachDebugInfo(obj, type, id, customName);
+export const registerNode = (node: IdentifiableNode) => debug.registerNode(node);
+export const attachDebugInfo = (
+  obj: IdentifiableNode,
+  type: string,
+  id: DependencyId,
+  customName?: string
+) => debug.attachDebugInfo(obj, type, id, customName);
 export const trackUpdate = (id: DependencyId, name?: string) => debug.trackUpdate(id, name);
 export const trackEvaluationFailure = (id: DependencyId) => debug.trackEvaluationFailure(id);
 export const getDebugName = (obj: object | null | undefined) => debug.getDebugName(obj);
@@ -266,4 +275,4 @@ let nextId = 1;
  *
  * @returns A unique `DependencyId`.
  */
-export const generateId = (): DependencyId => nextId++ as DependencyId;
+export const generateId = (): DependencyId => nextId++;

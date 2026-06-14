@@ -23,12 +23,11 @@ import { registry } from '@/core/registry';
 export function setAtomKey(nodes: Node[], key: string | null): void {
   for (let i = 0; i < nodes.length; i++) {
     const el = nodes[i];
-    if (el && el.nodeType === 1) {
-      const element = el as HTMLElement;
+    if (el instanceof Element) {
       if (key === null) {
-        element.removeAttribute('data-atom-key');
+        el.removeAttribute('data-atom-key');
       } else {
-        element.setAttribute('data-atom-key', key);
+        el.setAttribute('data-atom-key', key);
       }
     }
   }

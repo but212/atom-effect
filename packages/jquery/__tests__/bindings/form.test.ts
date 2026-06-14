@@ -358,7 +358,7 @@ describe('Form Binding (atomForm)', () => {
           }
           set value(v) {
             this._value = v;
-            this._internals.setFormValue(v as string);
+            this._internals.setFormValue(v);
           }
           val(v?: unknown) {
             if (v === undefined) return this.value;
@@ -382,6 +382,28 @@ describe('Form Binding (atomForm)', () => {
       $(faceEl).trigger('change');
       await $.nextTick();
       expect(data.value.custom).toBe('changed');
+    });
+  });
+
+  describe('Safety & Robustness', () => {
+    it('should skip elements if name property is null or undefined to avoid coercing to string "null"/"undefined"', async () => {
+      const data = $.atom<Record<string, unknown>>({ name: 'initial' });
+      const $form = $('<form><input id="test-input"></form>').appendTo(document.body);
+      const input = $form.find('input')[0];
+
+      Object.defineProperty(input, 'name', {
+        get: () => null,
+        configurable: true,
+      });
+
+      $form.atomForm(data);
+      await $.nextTick();
+
+      $form.find('input').val('new-value').trigger('change');
+      await $.nextTick();
+
+      expect(data.value).not.toHaveProperty('null');
+      expect(data.value).not.toHaveProperty('undefined');
     });
   });
 });

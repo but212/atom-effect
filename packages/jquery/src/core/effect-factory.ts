@@ -7,7 +7,7 @@
  * and ensures deterministic resource cleanup via the registry.
  */
 
-import { effect, isAtom, type ReadonlyAtom, untracked } from '@but212/atom-effect';
+import { effect, isAtom, untracked } from '@but212/atom-effect';
 import { SYSTEM_BINDING } from '@/constants';
 import { registry } from '@/core/registry';
 import type { AsyncReactiveValue } from '@/types';
@@ -31,10 +31,8 @@ export type BindingDebugType =
   | (string & {});
 
 export interface BatchedTask {
-  source?: AsyncReactiveValue<unknown>;
-  sourceMap?: Record<string, AsyncReactiveValue<unknown>>;
-  updater: (val: unknown) => void;
-  debugType: BindingDebugType;
+  isReactive: boolean;
+  run: (el: Element) => () => void;
 }
 
 let activeBatchCollector: BatchedTask[] | null = null;
@@ -65,9 +63,9 @@ export function withBatchCollection(fn: () => void): BatchedTask[] {
  * @internal
  */
 const getSourceValue = <T>(source: AsyncReactiveValue<T>): T | Promise<T> => {
-  if (isAtom(source)) return (source as ReadonlyAtom<T | Promise<T>>).value;
+  if (isAtom(source)) return source.value;
   if (typeof source === 'function') return (source as () => T | Promise<T>)();
-  return source as T | Promise<T>;
+  return source;
 };
 
 function createAsyncRunner<T>(
@@ -150,24 +148,28 @@ export function registerReactiveEffect<T>(
   updater: (value: T) => void,
   debugType: BindingDebugType
 ): void {
+  const hasReactive = isAtom(source) || typeof source === 'function';
+
   if (activeBatchCollector) {
     activeBatchCollector.push({
-      source: source as unknown as AsyncReactiveValue<unknown>,
-      updater: updater as unknown as (val: unknown) => void,
-      debugType,
+      isReactive: hasReactive,
+      run: (element) => {
+        const runner = createAsyncRunner(element, debugType, updater);
+        return () => runner(getSourceValue(source));
+      },
     });
     return;
   }
 
   const runner = createAsyncRunner(el, debugType, updater);
 
-  if (isAtom(source) || typeof source === 'function') {
+  if (hasReactive) {
     registry.trackEffect(
       el,
       effect(() => runner(getSourceValue(source)), { name: debugType })
     );
   } else {
-    runner(source as T | Promise<T>);
+    runner(source);
   }
 }
 
@@ -187,19 +189,8 @@ export function registerMapEffect<T>(
   updater: (map: Record<string, T>) => void,
   debugType: BindingDebugType
 ): void {
-  if (activeBatchCollector) {
-    activeBatchCollector.push({
-      sourceMap: sourceMap as unknown as Record<string, AsyncReactiveValue<unknown>>,
-      updater: updater as unknown as (val: unknown) => void,
-      debugType,
-    });
-    return;
-  }
-
-  const runner = createAsyncRunner(el, debugType, updater);
   const keys = Object.keys(sourceMap);
 
-  /** Pre-check if any source in the map is reactive. */
   let hasReactive = false;
   for (const key of keys) {
     const val = sourceMap[key];
@@ -209,7 +200,6 @@ export function registerMapEffect<T>(
     }
   }
 
-  /** Collects current values from the map in a single pass. */
   const collect = () => {
     const resolved: Record<string, T> = {};
     const promises: Promise<{ key: string; value: T }>[] = [];
@@ -235,6 +225,19 @@ export function registerMapEffect<T>(
     return resolved;
   };
 
+  if (activeBatchCollector) {
+    activeBatchCollector.push({
+      isReactive: hasReactive,
+      run: (element) => {
+        const runner = createAsyncRunner(element, debugType, updater);
+        return () => runner(collect());
+      },
+    });
+    return;
+  }
+
+  const runner = createAsyncRunner(el, debugType, updater);
+
   if (hasReactive) {
     registry.trackEffect(
       el,
@@ -245,68 +248,17 @@ export function registerMapEffect<T>(
   }
 }
 
-const collectMap = (
-  sourceMap: Record<string, AsyncReactiveValue<unknown>>,
-  keys: string[]
-): Record<string, unknown> | Promise<Record<string, unknown>> => {
-  const resolved: Record<string, unknown> = {};
-  const promises: Promise<{ key: string; value: unknown }>[] = [];
-
-  for (const key of keys) {
-    const value = getSourceValue(sourceMap[key]);
-
-    if (isPromise(value)) {
-      promises.push((value as Promise<unknown>).then((v) => ({ key, value: v })));
-    } else {
-      resolved[key] = value;
-    }
-  }
-
-  if (promises.length > 0) {
-    return Promise.all(promises).then((results) => {
-      for (const res of results) {
-        resolved[res.key] = res.value;
-      }
-      return resolved;
-    });
-  }
-  return resolved;
-};
-
-const isReactive = (val: unknown): boolean => isAtom(val) || typeof val === 'function';
-
 export function registerBatchedEffects(el: Element, tasks: BatchedTask[]): void {
   let hasReactive = false;
   for (let i = 0; i < tasks.length; i++) {
     const t = tasks[i];
-    if (t) {
-      if (t.sourceMap) {
-        const values = Object.values(t.sourceMap);
-        for (let j = 0; j < values.length; j++) {
-          if (isReactive(values[j])) {
-            hasReactive = true;
-            break;
-          }
-        }
-      } else if ('source' in t && isReactive(t.source)) {
-        hasReactive = true;
-      }
+    if (t?.isReactive) {
+      hasReactive = true;
+      break;
     }
-    if (hasReactive) break;
   }
 
-  const runners = tasks.map((t) => {
-    const runner = createAsyncRunner(el, t.debugType, t.updater);
-    const sourceMap = t.sourceMap;
-    if (sourceMap) {
-      const keys = Object.keys(sourceMap);
-      return () => runner(collectMap(sourceMap, keys));
-    }
-    if ('source' in t) {
-      return () => runner(getSourceValue(t.source));
-    }
-    return () => {};
-  });
+  const runners = tasks.map((t) => t.run(el));
 
   if (hasReactive) {
     registry.trackEffect(

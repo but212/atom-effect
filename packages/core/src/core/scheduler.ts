@@ -21,13 +21,7 @@ import {
   SCHEDULER_CONFIG,
   SCHEDULER_STATE,
 } from '@/constants';
-import type {
-  JobBuffer,
-  SchedulerJob,
-  SchedulerJobFunction,
-  SchedulerJobObject,
-  SchedulerState,
-} from '@/types';
+import type { JobBuffer, SchedulerJob, SchedulerJobObject, SchedulerState } from '@/types';
 import { nextSmi, SchedulerError } from '@/utils';
 
 import { resetTrackingContext, trackingContext } from './base';
@@ -142,12 +136,9 @@ class ReactiveScheduler implements SchedulerState {
 
       try {
         if (job._k === fnKind) {
-          (job as SchedulerJobFunction)();
+          job();
         } else {
-          const res = (job as SchedulerJobObject).execute() as unknown as Result<
-            void,
-            Error
-          > | void;
+          const res = (job as SchedulerJobObject).execute() as Result<void, Error> | void;
           if (res !== undefined && Result.isErr(res)) {
             const err = res.error;
             console.error(
@@ -246,10 +237,7 @@ class ReactiveScheduler implements SchedulerState {
    */
   schedule(callback: SchedulerJob): Result<void, Error> {
     if (IS_DEV) {
-      if (
-        typeof callback !== 'function' &&
-        (!callback || typeof (callback as SchedulerJobObject).execute !== 'function')
-      ) {
+      if (typeof callback !== 'function' && (!callback || typeof callback.execute !== 'function')) {
         return Result.err(new SchedulerError(ERROR_MESSAGES.SCHEDULER_CALLBACK_MUST_BE_FUNCTION));
       }
     }

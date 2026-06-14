@@ -199,7 +199,7 @@ class EffectImpl
     if (!(force || this._depSlots.size === 0 || nodeIsDirty(this))) return Result.ok(false);
 
     const budgetRes = this.#validateBudget();
-    if (Result.isErr(budgetRes)) return budgetRes as unknown as Result<boolean, Error>;
+    if (Result.isErr(budgetRes)) return budgetRes;
     if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
@@ -216,16 +216,16 @@ class EffectImpl
    * Logic: Resolution Handling
    * Synchronously assigns the cleanup handle or delegates to the async handler.
    */
-  #handleResult(val: unknown): void {
+  #handleResult(val: ReturnType<EffectFunction>): void {
     if (val === undefined || val === null) {
       this.#cleanup = null;
       return;
     }
 
     if (typeof val === 'function') {
-      this.#cleanup = val as () => void;
+      this.#cleanup = val;
     } else if (isPromise(val)) {
-      this.#handleAsyncResult(val as Promise<undefined | (() => void)>);
+      this.#handleAsyncResult(val);
     } else {
       this.#cleanup = null;
     }
@@ -236,7 +236,8 @@ class EffectImpl
    * Orchestrates cleanup handles returned from Promises. Uses session IDs
    * to discard stale handles from invalidated tracking cycles.
    */
-  #handleAsyncResult(promise: Promise<unknown>): void {
+  // biome-ignore lint/suspicious/noConfusingVoidType: matches public EffectFunction return type
+  #handleAsyncResult(promise: Promise<void | (() => void)>): void {
     const sessionId = ++this.#trackSessionId;
 
     promise.then(
@@ -256,7 +257,7 @@ class EffectImpl
           return;
         }
 
-        this.#cleanup = cleanup as () => void;
+        this.#cleanup = cleanup;
       },
       (err) => {
         if (this.#trackSessionId === sessionId) {
@@ -275,7 +276,7 @@ class EffectImpl
     try {
       fn();
     } catch (e) {
-      this.#handleExecutionError(e as Error, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+      this.#handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
     }
   }
 
@@ -298,7 +299,7 @@ class EffectImpl
     const globalCount = scheduler.incrementFlushExecutionCount();
     if (Result.isErr(globalCount)) {
       this.dispose();
-      return globalCount as unknown as Result<void, Error>;
+      return globalCount;
     }
 
     this.#totalExecutions++;

@@ -140,17 +140,17 @@ const isForbiddenKey = (key: string) => FORBIDDEN_KEYS.has(key);
 function cloneAndSet(container: object, key: string, value: unknown): object {
   if (Array.isArray(container)) {
     const next = [...container];
-    (next as unknown as Record<string, unknown>)[key] = value;
+    Reflect.set(next, key, value);
     return next;
   }
   if (container instanceof Map) {
-    return new Map(container as Map<unknown, unknown>).set(key, value);
+    return new Map(container).set(key, value);
   }
   const proto = Object.getPrototypeOf(container);
   if (proto === Object.prototype || proto === null) {
     return { ...container, [key]: value };
   }
-  const next = Object.assign(Object.create(proto), container) as Record<string, unknown>;
+  const next = Object.assign(Object.create(proto), container);
   next[key] = value;
   return next;
 }
@@ -159,27 +159,35 @@ function cloneAndSet(container: object, key: string, value: unknown): object {
  * Logic: Immutable Deep Update
  * @internal
  */
-export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): unknown {
+// biome-ignore lint/suspicious/noExplicitAny: returns type-erased dynamic value
+export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): any {
   if (index === keys.length) return value;
   const key = keys[index];
   if (key === undefined || obj == null || typeof obj !== 'object' || isForbiddenKey(key))
     return obj;
 
-  const oldVal = obj instanceof Map ? obj.get(key) : (obj as Record<string, unknown>)[key];
+  const oldVal = obj instanceof Map ? obj.get(key) : Reflect.get(obj, key);
   const newVal = setDeepValue(oldVal, keys, index + 1, value);
 
-  return DEFAULT_EQUAL(oldVal, newVal) ? obj : cloneAndSet(obj as object, key, newVal);
+  return DEFAULT_EQUAL(oldVal, newVal) ? obj : cloneAndSet(obj, key, newVal);
 }
 
 /**
  * Logic: Deep Read
  * @internal
  */
-export function getPathValue(source: unknown, parts: string[]): unknown {
+// biome-ignore lint/suspicious/noExplicitAny: returns type-erased dynamic path value
+export function getPathValue(source: unknown, parts: string[]): any {
   let res = source;
   for (const part of parts) {
     if (res == null || isForbiddenKey(part)) return undefined;
-    res = res instanceof Map ? res.get(part) : (res as Record<string, unknown>)[part];
+    res =
+      res instanceof Map
+        ? res.get(part)
+        : Reflect.get(
+            typeof res === 'object' || typeof res === 'function' ? res : Object(res),
+            part
+          );
   }
   return res;
 }
@@ -239,7 +247,7 @@ class LensImpl<T extends object, P extends string>
   set value(newVal: PathValue<T, P>) {
     const cur = this.#root.peek();
     const next = setDeepValue(cur, this.#parts, 0, newVal);
-    if (next !== cur) this.#root.value = next as T;
+    if (next !== cur) this.#root.value = next;
   }
 
   peek(): PathValue<T, P> {
@@ -277,13 +285,13 @@ class LensImpl<T extends object, P extends string>
   }
 
   #getValue(source: T): PathValue<T, P> {
-    return getPathValue(source, this.#parts) as PathValue<T, P>;
+    return getPathValue(source, this.#parts);
   }
 
   #notify(): void {
     const nv = this.peek();
     if (!DEFAULT_EQUAL(nv, this.#prevValue)) {
-      const ov = this.#prevValue as PathValue<T, P>;
+      const ov = this.#prevValue;
       this.#prevValue = nv;
       nodeNotifySubscribers(this, nv, ov);
     }
@@ -329,22 +337,27 @@ class LensImpl<T extends object, P extends string>
  * nameLens.value = 'Bob';      // Updates user.value.profile.name
  * ```
  */
+interface LensNode {
+  // biome-ignore lint/suspicious/noExplicitAny: type-erased root atom
+  _root: WritableAtom<any>;
+  _path: string;
+}
+
+function isLensNode(atom: unknown): atom is LensNode {
+  return atom != null && typeof atom === 'object' && '_root' in atom && '_path' in atom;
+}
+
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
-  const brand = (atom as { [BRAND]?: number })[BRAND] || 0;
+  const brand = atom[BRAND] || 0;
   if (brand & BrandFlags.Lens) {
-    const parent = atom as unknown as {
-      _root: WritableAtom<Record<string, unknown>>;
-      _path: string;
-    };
-    return atomLens(
-      parent._root,
-      `${parent._path}.${path as string}` as Paths<Record<string, unknown>>
-    ) as unknown as WritableAtom<PathValue<T, P>>;
+    if (isLensNode(atom)) {
+      return atomLens(atom._root, `${atom._path}.${path}` as P);
+    }
   }
-  return new LensImpl(atom, path as string) as unknown as WritableAtom<PathValue<T, P>>;
+  return new LensImpl(atom, path);
 }
 
 /**
@@ -371,7 +384,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   get value(): MergedDependencyValue<L> {
-    return mergeAtomValues(this.#lenses) as MergedDependencyValue<L>;
+    return mergeAtomValues(this.#lenses);
   }
 
   set value(newVal: MergedDependencyValue<L>) {
@@ -381,7 +394,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   peek(): MergedDependencyValue<L> {
-    return mergeAtomValues(this.#lenses, true) as MergedDependencyValue<L>;
+    return mergeAtomValues(this.#lenses, true);
   }
 
   subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {

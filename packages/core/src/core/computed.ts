@@ -81,11 +81,15 @@ export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracke
  * a visited set to handle potential cycles or diamonds.
  * @internal
  */
+function isDependencyTracker(node: unknown): node is ReactiveDependencyTracker {
+  return node != null && typeof node === 'object' && '_depSlots' in node;
+}
+
 export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst: boolean): Error[] {
   const collected: Error[] = [];
   const seen = new Set<number>();
 
-  const walk = (node: ReactiveNodeBase): boolean => {
+  const walk = (node: ReactiveNodeBase | Dependency): boolean => {
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
@@ -96,21 +100,12 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
       if (stopOnFirst) return true;
     }
 
-    const tracker = node as unknown as Partial<ReactiveDependencyTracker>;
-    if (
-      tracker._depSlots &&
-      tracker._depFlags !== undefined &&
-      (tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0
-    ) {
-      const slots = tracker._depSlots;
+    if (isDependencyTracker(node) && (node._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
+      const slots = node._depSlots;
       const len = slots.length;
       for (let i = 0; i < len; i++) {
         const link = slots.at(i);
-        if (
-          link &&
-          (link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0 &&
-          walk(link.node as unknown as ReactiveNodeBase)
-        ) {
+        if (link && (link.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0 && walk(link.node)) {
           return true;
         }
       }
@@ -162,7 +157,7 @@ class ComputedAtomImpl<T>
   #value: T;
   #equal: (a: T, b: T) => boolean;
   #computation: () => T | Promise<T>;
-  #defaultValue: T;
+  #defaultValue: T | typeof NO_DEFAULT_VALUE;
   #onError: ((error: Error) => void) | null;
   #notifyCallback: () => void;
 
@@ -173,7 +168,7 @@ class ComputedAtomImpl<T>
 
     this.#equal = options.equal ?? DEFAULT_EQUAL;
     this.#computation = computation;
-    this.#defaultValue = 'defaultValue' in options ? options.defaultValue : (NO_DEFAULT_VALUE as T);
+    this.#defaultValue = 'defaultValue' in options ? (options.defaultValue as T) : NO_DEFAULT_VALUE;
     this.#onError = options.onError ?? null;
     this.#notifyCallback = () => this.execute();
 
@@ -229,7 +224,7 @@ class ComputedAtomImpl<T>
 
     const flags = this.flags;
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
-      if (this.#defaultValue !== (NO_DEFAULT_VALUE as T)) return Result.ok(this.#defaultValue);
+      if (this.#defaultValue !== NO_DEFAULT_VALUE) return Result.ok(this.#defaultValue);
       return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY));
     }
 
@@ -248,8 +243,7 @@ class ComputedAtomImpl<T>
     const asyncState = nextFlags & STATE_MASKS.ASYNC_MASK;
     if (asyncState === COMPUTED_STATE_FLAGS.RESOLVED) return Result.ok(this.#value);
 
-    const hasDefault = this.#defaultValue !== (NO_DEFAULT_VALUE as T);
-    if (hasDefault) return Result.ok(this.#defaultValue);
+    if (this.#defaultValue !== NO_DEFAULT_VALUE) return Result.ok(this.#defaultValue);
 
     if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
       return Result.err(this._error ?? new Error('REJECTED without error'));
@@ -398,28 +392,24 @@ class ComputedAtomImpl<T>
       nodeStartTracking(this);
       prepareTracking(this);
 
-      let val: T | Promise<T> | undefined;
-      let hasError = false;
-      let errorToThrow: unknown;
-
+      let val: T | Promise<T>;
       try {
         val = runInTrackingContext(trackingContext, this, this.#computation);
       } catch (e) {
         if (e instanceof RangeError || e instanceof ReferenceError || e instanceof SyntaxError) {
           throw e;
         }
-        hasError = true;
-        errorToThrow = e;
+        nodeCommitDeps(this);
+        this.#handleError(e, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
+        return;
       }
 
       nodeCommitDeps(this);
 
-      if (hasError) {
-        this.#handleError(errorToThrow, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
-      } else if (isPromise(val)) {
-        this.#handleAsyncComputation(val as Promise<T>);
+      if (isPromise(val)) {
+        this.#handleAsyncComputation(val);
       } else {
-        this.#finalizeResolution(val as T);
+        this.#finalizeResolution(val);
       }
     } finally {
       this.flags &= ~COMPUTED_STATE_FLAGS.RECOMPUTING;

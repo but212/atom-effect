@@ -127,7 +127,7 @@ describe('Tracking Engine', () => {
     }
 
     describe('Subscription robustness with undefined slots', () => {
-      const mockLink = (() => {}) as unknown as SubscriberTarget<void>;
+      const mockLink = (() => {}) as SubscriberTarget<void>;
 
       it('handles undefined slots gracefully in nodeUnsubscribe without throwing TypeError', () => {
         const mockNode = createMockNodeWithUndefinedSlots();

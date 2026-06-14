@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { aeNextTick, atom, batch, type ComputedError, computed, effect, untracked } from '@/index';
+import { aeNextTick, atom, batch, computed, effect, untracked } from '@/index';
 import { getNodeVersion } from '../utils/test-helpers';
 
 // ─── 1. Version Semantics ───────────────────────────────────────────────────
@@ -279,8 +279,8 @@ describe('Error Isolation', () => {
     try {
       c.value;
     } catch (e) {
-      expect((e as Error).name).toBe('ComputedError');
-      expect((e as ComputedError).cause).toBeInstanceOf(TypeError);
+      expect(Reflect.get(e as object, 'name')).toBe('ComputedError');
+      expect(Reflect.get(e as object, 'cause')).toBeInstanceOf(TypeError);
     }
   });
 

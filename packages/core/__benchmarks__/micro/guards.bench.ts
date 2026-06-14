@@ -18,9 +18,7 @@ describe('Type Guards: isAtom / isComputed', () => {
     {
       name: 'baseline: basic property check',
       check: (t: any) =>
-        t !== null &&
-        (typeof t === 'object' || typeof t === 'function') &&
-        (t as any)[BRAND] !== undefined,
+        t !== null && (typeof t === 'object' || typeof t === 'function') && t[BRAND] !== undefined,
     },
     { name: 'isAtom checks', check: isAtom },
     { name: 'isComputed checks', check: isComputed },

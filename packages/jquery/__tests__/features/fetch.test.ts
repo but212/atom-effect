@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $, { type FetchError } from '@/index';
+import { createMockJqXHR } from '../utils/test-helpers';
 
 /**
  * Integration Suite: $.atomFetch
@@ -44,11 +45,12 @@ describe('$.atomFetch', () => {
 
     it('should expose accurate isPending/isResolved state', async () => {
       let resolveAjax!: (v: unknown) => void;
-      vi.spyOn($, 'ajax').mockImplementation(
-        () =>
+      vi.spyOn($, 'ajax').mockImplementation(() =>
+        createMockJqXHR(
           new Promise((resolve) => {
             resolveAjax = resolve;
-          }) as unknown as JQuery.jqXHR
+          })
+        )
       );
 
       const data = $.atomFetch('/api/slow', { defaultValue: null });
@@ -87,7 +89,7 @@ describe('$.atomFetch', () => {
       capturedOptions = undefined;
       vi.spyOn($, 'ajax').mockImplementation((opts) => {
         capturedOptions = opts;
-        return Promise.resolve({ ok: true }) as unknown as JQuery.jqXHR;
+        return createMockJqXHR(Promise.resolve({ ok: true }));
       });
     });
 
@@ -137,7 +139,7 @@ describe('$.atomFetch', () => {
       expect(data.lastError?.message).toContain('Network Error: Internal Server Error (500)');
 
       // Error is wrapped by ComputedAtom core logic, extracting it from .cause
-      const originalError = (data.lastError as unknown as { cause: FetchError }).cause;
+      const originalError = (data.lastError as { cause: FetchError }).cause;
       expect(originalError).toBeDefined();
       expect(originalError.jqXHR).toBe(jqXhrError);
       expect(onError).toHaveBeenCalledWith(originalError);
@@ -221,12 +223,12 @@ describe('$.atomFetch', () => {
 
       vi.spyOn($, 'ajax')
         .mockReturnValueOnce(
-          Object.assign(
+          createMockJqXHR(
             new Promise<unknown>((_, reject) => {
               rejectXhr = reject;
             }),
             { abort: abortFn }
-          ) as unknown as JQuery.jqXHR
+          )
         )
         .mockResolvedValueOnce({ ok: true });
 
@@ -246,7 +248,7 @@ describe('$.atomFetch', () => {
     it('should allow manual abort via atom.abort()', async () => {
       const abortSpy = vi.fn();
       vi.spyOn($, 'ajax').mockReturnValue(
-        Object.assign(new Promise(() => {}), { abort: abortSpy }) as unknown as JQuery.jqXHR
+        createMockJqXHR(new Promise(() => {}), { abort: abortSpy })
       );
 
       const data = $.atomFetch('/api/manual', { defaultValue: null });
@@ -259,7 +261,7 @@ describe('$.atomFetch', () => {
     it('should abort pending requests when the atom is disposed', async () => {
       const abortSpy = vi.fn();
       vi.spyOn($, 'ajax').mockReturnValue(
-        Object.assign(new Promise(() => {}), { abort: abortSpy }) as unknown as JQuery.jqXHR
+        createMockJqXHR(new Promise(() => {}), { abort: abortSpy })
       );
 
       const data = $.atomFetch('/api/dispose', { defaultValue: null });
@@ -292,7 +294,7 @@ describe('$.atomFetch', () => {
     it('should handle synchronous abort immediately after starting fetch', async () => {
       const abortSpy = vi.fn();
       vi.spyOn($, 'ajax').mockReturnValue(
-        Object.assign(new Promise(() => {}), { abort: abortSpy }) as unknown as JQuery.jqXHR
+        createMockJqXHR(new Promise(() => {}), { abort: abortSpy })
       );
 
       const data = $.atomFetch('/api/sync-abort', { defaultValue: null });
@@ -307,7 +309,7 @@ describe('$.atomFetch', () => {
     it('should abort session immediately when aborted during URL resolution', async () => {
       const abortSpy = vi.fn();
       vi.spyOn($, 'ajax').mockImplementation((_settings) => {
-        return Object.assign(new Promise(() => {}), { abort: abortSpy }) as unknown as JQuery.jqXHR;
+        return createMockJqXHR(new Promise(() => {}), { abort: abortSpy });
       });
 
       const data = $.atomFetch(

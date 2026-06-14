@@ -268,7 +268,7 @@ describe('Atom-Effect: Security Specification', () => {
     });
 
     it('should return false for isDangerousCssValue with invalid input', () => {
-      expect(isDangerousCssValue(null as unknown as string)).toBe(false);
+      expect(isDangerousCssValue(null)).toBe(false);
     });
 
     it('should resolve out of range numeric entities to empty string in CSS validation', () => {

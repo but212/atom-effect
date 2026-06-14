@@ -14,23 +14,11 @@
 import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { SYSTEM_BINDING } from '@/constants';
-import { INTERNAL_HANDLER } from '@/core/symbols';
+import { markInternal } from '@/core/symbols';
 import type { ValOptions, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
 
 type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-
-/**
- * Logic: Internal Handler Marking
- * Marks a function as an internal handler to bypass global jQuery patching.
- *
- * Why: Performance
- * Prevents redundant update cycles by skipping the `$.fn.on` batching
- * wrapper. Synchronization is already managed via internal `BindingFlags`.
- */
-const markInternal = (fn: (...args: never[]) => unknown): void => {
-  (fn as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
-};
 
 /** Represents a specialized synchronization strategy for different form element types. @internal */
 interface BindingStrategy<T> {
@@ -220,9 +208,7 @@ export function applyInputBinding<T>(
     .map((n) => n + eventNamespace)
     .join(' ');
 
-  $(element)
-    .on(`blur${eventNamespace}`, handleBlur)
-    .on(eventNames, handleInput as JQuery.EventHandler<HTMLElement>);
+  $(element).on(`blur${eventNamespace}`, handleBlur).on(eventNames, handleInput);
 
   return {
     reactiveEffect: effect(syncToDom),

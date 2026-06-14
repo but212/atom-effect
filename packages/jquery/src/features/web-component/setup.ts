@@ -258,8 +258,8 @@ export const SetupFeatures = {
           } else {
             // Fallback for primitives and binary types.
             internals.setFormValue(
-              v as unknown as string | File | FormData | null,
-              s as unknown as string | FormData | null
+              v as string | File | FormData | null,
+              s as string | FormData | null
             );
           }
         }

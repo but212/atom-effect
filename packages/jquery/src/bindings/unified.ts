@@ -12,7 +12,7 @@ import { applyInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
 import { registerMapEffect, registerReactiveEffect } from '@/core/effect-factory';
 import { registry } from '@/core/registry';
-import { INTERNAL_HANDLER } from '@/core/symbols';
+import { markInternal } from '@/core/symbols';
 import type {
   AsyncReactiveValue,
   BindingOptions,
@@ -105,7 +105,7 @@ export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>
     element,
     value,
     (val) => {
-      const sanitized = sanitizeHtml(val as string);
+      const sanitized = sanitizeHtml(val);
       if (prevHtml !== sanitized) {
         registry.cleanupDescendants(element);
         element.innerHTML = sanitized;
@@ -259,7 +259,7 @@ export function bindAttr(
           }
 
           // 2. Validate and Apply
-          if (attrVal !== null && isDangerousUrl(name, attrVal as string)) {
+          if (attrVal !== null && isDangerousUrl(name, attrVal)) {
             console.warn(
               `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
             );
@@ -270,9 +270,9 @@ export function bindAttr(
             if (attrVal === null) {
               element.removeAttribute(name);
             } else {
-              element.setAttribute(name, attrVal as string);
+              element.setAttribute(name, attrVal);
             }
-            prev[name] = attrVal as string | null;
+            prev[name] = attrVal;
           }
         }
       }
@@ -293,7 +293,6 @@ export function bindProp(
   element: HTMLElement,
   propMap: Record<string, AsyncReactiveValue<unknown>>
 ): void {
-  const target = element as unknown as Record<string, unknown>;
   const safeEntries = getSafeEntries(propMap, true);
   const safeMap = Object.fromEntries(safeEntries);
   const previousValues: Record<string, unknown> = {};
@@ -314,7 +313,7 @@ export function bindProp(
             continue;
           }
 
-          target[name] = value;
+          Reflect.set(element, name, value);
           previousValues[name] = value;
         }
       }
@@ -355,10 +354,10 @@ export function bindVisibility(
  * When to use:
  * - Implement two-way sync for inputs, selects, and textareas.
  */
-export function bindVal(
+export function bindVal<T>(
   element: HTMLElement,
-  atom: WritableAtom<unknown>,
-  options: ValOptions<unknown> = {}
+  atom: WritableAtom<T>,
+  options: ValOptions<T> = {}
 ): void {
   const tagName = element.tagName.toLowerCase();
   const isValidTag =
@@ -386,11 +385,13 @@ function syncRadios(element: HTMLInputElement): void {
   if (element.type === 'radio' && element.name) {
     const root = element.form || element.getRootNode();
     const safeName = element.name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const group = (root as ParentNode).querySelectorAll(`input[type="radio"][name="${safeName}"]`);
-    for (let i = 0; i < group.length; i++) {
-      const el = group[i];
-      if (el && el !== element) {
-        $(el as HTMLElement).trigger('change.atomRadioSync');
+    if (root instanceof Document || root instanceof DocumentFragment || root instanceof Element) {
+      const group = root.querySelectorAll(`input[type="radio"][name="${safeName}"]`);
+      for (let i = 0; i < group.length; i++) {
+        const el = group[i];
+        if (el && el !== element) {
+          $(el).trigger('change.atomRadioSync');
+        }
       }
     }
   }
@@ -414,7 +415,7 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
       syncRadios(element);
     }
   };
-  (onChange as unknown as Record<symbol, boolean>)[INTERNAL_HANDLER] = true;
+  markInternal(onChange);
 
   $element.on('change change.atomRadioSync', onChange);
   registry.onCleanup(element, () => {

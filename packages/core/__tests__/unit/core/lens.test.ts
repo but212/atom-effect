@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { BaseNode } from '@/core/base';
 import {
   aeNextTick,
   atom,
   atomLens,
   composeLens,
+  getPathValue,
   lensFor,
   mergeLenses,
   type WritableAtom,
@@ -14,7 +14,7 @@ function unsafeAtomLens<T extends object, V = unknown>(
   atom: WritableAtom<T>,
   path: string
 ): WritableAtom<V> {
-  return atomLens(atom, path as never) as unknown as WritableAtom<V>;
+  return atomLens(atom, path as never) as WritableAtom<V>;
 }
 
 function setupReentrantSubscription<T, U>(source: WritableAtom<T>, subscribeTo: WritableAtom<U>) {
@@ -296,14 +296,14 @@ describe('Lens System', () => {
         const lens = atomLens(store, 'x');
         const merged = mergeLenses(lens);
 
-        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(false);
-        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(false);
+        expect(Reflect.get(lens, 'isDisposed')).toBe(false);
+        expect(Reflect.get(merged, 'isDisposed')).toBe(false);
 
         lens.dispose();
         merged.dispose();
 
-        expect((lens as unknown as BaseNode<number>).isDisposed).toBe(true);
-        expect((merged as unknown as BaseNode<unknown>).isDisposed).toBe(true);
+        expect(Reflect.get(lens, 'isDisposed')).toBe(true);
+        expect(Reflect.get(merged, 'isDisposed')).toBe(true);
       });
 
       it('should immediately return no-op unsubscribe when subscribing to a disposed LensImpl', () => {
@@ -370,7 +370,7 @@ describe('Lens System', () => {
 
       nameLens.value = 'Bob';
       expect(store.value.user).toBeInstanceOf(User);
-      expect((store.value.user as User).greet()).toBe('Hi Bob');
+      expect(store.value.user.greet()).toBe('Hi Bob');
     });
   });
 
@@ -399,7 +399,7 @@ describe('Lens System', () => {
       expect(merged.subscriberCount()).toBe(1);
 
       // Setting merged value
-      (merged as unknown as { value: unknown }).value = { x: 3, y: 4 };
+      Reflect.set(merged, 'value', { x: 3, y: 4 });
 
       mergedUnsub();
       expect(merged.subscriberCount()).toBe(0);
@@ -414,7 +414,7 @@ describe('Lens System', () => {
       for (const path of malicious) {
         const l = unsafeAtomLens(store, path);
         l.value = 'evil';
-        expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+        expect(Reflect.get({}, 'polluted')).toBeUndefined();
       }
     });
 
@@ -468,6 +468,41 @@ describe('Lens System', () => {
 
       expect(user.value.profile.name).toBe('Bob');
       expect(user.value.profile.age).toBe(30);
+    });
+  });
+
+  describe('getPathValue', () => {
+    it('should retrieve properties from standard objects', () => {
+      expect(getPathValue({ a: { b: 42 } }, ['a', 'b'])).toBe(42);
+    });
+
+    it('should retrieve properties from Map instances', () => {
+      const map = new Map<string, unknown>([['key', 'map-value']]);
+      expect(getPathValue(map, ['key'])).toBe('map-value');
+    });
+
+    it('should retrieve properties from functions', () => {
+      const func = Object.assign(() => {}, { customProp: 'hello-func' });
+      expect(getPathValue(func, ['customProp'])).toBe('hello-func');
+    });
+
+    it('should retrieve prototype properties from primitives', () => {
+      expect(getPathValue('hello', ['length'])).toBe(5);
+      expect(getPathValue(true, ['toString'])).toBeTypeOf('function');
+    });
+
+    it('should return undefined for nullish values or missing paths', () => {
+      expect(getPathValue(null, ['a'])).toBeUndefined();
+      expect(getPathValue(undefined, ['a'])).toBeUndefined();
+      expect(getPathValue({}, ['a'])).toBeUndefined();
+      expect(getPathValue('hello', ['invalidProp'])).toBeUndefined();
+    });
+
+    it('should block and return undefined for forbidden keys', () => {
+      const obj = {};
+      expect(getPathValue(obj, ['__proto__'])).toBeUndefined();
+      expect(getPathValue(obj, ['constructor'])).toBeUndefined();
+      expect(getPathValue(obj, ['prototype'])).toBeUndefined();
     });
   });
 });

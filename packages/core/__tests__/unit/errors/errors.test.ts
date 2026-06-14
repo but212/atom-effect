@@ -7,7 +7,6 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import {
   AtomError,
-  type AtomErrorJSON,
   atom,
   ComputedError,
   computed,
@@ -22,10 +21,14 @@ import {
   SchedulerError,
   serializeError,
 } from '@/index';
-import { ERROR_STRATEGIES, type ErrorStrategy } from '@/utils';
+import { ERROR_STRATEGIES } from '@/utils';
 
 describe('Error Handling System', () => {
-  const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES as [ErrorStrategy, ErrorStrategy];
+  const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES;
+
+  if (brandStrategy === undefined || fallbackStrategy === undefined) {
+    throw new Error('ERROR_STRATEGIES must contain at least two strategies for testing');
+  }
 
   // ── Error Classes & Hierarchy ─────────────────────────────────────────────
 
@@ -110,7 +113,7 @@ describe('Error Handling System', () => {
       // Circularity protection
       const err1 = new AtomError('1');
       const err2 = new AtomError('2', { cause: err1 });
-      (err1 as unknown as { cause: unknown }).cause = err2;
+      Reflect.set(err1, 'cause', err2);
 
       const chain = getErrorChain(err1);
       expect(chain).toHaveLength(2);
@@ -125,10 +128,10 @@ describe('Error Handling System', () => {
           code: 'C1',
         }),
       });
-      const json = serializeError(top) as AtomErrorJSON;
+      const json = serializeError(top);
 
       expect(json.message).toBe('top');
-      const mid = json.cause as { code?: string; cause?: { name?: string; stack?: string } };
+      const mid = Reflect.get(json as object, 'cause');
       expect(mid.code).toBe('C1');
       expect(mid.cause?.name).toBe('TypeError');
       expect(mid.cause?.stack).toBeDefined();
@@ -151,7 +154,7 @@ describe('Error Handling System', () => {
 
     it('should respect custom recoverable properties on standard Error objects in fallback strategy', () => {
       const stdError = new Error('Some standard error');
-      (stdError as Error & { recoverable?: boolean }).recoverable = false;
+      (stdError as { recoverable?: boolean }).recoverable = false;
 
       expect(fallbackStrategy.test(stdError)).toBe(true);
 

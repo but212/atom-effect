@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HYDRATION_MARKER } from '@/core/symbols';
 import $ from '@/index';
 import type { AtomComponentElement } from '@/types';
+import { castTo } from '../utils/test-helpers';
 
 // ─── Test Utilities ─────────────────────────────────────────────────────────
 
@@ -12,7 +13,7 @@ function defineAndCreate<T extends HTMLElement>(
 ): AtomComponentElement<T> {
   const name = `${tagPrefix}-${Math.random().toString(36).slice(2, 7)}`;
   customElements.define(name, klass);
-  const el = document.createElement(name) as T;
+  const el = document.createElement(name);
   const aej = $.useAtomComponent(el);
   return Object.assign(el, { aej }) as AtomComponentElement<T>;
 }
@@ -47,7 +48,7 @@ describe('Web Component Features', () => {
       const ctrl = $.useAtomComponent(el);
       ctrl.setup(el.attachShadow({ mode: 'open' }));
 
-      const conflict = document.createElement('div') as unknown as ShadowRoot;
+      const conflict = castTo<ShadowRoot>(document.createElement('div'));
       expect(() => ctrl.setup(conflict)).toThrow(/teardown/i);
     });
   });

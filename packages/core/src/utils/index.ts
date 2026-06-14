@@ -41,7 +41,7 @@ export function mergeAtomValues<T extends Dependency<unknown>[]>(
   for (let i = 0; i < atoms.length; i++) {
     const val = peek ? atoms[i]?.peek() : atoms[i]?.value;
     if (val != null && typeof val === 'object') {
-      Object.assign(result as object, val);
+      Object.assign(result, val);
     } else if (val != null) {
       (result as Record<string, unknown>)[i] = val;
     }
@@ -50,7 +50,7 @@ export function mergeAtomValues<T extends Dependency<unknown>[]>(
   return result;
 }
 
-export { NO_DEFAULT_VALUE } from '@/types';
+export { NO_DEFAULT_VALUE } from '@/constants';
 export { debug, generateId } from './debug';
 export {
   AtomError,

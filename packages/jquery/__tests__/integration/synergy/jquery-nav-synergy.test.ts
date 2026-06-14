@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 import type { AtomNav } from '@/types';
+import { createMockJqXHR } from '../../utils/test-helpers';
 
 /**
  * Utility to setup AJAX mocks for PJAX/Navigation tests
@@ -10,7 +11,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
     const url = settings?.url || '';
     const response = Object.entries(responses).find(([pattern]) => url.includes(pattern))?.[1];
 
-    const xhr = {
+    const xhr = createMockJqXHR(Promise.resolve(), {
       getResponseHeader: (name: string) => {
         if (name === 'X-PJAX-URL') {
           return typeof response === 'object' ? response.url || url : url;
@@ -20,7 +21,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
       abort: vi.fn(),
       status: 200,
       statusText: 'OK',
-    } as unknown as JQuery.jqXHR;
+    });
 
     const deferred = $.Deferred<unknown, unknown, unknown>();
 
@@ -30,7 +31,7 @@ function setupMockAjax(responses: Record<string, string | { html: string; url?: 
       return Object.assign(deferred.promise(), xhr);
     }
 
-    return $.Deferred<unknown, unknown, unknown>().reject(xhr).promise() as unknown as JQuery.jqXHR;
+    return $.Deferred<unknown, unknown, unknown>().reject(xhr).promise() as JQuery.jqXHR;
   });
 }
 
@@ -394,7 +395,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       // Single unified spy to prevent mock overriding collisions
       vi.spyOn($, 'ajax').mockImplementation((settings?: JQuery.AjaxSettings) => {
         const url = settings?.url || '';
-        const xhr = {
+        const xhr = createMockJqXHR(Promise.resolve(), {
           getResponseHeader: () => null,
           abort: () => {
             if (url.includes('/api')) {
@@ -403,7 +404,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
           },
           status: 200,
           statusText: 'OK',
-        } as unknown as JQuery.jqXHR;
+        });
 
         const deferred = $.Deferred<unknown, unknown, unknown>();
 

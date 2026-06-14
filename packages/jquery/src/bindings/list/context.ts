@@ -42,7 +42,7 @@ export interface ListContext<T> {
   /** Inverse lookup for O(1) index retrieval from a key. */
   keyToIndex: Map<ListKey, number>;
   /** Cached reference to the placeholder element shown when the list is empty. */
-  $emptyEl: JQuery | null;
+  $emptyEl: JQuery<Element> | null;
   /** The reactive effect controlling this list. Needed to check disposal state during async tasks. */
   fx: EffectObject | undefined;
   /** Target container element. */
@@ -73,7 +73,7 @@ export function createListContext<T>(
  * Retrieves the index of a key, handling string-to-number normalization.
  */
 export function getIndex<T>(ctx: ListContext<T>, key: string): number | undefined {
-  const idx = ctx.keyToIndex.get(key as ListKey);
+  const idx = ctx.keyToIndex.get(key);
   if (idx !== undefined) return idx;
   const n = Number(key);
   return Number.isNaN(n) ? undefined : ctx.keyToIndex.get(n);
@@ -132,7 +132,7 @@ export function resolveEventTarget<T>(
   ctx: ListContext<T>,
   start: Element,
   container: Element
-): { target: HTMLElement; index: number; item: T } | null {
+): { target: Element; index: number; item: T } | null {
   let current: Element | null = start;
   while (current && current !== container) {
     const rawKey = current.getAttribute('data-atom-key');
@@ -141,7 +141,7 @@ export function resolveEventTarget<T>(
       if (index !== undefined) {
         const snapshot = ctx.snapshots[index];
         if (snapshot) {
-          return { target: current as HTMLElement, index, item: snapshot.item };
+          return { target: current, index, item: snapshot.item };
         }
       }
     }

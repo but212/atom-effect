@@ -8,7 +8,7 @@ describe('Option<T>', () => {
     ok: true,
     value: 42,
     [OPTION_SYMBOL]: true,
-  } as unknown as Option<number>;
+  } as Option<number>;
 
   describe('Factories & Constructors', () => {
     it('Option.some() should wrap any present value', () => {
@@ -43,7 +43,7 @@ describe('Option<T>', () => {
 
     it('Option.fromPredicate() should narrow type when predicate is a type guard', () => {
       const isString = (x: unknown): x is string => typeof x === 'string';
-      const result = Option.fromPredicate('hello' as unknown, isString);
+      const result = Option.fromPredicate<unknown, string>('hello', isString);
       expect(Option.unwrap(result)).toBe('hello');
     });
 
@@ -202,9 +202,7 @@ describe('Option<T>', () => {
 
       expect(Option.equals(opt, invalidOptionShape)).toBe(false);
       expect(Option.equals(invalidOptionShape, opt)).toBe(false);
-      expect(
-        Option.equals(nonOpt as unknown as Option<unknown>, nonOpt as unknown as Option<unknown>)
-      ).toBe(false);
+      expect(Option.equals(nonOpt as Option<unknown>, nonOpt as Option<unknown>)).toBe(false);
     });
   });
 

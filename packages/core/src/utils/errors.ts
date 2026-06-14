@@ -131,7 +131,8 @@ export function getErrorChain(error: unknown): Array<unknown> {
   for (
     let curr = error;
     curr != null && !seen.has(curr);
-    curr = (curr as { cause?: unknown }).cause
+    curr =
+      curr && typeof curr === 'object' && 'cause' in curr ? Reflect.get(curr, 'cause') : undefined
   ) {
     chain.push(curr);
     seen.add(curr);
@@ -150,32 +151,39 @@ export function getErrorChain(error: unknown): Array<unknown> {
  * @param error - The error or object to serialize.
  * @param seen - @internal Internal set for circular tracking.
  */
+export function serializeError(error: Error, seen?: Set<unknown>): AtomErrorJSON;
+export function serializeError(error: null | undefined, seen?: Set<unknown>): null | undefined;
+export function serializeError(error: unknown, seen?: Set<unknown>): AtomErrorJSON | unknown;
 export function serializeError(
   error: unknown,
   seen: Set<unknown> = new Set()
 ): AtomErrorJSON | unknown {
   if (error == null || typeof error !== 'object') return error;
   if (seen.has(error)) {
-    const errObj = error as Record<string, unknown>;
+    const name = 'name' in error ? Reflect.get(error, 'name') : undefined;
+    const recoverable = 'recoverable' in error ? Reflect.get(error, 'recoverable') : undefined;
+    const code = 'code' in error ? Reflect.get(error, 'code') : undefined;
     return {
-      name: typeof errObj.name === 'string' ? errObj.name : 'Object',
+      name: typeof name === 'string' ? name : 'Object',
       message: '[Circular Reference]',
-      recoverable: typeof errObj.recoverable === 'boolean' ? errObj.recoverable : true,
-      code: typeof errObj.code === 'string' ? errObj.code : undefined,
+      recoverable: typeof recoverable === 'boolean' ? recoverable : true,
+      code: typeof code === 'string' ? code : undefined,
     };
   }
 
   seen.add(error);
 
   if (isError(error)) {
-    const err = error as Error & Record<string, unknown>;
+    const cause = 'cause' in error ? Reflect.get(error, 'cause') : undefined;
+    const recoverable = 'recoverable' in error ? Reflect.get(error, 'recoverable') : undefined;
+    const code = 'code' in error ? Reflect.get(error, 'code') : undefined;
     return {
-      name: err.name,
-      message: err.message,
-      stack: err.stack,
-      cause: serializeError(err.cause, seen),
-      recoverable: typeof err.recoverable === 'boolean' ? err.recoverable : true,
-      code: typeof err.code === 'string' ? err.code : undefined,
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: serializeError(cause, seen),
+      recoverable: typeof recoverable === 'boolean' ? recoverable : true,
+      code: typeof code === 'string' ? code : undefined,
     };
   }
 
@@ -254,31 +262,54 @@ export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
   {
     test: (e: unknown): boolean => {
       try {
-        const tag = (e as Record<string, unknown>)?._tag;
-        return typeof tag === 'string' && tag.endsWith('Error');
+        if (e != null && typeof e === 'object') {
+          const tag = Reflect.get(e, '_tag');
+          return typeof tag === 'string' && tag.endsWith('Error');
+        }
+        return false;
       } catch {
         return false;
       }
     },
     fetch: (e: unknown) => {
-      const obj = e as Record<string, unknown>;
+      if (e != null && typeof e === 'object') {
+        const name = Reflect.get(e, 'name');
+        const message = Reflect.get(e, 'message');
+        const recoverable = Reflect.get(e, 'recoverable');
+        const code = Reflect.get(e, 'code');
+        return {
+          name: toStr(name),
+          message: toStr(message),
+          recoverable: !!recoverable,
+          code: toStrOrUndef(code),
+        };
+      }
       return {
-        name: toStr(obj.name),
-        message: toStr(obj.message),
-        recoverable: !!obj.recoverable,
-        code: toStrOrUndef(obj.code),
+        name: 'Object',
+        message: 'Invalid error object',
+        recoverable: true,
+        code: undefined,
       };
     },
   },
   {
     test: (e: unknown): e is Error => isError(e),
     fetch: (e: unknown) => {
-      const err = e as Error & Record<string, unknown>;
+      if (isError(e)) {
+        const recoverable = 'recoverable' in e ? Reflect.get(e, 'recoverable') : undefined;
+        const code = 'code' in e ? Reflect.get(e, 'code') : undefined;
+        return {
+          name: e.name,
+          message: e.message,
+          recoverable: typeof recoverable === 'boolean' ? recoverable : true,
+          code: toStrOrUndef(code),
+        };
+      }
       return {
-        name: err.name,
-        message: err.message,
-        recoverable: typeof err.recoverable === 'boolean' ? err.recoverable : true,
-        code: toStrOrUndef(err.code),
+        name: 'Unexpected error',
+        message: 'Invalid error object',
+        recoverable: true,
+        code: undefined,
       };
     },
   },
@@ -293,7 +324,7 @@ export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
 function getErrorMetadata(error: unknown) {
   const strategy = ERROR_STRATEGIES.find((s) => s.test(error));
   return strategy
-    ? strategy.fetch(error as never)
+    ? strategy.fetch(error)
     : {
         name: 'Unexpected error',
         message: toStr(error),

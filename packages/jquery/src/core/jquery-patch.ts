@@ -55,7 +55,7 @@ const wrapHandler = (fn: EventHandler): EventHandler => {
 
   const wrapped = function (this: unknown, ...args: unknown[]) {
     return batch(() => fn.apply(this, args as Parameters<EventHandler>));
-  } as unknown as InternalHandler;
+  } as InternalHandler;
 
   wrapped[INTERNAL_HANDLER] = true;
   handlerMap.set(fn, wrapped);
