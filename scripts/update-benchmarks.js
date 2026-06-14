@@ -30,7 +30,9 @@ const txtFiles = [
   'utils-all.txt',
 ];
 
-const workspaceRoot = import.meta.dirname ? path.join(import.meta.dirname, '..') : path.join(process.cwd());
+const workspaceRoot = import.meta.dirname
+  ? path.join(import.meta.dirname, '..')
+  : path.join(process.cwd());
 const benchmarkDb = {};
 
 /**
@@ -72,8 +74,8 @@ for (const file of txtFiles) {
         hz = parseFloat(parts[opsSecIdx - 1].replace(/,/g, ''));
         const meanIdx = parts.indexOf('(mean:');
         const p99Idx = parts.indexOf('(p99:');
-        mean = meanIdx !== -1 ? parseFloat(parts[meanIdx + 1]) : NaN;
-        p99 = p99Idx !== -1 ? parseFloat(parts[p99Idx + 1]) : NaN;
+        mean = meanIdx === -1 ? NaN : parseFloat(parts[meanIdx + 1]);
+        p99 = p99Idx === -1 ? NaN : parseFloat(parts[p99Idx + 1]);
         nameParts = parts.slice(0, opsSecIdx - 1);
       } else if (parts.length >= 11) {
         const stats = parts.slice(-10);
@@ -142,7 +144,10 @@ const OVERVIEW_SCHEMAS = [
       '**Atom** | Read (untracked)': { key: 'untracked read: active', format: 'hz' },
       '**Computed** | Recompute (cached)': { key: 'recomputation & cache', format: 'hz' },
       '**Effect** | Propagation': { key: 'propagation: atom → computed → effect', format: 'hz' },
-      '**Workflow** | Todo App': { key: '[Atom] full workflow: add → toggle → filter → delete → stats', format: 'hz' },
+      '**Workflow** | Todo App': {
+        key: '[Atom] full workflow: add → toggle → filter → delete → stats',
+        format: 'hz',
+      },
       '**Latency** | 100 Atom updates': { key: '[Batch] state sync (100 atoms)', format: 'ms' },
     },
   },
@@ -151,12 +156,30 @@ const OVERVIEW_SCHEMAS = [
     headers: ['Category', 'Key Metric', 'Value'],
     matchRow: (row) => `${row.Category} | ${row['Key Metric']}`,
     mappings: {
-      '**Text Binding** | Update (100el × 50)': { key: 'atom-effect: update text (100 elements x 50 updates)', format: 'hz' },
-      '**Class Binding** | Toggle (100el × 100)': { key: 'atom-effect: toggle class (100 elements x 100 toggles)', format: 'hz' },
-      '**List Render** | Reconciliation (100 items)': { key: 'reconciliation: full shuffle 100 items', format: 'hz' },
-      '**Input (DOM→Atom)** | 100 events': { key: 'DOM → atom: input val (trigger 100 events)', format: 'hz' },
-      '**Todo App** | Full workflow': { key: 'full workflow (small): add(20) → toggle(10) → filter(active) → delete(5) → all', format: 'hz' },
-      '**Dashboard** | Fan-in chain': { key: 'fan-in: 100 atoms → 1 computed → 1 DOM binding', format: 'hz' },
+      '**Text Binding** | Update (100el × 50)': {
+        key: 'atom-effect: update text (100 elements x 50 updates)',
+        format: 'hz',
+      },
+      '**Class Binding** | Toggle (100el × 100)': {
+        key: 'atom-effect: toggle class (100 elements x 100 toggles)',
+        format: 'hz',
+      },
+      '**List Render** | Reconciliation (100 items)': {
+        key: 'reconciliation: full shuffle 100 items',
+        format: 'hz',
+      },
+      '**Input (DOM→Atom)** | 100 events': {
+        key: 'DOM → atom: input val (trigger 100 events)',
+        format: 'hz',
+      },
+      '**Todo App** | Full workflow': {
+        key: 'full workflow (small): add(20) → toggle(10) → filter(active) → delete(5) → all',
+        format: 'hz',
+      },
+      '**Dashboard** | Fan-in chain': {
+        key: 'fan-in: 100 atoms → 1 computed → 1 DOM binding',
+        format: 'hz',
+      },
     },
   },
   {
@@ -164,11 +187,26 @@ const OVERVIEW_SCHEMAS = [
     headers: ['Benchmark', 'Result'],
     matchRow: (row) => row.Benchmark,
     mappings: {
-      'atomText update (100el × 50)': { key: 'atom-effect: update text (100 elements x 50 updates)', format: 'hz' },
-      'atomClass toggle (100el × 100)': { key: 'atom-effect: toggle class (100 elements x 100 toggles)', format: 'hz' },
-      'atomList reconciliation (100 items)': { key: 'reconciliation: full shuffle 100 items', format: 'hz' },
-      'atomVal DOM→Atom (100 events)': { key: 'DOM → atom: input val (trigger 100 events)', format: 'hz' },
-      'Todo full workflow': { key: 'full workflow (small): add(20) → toggle(10) → filter(active) → delete(5) → all', format: 'hz' },
+      'atomText update (100el × 50)': {
+        key: 'atom-effect: update text (100 elements x 50 updates)',
+        format: 'hz',
+      },
+      'atomClass toggle (100el × 100)': {
+        key: 'atom-effect: toggle class (100 elements x 100 toggles)',
+        format: 'hz',
+      },
+      'atomList reconciliation (100 items)': {
+        key: 'reconciliation: full shuffle 100 items',
+        format: 'hz',
+      },
+      'atomVal DOM→Atom (100 events)': {
+        key: 'DOM → atom: input val (trigger 100 events)',
+        format: 'hz',
+      },
+      'Todo full workflow': {
+        key: 'full workflow (small): add(20) → toggle(10) → filter(active) → delete(5) → all',
+        format: 'hz',
+      },
       'Dashboard fan-in': { key: 'fan-in: 100 atoms → 1 computed → 1 DOM binding', format: 'hz' },
       'atomForm O(1) Scaling': { key: 'Update 1 field in 100-field form (x10)', format: 'hz' },
     },
