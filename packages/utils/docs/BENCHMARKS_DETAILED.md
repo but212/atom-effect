@@ -16,22 +16,22 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Literal assignment | 2,364,218.15 | 0.0004 | 0.0005 |
-| Null check | 2,362,461.21 | 0.0004 | 0.0005 |
-| Nullish coalescing (mixed) | 2,295,693.81 | 0.0004 | 0.0005 |
-| Inline ternary map | 2,402,338.33 | 0.0004 | 0.0004 |
-| If-Else branch (mixed) | 2,329,586.63 | 0.0004 | 0.0005 |
+| Literal assignment | 2,743,394.30 | 0.0004 | 0.0006 |
+| Null check | 2,729,508.60 | 0.0004 | 0.0004 |
+| Nullish coalescing (mixed) | 2,655,665.61 | 0.0004 | 0.0004 |
+| Inline ternary map | 2,733,046.04 | 0.0004 | 0.0004 |
+| If-Else branch (mixed) | 2,635,051.05 | 0.0004 | 0.0004 |
 
 ### Option Operations (x10)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Some creation | 1,657,424.13 | 0.0006 | 0.0011 |
-| isSome | 1,811,689.99 | 0.0006 | 0.0010 |
-| unwrapOr (mixed) | 1,819,491.14 | 0.0005 | 0.0006 |
-| map | 1,640,140.75 | 0.0006 | 0.0007 |
-| match (mixed) | 1,736,310.80 | 0.0006 | 0.0006 |
-| fromNullable (mixed) | 1,680,618.60 | 0.0006 | 0.0006 |
+| Some creation | 1,725,252.95 | 0.0006 | 0.0007 |
+| isSome | 2,036,332.15 | 0.0005 | 0.0005 |
+| unwrapOr (mixed) | 1,963,012.63 | 0.0005 | 0.0005 |
+| map | 1,720,964.48 | 0.0006 | 0.0006 |
+| match (mixed) | 1,949,272.39 | 0.0005 | 0.0005 |
+| fromNullable (mixed) | 1,831,887.60 | 0.0005 | 0.0007 |
 
 ---
 
@@ -41,22 +41,22 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Literal assignment | 2,678,608.74 | 0.0004 | 0.0004 |
-| Boolean flag check | 2,680,946.74 | 0.0004 | 0.0004 |
-| Ternary error fallback (mixed) | 2,548,473.11 | 0.0004 | 0.0004 |
-| Native try/catch (mixed) | 492,138.99 | 0.0020 | 0.0021 |
+| Literal assignment | 2,743,394.30 | 0.0004 | 0.0006 |
+| Boolean flag check | 2,661,208.24 | 0.0004 | 0.0004 |
+| Ternary error fallback (mixed) | 2,577,711.87 | 0.0004 | 0.0004 |
+| Native try/catch (mixed) | 477,088.67 | 0.0021 | 0.0022 |
 
 ### Result Operations (x10)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Result.ok creation | 1,788,782.99 | 0.0006 | 0.0006 |
-| Result.err creation | 1,805,249.25 | 0.0006 | 0.0007 |
-| isOk | 2,033,977.08 | 0.0005 | 0.0005 |
-| unwrapOr (mixed) | 1,932,785.37 | 0.0005 | 0.0005 |
-| map | 1,778,058.90 | 0.0006 | 0.0007 |
-| Result.match (mixed) | 1,966,475.65 | 0.0005 | 0.0005 |
-| Result.tryCatch (mixed) | 444,104.94 | 0.0023 | 0.0025 |
+| Result.ok creation | 1,661,452.20 | 0.0006 | 0.0007 |
+| Result.err creation | 1,658,315.46 | 0.0006 | 0.0007 |
+| isOk | 1,913,660.04 | 0.0005 | 0.0005 |
+| unwrapOr (mixed) | 1,963,012.63 | 0.0005 | 0.0005 |
+| map | 1,720,964.48 | 0.0006 | 0.0006 |
+| Result.match (mixed) | 1,885,785.92 | 0.0005 | 0.0006 |
+| Result.tryCatch (mixed) | 438,389.26 | 0.0023 | 0.0026 |
 
 ---
 
@@ -64,13 +64,13 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| push (small, x10) | 2,109,158.19 | 0.0005 | 0.0006 |
-| push (large, x10) | 36,620.84 | 0.0273 | 0.0386 |
-| has (x10) | 1,392,131.77 | 0.0007 | 0.0007 |
-| forEach (x10) | 529,137.06 | 0.0019 | 0.0019 |
-| compact (x10) | 313,823.61 | 0.0032 | 0.0038 |
-| some (early exit, x10) | 2,159,130.88 | 0.0005 | 0.0005 |
-| some (full scan, x10) | 891,006.49 | 0.0011 | 0.0012 |
+| push (small, x10) | 2,341,428.52 | 0.0004 | 0.0006 |
+| push (large, x10) | 38,927.95 | 0.0257 | 0.0365 |
+| has (x10) | 1,328,331.50 | 0.0008 | 0.0008 |
+| forEach (x10) | 530,575.37 | 0.0019 | 0.0020 |
+| compact (x10) | 343,551.30 | 0.0029 | 0.0035 |
+| some (early exit, x10) | 2,332,649.59 | 0.0004 | 0.0004 |
+| some (full scan, x10) | 888,664.65 | 0.0011 | 0.0014 |
 
 ---
 
@@ -78,9 +78,9 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| isPromise: native promise | 2,042,450.49 | 0.0005 | 0.0006 |
-| isPromise: thenable | 2,004,224.97 | 0.0005 | 0.0009 |
-| isPromise: object | 1,965,401.87 | 0.0005 | 0.0005 |
-| isOption: true | 2,022,963.84 | 0.0005 | 0.0009 |
-| isOption: false | 2,049,433.04 | 0.0005 | 0.0005 |
-| isPromise: mixed data | 1,803,922.71 | 0.0006 | 0.0006 |
+| isPromise: native promise | 2,028,846.13 | 0.0005 | 0.0009 |
+| isPromise: thenable | 2,070,781.68 | 0.0005 | 0.0008 |
+| isPromise: object | 2,027,913.43 | 0.0005 | 0.0005 |
+| isOption: true | 2,129,685.69 | 0.0005 | 0.0005 |
+| isOption: false | 2,027,001.06 | 0.0005 | 0.0009 |
+| isPromise: mixed data | 1,957,886.99 | 0.0005 | 0.0005 |
