@@ -4,6 +4,7 @@ import {
   atom,
   atomLens,
   composeLens,
+  getPathValue,
   lensFor,
   mergeLenses,
   type WritableAtom,
@@ -467,6 +468,17 @@ describe('Lens System', () => {
 
       expect(user.value.profile.name).toBe('Bob');
       expect(user.value.profile.age).toBe(30);
+    });
+  });
+
+  describe('getPathValue', () => {
+    it('should retrieve properties from functions', () => {
+      const func = Object.assign(() => {}, { customProp: 'hello-func' });
+      expect(getPathValue(func, ['customProp'])).toBe('hello-func');
+    });
+
+    it('should retrieve prototype properties from primitives', () => {
+      expect(getPathValue('hello', ['length'])).toBe(5);
     });
   });
 });
