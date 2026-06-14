@@ -62,24 +62,35 @@ for (const file of txtFiles) {
     // Benchmark rows are marked with the '·' bullet point
     if (cleanLine.includes('·') || cleanLine.startsWith('·')) {
       const parts = cleanLine.split(/\s+/);
+      let hz = NaN;
+      let mean = NaN;
+      let p99 = NaN;
+      let nameParts = [];
+
       const opsSecIdx = parts.lastIndexOf('ops/sec');
       if (opsSecIdx !== -1 && opsSecIdx > 0) {
-        const hz = parseFloat(parts[opsSecIdx - 1].replace(/,/g, ''));
+        hz = parseFloat(parts[opsSecIdx - 1].replace(/,/g, ''));
         const meanIdx = parts.indexOf('(mean:');
         const p99Idx = parts.indexOf('(p99:');
-        const mean = meanIdx !== -1 ? parseFloat(parts[meanIdx + 1]) : NaN;
-        const p99 = p99Idx !== -1 ? parseFloat(parts[p99Idx + 1]) : NaN;
+        mean = meanIdx !== -1 ? parseFloat(parts[meanIdx + 1]) : NaN;
+        p99 = p99Idx !== -1 ? parseFloat(parts[p99Idx + 1]) : NaN;
+        nameParts = parts.slice(0, opsSecIdx - 1);
+      } else if (parts.length >= 11) {
+        const stats = parts.slice(-10);
+        hz = parseFloat(stats[0].replace(/,/g, ''));
+        mean = parseFloat(stats[3]);
+        p99 = parseFloat(stats[5]);
+        nameParts = parts.slice(0, -10);
+      }
 
-        if (!Number.isNaN(hz) && !Number.isNaN(mean) && !Number.isNaN(p99)) {
-          const nameParts = parts.slice(0, opsSecIdx - 1);
-          const name = nameParts
-            .join(' ')
-            .replace(/^[·\s]+/, '')
-            .trim();
-          const normalized = normalizeName(name);
+      if (!Number.isNaN(hz) && !Number.isNaN(mean) && !Number.isNaN(p99)) {
+        const name = nameParts
+          .join(' ')
+          .replace(/^[·\s]+/, '')
+          .trim();
+        const normalized = normalizeName(name);
 
-          benchmarkDb[normalized] = { hz, mean, p99 };
-        }
+        benchmarkDb[normalized] = { hz, mean, p99 };
       }
     }
   }
