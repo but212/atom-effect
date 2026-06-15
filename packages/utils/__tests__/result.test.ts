@@ -28,7 +28,7 @@ describe('Result<T, E>', () => {
     it('shared VOID_SUCCESS should be frozen and immutable', () => {
       const res = Result.ok(undefined);
       expect(() => {
-        (res as unknown as Record<string, unknown>).value = 1;
+        (res as { value: unknown }).value = 1;
       }).toThrow();
     });
 

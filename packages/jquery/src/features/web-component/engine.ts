@@ -29,6 +29,12 @@ export interface DebugPortal {
   version: string;
 }
 
+declare global {
+  interface Window {
+    __AEJ_INTERNAL__?: DebugPortal;
+  }
+}
+
 export const nodeStateMap = new WeakMap<Node, NodeInternalState>();
 export const sheetCache = new Map<string, CSSStyleSheet>();
 
@@ -152,7 +158,7 @@ export function createContextProxy<T>(
 }
 
 if (typeof window !== 'undefined') {
-  (window as unknown as { __AEJ_INTERNAL__: DebugPortal }).__AEJ_INTERNAL__ = {
+  window.__AEJ_INTERNAL__ = {
     nodeStateMap,
     sheetCache,
     version: '0.33.1',

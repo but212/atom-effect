@@ -44,5 +44,7 @@ export interface InternalHandler {
  * Prevents redundant update cycles by skipping the `$.fn.on` batching wrapper.
  */
 export const markInternal = (fn: (...args: never[]) => unknown): void => {
-  (fn as unknown as InternalHandler)[INTERNAL_HANDLER] = true;
+  (fn as ((...args: never[]) => unknown) & Partial<Record<typeof INTERNAL_HANDLER, boolean>>)[
+    INTERNAL_HANDLER
+  ] = true;
 };

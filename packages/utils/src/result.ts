@@ -73,7 +73,7 @@ function assertResult(value: unknown): asserts value is Result<unknown, unknown>
  * Pre-allocated success result for void operations.
  * Optimization: Shared instance reduces allocation overhead for common 'return Result.ok()' calls.
  */
-const voidSuccessResult = Object.freeze({
+const voidSuccessResult: Result<unknown, never> = Object.freeze({
   ok: true,
   value: undefined,
   error: undefined,
@@ -142,7 +142,7 @@ export const Result = {
    */
   ok: <T, E = never>(value: T): Result<T, E> =>
     value === undefined
-      ? (voidSuccessResult as unknown as Result<T, E>)
+      ? (voidSuccessResult as Result<T, E>)
       : ({
           ok: true,
           value,
@@ -277,7 +277,7 @@ export const Result = {
       (mappedValue === null ||
         (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
         Object.isFrozen(mappedValue))
-      ? (result as unknown as Result<U, E>)
+      ? (result as Result<never, E>)
       : Result.ok(mappedValue);
   },
 
