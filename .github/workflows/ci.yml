@@ -19,7 +19,7 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          install-playwright: "false"
+          install-playwright: "true"
 
       - name: Lint
         run: pnpm lint
@@ -29,9 +29,6 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
-
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium
 
       - name: Test
         run: pnpm test:coverage
