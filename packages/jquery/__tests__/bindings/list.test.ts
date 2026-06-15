@@ -631,7 +631,7 @@ describe('$.atomList (Integration)', () => {
       const $container = $('<div>').appendTo(document.body);
 
       $container.atomList(list, {
-        key: castTo<never>('id'),
+        key: castTo<keyof ({ id: number } | null | undefined)>('id'),
         render: (item) => `<span>${item ? item.id : 'nullish'}</span>`,
       });
 

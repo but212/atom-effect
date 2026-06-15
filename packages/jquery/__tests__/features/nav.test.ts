@@ -66,7 +66,7 @@ class NavTestHarness {
         getAllResponseHeaders: vi.fn(() => ''),
         setRequestHeader: vi.fn(),
         statusCode: vi.fn(),
-        promise: () => promise,
+        promise: () => castTo<never>(promise),
       });
     });
   }

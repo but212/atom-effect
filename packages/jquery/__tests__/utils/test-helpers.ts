@@ -7,7 +7,7 @@
  */
 export function createMockJqXHR<T>(
   promise: Promise<T>,
-  extraProps?: Record<string, unknown>
+  extraProps?: Partial<JQuery.jqXHR>
 ): JQuery.jqXHR {
   return castTo<JQuery.jqXHR>(Object.assign(promise, extraProps));
 }
