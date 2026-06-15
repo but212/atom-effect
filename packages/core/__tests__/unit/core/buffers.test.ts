@@ -40,14 +40,16 @@ const createLink = (node: Dependency, version: number, unsub?: () => void): Depe
   createDependencyLink(node, version, unsub);
 
 describe('DepBuffer: Reuse & Lifecycle', () => {
-  const createMockDep = (id: number): Dependency =>
-    ({
+  const createMockDep = (id: number): Dependency => {
+    const mock: Partial<Dependency> = {
       id,
       version: 1,
       flags: 0,
       _lastSeenEpoch: -1,
       subscribe: vi.fn(() => vi.fn()),
-    }) as unknown as Dependency;
+    };
+    return mock as Dependency;
+  };
 
   describe('Basic Operations', () => {
     it('claimExisting: should swap and relocate dependencies correctly', () => {
@@ -145,17 +147,17 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     it('isBufferDirty: should not swallow system-level exceptions', () => {
       const buf = createDepBuffer();
 
-      const systemErrorDep = {
-        id: 999,
+      const systemErrorDep: Partial<Dependency> = {
+        id: 998,
         version: 1,
         flags: COMPUTED_STATE_FLAGS.IS_COMPUTED,
         get value() {
           throw new RangeError('Maximum call stack size exceeded');
         },
         subscribe: vi.fn(() => vi.fn()),
-      } as unknown as Dependency;
+      };
 
-      depBufferPush(buf, createLink(systemErrorDep, 1));
+      depBufferPush(buf, createLink(systemErrorDep as Dependency, 1));
 
       // Calling isBufferDirty should propagate the RangeError, not swallow it
       expect(() => isBufferDirty(buf)).toThrow(RangeError);
@@ -164,7 +166,7 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     it('isBufferDirty: should propagate non-system errors thrown during computed dependency evaluation', () => {
       const buf = createDepBuffer();
 
-      const customErrorDep = {
+      const customErrorDep: Partial<Dependency> = {
         id: 999,
         version: 1,
         flags: COMPUTED_STATE_FLAGS.IS_COMPUTED,
@@ -172,9 +174,9 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
           throw new Error('Custom computation error');
         },
         subscribe: vi.fn(() => vi.fn()),
-      } as unknown as Dependency;
+      };
 
-      depBufferPush(buf, createLink(customErrorDep, 1));
+      depBufferPush(buf, createLink(customErrorDep as Dependency, 1));
 
       // Calling isBufferDirty should propagate the custom Error, not swallow it
       expect(() => isBufferDirty(buf)).toThrowError('Custom computation error');

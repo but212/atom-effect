@@ -232,7 +232,7 @@ export function setupRouteScanner(
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: NAV_SPEC.attributes as unknown as string[],
+    attributeFilter: [...NAV_SPEC.attributes],
   });
 
   scan();

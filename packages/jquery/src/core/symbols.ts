@@ -44,5 +44,5 @@ export interface InternalHandler {
  * Prevents redundant update cycles by skipping the `$.fn.on` batching wrapper.
  */
 export const markInternal = (fn: (...args: never[]) => unknown): void => {
-  (fn as unknown as InternalHandler)[INTERNAL_HANDLER] = true;
+  Object.assign(fn, { [INTERNAL_HANDLER]: true });
 };

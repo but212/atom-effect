@@ -232,7 +232,7 @@ export const Option = {
       (mappedValue === null ||
         (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
         Object.isFrozen(mappedValue))
-      ? (option as unknown as Option<U>)
+      ? (option as Option<never>)
       : Option.some(mappedValue);
   },
 

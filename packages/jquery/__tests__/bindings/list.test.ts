@@ -631,7 +631,7 @@ describe('$.atomList (Integration)', () => {
       const $container = $('<div>').appendTo(document.body);
 
       $container.atomList(list, {
-        key: 'id' as unknown as keyof ({ id: number } | null | undefined),
+        key: castTo<keyof ({ id: number } | null | undefined)>('id'),
         render: (item) => `<span>${item ? item.id : 'nullish'}</span>`,
       });
 
@@ -698,9 +698,9 @@ describe('$.atomList (Integration)', () => {
     });
 
     it('ListContext resolveEventTarget should work with SVGElement', () => {
-      const $container = $(
-        document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      ) as unknown as JQuery<HTMLElement>;
+      const $container = castTo<JQuery<HTMLElement>>(
+        $(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+      );
       const ctx = createListContext<string>($container, undefined);
       ctx.keyToIndex.set('key1', 0);
       ctx.snapshots = [{ key: 'key1', item: 'item1', node: [] }];

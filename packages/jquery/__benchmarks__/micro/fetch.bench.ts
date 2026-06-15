@@ -13,13 +13,15 @@ interface FetchMockData {
 
 let mockResponse: FetchMockData = { id: 1, name: 'Alice' };
 
+const castTo = <T>(value: unknown): T => value as T;
+
 $.ajax = (): JQuery.jqXHR => {
   const def = $.Deferred<FetchMockData, string, never>().resolve(mockResponse);
-  return {
+  return castTo<JQuery.jqXHR>({
     ...def.promise(),
     abort: () => {},
     getResponseHeader: () => null,
-  } as unknown as JQuery.jqXHR;
+  });
 };
 
 describe('Fetch: Setup & Dependency Pipeline', () => {

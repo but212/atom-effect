@@ -121,9 +121,8 @@ describe('Tracking Engine', () => {
 
   describe('Internal Engine Robustness & Edge Cases', () => {
     function createMockNodeWithUndefinedSlots(): ReactiveNode<void> {
-      return {
-        _slots: undefined,
-      } as unknown as ReactiveNode<void>;
+      const mock: Partial<ReactiveNode<void>> = {};
+      return mock as ReactiveNode<void>;
     }
 
     describe('Subscription robustness with undefined slots', () => {
@@ -153,22 +152,26 @@ describe('Tracking Engine', () => {
 
     describe('nodeTrackDependency safety', () => {
       it('handles null dependency buffer gracefully in nodeTrackDependency without throwing TypeError', () => {
-        const mockTracker = {
+        const mockTracker: Partial<DependencyTracker & ReactiveDependencyTracker> = {
           _trackEpoch: 1,
           _trackCount: 0,
-        } as unknown as DependencyTracker & ReactiveDependencyTracker;
+        };
 
-        const mockDep = {
+        const mockDep: Partial<Dependency> = {
           _lastSeenEpoch: 0,
           version: 1,
           isComputed: false,
           subscribe: () => () => {},
-        } as unknown as Dependency;
+        };
 
         // Under robust implementation, if deps buffer is null/undefined, it returns early
         // instead of crashing on tracker._storage.deps! assertion.
         expect(() => {
-          nodeTrackDependency(mockTracker, mockDep, () => {});
+          nodeTrackDependency(
+            mockTracker as DependencyTracker & ReactiveDependencyTracker,
+            mockDep as Dependency,
+            () => {}
+          );
         }).not.toThrow();
       });
     });
