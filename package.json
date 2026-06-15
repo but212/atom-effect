@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
-    "@microsoft/api-extractor": "^7.58.7",
+    "@microsoft/api-extractor": "^7.58.9",
     "@types/node": "catalog:",
     "@vitest/browser": "catalog:",
     "@vitest/browser-playwright": "catalog:",
@@ -43,7 +43,7 @@
     "playwright": "catalog:",
     "rimraf": "catalog:",
     "tinybench": "catalog:",
-    "turbo": "^2.9.16",
+    "turbo": "^2.9.18",
     "typescript": "catalog:",
     "unplugin-dts": "catalog:",
     "vite": "catalog:",
