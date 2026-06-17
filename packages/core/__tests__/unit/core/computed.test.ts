@@ -167,6 +167,27 @@ describe('Computed', () => {
       // Diamond pattern should resolve correctly, not throw circular dependency
       expect(diamond.value).toBe(23); // 11 + 12
     });
+
+    it('should keep computed derivations pure and handle state changes inside effects', async () => {
+      const a = atom(1);
+      // Best Practice: Keep computed derivation pure
+      const c = computed(() => a.value * 2);
+
+      let effectRunCount = 0;
+      // Best Practice: Perform side-effects or state updates in effects
+      effect(() => {
+        c.value;
+        effectRunCount++;
+      });
+
+      expect(c.value).toBe(2);
+      expect(effectRunCount).toBe(1);
+
+      a.value = 2;
+      await aeNextTick();
+      expect(c.value).toBe(4);
+      expect(effectRunCount).toBe(2);
+    });
   });
 
   describe('Error Handling', () => {

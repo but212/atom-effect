@@ -17,7 +17,7 @@ import { debug } from '@/utils/debug';
 import { sanitizeHtml } from '@/utils/sanitize';
 import { type ListContext, removeNode } from './context';
 import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
-import { cleanupNodes } from './utils';
+import { injectKeyToHtml, replaceDomNodes } from './utils';
 
 function isJQuery(obj: unknown): obj is JQuery {
   return obj instanceof $;
@@ -25,20 +25,6 @@ function isJQuery(obj: unknown): obj is JQuery {
 
 function isStringArray(arr: unknown[]): arr is string[] {
   return arr.every((x) => typeof x === 'string');
-}
-
-/**
- * Helper to inject data-atom-key attribute directly into an HTML string's root element.
- * Performance: Avoids setAttribute DOM calls inside placeItems.
- */
-function injectKeyToHtml(html: string, key: string): string {
-  if (!html.startsWith('<')) return html;
-  const match = html.match(/^<([^\s/>]+)/);
-  if (match) {
-    const insertIdx = match[0].length;
-    return `${html.slice(0, insertIdx)} data-atom-key="${key}"${html.slice(insertIdx)}`;
-  }
-  return html;
 }
 
 /**
@@ -165,25 +151,9 @@ export function renderItems<T>(
       }
     }
 
-    const oldNode = slot.node;
-    if (slot.state === ItemState.ForceReplace && oldNode) {
-      cleanupNodes(oldNode);
-      const firstOld = oldNode[0];
-      if (firstOld?.parentNode) {
-        const parent = firstOld.parentNode;
-        for (let j = 0; j < nodes.length; j++) {
-          const el = nodes[j];
-          if (el) parent.insertBefore(el, firstOld);
-        }
-        for (let j = 0; j < oldNode.length; j++) {
-          const el = oldNode[j];
-          if (el?.parentNode) {
-            el.parentNode.removeChild(el);
-          }
-        }
-      }
+    if (slot.state === ItemState.ForceReplace) {
+      slot.oldNode = slot.node;
     }
-
     slot.node = nodes;
   }
 
@@ -245,6 +215,14 @@ export function placeItems<T>(
     return;
   }
 
+  // Swap ForceReplace nodes before reordering
+  for (let i = 0; i < count; i++) {
+    const slot = slots[i];
+    if (slot && slot.state === ItemState.ForceReplace && slot.oldNode && slot.node) {
+      replaceDomNodes(slot.oldNode, slot.node);
+    }
+  }
+
   if (ctx.snapshots.length === 0 && ctx.removingKeys.size === 0) {
     const frag = document.createDocumentFragment();
     for (const slot of slots) {
@@ -303,6 +281,11 @@ export function placeItems<T>(
           break;
         case ItemState.ForceReplace:
           if (bind) bind($node, item, i);
+          if (onAdd) {
+            onAdd($node);
+            ctx.removingKeys.delete(key);
+            debug.domUpdated(SYSTEM_LIST.PREFIX, $node, 'list.add', item);
+          }
           break;
       }
     }

@@ -52,3 +52,50 @@ export function cleanupNodes(nodes: Node[]): void {
     if (el) registry.cleanupTree(el);
   }
 }
+
+/**
+ * Escapes special HTML characters to prevent attribute breakout.
+ */
+export function escapeHtmlAttr(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Injects 'data-atom-key' attribute directly into an HTML string's root element.
+ */
+export function injectKeyToHtml(html: string, key: string): string {
+  if (!html.startsWith('<')) return html;
+  const match = html.match(/^<([^\s/>]+)/);
+  if (match) {
+    const insertIdx = match[0].length;
+    const escapedKey = escapeHtmlAttr(key);
+    return `${html.slice(0, insertIdx)} data-atom-key="${escapedKey}"${html.slice(insertIdx)}`;
+  }
+  return html;
+}
+
+/**
+ * Swaps old DOM nodes with new DOM nodes in place and cleans up reactive resources.
+ */
+export function replaceDomNodes(oldNodes: Node[], newNodes: Node[]): void {
+  cleanupNodes(oldNodes);
+  const firstOld = oldNodes[0];
+  if (firstOld?.parentNode) {
+    const parent = firstOld.parentNode;
+    for (let i = 0; i < newNodes.length; i++) {
+      const el = newNodes[i];
+      if (el) parent.insertBefore(el, firstOld);
+    }
+    for (let i = 0; i < oldNodes.length; i++) {
+      const el = oldNodes[i];
+      if (el?.parentNode) {
+        el.parentNode.removeChild(el);
+      }
+    }
+  }
+}
