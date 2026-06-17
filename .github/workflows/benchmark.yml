@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Download all raw results
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: benchmark-raw-*
           merge-multiple: true
