@@ -65,18 +65,18 @@ export function escapeHtmlAttr(str: string): string {
     .replace(/>/g, '&gt;');
 }
 
+const HTML_TAG_START_REGEXP = /^\s*<([a-zA-Z][^\s/>]*)/;
+
 /**
  * Injects 'data-atom-key' attribute directly into an HTML string's root element.
  */
 export function injectKeyToHtml(html: string, key: string): string {
-  if (!html.startsWith('<')) return html;
-  const match = html.match(/^<([^\s/>]+)/);
-  if (match) {
-    const insertIdx = match[0].length;
-    const escapedKey = escapeHtmlAttr(key);
-    return `${html.slice(0, insertIdx)} data-atom-key="${escapedKey}"${html.slice(insertIdx)}`;
-  }
-  return html;
+  const match = html.match(HTML_TAG_START_REGEXP);
+  if (!match) return html;
+
+  const insertIdx = match[0].length;
+  const escapedKey = escapeHtmlAttr(key);
+  return `${html.slice(0, insertIdx)} data-atom-key="${escapedKey}"${html.slice(insertIdx)}`;
 }
 
 /**

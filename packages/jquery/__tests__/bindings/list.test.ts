@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createListContext, resolveEventTarget } from '@/bindings/list/context';
 import { applyListBinding } from '@/bindings/list/index';
+import { injectKeyToHtml } from '@/bindings/list/utils';
 import { registry } from '@/core/registry';
 import $ from '@/index';
 import { castTo } from '../utils/test-helpers';
@@ -785,6 +786,26 @@ describe('$.atomList (Integration)', () => {
       const result = resolveEventTarget(ctx, el, $container[0] as Element);
       expect(result).not.toBeNull();
       expect(result?.item).toBe('item1');
+    });
+
+    describe('injectKeyToHtml', () => {
+      it('should inject data-atom-key even when there is leading whitespace or newline', () => {
+        const result = injectKeyToHtml('\n  <div class="item"></div>', 'my-key');
+        expect(result).toContain('data-atom-key="my-key"');
+      });
+
+      it('should not inject key if HTML string does not start with an element tag', () => {
+        const result = injectKeyToHtml('some text', 'my-key');
+        expect(result).toBe('some text');
+      });
+
+      it('should skip comment and doctype tags and return unchanged', () => {
+        const commentResult = injectKeyToHtml('<!-- comment --><div></div>', 'my-key');
+        expect(commentResult).toBe('<!-- comment --><div></div>');
+
+        const doctypeResult = injectKeyToHtml('<!DOCTYPE html><div></div>', 'my-key');
+        expect(doctypeResult).toBe('<!DOCTYPE html><div></div>');
+      });
     });
   });
 
