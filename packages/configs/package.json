@@ -17,7 +17,11 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json --external unplugin-dts --external @vue/language-core",
     "dev": "pnpm run build --watch",
-    "clean:build": "rimraf dist"
+    "clean:build": "rimraf dist",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "tsup": "^8.5.1",
