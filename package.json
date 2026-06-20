@@ -1,6 +1,6 @@
 {
   "name": "atom-effect-monorepo",
-  "version": "0.33.1",
+  "version": "0.34.0",
   "private": true,
   "type": "module",
   "description": "Monorepo for atom-effect reactive state management library and its ecosystem",
