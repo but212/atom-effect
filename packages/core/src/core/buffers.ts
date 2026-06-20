@@ -33,31 +33,31 @@ export function prepareTracking(state: ReactiveDependencyTracker): void {
 /** @internal */
 export function claimExisting(
   state: ReactiveDependencyTracker,
-  dep: Dependency,
+  dependency: Dependency,
   trackIndex: number
 ): boolean {
   const slots = state._depSlots;
   if (slots.length <= trackIndex) return false;
 
   const current = slots.at(trackIndex);
-  if (current?.node === dep && current.unsub) {
-    current.version = dep.version;
+  if (current?.node === dependency && current.unsubscribeCallback) {
+    current.version = dependency.version;
     return true;
   }
 
-  const existingIndex = findExistingIndex(state, dep, trackIndex);
+  const existingIndex = findExistingIndex(state, dependency, trackIndex);
   if (existingIndex === -1) return false;
 
   const link = slots.at(existingIndex);
   if (!link) return false;
-  link.version = dep.version;
+  link.version = dependency.version;
 
-  const temp = slots.at(trackIndex);
+  const swappedLink = slots.at(trackIndex);
 
   // Reason: Swapping instead of splicing keeps the SlotBuffer size stable
   // and avoids O(n) array shifts during a tracking run.
   slots.setAt(trackIndex, link);
-  slots.setAt(existingIndex, temp);
+  slots.setAt(existingIndex, swappedLink);
 
   return true;
 }
@@ -67,13 +67,13 @@ export function claimExisting(
  */
 function findExistingIndex(
   state: ReactiveDependencyTracker,
-  dep: Dependency,
+  dependency: Dependency,
   start: number
 ): number {
   const slots = state._depSlots;
-  for (let i = start + 1, len = slots.length; i < len; i++) {
+  for (let i = start + 1, slotsLength = slots.length; i < slotsLength; i++) {
     const link = slots.at(i);
-    if (link?.node === dep && link.unsub) return i;
+    if (link?.node === dependency && link.unsubscribeCallback) return i;
   }
   return -1;
 }
@@ -85,11 +85,11 @@ function findExistingIndex(
 /** @internal */
 export function insertNew(
   state: ReactiveDependencyTracker,
-  trackIdx: number,
+  trackIndex: number,
   link: DependencyLink
 ): void {
-  const occupant = state._depSlots.at(trackIdx);
-  depBufferSetAt(state, trackIdx, link);
+  const occupant = state._depSlots.at(trackIndex);
+  depBufferSetAt(state, trackIndex, link);
   if (occupant !== null) depBufferPush(state, occupant);
 }
 
@@ -97,14 +97,17 @@ export function insertNew(
 export function depBufferSetAt(
   state: ReactiveDependencyTracker,
   index: number,
-  item: DependencyLink | null
+  dependencyLink: DependencyLink | null
 ): void {
-  state._depSlots.setAt(index, item);
+  state._depSlots.setAt(index, dependencyLink);
 }
 
 /** @internal */
-export function depBufferPush(state: ReactiveDependencyTracker, item: DependencyLink): number {
-  return state._depSlots.push(item);
+export function depBufferPush(
+  state: ReactiveDependencyTracker,
+  dependencyLink: DependencyLink
+): number {
+  return state._depSlots.push(dependencyLink);
 }
 
 /**
@@ -128,35 +131,35 @@ export function isBufferShallowDirty(state: ReactiveDependencyTracker): boolean 
 
 function checkDirty(state: ReactiveDependencyTracker, deep: boolean): boolean {
   const slots = state._depSlots;
-  const len = slots.length;
-  if (len === 0) return false;
+  const slotsLength = slots.length;
+  if (slotsLength === 0) return false;
 
   const IS_COMPUTED = COMPUTED_STATE_FLAGS.IS_COMPUTED;
   const DIRTY = COMPUTED_STATE_FLAGS.DIRTY;
 
-  for (let i = 0; i < len; i++) {
+  for (let i = 0; i < slotsLength; i++) {
     const link = slots.at(i);
     if (!link) continue;
 
-    const dep = link.node;
+    const dependency = link.node;
 
-    if (deep && (dep.flags & IS_COMPUTED) !== 0) {
+    if (deep && (dependency.flags & IS_COMPUTED) !== 0) {
       // Logic: Accessing .value on a computed dependency triggers its internal
       // check/refresh logic. If it throws, we track it for debugging.
       try {
         if (trackingContext.current) {
-          untracked(() => dep.value);
+          untracked(() => dependency.value);
         } else {
-          dep.value;
+          dependency.value;
         }
-      } catch (e) {
-        trackEvaluationFailure(dep.id);
-        throw e;
+      } catch (error) {
+        trackEvaluationFailure(dependency.id);
+        throw error;
       }
     }
 
-    if (dep.version !== link.version) return true;
-    if (!deep && (dep.flags & DIRTY) !== 0) return true;
+    if (dependency.version !== link.version) return true;
+    if (!deep && (dependency.flags & DIRTY) !== 0) return true;
   }
   return false;
 }
@@ -171,17 +174,17 @@ function checkDirty(state: ReactiveDependencyTracker, deep: boolean): boolean {
  */
 export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: number): void {
   const slots = state._depSlots;
-  const len = slots.length;
-  if (index >= len) return;
+  const slotsLength = slots.length;
+  if (index >= slotsLength) return;
 
-  for (let i = index; i < len; i++) {
+  for (let i = index; i < slotsLength; i++) {
     const link = slots.at(i);
     if (link) {
-      if (link.unsub) {
+      if (link.unsubscribeCallback) {
         try {
-          link.unsub();
-        } catch (e) {
-          if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, e);
+          link.unsubscribeCallback();
+        } catch (unsubscribeError) {
+          if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
         }
       }
     }

@@ -94,7 +94,7 @@ describe('Lenses: Structural Access', () => {
         });
       },
       teardown: () => {
-        for (const unsub of manyLensesUnsub) unsub();
+        for (const unsubscribeCallback of manyLensesUnsub) unsubscribeCallback();
         manyLensesUnsub = [];
       },
     }

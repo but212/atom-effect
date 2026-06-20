@@ -818,7 +818,7 @@ describe('$.atomList (Integration)', () => {
         resolveRemovePromise = resolve;
       });
 
-      const { fx, ctx } = applyListBinding($container[0] as HTMLElement, list, {
+      const { reactiveEffect: fx, ctx } = applyListBinding($container[0] as HTMLElement, list, {
         key: (item: string) => item,
         render: (item) => `<span>${item}</span>`,
         onRemove: () => removePromise,

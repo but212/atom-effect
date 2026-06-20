@@ -37,11 +37,11 @@
               </div>
               <pre
                 class="code-block"
-              ><span class="code-fn">fetchUser</span>(id, (err, user) => {
-  <span class="code-keyword">if</span> (err) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
-  <span class="code-fn">fetchRepos</span>(user.id, (err, repos) => {
-    <span class="code-keyword">if</span> (err) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
-    <span class="code-fn">getStats</span>(repos, (err, stats) => {
+              ><span class="code-fn">fetchUser</span>(id, (error, user) => {
+  <span class="code-keyword">if</span> (error) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
+  <span class="code-fn">fetchRepos</span>(user.id, (error, repos) => {
+    <span class="code-keyword">if</span> (error) <span class="code-keyword">return</span> <span class="code-fn">error</span>();
+    <span class="code-fn">getStats</span>(repos, (error, stats) => {
       <span class="code-fn">render</span>(stats);
     });
   });

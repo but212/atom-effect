@@ -100,11 +100,11 @@ describe('Scheduler Engine', () => {
 
     it('prevents stack overflow through flat execution loops', () => {
       const depth = 500;
-      const fn = (d: number) => {
-        if (d > 0) batch(() => fn(d - 1));
+      const batchedCallback = (d: number) => {
+        if (d > 0) batch(() => batchedCallback(d - 1));
       };
 
-      expect(() => fn(depth)).not.toThrow();
+      expect(() => batchedCallback(depth)).not.toThrow();
     });
 
     it('handles nested batch scopes correctly', () => {
@@ -145,9 +145,9 @@ describe('Scheduler Engine', () => {
     });
 
     it('should execute optional callback and resolve correctly', async () => {
-      const cb = vi.fn();
-      await aeNextTick(cb);
-      expect(cb).toHaveBeenCalled();
+      const callback = vi.fn();
+      await aeNextTick(callback);
+      expect(callback).toHaveBeenCalled();
     });
 
     it('should propagate errors from the callback', async () => {
@@ -264,8 +264,8 @@ describe('Scheduler Engine', () => {
         });
 
         let uncaughtError: Error | null = null;
-        const handler = (err: unknown) => {
-          uncaughtError = err as Error;
+        const handler = (error: unknown) => {
+          uncaughtError = error as Error;
         };
         process.on('uncaughtException', handler);
 

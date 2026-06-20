@@ -23,26 +23,26 @@ function isJQuery(obj: unknown): obj is JQuery {
   return obj instanceof $;
 }
 
-function isStringArray(arr: unknown[]): arr is string[] {
-  return arr.every((x) => typeof x === 'string');
+function isStringArray(array: unknown[]): array is string[] {
+  return array.every((element) => typeof element === 'string');
 }
 
 /**
  * Extracts raw Nodes from a render result.
  * Performance: Bypasses jQuery wrapper allocation.
  */
-function getElements(raw: unknown): Node[] {
-  if (typeof raw === 'string') {
-    return $.parseHTML(raw) || [];
+function getElements(elementSource: unknown): Node[] {
+  if (typeof elementSource === 'string') {
+    return $.parseHTML(elementSource) || [];
   }
-  if (isJQuery(raw)) {
-    return raw.get();
+  if (isJQuery(elementSource)) {
+    return elementSource.get();
   }
-  if (raw instanceof DocumentFragment) {
-    return Array.from(raw.childNodes);
+  if (elementSource instanceof DocumentFragment) {
+    return Array.from(elementSource.childNodes);
   }
-  if (raw instanceof Node) {
-    return [raw];
+  if (elementSource instanceof Node) {
+    return [elementSource];
   }
   return [];
 }
@@ -83,17 +83,19 @@ export function handleEmpty<T>(
   const { onRemove, snapshots } = ctx;
 
   if (onRemove) {
-    for (const row of snapshots) {
-      if (row.node) removeNode(ctx, row.key, row.node);
+    for (const listSnapshot of snapshots) {
+      if (listSnapshot.node) removeNode(ctx, listSnapshot.key, listSnapshot.node);
     }
   } else {
     $container.empty();
   }
 
   if (empty && !ctx.$emptyEl) {
-    const raw = typeof empty === 'string' ? $.parseHTML(sanitizeHtml(empty)) : empty;
-    if (raw) {
-      ctx.$emptyEl = $(raw as Element | ArrayLike<Element> | JQuery<Element>).appendTo($container);
+    const elementSource = typeof empty === 'string' ? $.parseHTML(sanitizeHtml(empty)) : empty;
+    if (elementSource) {
+      ctx.$emptyEl = $(elementSource as Element | ArrayLike<Element> | JQuery<Element>).appendTo(
+        $container
+      );
     }
   }
 
@@ -116,15 +118,15 @@ export function renderItems<T>(
 
   const results = toRender.map((entry) => options.render(entry.item, entry.targetIndex));
 
-  const hasStrings = results.some((r) => typeof r === 'string');
+  const hasStrings = results.some((result) => typeof result === 'string');
   const sanitized = hasStrings
-    ? results.map((r, i) => {
+    ? results.map((result, i) => {
         const slot = toRender[i];
-        const val = typeof r === 'string' ? sanitizeHtml(r) : r;
-        if (typeof val === 'string' && slot !== undefined) {
-          return injectKeyToHtml(val, String(slot.key));
+        const sanitizedResult = typeof result === 'string' ? sanitizeHtml(result) : result;
+        if (typeof sanitizedResult === 'string' && slot !== undefined) {
+          return injectKeyToHtml(sanitizedResult, String(slot.key));
         }
-        return val;
+        return sanitizedResult;
       })
     : results;
 
@@ -137,24 +139,24 @@ export function renderItems<T>(
 
   for (let i = 0; i < renderCount; i++) {
     const slot = toRender[i];
-    const raw = sanitized[i];
-    if (!slot || raw === undefined) continue;
+    const elementSource = sanitized[i];
+    if (!slot || elementSource === undefined) continue;
 
-    const nodes = getElements(raw);
+    const nodes = getElements(elementSource);
 
     // Fallback: Ensure data-atom-key is set on all Element nodes
-    for (const el of nodes) {
-      if (el instanceof Element) {
-        if (!el.hasAttribute('data-atom-key')) {
-          el.setAttribute('data-atom-key', String(slot.key));
+    for (const element of nodes) {
+      if (element instanceof Element) {
+        if (!element.hasAttribute('data-atom-key')) {
+          element.setAttribute('data-atom-key', String(slot.key));
         }
       }
     }
 
     if (slot.state === ItemState.ForceReplace) {
-      slot.oldNode = slot.node;
+      slot.oldNodes = slot.nodes;
     }
-    slot.node = nodes;
+    slot.nodes = nodes;
   }
 
   return null;
@@ -167,9 +169,9 @@ export function renderItems<T>(
 export function cleanupRemoved<T>(ctx: ListContext<T>): void {
   const { snapshots, keyToIndex } = ctx;
   for (let i = 0; i < snapshots.length; i++) {
-    const row = snapshots[i];
-    if (row?.node && !keyToIndex.has(row.key)) {
-      removeNode(ctx, row.key, row.node);
+    const listSnapshot = snapshots[i];
+    if (listSnapshot?.node && !keyToIndex.has(listSnapshot.key)) {
+      removeNode(ctx, listSnapshot.key, listSnapshot.node);
     }
   }
 }
@@ -201,7 +203,7 @@ export function placeItems<T>(
 
       // Lazy wrapping: JQuery wrapper only allocated if callback exists
       const $el = bind || onAdd ? $(el as HTMLElement) : null;
-      slot.node = [el];
+      slot.nodes = [el];
       slot.state = ItemState.Existing;
 
       if (bind && $el) bind($el, item, i);
@@ -218,37 +220,37 @@ export function placeItems<T>(
   // Swap ForceReplace nodes before reordering
   for (let i = 0; i < count; i++) {
     const slot = slots[i];
-    if (slot && slot.state === ItemState.ForceReplace && slot.oldNode && slot.node) {
-      replaceDomNodes(slot.oldNode, slot.node);
+    if (slot && slot.state === ItemState.ForceReplace && slot.oldNodes && slot.nodes) {
+      replaceDomNodes(slot.oldNodes, slot.nodes);
     }
   }
 
   if (ctx.snapshots.length === 0 && ctx.removingKeys.size === 0) {
-    const frag = document.createDocumentFragment();
+    const documentFragment = document.createDocumentFragment();
     for (const slot of slots) {
-      if (slot?.node) {
-        for (let j = 0; j < slot.node.length; j++) {
-          const element = slot.node[j];
-          if (element) frag.appendChild(element);
+      if (slot?.nodes) {
+        for (let j = 0; j < slot.nodes.length; j++) {
+          const element = slot.nodes[j];
+          if (element) documentFragment.appendChild(element);
         }
       }
     }
     container.innerHTML = '';
-    container.appendChild(frag);
+    container.appendChild(documentFragment);
   } else {
     let next: Node | null = null;
-    let min = Infinity;
+    let minimumIndex = Infinity;
     for (let i = count - 1; i >= 0; i--) {
       const slot = slots[i];
       if (!slot) continue;
-      const idx = slot.oldIndex;
-      const node = slot.node;
+      const oldIndex = slot.oldIndex;
+      const node = slot.nodes;
       if (!node) continue;
 
       const first = node[0];
       if (first) {
-        if (idx !== -1 && idx < min) {
-          min = idx;
+        if (oldIndex !== -1 && oldIndex < minimumIndex) {
+          minimumIndex = oldIndex;
         } else {
           insertOrAppend(node, next, container);
         }
@@ -262,7 +264,7 @@ export function placeItems<T>(
   for (let i = 0; i < count; i++) {
     const slot = slots[i];
     if (!slot) continue;
-    const { state, node, item, key } = slot;
+    const { state, nodes: node, item, key } = slot;
     if (state === ItemState.Unchanged || !node) continue;
 
     if (bind || onAdd || (state === ItemState.Existing && update)) {

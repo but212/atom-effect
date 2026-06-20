@@ -354,14 +354,14 @@ describe('Computed State Machine', () => {
 describe('Subscription Protocol', () => {
   it('unsubscribe decrements count and is idempotent', () => {
     const a = atom(0);
-    const unsub = a.subscribe(() => {});
+    const unsubscribeCallback = a.subscribe(() => {});
     a.subscribe(() => {});
     expect(a.subscriberCount()).toBe(2);
 
-    unsub();
+    unsubscribeCallback();
     expect(a.subscriberCount()).toBe(1);
 
-    unsub();
+    unsubscribeCallback();
     expect(a.subscriberCount()).toBe(1);
   });
 

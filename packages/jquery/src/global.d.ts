@@ -135,7 +135,7 @@ declare global {
      * - To optimize performance through caching of expensive calculations.
      * - To transform or aggregate raw state for UI presentation.
      *
-     * @param fn - The computation function.
+     * @param computationCallback - The computation function.
      * @param options - Configuration for custom equality checks or error handlers.
      *
      * @example
@@ -148,7 +148,7 @@ declare global {
      * console.log(doubled.value); // 10
      * ```
      */
-    computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
+    computed<T>(computationCallback: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
     /**
      * Creates an asynchronous reactive computation.
      *
@@ -160,7 +160,7 @@ declare global {
      * state while the Promise is PENDING.
      */
     computed<T>(
-      fn: () => Promise<T>,
+      computationCallback: () => Promise<T>,
       options: ComputedOptions<T> & { defaultValue: T }
     ): ComputedAtom<T>;
     /**
@@ -171,11 +171,11 @@ declare global {
      * - To perform logging, monitoring, or diagnostic tasks.
      * - To manage timers, network requests, or global subscriptions.
      *
-     * @param fn - The function to execute. Can return a synchronous or asynchronous cleanup handle.
+     * @param effectCallback - The function to execute. Can return a synchronous or asynchronous cleanup handle.
      * @param options - Configuration for execution limits, custom error handlers, and sync delivery.
      * @returns An `EffectObject` used to manually trigger or stop the effect.
      *
-     * @throws {EffectError} If the provided `fn` is not a function.
+     * @throws {EffectError} If the provided `effectCallback` is not a function.
      *
      * @example
      * ```typescript
@@ -193,7 +193,7 @@ declare global {
      * sub.dispose(); // Stops the effect
      * ```
      */
-    effect(fn: () => EffectResult, options?: EffectOptions): EffectObject;
+    effect(effectCallback: () => EffectResult, options?: EffectOptions): EffectObject;
     /**
      * Logic: Atomic Update Batching
      * Groups multiple state updates into a single atomic change cycle.

@@ -56,8 +56,8 @@ export function cleanupNodes(nodes: Node[]): void {
 /**
  * Escapes special HTML characters to prevent attribute breakout.
  */
-export function escapeHtmlAttr(str: string): string {
-  return str
+export function escapeHtmlAttr(attributeValue: string): string {
+  return attributeValue
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
@@ -74,9 +74,9 @@ export function injectKeyToHtml(html: string, key: string): string {
   const match = html.match(HTML_TAG_START_REGEXP);
   if (!match) return html;
 
-  const insertIdx = match[0].length;
+  const insertIndex = match[0].length;
   const escapedKey = escapeHtmlAttr(key);
-  return `${html.slice(0, insertIdx)} data-atom-key="${escapedKey}"${html.slice(insertIdx)}`;
+  return `${html.slice(0, insertIndex)} data-atom-key="${escapedKey}"${html.slice(insertIndex)}`;
 }
 
 /**
@@ -84,12 +84,12 @@ export function injectKeyToHtml(html: string, key: string): string {
  */
 export function replaceDomNodes(oldNodes: Node[], newNodes: Node[]): void {
   cleanupNodes(oldNodes);
-  const firstOld = oldNodes[0];
-  if (firstOld?.parentNode) {
-    const parent = firstOld.parentNode;
+  const firstPreviousNode = oldNodes[0];
+  if (firstPreviousNode?.parentNode) {
+    const parent = firstPreviousNode.parentNode;
     for (let i = 0; i < newNodes.length; i++) {
       const el = newNodes[i];
-      if (el) parent.insertBefore(el, firstOld);
+      if (el) parent.insertBefore(el, firstPreviousNode);
     }
     for (let i = 0; i < oldNodes.length; i++) {
       const el = oldNodes[i];

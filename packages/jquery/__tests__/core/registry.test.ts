@@ -241,7 +241,7 @@ describe('Binding Registry', () => {
       // 2. Register an unrelated addition observer on the same root
       const observer = getOrCreateRootObserver(root);
       const addedList: Element[] = [];
-      const unsub = observer.onNodeAdded('.test-node', (el) => {
+      const unsubscribeCallback = observer.onNodeAdded('.test-node', (el) => {
         addedList.push(el);
       });
 
@@ -263,7 +263,7 @@ describe('Binding Registry', () => {
       expect(addedList).toContain(target);
 
       // Cleanup
-      unsub();
+      unsubscribeCallback();
       expect(rootObserversMap.has(root)).toBe(false);
     });
 

@@ -157,18 +157,18 @@ describe('Tracking Engine', () => {
   });
 
   describe('BaseNode disposal', () => {
-    it('should not allocate _slots or register target when subscribing to a disposed node', () => {
+    it('should not allocate _subscriberSlots or register target when subscribing to a disposed node', () => {
       class TestNode extends BaseNode<number> {}
       const node = new TestNode();
 
       node.flags |= STATE_FLAGS.DISPOSED;
 
-      const unsub = node.subscribe(() => {});
+      const unsubscribeCallback = node.subscribe(() => {});
 
-      expect(node._slots).toBeNull();
+      expect(node._subscriberSlots).toBeNull();
       expect(node.subscriberCount()).toBe(0);
 
-      unsub();
+      unsubscribeCallback();
     });
   });
 
@@ -184,13 +184,16 @@ describe('Tracking Engine', () => {
 
   describe('Internal API invariants', () => {
     it('nodeIsComputed and nodeIsNotifying work correctly', () => {
-      const mockNode: { flags: number; _slots: unknown } = { flags: 0, _slots: null };
+      const mockNode: { flags: number; _subscriberSlots: unknown } = {
+        flags: 0,
+        _subscriberSlots: null,
+      };
       expect(nodeIsComputed(mockNode as unknown as ReactiveNode<unknown>)).toBe(false);
       mockNode.flags = 1 << 1; // IS_COMPUTED flag
       expect(nodeIsComputed(mockNode as unknown as ReactiveNode<unknown>)).toBe(true);
 
       expect(nodeIsNotifying(mockNode as unknown as ReactiveNode<unknown>)).toBe(false);
-      mockNode._slots = { isLocked: true } as unknown as SlotBuffer<never>;
+      mockNode._subscriberSlots = { isLocked: true } as unknown as SlotBuffer<never>;
       expect(nodeIsNotifying(mockNode as unknown as ReactiveNode<unknown>)).toBe(true);
     });
 

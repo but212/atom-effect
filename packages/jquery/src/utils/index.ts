@@ -26,29 +26,29 @@ export { isPromise } from '@but212/atom-effect-utils';
  *
  * @internal
  */
-export function getSelector(el: Element): string {
-  const tag = el.localName;
-  const id = el.id;
-  const classStr = el.getAttribute('class');
-  const type = (el as HTMLInputElement).type;
+export function getSelector(element: Element): string {
+  const tag = element.localName;
+  const id = element.id;
+  const classNameAttribute = element.getAttribute('class');
+  const type = (element as HTMLInputElement).type;
 
-  let res = tag;
+  let selectorResult = tag;
   if (id) {
-    res += `#${id}`;
+    selectorResult += `#${id}`;
   }
 
-  if (classStr) {
-    const trimmed = classStr.trim().replace(/\s+/g, '.');
+  if (classNameAttribute) {
+    const trimmed = classNameAttribute.trim().replace(/\s+/g, '.');
     if (trimmed) {
-      res += `.${trimmed}`;
+      selectorResult += `.${trimmed}`;
     }
   }
 
   if (type && type !== 'text') {
-    res += `.${type}`;
+    selectorResult += `.${type}`;
   }
 
-  return res;
+  return selectorResult;
 }
 
 /**
@@ -61,14 +61,22 @@ export function getSelector(el: Element): string {
  *
  * @internal
  */
-export function flattenToFormData(fd: FormData, prefix: string, obj: unknown): void {
-  if (typeof obj === 'object' && obj !== null && !(obj instanceof File) && !(obj instanceof Blob)) {
-    for (const [k, v] of Object.entries(obj)) {
-      const key = prefix ? `${prefix}[${k}]` : k;
-      flattenToFormData(fd, key, v);
+export function flattenToFormData(formData: FormData, prefix: string, sourceObject: unknown): void {
+  if (
+    typeof sourceObject === 'object' &&
+    sourceObject !== null &&
+    !(sourceObject instanceof File) &&
+    !(sourceObject instanceof Blob)
+  ) {
+    for (const [entryKey, entryValue] of Object.entries(sourceObject)) {
+      const key = prefix ? `${prefix}[${entryKey}]` : entryKey;
+      flattenToFormData(formData, key, entryValue);
     }
   } else {
-    fd.append(prefix, obj instanceof Blob ? obj : String(obj ?? ''));
+    formData.append(
+      prefix,
+      sourceObject instanceof Blob ? sourceObject : String(sourceObject ?? '')
+    );
   }
 }
 

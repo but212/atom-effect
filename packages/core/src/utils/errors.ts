@@ -129,13 +129,15 @@ export function getErrorChain(error: unknown): Array<unknown> {
   const chain: Array<unknown> = [];
   const seen = new Set<unknown>();
   for (
-    let curr = error;
-    curr != null && !seen.has(curr);
-    curr =
-      curr && typeof curr === 'object' && 'cause' in curr ? Reflect.get(curr, 'cause') : undefined
+    let currentError = error;
+    currentError != null && !seen.has(currentError);
+    currentError =
+      currentError && typeof currentError === 'object' && 'cause' in currentError
+        ? Reflect.get(currentError, 'cause')
+        : undefined
   ) {
-    chain.push(curr);
-    seen.add(curr);
+    chain.push(currentError);
+    seen.add(currentError);
   }
   return chain;
 }
@@ -198,18 +200,18 @@ export function serializeError(
  * - To unify error reporting formats across different engine modules.
  *
  * @param error - The raw error to wrap.
- * @param ErrorClass - The system error class to instantiate.
+ * @param errorConstructor - The system error class to instantiate.
  * @param context - Human-readable context (e.g., 'Computed: userId').
  * @returns A structured `AtomError` instance.
  */
 export function wrapError(
   error: unknown,
-  ErrorClass: AtomErrorConstructor,
+  errorConstructor: AtomErrorConstructor,
   context: string
 ): AtomError {
   const meta = getErrorMetadata(error);
 
-  return new ErrorClass(AtomError.format(meta.name, context, meta.message), {
+  return new errorConstructor(AtomError.format(meta.name, context, meta.message), {
     cause: error,
     recoverable: meta.recoverable,
     code: meta.code,
@@ -218,12 +220,21 @@ export function wrapError(
 
 /**
  * @internal
+ * Safe helper to check if a value is an object (record) and not null.
+ */
+function isRecord(value: unknown): value is Record<string | symbol, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * @internal
  * Optimization: Converts a value to its string representation safely.
  * Gracefully catches exceptions thrown by null-prototype or custom toString methods.
  */
-const toStr = (val: unknown, fallback = ''): string => {
+const safeString = (value: unknown, fallback: string | undefined): string | undefined => {
+  if (value == null) return fallback;
   try {
-    return val == null ? fallback : String(val);
+    return String(value);
   } catch {
     return fallback;
   }
@@ -231,104 +242,67 @@ const toStr = (val: unknown, fallback = ''): string => {
 
 /**
  * @internal
- * Optimization: Converts a value to its string representation safely, yielding undefined if null/empty.
- * Gracefully catches exceptions thrown by null-prototype or custom toString methods.
- */
-const toStrOrUndef = (val: unknown): string | undefined => {
-  try {
-    return val == null ? undefined : String(val);
-  } catch {
-    return undefined;
-  }
-};
-
-/** @internal */
-export type ErrorStrategy = {
-  test: (e: unknown) => boolean;
-  fetch: (e: unknown) => {
-    name: string;
-    message: string;
-    recoverable: boolean;
-    code: string | undefined;
-  };
-};
-
-/**
- * @internal
  * Logic: Normalization sequence for converting foreign exceptions into system errors.
  * Handles standard JavaScript errors and cross-context exceptions gracefully.
  */
-export const ERROR_STRATEGIES: readonly ErrorStrategy[] = [
-  {
-    test: (e: unknown): boolean => {
-      try {
-        if (e != null && typeof e === 'object') {
-          const tag = Reflect.get(e, '_tag');
-          return typeof tag === 'string' && tag.endsWith('Error');
-        }
-        return false;
-      } catch {
-        return false;
-      }
-    },
-    fetch: (e: unknown) => {
-      if (e != null && typeof e === 'object') {
-        const name = Reflect.get(e, 'name');
-        const message = Reflect.get(e, 'message');
-        const recoverable = Reflect.get(e, 'recoverable');
-        const code = Reflect.get(e, 'code');
-        return {
-          name: toStr(name),
-          message: toStr(message),
-          recoverable: !!recoverable,
-          code: toStrOrUndef(code),
-        };
-      }
-      return {
-        name: 'Object',
-        message: 'Invalid error object',
-        recoverable: true,
-        code: undefined,
-      };
-    },
-  },
-  {
-    test: (e: unknown): e is Error => isError(e),
-    fetch: (e: unknown) => {
-      if (isError(e)) {
-        const recoverable = 'recoverable' in e ? Reflect.get(e, 'recoverable') : undefined;
-        const code = 'code' in e ? Reflect.get(e, 'code') : undefined;
-        return {
-          name: e.name,
-          message: e.message,
-          recoverable: typeof recoverable === 'boolean' ? recoverable : true,
-          code: toStrOrUndef(code),
-        };
-      }
-      return {
-        name: 'Unexpected error',
-        message: 'Invalid error object',
-        recoverable: true,
-        code: undefined,
-      };
-    },
-  },
-];
+export interface ErrorMetadata {
+  name: string;
+  message: string;
+  recoverable: boolean;
+  code: string | undefined;
+}
 
 /**
  * Logic: Heuristic Metadata Extraction
- * Iterates through configured strategies to extract meaningful data from
- * non-standard error objects or primitives.
+ * Extracts meaningful data from non-standard error objects or primitives.
  * @internal
  */
-function getErrorMetadata(error: unknown) {
-  const strategy = ERROR_STRATEGIES.find((s) => s.test(error));
-  return strategy
-    ? strategy.fetch(error)
-    : {
-        name: 'Unexpected error',
-        message: toStr(error),
-        recoverable: true,
-        code: undefined,
+export function getErrorMetadata(error: unknown): ErrorMetadata {
+  if (!isRecord(error)) {
+    return {
+      name: 'Unexpected error',
+      message: safeString(error, '') ?? '',
+      recoverable: true,
+      code: undefined,
+    };
+  }
+
+  // Case A: Standard or custom Error objects
+  if (isError(error)) {
+    const recoverable = 'recoverable' in error ? Reflect.get(error, 'recoverable') : undefined;
+    const code = 'code' in error ? Reflect.get(error, 'code') : undefined;
+    return {
+      name: error.name,
+      message: error.message,
+      recoverable: typeof recoverable === 'boolean' ? recoverable : true,
+      code: typeof code === 'string' ? code : undefined,
+    };
+  }
+
+  // Case B: Brand-based objects (tag ending with 'Error')
+  try {
+    const tag = Reflect.get(error, '_tag');
+    if (typeof tag === 'string' && tag.endsWith('Error')) {
+      const errorName = Reflect.get(error, 'name');
+      const errorMessage = Reflect.get(error, 'message');
+      const isRecoverable = Reflect.get(error, 'recoverable');
+      const errorCode = Reflect.get(error, 'code');
+      return {
+        name: safeString(errorName, '') ?? '',
+        message: safeString(errorMessage, '') ?? '',
+        recoverable: isRecoverable !== false,
+        code: safeString(errorCode, undefined),
       };
+    }
+  } catch {
+    // Fall through if getter execution throws
+  }
+
+  // Case C: Plain object / unexpected fallback
+  return {
+    name: 'Unexpected error',
+    message: safeString(error, '') ?? '',
+    recoverable: true,
+    code: undefined,
+  };
 }

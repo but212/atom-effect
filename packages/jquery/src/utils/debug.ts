@@ -15,12 +15,12 @@ const ATTR_MARKER = 'data-atom-debug';
 const animations = new WeakMap<Element, Animation>();
 
 function resolveInitialState(): boolean {
-  const g = globalThis as typeof globalThis & {
+  const globalScope = globalThis as typeof globalThis & {
     __ATOM_DEBUG__?: boolean;
     process?: { env?: { NODE_ENV?: string } };
   };
-  if (g.__ATOM_DEBUG__ !== undefined) return !!g.__ATOM_DEBUG__;
-  const env = g.process?.env?.NODE_ENV;
+  if (globalScope.__ATOM_DEBUG__ !== undefined) return !!globalScope.__ATOM_DEBUG__;
+  const env = globalScope.process?.env?.NODE_ENV;
   return env !== 'production' && env !== undefined;
 }
 
@@ -33,17 +33,17 @@ function injectStyle(): void {
   document.head.appendChild(style);
 }
 
-function triggerVisualHighlight(el: Element): void {
-  if (typeof el.animate !== 'function') return;
+function triggerVisualHighlight(element: Element): void {
+  if (typeof element.animate !== 'function') return;
 
   injectStyle();
-  animations.get(el)?.cancel();
+  animations.get(element)?.cancel();
 
-  if (!el.hasAttribute(ATTR_MARKER)) {
-    el.setAttribute(ATTR_MARKER, '');
+  if (!element.hasAttribute(ATTR_MARKER)) {
+    element.setAttribute(ATTR_MARKER, '');
   }
 
-  const anim = el.animate(
+  const highlightAnimation = element.animate(
     [
       { outline: '2px solid rgba(255, 68, 68, 0.9)', outlineOffset: '1px' },
       { outline: '0px solid transparent', outlineOffset: '1px' },
@@ -54,8 +54,8 @@ function triggerVisualHighlight(el: Element): void {
     }
   );
 
-  animations.set(el, anim);
-  anim.onfinish = () => animations.delete(el);
+  animations.set(element, highlightAnimation);
+  highlightAnimation.onfinish = () => animations.delete(element);
 }
 
 let enabled = resolveInitialState();
@@ -69,8 +69,8 @@ export const debug = {
   get enabled(): boolean {
     return enabled;
   },
-  set enabled(val: boolean) {
-    enabled = val;
+  set enabled(isEnabled: boolean) {
+    enabled = isEnabled;
   },
 
   warn(prefix: string, message: string, ...rest: unknown[]): void {
@@ -89,14 +89,14 @@ export const debug = {
   ): void {
     if (!enabled || !target) return;
 
-    const el =
+    const element =
       target && typeof target === 'object' && 'jquery' in target
         ? (target as JQuery)[0]
         : (target as Element);
 
-    if (el instanceof Element && el.isConnected) {
-      console.log(`${prefix} DOM updated: ${getSelector(el)}.${type} =`, value);
-      triggerVisualHighlight(el);
+    if (element instanceof Element && element.isConnected) {
+      console.log(`${prefix} DOM updated: ${getSelector(element)}.${type} =`, value);
+      triggerVisualHighlight(element);
     }
   },
 };

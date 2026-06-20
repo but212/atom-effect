@@ -91,13 +91,13 @@ export const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet 
  * @internal
  */
 export const discoverProvider = (target: Node, key: string | symbol): unknown | undefined => {
-  let curr: Node | null = target;
-  while (curr) {
-    const state = nodeStateMap.get(curr);
+  let currentNode: Node | null = target;
+  while (currentNode) {
+    const state = nodeStateMap.get(currentNode);
     if (state?.providers?.has(key)) {
       return state.providers.get(key);
     }
-    curr = curr instanceof ShadowRoot ? curr.host : curr.parentNode;
+    currentNode = currentNode instanceof ShadowRoot ? currentNode.host : currentNode.parentNode;
   }
   return undefined;
 };
@@ -119,33 +119,33 @@ export function createContextProxy<T>(
   key: string | symbol
 ): WritableAtom<T | null> {
   const resolve = (isPeek: boolean): T | null => {
-    const p = discoverProvider(target, key);
-    if (p === undefined) return null;
-    return (isAtom(p) ? (isPeek ? p.peek() : p.value) : p) as T;
+    const provider = discoverProvider(target, key);
+    if (provider === undefined) return null;
+    return (isAtom(provider) ? (isPeek ? provider.peek() : provider.value) : provider) as T;
   };
 
   return {
     get value() {
       return resolve(false);
     },
-    set value(v: T | null) {
-      const p = discoverProvider(target, key);
-      if (p !== undefined && isWritable(p)) {
-        p.value = v;
+    set value(newValue: T | null) {
+      const provider = discoverProvider(target, key);
+      if (provider !== undefined && isWritable(provider)) {
+        provider.value = newValue;
       }
     },
     peek() {
       return resolve(true);
     },
-    subscribe(fn) {
+    subscribe(callback) {
       // In this stateless model, we create a temporary computed that captures the current
       // resolution value and subscribe to it. If the user wants to react to *movement* in the DOM,
       // they must explicitly re-evaluate or use a component lifecycle hook.
       // This enforces explicit bounds over implicit magical DOM tracking.
       const shared = $.computed(() => resolve(false));
-      const unsub = shared.subscribe(fn);
+      const unsubscribeCallback = shared.subscribe(callback);
       return () => {
-        unsub();
+        unsubscribeCallback();
         shared.dispose();
       };
     },

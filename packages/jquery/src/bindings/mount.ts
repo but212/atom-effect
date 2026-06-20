@@ -30,8 +30,8 @@ $.fn.atomMount = function <P>(this: JQuery, component: ComponentFn<P>, props?: P
   return atomEachElement(this, (element) => {
     registry.cleanupTree(element);
 
-    const hook = untracked(() => batch(() => component($(element), resolvedProps)));
-    const teardown = typeof hook === 'function' ? hook : hook?.unmount;
+    const mountResult = untracked(() => batch(() => component($(element), resolvedProps)));
+    const teardown = typeof mountResult === 'function' ? mountResult : mountResult?.unmount;
     if (teardown) {
       registry.setTeardown(element, teardown);
     }

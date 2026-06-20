@@ -24,8 +24,8 @@ function buildGraph(rand: () => number, atomCount = 5, computedCount = 20) {
     const numDeps = Math.floor(rand() * 3) + 1;
     const deps: (WritableAtom<number> | ComputedAtom<number>)[] = [];
     for (let j = 0; j < numDeps; j++) {
-      const dep = allNodes[Math.floor(rand() * allNodes.length)];
-      if (dep) deps.push(dep);
+      const dependency = allNodes[Math.floor(rand() * allNodes.length)];
+      if (dependency) deps.push(dependency);
     }
     depMap.push(deps);
     const c = computed(() => deps.reduce((sum, d) => sum + d.value, 0));

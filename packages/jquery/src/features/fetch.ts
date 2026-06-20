@@ -27,13 +27,13 @@ import type { FetchError, FetchOptions } from '@/types';
  */
 function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettings {
   const { ajaxOptions, method, headers } = options;
-  const optObj = typeof ajaxOptions === 'function' ? ajaxOptions() : ajaxOptions || {};
+  const ajaxOptionsObject = typeof ajaxOptions === 'function' ? ajaxOptions() : ajaxOptions || {};
 
   return {
-    ...optObj,
+    ...ajaxOptionsObject,
     url,
-    method: method || optObj.method,
-    headers: { ...optObj.headers, ...headers },
+    method: method || ajaxOptionsObject.method,
+    headers: { ...ajaxOptionsObject.headers, ...headers },
     success: undefined,
     error: undefined,
     complete: undefined,
@@ -47,17 +47,19 @@ function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettin
  *
  * @internal
  */
-function toError(err: unknown): Error {
-  if (err && typeof err === 'object' && 'readyState' in err) {
-    const xhr = err as JQuery.jqXHR;
+function toError(rawError: unknown): Error {
+  if (rawError && typeof rawError === 'object' && 'readyState' in rawError) {
+    const xhr = rawError as JQuery.jqXHR;
     // Reason: A status of 0 typically indicates a network timeout or DNS
     // failure where statusText might be empty.
     const message = xhr.statusText || (xhr.status === 0 ? 'Network Error' : 'Request Failed');
-    const error = new Error(`Network Error: ${message} (${xhr.status})`, { cause: err });
+    const error = new Error(`Network Error: ${message} (${xhr.status})`, { cause: rawError });
     (error as FetchError).jqXHR = xhr;
     return error;
   }
-  return err instanceof Error ? err : new Error(String(err ?? 'Unknown error'), { cause: err });
+  return rawError instanceof Error
+    ? rawError
+    : new Error(String(rawError ?? 'Unknown error'), { cause: rawError });
 }
 
 interface FetchSession {
@@ -115,26 +117,26 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
         abortSession(session);
       }
 
-      const data = await xhr;
+      const responseData = await xhr;
 
       const transformedResult = options.transform
-        ? options.transform(data as unknown, xhr)
-        : (data as T);
+        ? options.transform(responseData as unknown, xhr)
+        : (responseData as T);
 
       return transformedResult instanceof Promise ? await transformedResult : transformedResult;
-    } catch (err) {
+    } catch (ajaxError) {
       if (session.aborted) {
-        const abortErr = new Error('AbortError');
-        abortErr.name = 'AbortError';
-        throw abortErr;
+        const abortError = new Error('AbortError');
+        abortError.name = 'AbortError';
+        throw abortError;
       }
 
-      const error = toError(err);
+      const error = toError(ajaxError);
       if (options.onError) {
         try {
           options.onError(error);
-        } catch (hookErr) {
-          console.error('atomFetch: onError hook threw an error', hookErr);
+        } catch (onErrorHookError) {
+          console.error('atomFetch: onError hook threw an error', onErrorHookError);
         }
       }
       throw error;

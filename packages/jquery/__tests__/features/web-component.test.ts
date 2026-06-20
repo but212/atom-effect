@@ -671,10 +671,10 @@ describe('Web Component Features', () => {
       expect(proxyAtom.subscriberCount()).toBe(0);
 
       // In stateless proxy, subscriber count doesn't track global retainers
-      const unsub = proxyAtom.subscribe(() => {});
+      const unsubscribeCallback = proxyAtom.subscribe(() => {});
       expect(proxyAtom.subscriberCount()).toBe(0);
 
-      unsub();
+      unsubscribeCallback();
       expect(proxyAtom.subscriberCount()).toBe(0);
 
       proxyAtom.dispose();

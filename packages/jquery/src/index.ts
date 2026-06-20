@@ -61,8 +61,8 @@ export function initAEJ(config: AEJConfig = {}): void {
   // double-patching if the library is re-initialized with different settings.
   disablejQueryOverrides();
   if (patch !== false) {
-    const patchOpts = typeof patch === 'object' ? patch : {};
-    enablejQueryOverrides(patchOpts);
+    const patchOptions = typeof patch === 'object' ? patch : {};
+    enablejQueryOverrides(patchOptions);
   }
 
   // Security: The MutationObserver safety net is the primary defense against memory
@@ -84,8 +84,8 @@ export function initAEJ(config: AEJConfig = {}): void {
 // Automatically initializes the library on DOM ready to support traditional
 // JQuery script tag usage. Can be disabled via global configuration.
 $(() => {
-  const win = window as { AEJ_NO_AUTO_INIT?: boolean };
-  if (!win.AEJ_NO_AUTO_INIT) initAEJ();
+  const currentWindow = window as { AEJ_NO_AUTO_INIT?: boolean };
+  if (!currentWindow.AEJ_NO_AUTO_INIT) initAEJ();
 });
 
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
@@ -114,7 +114,7 @@ export function cleanup(element: HTMLElement | JQuery): void {
   if (element instanceof HTMLElement) {
     registry.cleanupTree(element);
   } else {
-    element.each((_, el) => registry.cleanupTree(el));
+    element.each((_, currentElement) => registry.cleanupTree(currentElement));
   }
 }
 

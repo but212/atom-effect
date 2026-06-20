@@ -7,7 +7,8 @@
 /** Core reactive engine error templates. @internal */
 export const SYSTEM_CORE = {
   ERRORS: {
-    EFFECT_DISPOSE_ERROR: (i?: string) => (i ? `Dispose error: ${i}` : 'Dispose error'),
+    EFFECT_DISPOSE_ERROR: (identifier?: string) =>
+      identifier ? `Dispose error: ${identifier}` : 'Dispose error',
   },
 } as const;
 
@@ -21,7 +22,7 @@ export const SYSTEM_ROUTE = {
     activeClass: 'active',
   },
   ERRORS: {
-    NOT_FOUND: (n: string) => `Route "${n}" not found`,
+    NOT_FOUND: (routeName: string) => `Route "${routeName}" not found`,
   },
 } as const;
 
@@ -31,11 +32,13 @@ export const SYSTEM_BINDING = {
   INPUT_DEFAULTS: { event: 'input change', debounce: 0 },
   VALID_INPUT_TAGS: ['input', 'select', 'textarea'],
   ERRORS: {
-    INVALID_INPUT_ELEMENT: (t: string) => `Invalid element <${t}> for val.`,
-    MISSING_SOURCE: (m: string) => `[${m}] source required.`,
-    MISSING_CONDITION: (m: string) => `[${m}] condition required.`,
-    UPDATER_ERROR: (d: string, s?: boolean) => `Updater failed: "${d}"${s ? ' (static)' : ''}`,
-    CLEANUP_ERROR: (i?: string) => (i ? `Binding cleanup error: ${i}` : 'Binding cleanup error'),
+    INVALID_INPUT_ELEMENT: (tagName: string) => `Invalid element <${tagName}> for val.`,
+    MISSING_SOURCE: (bindingName: string) => `[${bindingName}] source required.`,
+    MISSING_CONDITION: (bindingName: string) => `[${bindingName}] condition required.`,
+    UPDATER_ERROR: (bindingType: string, isStatic?: boolean) =>
+      `Updater failed: "${bindingType}"${isStatic ? ' (static)' : ''}`,
+    CLEANUP_ERROR: (identifier?: string) =>
+      identifier ? `Binding cleanup error: ${identifier}` : 'Binding cleanup error',
   },
 } as const;
 
@@ -60,9 +63,9 @@ export const SYSTEM_SECURITY = {
   ],
   DANGEROUS_PROTOCOL_PATTERN: '(?:javascript|vbscript)',
   ERRORS: {
-    BLOCKED_EVENT_HANDLER: (n: string) => `Blocked handler: "${n}".`,
-    BLOCKED_PROTOCOL: (n: string) => `Blocked protocol: "${n}".`,
-    BLOCKED_PROP: (n: string) => `Blocked prop: "${n}".`,
+    BLOCKED_EVENT_HANDLER: (name: string) => `Blocked handler: "${name}".`,
+    BLOCKED_PROTOCOL: (name: string) => `Blocked protocol: "${name}".`,
+    BLOCKED_PROP: (name: string) => `Blocked prop: "${name}".`,
   },
 } as const;
 
@@ -70,7 +73,8 @@ export const SYSTEM_SECURITY = {
 export const SYSTEM_LIST = {
   PREFIX: '[atom-list]',
   ERRORS: {
-    DUPLICATE_KEY: (k: string | number, i: number) => `Duplicate key "${k}" at index ${i}.`,
+    DUPLICATE_KEY: (itemKey: string | number, i: number) =>
+      `Duplicate key "${itemKey}" at index ${i}.`,
   },
 } as const;
 
@@ -78,7 +82,8 @@ export const SYSTEM_LIST = {
 export const SYSTEM_MOUNT = {
   PREFIX: '[atom-mount]',
   ERRORS: {
-    CLEANUP_ERROR: (n?: string) => (n ? `Cleanup error in <${n}>` : 'Cleanup error'),
+    CLEANUP_ERROR: (identifier?: string) =>
+      identifier ? `Cleanup error in <${identifier}>` : 'Cleanup error',
   },
 } as const;
 

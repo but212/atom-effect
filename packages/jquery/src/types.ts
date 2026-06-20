@@ -34,7 +34,7 @@ export type EffectResult = undefined | EffectCleanup | ComponentLifecycle;
  * Used to optimize reactivity by preventing updates when values are
  * logically equivalent, even if object references have changed.
  */
-export type EqualFn<T> = (a: T, b: T) => boolean;
+export type EqualFn<T> = (first: T, second: T) => boolean;
 
 /**
  * Configuration options for creating reactive atoms.
@@ -157,7 +157,7 @@ export interface BindingOptions<T = unknown, TText = unknown> {
         options?: FormOptions<T extends object ? T : unknown> | null | undefined,
       ];
   /** Registers event listeners with automatic lifecycle management. */
-  on?: Record<string, (e: JQuery.Event) => void>;
+  on?: Record<string, (event: JQuery.Event) => void>;
 }
 
 /** A writable atom that includes an explicit disposal mechanism. @internal */
@@ -210,7 +210,7 @@ export interface ListOptions<T> {
   /** Event handlers bound to individual list items. */
   events?: Record<string, (item: T, index: number, e: JQuery.TriggeredEvent) => void>;
   /** Optional function for custom item equality checks. */
-  isEqual?: (a: T, b: T) => boolean;
+  isEqual?: (first: T, second: T) => boolean;
 }
 
 /** Options for customizing two-way value bindings. */
@@ -220,7 +220,7 @@ export interface ValOptions<T> {
   /** The DOM event used to trigger synchronization (e.g., 'change'). */
   event?: string;
   /** Function to parse the DOM string value into the atom's type. */
-  parse?: (v: string) => T;
+  parse?: (rawValue: string) => T;
   /** Function to format the atom's value for DOM display. */
   format?: (v: T) => string;
   /** Function for custom value equality checks. */
@@ -234,7 +234,7 @@ export interface FormOptions<T> extends ValOptions<T> {
   /** Callback triggered whenever any field in the form changes. */
   onChange?: (path: string, value: unknown) => void;
   /** Reactive validation schema mapping paths to validators. */
-  validation?: Record<string, (val: unknown) => string | boolean>;
+  validation?: Record<string, (fieldValue: unknown) => string | boolean>;
 }
 
 /**
@@ -258,11 +258,11 @@ export interface FetchOptions<T> {
   /** Custom HTTP headers to include in the request. */
   headers?: Record<string, string>;
   /** Function to transform the raw response before it is stored in the atom. */
-  transform?: (raw: unknown, xhr: JQuery.jqXHR) => T | Promise<T>;
+  transform?: (raw: unknown, jqXHR: JQuery.jqXHR) => T | Promise<T>;
   /** Direct overrides for the underlying jQuery AJAX settings. */
   ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
   /** Callback triggered when the request fails. */
-  onError?: (err: unknown) => void;
+  onError?: (error: unknown) => void;
   /** Whether to trigger the initial request immediately upon creation. */
   eager?: boolean;
 }
@@ -389,7 +389,7 @@ export interface AtomNavOptions {
   /** Callback triggered before content is replaced. */
   onUnmount?: ($container: JQuery, oldUrl: string) => void;
   /** Callback for handling navigation errors. */
-  onError?: (err: unknown, url: string) => boolean | undefined;
+  onError?: (error: unknown, url: string) => boolean | undefined;
   /** Whether to reset scroll position to the top after navigation. */
   scrollToTop?: boolean;
   /** Whether to synchronize the document title with the loaded page. */

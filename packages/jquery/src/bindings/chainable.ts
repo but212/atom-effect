@@ -46,17 +46,17 @@ import { debug } from '@/utils/debug';
  * a consistent Record for downstream binding operations.
  *
  * @param keyOrMap - A property name string or a mapping object.
- * @param value - The reactive value (required if `keyOrMap` is a string).
+ * @param bindingValue - The reactive value (required if `keyOrMap` is a string).
  * @internal
  */
 function resolveArgs<V>(
   keyOrMap: string | Record<string, V>,
-  value: V | undefined
+  bindingValue: V | undefined
 ): Record<string, V> | null {
   return typeof keyOrMap === 'string'
-    ? value === undefined
+    ? bindingValue === undefined
       ? null
-      : { [keyOrMap]: value }
+      : { [keyOrMap]: bindingValue }
     : keyOrMap || null;
 }
 
@@ -73,11 +73,14 @@ function resolveArgs<V>(
  *
  * @example
  * ```typescript
- * $('.count-display').atomText(counterAtom, (val) => `Total: ${val}`);
+ * $('.count-display').atomText(counterAtom, (rawValue) => `Total: ${rawValue}`);
  * ```
  */
-$.fn.atomText = function <T>(source: AsyncReactiveValue<T>, formatter?: (v: T) => string): JQuery {
-  return atomEachElement(this, (el) => bindText(el, source, formatter));
+$.fn.atomText = function <T>(
+  source: AsyncReactiveValue<T>,
+  formatter?: (rawValue: T) => string
+): JQuery {
+  return atomEachElement(this, (element) => bindText(element, source, formatter));
 };
 
 /**
@@ -99,7 +102,7 @@ $.fn.atomText = function <T>(source: AsyncReactiveValue<T>, formatter?: (v: T) =
  * ```
  */
 $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
-  return atomEachElement(this, (el) => bindHtml(el, source));
+  return atomEachElement(this, (element) => bindHtml(element, source));
 };
 
 /**
@@ -110,13 +113,13 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
  * declarative interface for chainable plugin methods.
  *
  * @param binder - The underlying binding function.
- * @param errorMsg - Error message to display if arguments are invalid.
+ * @param errorMessage - Error message to display if arguments are invalid.
  * @internal
  */
 function createChainableMethod<V, O = V>(
-  binder: (el: HTMLElement, map: Record<string, O>) => void,
-  errorMsg: string,
-  transformValue?: (v: V, extra?: unknown) => O
+  binder: (element: HTMLElement, map: Record<string, O>) => void,
+  errorMessage: string,
+  transformValue?: (inputValue: V, extra?: unknown) => O
 ) {
   return function (
     this: JQuery,
@@ -128,10 +131,10 @@ function createChainableMethod<V, O = V>(
       transformValue && value !== undefined ? transformValue(value, extra) : (value as O);
     const map = resolveArgs<O>(keyOrMap as string | Record<string, O>, resolvedValue);
     if (!map) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${errorMsg}`);
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${errorMessage}`);
       return this;
     }
-    return atomEachElement(this, (el) => binder(el, map));
+    return atomEachElement(this, (element) => binder(element, map));
   };
 }
 
@@ -220,7 +223,7 @@ $.fn.atomCss = createChainableMethod<CssValue, CssValue>(
  * ```
  */
 $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
-  return atomEachElement(this, (el) => bindVisibility(el, condition, false));
+  return atomEachElement(this, (element) => bindVisibility(element, condition, false));
 };
 
 /**
@@ -239,7 +242,7 @@ $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
  * ```
  */
 $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
-  return atomEachElement(this, (el) => bindVisibility(el, condition, true));
+  return atomEachElement(this, (element) => bindVisibility(element, condition, true));
 };
 
 /**
@@ -262,7 +265,7 @@ $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
  * ```
  */
 $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}): JQuery {
-  return atomEachElement(this, (el) => bindVal(el, atom, options));
+  return atomEachElement(this, (element) => bindVal(element, atom, options));
 };
 
 /**
@@ -272,7 +275,7 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
  * @returns The original jQuery collection for chaining.
  */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
-  return atomEachElement(this, (el) => bindChecked(el, atom));
+  return atomEachElement(this, (element) => bindChecked(element, atom));
 };
 
 /**
@@ -298,9 +301,9 @@ $.fn.atomForm = function <T extends object>(
   atom: WritableAtom<T> | WritableAtom<unknown>[],
   options: FormOptions<T> = {}
 ): JQuery {
-  return atomEachElement(this, (el) => {
-    if (el instanceof HTMLFormElement) {
-      bindForm(el, atom, options);
+  return atomEachElement(this, (element) => {
+    if (element instanceof HTMLFormElement) {
+      bindForm(element, atom, options);
     } else {
       debug.warn(SYSTEM_BINDING.PREFIX, 'Skipping non-Form element for atomForm');
     }
@@ -315,21 +318,21 @@ $.fn.atomForm = function <T extends object>(
  * @returns The original jQuery collection for chaining.
  */
 $.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
-  return atomEachElement(this, (el) => bindOn(el, event, handler));
+  return atomEachElement(this, (element) => bindOn(element, event, handler));
 };
 
-function unpack<T, O>(val: T | [T, O]): [T, O?] {
-  if (Array.isArray(val) && val.length === 2) {
-    const second = val[1];
+function unpack<T, O>(unpackedValue: T | [T, O]): [T, O?] {
+  if (Array.isArray(unpackedValue) && unpackedValue.length === 2) {
+    const second = unpackedValue[1];
     if (
       second == null ||
       typeof second === 'function' ||
       (typeof second === 'object' && !('value' in second) && !('then' in second))
     ) {
-      return val as [T, O];
+      return unpackedValue as [T, O];
     }
   }
-  return [val as T];
+  return [unpackedValue as T];
 }
 
 /**
@@ -355,78 +358,78 @@ function unpack<T, O>(val: T | [T, O]): [T, O?] {
  * ```
  */
 $.fn.atomBind = function <T, TText>(this: JQuery, options: BindingOptions<T, TText>): JQuery {
-  const opt = options;
+  const bindingOptions = options;
 
   const hasActive =
-    opt.text !== undefined ||
-    opt.html !== undefined ||
-    opt.class !== undefined ||
-    opt.css !== undefined ||
-    opt.attr !== undefined ||
-    opt.prop !== undefined ||
-    opt.show !== undefined ||
-    opt.hide !== undefined ||
-    opt.val !== undefined ||
-    opt.checked !== undefined ||
-    opt.form !== undefined ||
-    opt.on !== undefined;
+    bindingOptions.text !== undefined ||
+    bindingOptions.html !== undefined ||
+    bindingOptions.class !== undefined ||
+    bindingOptions.css !== undefined ||
+    bindingOptions.attr !== undefined ||
+    bindingOptions.prop !== undefined ||
+    bindingOptions.show !== undefined ||
+    bindingOptions.hide !== undefined ||
+    bindingOptions.val !== undefined ||
+    bindingOptions.checked !== undefined ||
+    bindingOptions.form !== undefined ||
+    bindingOptions.on !== undefined;
 
   if (!hasActive) return this;
 
-  return atomEachElement(this, (el) => {
+  return atomEachElement(this, (element) => {
     const tasks = withBatchCollection(() => {
-      if (opt.text !== undefined) {
-        const [src, formatter] = unpack(opt.text as unknown) as [
+      if (bindingOptions.text !== undefined) {
+        const [source, formatter] = unpack(bindingOptions.text as unknown) as [
           AsyncReactiveValue<unknown>,
           (((v: unknown) => string) | null)?,
         ];
-        bindText(el, src, formatter || undefined);
+        bindText(element, source, formatter || undefined);
       }
-      if (opt.html !== undefined) {
-        bindHtml(el, opt.html);
+      if (bindingOptions.html !== undefined) {
+        bindHtml(element, bindingOptions.html);
       }
-      if (opt.class !== undefined) {
-        bindClass(el, opt.class);
+      if (bindingOptions.class !== undefined) {
+        bindClass(element, bindingOptions.class);
       }
-      if (opt.css !== undefined) {
-        bindCss(el, opt.css);
+      if (bindingOptions.css !== undefined) {
+        bindCss(element, bindingOptions.css);
       }
-      if (opt.attr !== undefined) {
-        bindAttr(el, opt.attr);
+      if (bindingOptions.attr !== undefined) {
+        bindAttr(element, bindingOptions.attr);
       }
-      if (opt.prop !== undefined) {
-        bindProp(el, opt.prop);
+      if (bindingOptions.prop !== undefined) {
+        bindProp(element, bindingOptions.prop);
       }
-      if (opt.show !== undefined) {
-        bindVisibility(el, opt.show, false);
+      if (bindingOptions.show !== undefined) {
+        bindVisibility(element, bindingOptions.show, false);
       }
-      if (opt.hide !== undefined) {
-        bindVisibility(el, opt.hide, true);
+      if (bindingOptions.hide !== undefined) {
+        bindVisibility(element, bindingOptions.hide, true);
       }
-      if (opt.val !== undefined) {
-        const [atom, valOpts] = unpack(opt.val as unknown) as [
+      if (bindingOptions.val !== undefined) {
+        const [atom, valueOptions] = unpack(bindingOptions.val as unknown) as [
           WritableAtom<unknown>,
           ValOptions<unknown>?,
         ];
-        bindVal(el, atom, valOpts);
+        bindVal(element, atom, valueOptions);
       }
-      if (opt.checked !== undefined) {
-        bindChecked(el, opt.checked);
+      if (bindingOptions.checked !== undefined) {
+        bindChecked(element, bindingOptions.checked);
       }
-      if (opt.form !== undefined && el instanceof HTMLFormElement) {
-        const [atomOrArr, formOpts] = unpack(opt.form as unknown) as [
+      if (bindingOptions.form !== undefined && element instanceof HTMLFormElement) {
+        const [atomOrArr, formOptions] = unpack(bindingOptions.form as unknown) as [
           WritableAtom<object> | WritableAtom<unknown>[],
           FormOptions<unknown>?,
         ];
-        bindForm(el, atomOrArr, formOpts);
+        bindForm(element, atomOrArr, formOptions);
       }
-      if (opt.on !== undefined) {
-        bindEvents(el, opt.on);
+      if (bindingOptions.on !== undefined) {
+        bindEvents(element, bindingOptions.on);
       }
     });
 
     if (tasks.length > 0) {
-      registerBatchedEffects(el, tasks);
+      registerBatchedEffects(element, tasks);
     }
   });
 };
@@ -446,5 +449,5 @@ $.fn.atomBind = function <T, TText>(this: JQuery, options: BindingOptions<T, TTe
  * ```
  */
 $.fn.atomUnbind = function (this: JQuery): JQuery {
-  return atomEachElement(this, (el) => registry.cleanupTree(el));
+  return atomEachElement(this, (element) => registry.cleanupTree(element));
 };
