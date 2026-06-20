@@ -49,7 +49,8 @@ $.initAEJ({
 $.initAEJ({ patch: false, autoCleanup: false });
 ```
 
-> **Note**: Subsequent calls to `initAEJ` replace the existing configuration.
+> [!NOTE]
+> Subsequent calls to `initAEJ` replace the existing configuration.
 
 ### Extending jQuery
 
@@ -110,6 +111,7 @@ $el.atomBind({ text: [count, c => `Count: ${c}`] });
 
 Updates `innerHTML`.
 
+> [!IMPORTANT]
 > **Security Implementation**:
 > This method utilizes an internal sanitization engine (`sanitizeHtml`) to mitigate DOM Clobbering and XSS vulnerabilities:
 >
