@@ -2,9 +2,9 @@
  * @fileoverview Consolidated error handling and propagation tests
  */
 
+import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it, vi } from 'vitest';
 import { aeNextTick, atom, computed, effect } from '@/index';
-import { sleep } from '../utils/test-helpers';
 
 describe('Core - Error Handling and Propagation', () => {
   describe('Sync Error Propagation & Recovery', () => {
@@ -32,7 +32,6 @@ describe('Core - Error Handling and Propagation', () => {
       expect(z.hasError).toBe(false);
       expect(z.errors).toEqual([]);
 
-      // Trigger x and y evaluations — direct access throws even with defaultValue
       try {
         x.value;
       } catch {
@@ -89,6 +88,7 @@ describe('Core - Error Handling and Propagation', () => {
       expect(user.errors[0]?.message).toContain('API Fail');
 
       shouldFail.value = false;
+      user.value; // retry
       user.invalidate();
       user.value;
 

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '@tests/utils/test-helpers';
+import { describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_STATE } from '@/constants';
 import {
   aeNextTick,
@@ -11,23 +12,13 @@ import {
   schedulerSetMaxFlushIterations,
 } from '@/core/scheduler';
 import { atom, computed, effect, SCHEDULER_CONFIG, SchedulerError } from '@/index';
-import { sleep } from '../../utils/test-helpers';
 
 describe('Scheduler Engine', () => {
-  beforeEach(async () => {
-    // Wait for any pending flushes and reset batch depth
-    await aeNextTick();
-    while (schedulerIsBatching(scheduler)) {
-      schedulerEndBatch(scheduler);
-    }
-  });
-
-  describe('Core Scheduling', () => {
+  describe('schedulerSchedule()', () => {
     it('manages job lifecycle: deduplication, async execution, and queue drainage', async () => {
       const job1 = vi.fn();
       const job2 = vi.fn();
 
-      // 1. Deduplication (Same epoch)
       schedulerSchedule(scheduler, job1);
       schedulerSchedule(scheduler, job1);
       schedulerSchedule(scheduler, job2);
@@ -35,7 +26,6 @@ describe('Scheduler Engine', () => {
       expect(schedulerQueueSize(scheduler)).toBe(2);
       expect(job1).not.toHaveBeenCalled();
 
-      // 2. Async Execution
       await sleep(10);
 
       expect(job1).toHaveBeenCalledTimes(1);
@@ -60,22 +50,13 @@ describe('Scheduler Engine', () => {
       expect(nestedJob).toHaveBeenCalledTimes(1);
     });
 
-    it('handles nested batch scopes correctly', () => {
-      const log: string[] = [];
-
-      batch(() => {
-        log.push('outer-start');
-        batch(() => {
-          log.push('inner');
-        });
-        log.push('outer-end');
-      });
-
-      expect(log).toEqual(['outer-start', 'inner', 'outer-end']);
+    it('rejects invalid scheduler callback types', () => {
+      // @ts-expect-error Testing invalid callback type
+      expect(() => schedulerSchedule(scheduler, null)).toThrow(SchedulerError);
     });
   });
 
-  describe('Batching Strategy', () => {
+  describe('batch()', () => {
     it('coalesces updates and maintains data consistency', () => {
       const a = atom(0);
       const c = computed(() => a.value + 1);
@@ -88,13 +69,13 @@ describe('Scheduler Engine', () => {
 
       const result = batch(() => {
         a.value = 1;
-        expect(c.value).toBe(2); // Computed should be fresh within batch
+        expect(c.value).toBe(2);
         a.value = 10;
         return 'done';
       });
 
       expect(result).toBe('done');
-      expect(log).toEqual([10]); // Effect runs only once after batch
+      expect(log).toEqual([10]);
       expect(c.value).toBe(11);
     });
 
@@ -109,13 +90,12 @@ describe('Scheduler Engine', () => {
         });
       }).toThrow('batch-fail');
 
-      expect(a.value).toBe(42); // Value committed despite error
-      expect(schedulerIsBatching(scheduler)).toBe(false); // Depth reset correctly
+      expect(a.value).toBe(42);
+      expect(schedulerIsBatching(scheduler)).toBe(false);
       consoleError.mockRestore();
     });
 
     it('prevents stack overflow through flat execution loops', () => {
-      // Stress test for recursion protection
       const depth = 500;
       const fn = (d: number) => {
         if (d > 0) batch(() => fn(d - 1));
@@ -123,9 +103,30 @@ describe('Scheduler Engine', () => {
 
       expect(() => fn(depth)).not.toThrow();
     });
+
+    it('handles nested batch scopes correctly', () => {
+      const log: string[] = [];
+
+      batch(() => {
+        log.push('outer-start');
+        batch(() => {
+          log.push('inner');
+        });
+        log.push('outer-end');
+      });
+
+      expect(log).toEqual(['outer-start', 'inner', 'outer-end']);
+    });
+
+    it('warns on unbalanced endBatch calls', () => {
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      schedulerEndBatch(scheduler);
+      expect(consoleWarn).toHaveBeenCalled();
+      consoleWarn.mockRestore();
+    });
   });
 
-  describe('aeNextTick', () => {
+  describe('aeNextTick()', () => {
     it('should wait for all reactive updates to be flushed', async () => {
       const a = atom(0);
       let capturedValue = -1;
@@ -134,10 +135,10 @@ describe('Scheduler Engine', () => {
       });
 
       a.value = 42;
-      expect(capturedValue).toBe(0); // Queued
+      expect(capturedValue).toBe(0);
 
       await aeNextTick();
-      expect(capturedValue).toBe(42); // Flushed
+      expect(capturedValue).toBe(42);
     });
 
     it('should execute optional callback and resolve correctly', async () => {
@@ -156,7 +157,7 @@ describe('Scheduler Engine', () => {
     });
   });
 
-  describe('Resilience & Error Handling', () => {
+  describe('error isolation & recovery', () => {
     it('isolates job errors to prevent scheduler lockup', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const fail = vi.fn(() => {
@@ -170,7 +171,7 @@ describe('Scheduler Engine', () => {
       await sleep(10);
 
       expect(fail).toHaveBeenCalled();
-      expect(success).toHaveBeenCalled(); // Success job must run despite failure in sibling
+      expect(success).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalled();
       consoleError.mockRestore();
     });
@@ -190,7 +191,7 @@ describe('Scheduler Engine', () => {
 
       expect(onOverflow).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
-      expect(schedulerQueueSize(scheduler)).toBe(0); // Queues must be purged
+      expect(schedulerQueueSize(scheduler)).toBe(0);
 
       scheduler.onOverflow = null;
       schedulerSetMaxFlushIterations(scheduler, originalMax);
@@ -198,7 +199,7 @@ describe('Scheduler Engine', () => {
     });
   });
 
-  describe('Configuration & Boundary Validation', () => {
+  describe('configuration & invariants', () => {
     it('should ensure SCHEDULER_STATE is runtime-frozen to prevent mutation', () => {
       expect(Object.isFrozen(SCHEDULER_STATE)).toBe(true);
     });
@@ -217,18 +218,6 @@ describe('Scheduler Engine', () => {
       );
       expect(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND).toBeGreaterThan(0);
       expect(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT).toBeGreaterThan(0);
-    });
-
-    it('rejects invalid scheduler callback types', () => {
-      // @ts-expect-error Testing invalid callback type
-      expect(() => schedulerSchedule(scheduler, null)).toThrow(SchedulerError);
-    });
-
-    it('warns on unbalanced endBatch calls', () => {
-      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      schedulerEndBatch(scheduler); // Unbalanced call
-      expect(consoleWarn).toHaveBeenCalled();
-      consoleWarn.mockRestore();
     });
 
     describe('maxFlushIterations boundaries', () => {
