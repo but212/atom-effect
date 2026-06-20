@@ -34,7 +34,10 @@ import { defineConfig as defineVitest, type ViteUserConfig } from 'vitest/config
  * // => 'atom-effect-jquery'
  */
 export const toKebabCase = (str: string): string =>
-  str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  str
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase();
 
 /**
  * Generates resolve-alias configuration for a package directory.
@@ -51,7 +54,7 @@ export const toKebabCase = (str: string): string =>
  */
 export const getResolveConfig = (packageDir: string) => ({
   alias: {
-    '@': `${packageDir}/src`,
+    '@': `${packageDir.replace(/\\/g, '/')}/src`,
   },
 });
 
@@ -99,22 +102,53 @@ export interface BaseViteConfigOptions {
 /**
  * The build target derived from the `BUILD_TARGET` environment variable.
  */
-export const target = process.env.BUILD_TARGET;
+export let target = process.env.BUILD_TARGET;
+
+const updateTarget = (val: string | undefined) => {
+  target = val;
+  isTypes = val === 'types';
+  isBundle = val === 'bundle';
+  isLib = val === 'lib';
+};
+
+if (typeof process === 'object' && process !== null) {
+  const originalEnv = process.env;
+  const envProxy = new Proxy(originalEnv, {
+    get(t, prop) {
+      return t[prop as string];
+    },
+    set(t, prop, value) {
+      t[prop as string] = value;
+      if (prop === 'BUILD_TARGET') {
+        updateTarget(value);
+      }
+      return true;
+    },
+  });
+
+  Object.defineProperty(process, 'env', {
+    get() {
+      return envProxy;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+}
 
 /**
  * Tracks if the build target is 'types' (only TypeScript declarations).
  */
-export const isTypes = target === 'types';
+export let isTypes = target === 'types';
 
 /**
  * Tracks if the build target is 'bundle' (bundled UMD builds).
  */
-export const isBundle = target === 'bundle';
+export let isBundle = target === 'bundle';
 
 /**
  * Tracks if the build target is 'lib' (esm/cjs library builds).
  */
-export const isLib = target === 'lib';
+export let isLib = target === 'lib';
 
 /**
  * Generates a base Vite configuration for building libraries and bundles.
@@ -178,7 +212,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
           dts({
             include: ['src/**/*'],
             exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
-            tsconfigPath: './tsconfig.build.json',
+            tsconfigPath: `${packageDir}/tsconfig.build.json`,
             bundleTypes: true,
             ...dtsOptions,
           }),

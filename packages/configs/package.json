@@ -24,7 +24,6 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "tsup": "^8.5.1",
     "unplugin-dts": "^1.0.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"

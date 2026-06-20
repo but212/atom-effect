@@ -1,6 +1,15 @@
-import type { UserConfig } from 'vite';
-import { describe, expect, it } from 'vitest';
+import type { LibraryOptions, UserConfig } from 'vite';
+import { describe, expect, it, vi } from 'vitest';
 import type { ViteUserConfig } from 'vitest/config';
+
+const { mockDts } = vi.hoisted(() => {
+  return { mockDts: vi.fn().mockReturnValue({ name: 'unplugin-dts' }) };
+});
+
+vi.mock('unplugin-dts/vite', () => ({
+  default: mockDts,
+}));
+
 import {
   baseCoverageExclude,
   defineViteConfig,
@@ -10,6 +19,10 @@ import {
   getBaseVitestBenchConfig,
   getBaseVitestConfig,
   getResolveConfig,
+  isBundle,
+  isLib,
+  isTypes,
+  target,
   toKebabCase,
 } from '../src/index';
 
@@ -22,20 +35,15 @@ const TEST_KEBAB = 'test-package';
 describe('packages/configs', () => {
   describe('utility helpers', () => {
     describe('toKebabCase', () => {
-      it('should convert PascalCase to kebab-case', () => {
-        expect(toKebabCase('MyLibrary')).toBe('my-library');
-      });
-
-      it('should convert camelCase to kebab-case', () => {
-        expect(toKebabCase('someCoolName')).toBe('some-cool-name');
-      });
-
-      it('should keep already kebab-cased strings unchanged', () => {
-        expect(toKebabCase('already-kebab')).toBe('already-kebab');
-      });
-
-      it('should keep simple lowercase strings unchanged', () => {
-        expect(toKebabCase('lowercase')).toBe('lowercase');
+      it.each([
+        ['MyLibrary', 'my-library'],
+        ['someCoolName', 'some-cool-name'],
+        ['already-kebab', 'already-kebab'],
+        ['lowercase', 'lowercase'],
+        ['APIClient', 'api-client'],
+        ['MyJSONParser', 'my-json-parser'],
+      ])('should convert "%s" to "%s"', (input, expected) => {
+        expect(toKebabCase(input)).toBe(expected);
       });
     });
 
@@ -46,6 +54,12 @@ describe('packages/configs', () => {
             '@': `${TEST_DIR}/src`,
           },
         });
+      });
+
+      it('should normalize path separators to forward slashes on Windows', () => {
+        const winPath = 'C:\\Users\\redog\\project\\atom-effect';
+        const config = getResolveConfig(winPath);
+        expect(config.alias['@']).toBe('C:/Users/redog/project/atom-effect/src');
       });
     });
   });
@@ -64,8 +78,7 @@ describe('packages/configs', () => {
         expect(config.build?.outDir).toBe('dist');
 
         const lib = config.build?.lib;
-        expect(lib).toBeDefined();
-        expect(lib).not.toBe(false);
+        expect(lib).toBeTypeOf('object');
         if (lib && typeof lib === 'object') {
           expect(lib.entry).toBe(`${TEST_DIR}/src/index.ts`);
           expect(lib.name).toBe(TEST_PKG);
@@ -81,16 +94,15 @@ describe('packages/configs', () => {
         });
 
         const lib = config.build?.lib;
-        expect(lib && typeof lib === 'object').toBe(true);
-        if (lib && typeof lib === 'object') {
-          const fileNameFn = lib.fileName;
-          expect(typeof fileNameFn).toBe('function');
-          if (typeof fileNameFn === 'function') {
-            expect(fileNameFn('umd', 'index')).toBe(`${TEST_KEBAB}.min.js`);
-            expect(fileNameFn('es', 'index')).toBe('index.mjs');
-            expect(fileNameFn('cjs', 'index')).toBe('index.cjs');
-          }
-        }
+        expect(lib).toBeTypeOf('object');
+        const fileNameFn = (lib as LibraryOptions)?.fileName as (
+          format: string,
+          entryName: string
+        ) => string;
+        expect(fileNameFn).toBeTypeOf('function');
+        expect(fileNameFn('umd', 'index')).toBe(`${TEST_KEBAB}.min.js`);
+        expect(fileNameFn?.('es', 'index')).toBe('index.mjs');
+        expect(fileNameFn?.('cjs', 'index')).toBe('index.cjs');
       });
 
       it('should apply custom filename overrides if specified', () => {
@@ -103,15 +115,14 @@ describe('packages/configs', () => {
         });
 
         const lib = config.build?.lib;
-        expect(lib && typeof lib === 'object').toBe(true);
-        if (lib && typeof lib === 'object') {
-          const fileNameFn = lib.fileName;
-          expect(typeof fileNameFn).toBe('function');
-          if (typeof fileNameFn === 'function') {
-            expect(fileNameFn('es', 'index')).toBe('custom.js');
-            expect(fileNameFn('umd', 'index')).toBe(`${TEST_KEBAB}.min.js`);
-          }
-        }
+        expect(lib).toBeTypeOf('object');
+        const fileNameFn = (lib as LibraryOptions)?.fileName as (
+          format: string,
+          entryName: string
+        ) => string;
+        expect(fileNameFn).toBeTypeOf('function');
+        expect(fileNameFn('es', 'index')).toBe('custom.js');
+        expect(fileNameFn?.('umd', 'index')).toBe(`${TEST_KEBAB}.min.js`);
       });
 
       describe('buildTarget options', () => {
@@ -123,10 +134,8 @@ describe('packages/configs', () => {
           });
 
           const lib = config.build?.lib;
-          expect(lib && typeof lib === 'object').toBe(true);
-          if (lib && typeof lib === 'object') {
-            expect(lib.formats).toEqual(['umd']);
-          }
+          expect(lib).toBeTypeOf('object');
+          expect((lib as LibraryOptions)?.formats).toEqual(['umd']);
         });
 
         it('should structure formats for lib target', () => {
@@ -137,10 +146,8 @@ describe('packages/configs', () => {
           });
 
           const lib = config.build?.lib;
-          expect(lib && typeof lib === 'object').toBe(true);
-          if (lib && typeof lib === 'object') {
-            expect(lib.formats).toEqual(['es', 'cjs']);
-          }
+          expect(lib).toBeTypeOf('object');
+          expect((lib as LibraryOptions)?.formats).toEqual(['es', 'cjs']);
         });
 
         it('should configure settings for types target', () => {
@@ -151,6 +158,19 @@ describe('packages/configs', () => {
           });
           expect(config.build?.emptyOutDir).toBe(true);
           expect(config.plugins).toHaveLength(1);
+        });
+
+        it('should resolve tsconfigPath relative to packageDir instead of hardcoding ./tsconfig.build.json', () => {
+          mockDts.mockClear();
+          getBaseViteConfig({
+            packageDir: TEST_DIR,
+            name: TEST_PKG,
+            buildTarget: 'types',
+          });
+          expect(mockDts).toHaveBeenCalled();
+          const callArgs = mockDts.mock.calls[0]?.[0];
+          expect(callArgs).toBeDefined();
+          expect(callArgs?.tsconfigPath).toBe(`${TEST_DIR}/tsconfig.build.json`);
         });
       });
     });
@@ -228,6 +248,31 @@ describe('packages/configs', () => {
           'my-bench.ts',
         ]);
       });
+    });
+  });
+
+  describe('environment target constants', () => {
+    it.each([
+      { envValue: 'lib', expectedLib: true, expectedTypes: false, expectedBundle: false },
+      { envValue: 'types', expectedLib: false, expectedTypes: true, expectedBundle: false },
+      { envValue: 'bundle', expectedLib: false, expectedTypes: false, expectedBundle: true },
+      { envValue: undefined, expectedLib: false, expectedTypes: false, expectedBundle: false },
+    ])('should reflect process.env.BUILD_TARGET = "$envValue" dynamically', ({
+      envValue,
+      expectedLib,
+      expectedTypes,
+      expectedBundle,
+    }) => {
+      const originalTarget = process.env.BUILD_TARGET;
+      try {
+        process.env.BUILD_TARGET = envValue;
+        expect(target).toBe(envValue);
+        expect(isLib).toBe(expectedLib);
+        expect(isTypes).toBe(expectedTypes);
+        expect(isBundle).toBe(expectedBundle);
+      } finally {
+        process.env.BUILD_TARGET = originalTarget;
+      }
     });
   });
 });
