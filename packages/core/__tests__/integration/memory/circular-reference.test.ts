@@ -4,7 +4,15 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { aeNextTick, atom, ComputedError, computed, effect, SchedulerError } from '@/index';
+import {
+  aeNextTick,
+  atom,
+  type ComputedAtom,
+  ComputedError,
+  computed,
+  effect,
+  SchedulerError,
+} from '@/index';
 
 describe('Dependency Graph Safety', () => {
   describe('Cycle Detection', () => {
@@ -17,6 +25,16 @@ describe('Dependency Graph Safety', () => {
 
       expect(() => c1.value).toThrow(ComputedError);
       expect(() => c1.value).toThrow('Circular');
+    });
+
+    it('should successfully detect and throw on circular dependencies', () => {
+      let c1: ComputedAtom<number>;
+      let c2: ComputedAtom<number>;
+      c1 = computed(() => c2.value + 1);
+      c2 = computed(() => c1.value + 1);
+
+      // Best Practice: Assert that evaluating a circular dependency throws a circular dependency error
+      expect(() => c1.value).toThrow('Circular dependency detected');
     });
 
     it('does not throw when a cyclic node has defaultValue — uses it as recursive base case', () => {
