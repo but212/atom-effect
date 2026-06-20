@@ -22,7 +22,8 @@ Contributions to `@but212/atom-effect` are welcome. This guide will help you get
    pnpm install
    ```
 
-   > **Important**: Do not delete `pnpm-lock.yaml`. It ensures dependency consistency across environments.
+   > [!IMPORTANT]
+   > Do not delete `pnpm-lock.yaml`. It ensures dependency consistency across environments.
 
 3. **Build the project**:
 

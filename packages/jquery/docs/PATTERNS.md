@@ -203,7 +203,8 @@ $.batch(() => {
 const updatedText = $('#name').text();
 ```
 
-> **Note**: jQuery's patched `.on()` method automatically wraps event handlers in `$.batch()`.
+> [!NOTE]
+> jQuery's patched `.on()` method automatically wraps event handlers in `$.batch()`.
 
 ---
 

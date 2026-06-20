@@ -7,7 +7,8 @@
 - **Browser**: Chromium (via Vitest browser mode)
 - **OS**: ubuntu-latest (GitHub Actions)
 
-> *Note: These benchmarks are executed in a Chromium browser environment. Results include DOM rendering costs such as layout, paint, and event processing.*
+> [!NOTE]
+> These benchmarks are executed in a Chromium browser environment. Results include DOM rendering costs such as layout, paint, and event processing.
 
 ---
 

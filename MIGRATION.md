@@ -196,4 +196,4 @@ If you were manually dispatching or intercepting the `aej:context-request` custo
 
 ## Need Help?
 
-If you encounter any issues during migration, please open an issue on our [GitHub repository](https://github.com/but212/atom-effect/issues).
+If you encounter any issues during migration, please open an issue on our [GitHub Issues](https://github.com/but212/atom-effect/issues) page.
