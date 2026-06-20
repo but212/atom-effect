@@ -1,9 +1,12 @@
+import { Result } from '@but212/atom-effect-utils';
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_STATE } from '@/constants';
+import { trackingContext } from '@/core/base';
 import {
   aeNextTick,
   batch,
+  runInFlushScope,
   scheduler,
   schedulerEndBatch,
   schedulerIsBatching,
@@ -180,6 +183,7 @@ describe('Scheduler Engine', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const onOverflow = vi.fn();
       scheduler.onOverflow = onOverflow;
+      expect(scheduler.onOverflow).toBe(onOverflow);
 
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
       schedulerSetMaxFlushIterations(scheduler, 10);
@@ -194,6 +198,7 @@ describe('Scheduler Engine', () => {
       expect(schedulerQueueSize(scheduler)).toBe(0);
 
       scheduler.onOverflow = null;
+      expect(scheduler.onOverflow).toBeNull();
       schedulerSetMaxFlushIterations(scheduler, originalMax);
       consoleError.mockRestore();
     });
@@ -234,6 +239,82 @@ describe('Scheduler Engine', () => {
 
       it('rejects non-integer decimal values', () => {
         expect(() => schedulerSetMaxFlushIterations(scheduler, 10.5)).toThrow();
+      });
+    });
+
+    describe('batch inputs and runInFlushScope', () => {
+      it('batch throws TypeError when parameter is not a function', () => {
+        // @ts-expect-error - testing invalid parameter type
+        expect(() => batch(null)).toThrow(TypeError);
+      });
+
+      it('runInFlushScope executes successfully', () => {
+        let executed = false;
+        const res = runInFlushScope(() => {
+          executed = true;
+          return 'success';
+        });
+        expect(executed).toBe(true);
+        expect(res).toBe('success');
+      });
+
+      it('resets tracking context if flushQueues throws in queueMicrotask', async () => {
+        const spy = vi.spyOn(scheduler, 'flushQueues').mockImplementation(() => {
+          throw new Error('Test flushQueues error');
+        });
+
+        let uncaughtError: Error | null = null;
+        const handler = (err: unknown) => {
+          uncaughtError = err as Error;
+        };
+        process.on('uncaughtException', handler);
+
+        const origCtx = trackingContext.current;
+        // @ts-expect-error - mock context
+        trackingContext.current = { id: 999 };
+
+        schedulerSchedule(scheduler, () => {});
+
+        await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+        expect(uncaughtError).not.toBeNull();
+        expect((uncaughtError as Error | null)?.message).toBe('Test flushQueues error');
+        expect(trackingContext.current).toBeNull();
+
+        process.off('uncaughtException', handler);
+        trackingContext.current = origCtx;
+        spy.mockRestore();
+      });
+
+      it('startFlush returns false and console.warns when already active', () => {
+        const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const first = scheduler.startFlush();
+        expect(first).toBe(true);
+
+        const second = scheduler.startFlush();
+        expect(second).toBe(false);
+        expect(consoleWarn).toHaveBeenCalled();
+
+        scheduler.endFlush();
+        consoleWarn.mockRestore();
+      });
+
+      it('incrementFlushExecutionCount returns error when limit is exceeded', () => {
+        const started = scheduler.startFlush();
+        expect(started).toBe(true);
+
+        // Run 10000 times (the MAX_EXECUTIONS_PER_FLUSH threshold)
+        for (let i = 0; i < 10000; i++) {
+          const res = scheduler.incrementFlushExecutionCount();
+          expect(Result.isOk(res)).toBe(true);
+        }
+
+        // The 10001st call should exceed the limit and return an error
+        const overflowRes = scheduler.incrementFlushExecutionCount();
+        expect(Result.isErr(overflowRes)).toBe(true);
+        expect(overflowRes.error?.message).toContain('Infinite loop detected: limit exceeded');
+
+        scheduler.endFlush();
       });
     });
   });

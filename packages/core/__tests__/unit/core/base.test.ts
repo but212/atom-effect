@@ -1,9 +1,13 @@
+import type { SlotBuffer } from '@but212/atom-effect-utils';
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
 import { STATE_FLAGS } from '@/constants';
 import {
   BaseNode,
+  nodeCommitDeps,
   nodeHasSubscription,
+  nodeIsComputed,
+  nodeIsNotifying,
   nodeNotifySubscribers,
   nodeTrackDependency,
   nodeUnsubscribe,
@@ -165,6 +169,42 @@ describe('Tracking Engine', () => {
       expect(node.subscriberCount()).toBe(0);
 
       unsub();
+    });
+  });
+
+  describe('BaseNode personality traits', () => {
+    it('BaseNode default getters return expected values', () => {
+      class TestNode extends BaseNode<number> {}
+      const node = new TestNode();
+      expect(node.isComputed).toBe(false);
+      expect(node.isRejected).toBe(false);
+      expect(node.hasError).toBe(false);
+    });
+  });
+
+  describe('Internal API invariants', () => {
+    it('nodeIsComputed and nodeIsNotifying work correctly', () => {
+      const mockNode: { flags: number; _slots: unknown } = { flags: 0, _slots: null };
+      expect(nodeIsComputed(mockNode as unknown as ReactiveNode<unknown>)).toBe(false);
+      mockNode.flags = 1 << 1; // IS_COMPUTED flag
+      expect(nodeIsComputed(mockNode as unknown as ReactiveNode<unknown>)).toBe(true);
+
+      expect(nodeIsNotifying(mockNode as unknown as ReactiveNode<unknown>)).toBe(false);
+      mockNode._slots = { isLocked: true } as unknown as SlotBuffer<never>;
+      expect(nodeIsNotifying(mockNode as unknown as ReactiveNode<unknown>)).toBe(true);
+    });
+
+    it('nodeCommitDeps catches errors raised by depBufferTruncateFrom', () => {
+      const mockTracker = {
+        id: 42,
+        _trackCount: 5,
+        get _depSlots() {
+          throw new Error('Expected test error from _depSlots getter');
+        },
+      };
+      expect(() => {
+        nodeCommitDeps(mockTracker as unknown as DependencyTracker & ReactiveDependencyTracker);
+      }).not.toThrow();
     });
   });
 });

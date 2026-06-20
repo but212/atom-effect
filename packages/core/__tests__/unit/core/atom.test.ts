@@ -184,6 +184,30 @@ describe('Atom', () => {
         expect(log).toEqual(['s1']);
       });
     });
+
+    it('should correctly expose internal getters: isNotifying, isNotificationScheduled, and isSync', async () => {
+      const a = atom(42);
+      expect(Reflect.get(a, 'isNotifying')).toBe(false);
+      expect(Reflect.get(a, 'isNotificationScheduled')).toBe(false);
+      expect(Reflect.get(a, 'isSync')).toBe(false);
+
+      let notified = false;
+      a.subscribe(() => {
+        notified = true;
+        expect(Reflect.get(a, 'isNotifying')).toBe(true);
+      });
+
+      a.value = 100;
+      expect(Reflect.get(a, 'isNotificationScheduled')).toBe(true);
+
+      await aeNextTick();
+      expect(notified).toBe(true);
+      expect(Reflect.get(a, 'isNotifying')).toBe(false);
+      expect(Reflect.get(a, 'isNotificationScheduled')).toBe(false);
+
+      const syncAtom = atom(42, { sync: true });
+      expect(Reflect.get(syncAtom, 'isSync')).toBe(true);
+    });
   });
 
   describe('peek()', () => {
@@ -355,9 +379,7 @@ describe('Atom', () => {
         }
       }
     });
-  });
 
-  describe('Internal mechanics', () => {
     it('should break out of flushNotifications and clear the scheduled flag when prev is NO_VALUE', () => {
       const a = atom(42);
 

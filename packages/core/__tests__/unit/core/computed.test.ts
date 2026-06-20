@@ -102,6 +102,30 @@ describe('Computed', () => {
       });
     });
 
+    describe('internal state getters', () => {
+      it('should correctly expose internal getters: isDirty, isRecomputing, and isValid', () => {
+        const a = atom(0, { sync: true });
+        const c = computed(() => {
+          expect(Reflect.get(c, 'isRecomputing')).toBe(true);
+          return a.value * 2;
+        });
+
+        expect(Reflect.get(c, 'isDirty')).toBe(true);
+        expect(Reflect.get(c, 'isRecomputing')).toBe(false);
+        expect(Reflect.get(c, 'isValid')).toBe(true);
+
+        c.subscribe(() => {});
+
+        expect(c.value).toBe(0);
+        expect(Reflect.get(c, 'isDirty')).toBe(false);
+
+        a.value = 1;
+        expect(Reflect.get(c, 'isDirty')).toBe(true);
+        expect(c.value).toBe(2);
+        expect(Reflect.get(c, 'isDirty')).toBe(false);
+      });
+    });
+
     describe('dependency resolution', () => {
       it('should not false-positive circular dependency during diamond dependency', async () => {
         const root = atom(1);
