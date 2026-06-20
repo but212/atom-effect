@@ -232,7 +232,7 @@ describe('packages/configs', () => {
     });
 
     describe('defineVitestBenchConfig', () => {
-      it('should merge Vitest benchmark overrides successfully', async () => {
+      it('should completely override the benchmark include array instead of concatenating it', async () => {
         const configFn = defineVitestBenchConfig(TEST_DIR, {
           test: {
             benchmark: {
@@ -243,10 +243,21 @@ describe('packages/configs', () => {
 
         expect(typeof configFn).toBe('function');
         const config = await (configFn as ConfigFn<ViteUserConfig>)();
-        expect(config.test?.benchmark?.include).toEqual([
-          '__benchmarks__/**/*.bench.ts',
-          'my-bench.ts',
-        ]);
+        expect(config.test?.benchmark?.include).toEqual(['my-bench.ts']);
+      });
+
+      it('should merge other Vitest benchmark configuration properties successfully', async () => {
+        const configFn = defineVitestBenchConfig(TEST_DIR, {
+          test: {
+            benchmark: {
+              exclude: ['**/custom-exclude/**'],
+            },
+          },
+        });
+
+        const config = await (configFn as ConfigFn<ViteUserConfig>)();
+        expect(config.test?.benchmark?.include).toEqual(['__benchmarks__/**/*.bench.ts']);
+        expect(config.test?.benchmark?.exclude).toContain('**/custom-exclude/**');
       });
     });
   });

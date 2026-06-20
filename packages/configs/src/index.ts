@@ -336,4 +336,15 @@ export const getBaseVitestBenchConfig = (packageDir: string): ViteUserConfig => 
  * });
  */
 export const defineVitestBenchConfig = (packageDir: string, overrides: ViteUserConfig = {}) =>
-  defineVitest(() => mergeConfig(getBaseVitestBenchConfig(packageDir), overrides));
+  defineVitest(() => {
+    const merged = mergeConfig(getBaseVitestBenchConfig(packageDir), overrides);
+
+    // Vite's mergeConfig concatenates arrays. We explicitly override the benchmark include array
+    // if the user provided it in their custom overrides configuration.
+    const customInclude = overrides.test?.benchmark?.include;
+    if (customInclude && merged.test?.benchmark) {
+      merged.test.benchmark.include = customInclude;
+    }
+
+    return merged;
+  });
