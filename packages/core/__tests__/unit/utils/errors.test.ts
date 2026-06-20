@@ -1,6 +1,5 @@
 /**
  * @fileoverview Error Handling System Tests
- * @description Verifies Error hierarchy, wrapping logic, and type guards
  */
 
 import vm from 'node:vm';
@@ -30,9 +29,7 @@ describe('Error Handling System', () => {
     throw new Error('ERROR_STRATEGIES must contain at least two strategies for testing');
   }
 
-  // ── Error Classes & Hierarchy ─────────────────────────────────────────────
-
-  describe('Error Hierarchy & Integrity', () => {
+  describe('Error classes (AtomError, ComputedError, etc.)', () => {
     const errorTypes = [
       { Class: AtomError, name: 'AtomError', recoverable: true, tag: 'AtomError' },
       { Class: ComputedError, name: 'ComputedError', recoverable: true, tag: 'ComputedError' },
@@ -48,7 +45,6 @@ describe('Error Handling System', () => {
     }) => {
       const cause = new Error('root');
 
-      // Default behavior
       const err = new Class('msg', { cause });
       expect(err).toBeInstanceOf(AtomError);
       expect(err.name).toBe(name);
@@ -56,7 +52,6 @@ describe('Error Handling System', () => {
       expect(err.recoverable).toBe(defaultRecoverable);
       expect(err.cause).toBe(cause);
 
-      // Override & Code
       const custom = new Class('msg', {
         cause: null,
         recoverable: !defaultRecoverable,
@@ -73,9 +68,7 @@ describe('Error Handling System', () => {
     });
   });
 
-  // ── Type Guards ───────────────────────────────────────────────────────────────
-
-  describe('Type Guards', () => {
+  describe('Type guards (isAtom, isWritable, etc.)', () => {
     it('identifies reactive primitives correctly', () => {
       const a = atom(0);
       const c = computed(() => 1);
@@ -103,14 +96,10 @@ describe('Error Handling System', () => {
     });
   });
 
-  // ── Traceability & Serialization ───────────────────────────────────────────
-
-  describe('Advanced Features', () => {
+  describe('getErrorChain() / serializeError()', () => {
     it('getErrorChain handles falsy causes and prevents circular loops', () => {
-      // Falsy cause preservation
       expect(getErrorChain(new AtomError('m', { cause: 0 }))[1]).toBe(0);
 
-      // Circularity protection
       const err1 = new AtomError('1');
       const err2 = new AtomError('2', { cause: err1 });
       Reflect.set(err1, 'cause', err2);
@@ -138,9 +127,7 @@ describe('Error Handling System', () => {
     });
   });
 
-  // ── Error Extraction Strategies ───────────────────────────────────────────
-
-  describe('Error Extraction Strategies', () => {
+  describe('ERROR_STRATEGIES (brand and fallback strategies)', () => {
     it('should not stringify missing name and message properties on brand-based errors to literal "undefined" strings', () => {
       const customBrandError = { _tag: 'CustomError' };
 

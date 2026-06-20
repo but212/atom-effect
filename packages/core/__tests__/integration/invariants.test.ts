@@ -1,13 +1,10 @@
 /**
  * @fileoverview Core Invariant Tests
- * @description Verifies the fundamental behavioral contracts of the reactive system.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getNodeVersion } from '@tests/utils/test-helpers';
+import { describe, expect, it, vi } from 'vitest';
 import { aeNextTick, atom, batch, computed, effect, untracked } from '@/index';
-import { getNodeVersion } from '../utils/test-helpers';
-
-// ─── 1. Version Semantics ───────────────────────────────────────────────────
 
 describe('Version Semantics', () => {
   it('atom version increments on change, stays on same-value assignment', () => {
@@ -18,26 +15,23 @@ describe('Version Semantics', () => {
     expect(getNodeVersion(a)).toBe(v0 + 1);
 
     const v1 = getNodeVersion(a);
-    a.value = 1; // same value
+    a.value = 1;
     expect(getNodeVersion(a)).toBe(v1);
   });
 
   it('computed version bumps only on resolution with changed value', () => {
     const src = atom(0);
     const c = computed(() => Math.floor(src.value / 10));
-    c.value; // initial resolve → 0
+    c.value;
     const v0 = getNodeVersion(c);
 
-    // markDirty does NOT bump version
     c.invalidate();
     expect(getNodeVersion(c)).toBe(v0);
 
-    // same resolved value (floor(5/10)=0) → no bump
     src.value = 5;
     c.value;
     expect(getNodeVersion(c)).toBe(v0);
 
-    // different resolved value → bump
     src.value = 99;
     c.invalidate();
     c.value;
@@ -53,7 +47,7 @@ describe('Version Semantics', () => {
       { defaultValue: -1 }
     );
 
-    c.value; // triggers async → PENDING
+    c.value;
     const v0 = getNodeVersion(c);
 
     await new Promise((r) => setTimeout(r, 30));
@@ -63,28 +57,24 @@ describe('Version Semantics', () => {
   });
 });
 
-// ─── 2. Push-Pull Propagation ───────────────────────────────────────────────
-
 describe('Push-Pull Propagation', () => {
   it('atom notifies async by default, sync when opted in', async () => {
-    // Async default
     const asyncAtom = atom(0);
     const asyncCalls: number[] = [];
     asyncAtom.subscribe((val) => asyncCalls.push(val ?? 0));
 
     asyncAtom.value = 1;
-    expect(asyncCalls).toEqual([]); // not yet
+    expect(asyncCalls).toEqual([]);
 
     await aeNextTick();
     expect(asyncCalls).toEqual([1]);
 
-    // Sync opt-in
     const syncAtom = atom(0, { sync: true });
     const syncCalls: number[] = [];
     syncAtom.subscribe((val) => syncCalls.push(val ?? 0));
 
     syncAtom.value = 1;
-    expect(syncCalls).toEqual([1]); // immediate
+    expect(syncCalls).toEqual([1]);
   });
 
   it('effect pulls computed value during dirty check', async () => {
@@ -111,8 +101,6 @@ describe('Push-Pull Propagation', () => {
   });
 });
 
-// ─── 3. Dependency Tracking ─────────────────────────────────────────────────
-
 describe('Dependency Tracking', () => {
   it('tracks only accessed dependencies and prunes on branch switch', async () => {
     const toggle = atom(true);
@@ -127,20 +115,17 @@ describe('Dependency Tracking', () => {
     expect(c.value).toBe('A');
     expect(runs).toBe(1);
 
-    // b is not tracked
     b.value = 'B2';
     await aeNextTick();
     c.invalidate();
     expect(c.value).toBe('A');
     expect(runs).toBe(2);
 
-    // switch branch: now c depends on toggle + b
     toggle.value = false;
     c.invalidate();
     expect(c.value).toBe('B2');
     expect(runs).toBe(3);
 
-    // a is pruned
     const runsAfterSwitch = runs;
     a.value = 'A2';
     await aeNextTick();
@@ -154,7 +139,7 @@ describe('Dependency Tracking', () => {
 
     expect(c.value).toBe(101);
     b.value = 200;
-    expect(c.value).toBe(101); // b not tracked → cached
+    expect(c.value).toBe(101);
   });
 
   it('deduplicates same dependency accessed multiple times', () => {
@@ -164,8 +149,6 @@ describe('Dependency Tracking', () => {
     expect(a.subscriberCount()).toBe(1);
   });
 });
-
-// ─── 4. Batch Guarantees ────────────────────────────────────────────────────
 
 describe('Batch Guarantees', () => {
   it('defers all notifications until outermost batch completes', async () => {
@@ -192,13 +175,11 @@ describe('Batch Guarantees', () => {
   });
 });
 
-// ─── 5. Disposal Finality ───────────────────────────────────────────────────
-
 describe('Disposal Finality', () => {
   it('all node types become unusable after dispose and dispose is idempotent', () => {
     const a = atom(42);
     const c = computed(() => a.value);
-    c.value; // resolve
+    c.value;
     const e = effect(() => {
       void c.value;
     });
@@ -211,7 +192,6 @@ describe('Disposal Finality', () => {
     expect(() => c.value).toThrow();
     expect(() => e.run()).toThrow();
 
-    // Idempotent — second dispose does not throw
     a.dispose();
     c.dispose();
     e.dispose();
@@ -236,7 +216,6 @@ describe('Disposal Finality', () => {
       const _safeEffect = effect(() => {
         safeContainer.push(source.value);
       });
-      // Manual disposal replaces ES2023 'using' for ES2022 compatibility
       _safeEffect.dispose();
     }
 
@@ -248,11 +227,7 @@ describe('Disposal Finality', () => {
   });
 });
 
-// ─── 6. Error Isolation ─────────────────────────────────────────────────────
-
 describe('Error Isolation', () => {
-  afterEach(() => vi.restoreAllMocks());
-
   it('subscriber errors do not affect sibling subscribers', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const a = atom(0);
@@ -302,7 +277,6 @@ describe('Error Isolation', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0].name).toBe('EffectError');
 
-    // onError that throws — system must stay functional
     const trigger2 = atom(false);
     effect(
       () => {
@@ -323,8 +297,6 @@ describe('Error Isolation', () => {
     consoleSpy.mockRestore();
   });
 });
-
-// ─── 7. Equality Contract ───────────────────────────────────────────────────
 
 describe('Equality Contract', () => {
   it('atom uses Object.is (NaN === NaN)', async () => {
@@ -351,8 +323,6 @@ describe('Equality Contract', () => {
     expect(getNodeVersion(c)).toBe(v0);
   });
 });
-
-// ─── 8. Computed State Machine ──────────────────────────────────────────────
 
 describe('Computed State Machine', () => {
   it('sync: IDLE → RESOLVED on first access', () => {
@@ -381,8 +351,6 @@ describe('Computed State Machine', () => {
   });
 });
 
-// ─── 9. Subscription Protocol ───────────────────────────────────────────────
-
 describe('Subscription Protocol', () => {
   it('unsubscribe decrements count and is idempotent', () => {
     const a = atom(0);
@@ -393,7 +361,7 @@ describe('Subscription Protocol', () => {
     unsub();
     expect(a.subscriberCount()).toBe(1);
 
-    unsub(); // idempotent
+    unsub();
     expect(a.subscriberCount()).toBe(1);
   });
 
@@ -424,12 +392,9 @@ describe('Subscription Protocol', () => {
     unsub2 = a.subscribe(() => calls.push('second'));
 
     a.value = 1;
-    // 'second' is no longer pushed since unsubscribe is immediate via tombstones
     expect(calls).toEqual(['first']);
   });
 });
-
-// ─── 10. Async Computed Safety ──────────────────────────────────────────────
 
 describe('Async Computed Safety', () => {
   it('eventually resolves to latest value after dependency drift', async () => {

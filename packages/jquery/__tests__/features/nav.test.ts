@@ -60,14 +60,14 @@ class NavTestHarness {
         else executor();
       });
 
-      return Object.assign(promise, {
+      return createMockJqXHR(promise, {
         abort: vi.fn(() => rejectPromise({ statusText: 'abort' })),
         getResponseHeader: vi.fn((name: string) => options.headers?.[name] || null),
         getAllResponseHeaders: vi.fn(() => ''),
         setRequestHeader: vi.fn(),
         statusCode: vi.fn(),
-        promise: () => promise,
-      }) as unknown as JQuery.jqXHR;
+        promise: () => castTo<never>(promise),
+      });
     });
   }
 
@@ -195,7 +195,7 @@ describe('$.atomNav', () => {
         const p = new Promise<string>((res) => {
           resolveFetch = res;
         });
-        return Object.assign(p, { abort: vi.fn() }) as unknown as JQuery.jqXHR;
+        return createMockJqXHR(p, { abort: vi.fn() });
       });
 
       const hooks = { onMount: vi.fn(), onUnmount: vi.fn() };
