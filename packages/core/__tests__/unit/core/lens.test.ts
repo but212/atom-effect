@@ -43,7 +43,7 @@ function setupReentrantSubscription<T, U>(source: WritableAtom<T>, subscribeTo: 
 }
 
 describe('Lens System', () => {
-  describe('State Composition: mergeLenses', () => {
+  describe('mergeLenses()', () => {
     it('should unify multiple object-based lenses into a single intersected lens', () => {
       const user = atom({
         profile: { name: 'Alice' },
@@ -55,15 +55,14 @@ describe('Lens System', () => {
 
       const combined = mergeLenses(profileLens, settingsLens);
 
-      // Verify merged read
       expect(combined.value).toEqual({ name: 'Alice', age: 25 });
 
-      // Verify unified write (Two-way binding)
       combined.value = { name: 'Bob', age: 30 };
       expect(user.value.profile.name).toBe('Bob');
       expect(user.value.settings.age).toBe(30);
-      expect(user.value.city).toBe('Seoul'); // Unrelated field preserved
+      expect(user.value.city).toBe('Seoul');
     });
+
     it('should maintain reactivity across all source lenses', async () => {
       const user = atom({
         profile: { name: 'Alice' },
@@ -78,13 +77,11 @@ describe('Lens System', () => {
         callCount++;
       });
 
-      // Update via root
       user.value = { ...user.value, profile: { name: 'Bob' } };
       await aeNextTick();
       expect(callCount).toBe(1);
       expect(combined.value.name).toBe('Bob');
 
-      // Update via sibling lens
       settingsLens.value = { age: 30 };
       await aeNextTick();
       expect(callCount).toBe(2);
@@ -98,7 +95,6 @@ describe('Lens System', () => {
       const combined = mergeLenses(aLens, bLens);
 
       combined.subscribe(() => {});
-      // Each source lens subscribes to the root
       expect(user.subscriberCount()).toBe(2);
 
       combined.dispose();
@@ -106,8 +102,8 @@ describe('Lens System', () => {
     });
   });
 
-  describe('Path-based Access: atomLens', () => {
-    describe('Basic & Deep Nesting', () => {
+  describe('atomLens()', () => {
+    describe('basic & deep nesting', () => {
       it('should handle single-level property access', () => {
         const store = atom({ count: 0 });
         const lens = atomLens(store, 'count');
@@ -127,7 +123,7 @@ describe('Lens System', () => {
 
         collapsedLens.value = true;
         expect(store.value.ui.sidebar.collapsed).toBe(true);
-        expect(store.value.data).toBe(originalData); // Structural sharing preserved
+        expect(store.value.data).toBe(originalData);
       });
 
       it('should not auto-vivify paths through null values', () => {
@@ -135,11 +131,11 @@ describe('Lens System', () => {
         const nameLens = atomLens(store, 'profile.name');
 
         nameLens.value = 'Bob';
-        expect(store.value.profile).toBeNull(); // Should fail gracefully
+        expect(store.value.profile).toBeNull();
       });
     });
 
-    describe('Collection Support (Array & Map)', () => {
+    describe('collection support (Array & Map)', () => {
       it('should support array indices in paths', () => {
         const store = atom({ items: [{ text: 'A' }, { text: 'B' }] });
         const lens = atomLens(store, 'items.1.text');
@@ -163,7 +159,66 @@ describe('Lens System', () => {
     });
   });
 
-  describe('Reactive Lifecycle & Optimization', () => {
+  describe('composeLens()', () => {
+    it('should support multi-tier composition', async () => {
+      const store = atom({ a: { b: { c: 1 } } });
+      const ab = atomLens(store, 'a.b');
+      const abc = composeLens(ab, 'c');
+
+      expect(abc.value).toBe(1);
+      abc.value = 100;
+      expect(store.value.a.b.c).toBe(100);
+    });
+  });
+
+  describe('lensFor()', () => {
+    it('should provide a lens factory', () => {
+      const store = atom({ profile: { name: 'Alice' } });
+      const l = lensFor(store);
+      const nameLens = l('profile.name');
+
+      expect(nameLens.value).toBe('Alice');
+      nameLens.value = 'Bob';
+      expect(store.value.profile.name).toBe('Bob');
+    });
+  });
+
+  describe('getPathValue()', () => {
+    it('should retrieve properties from standard objects', () => {
+      expect(getPathValue({ a: { b: 42 } }, ['a', 'b'])).toBe(42);
+    });
+
+    it('should retrieve properties from Map instances', () => {
+      const map = new Map<string, unknown>([['key', 'map-value']]);
+      expect(getPathValue(map, ['key'])).toBe('map-value');
+    });
+
+    it('should retrieve properties from functions', () => {
+      const func = Object.assign(() => {}, { customProp: 'hello-func' });
+      expect(getPathValue(func, ['customProp'])).toBe('hello-func');
+    });
+
+    it('should retrieve prototype properties from primitives', () => {
+      expect(getPathValue('hello', ['length'])).toBe(5);
+      expect(getPathValue(true, ['toString'])).toBeTypeOf('function');
+    });
+
+    it('should return undefined for nullish values or missing paths', () => {
+      expect(getPathValue(null, ['a'])).toBeUndefined();
+      expect(getPathValue(undefined, ['a'])).toBeUndefined();
+      expect(getPathValue({}, ['a'])).toBeUndefined();
+      expect(getPathValue('hello', ['invalidProp'])).toBeUndefined();
+    });
+
+    it('should block and return undefined for forbidden keys', () => {
+      const obj = {};
+      expect(getPathValue(obj, ['__proto__'])).toBeUndefined();
+      expect(getPathValue(obj, ['constructor'])).toBeUndefined();
+      expect(getPathValue(obj, ['prototype'])).toBeUndefined();
+    });
+  });
+
+  describe('reactivity & lifecycle', () => {
     it('should share a single root subscription for multiple lens listeners', () => {
       const store = atom({ x: 1 });
       const lens = atomLens(store, 'x');
@@ -174,7 +229,7 @@ describe('Lens System', () => {
       const unsub2 = lens.subscribe(() => {});
 
       expect(lens.subscriberCount()).toBe(2);
-      expect(store.subscriberCount()).toBe(1); // Shared root subscription
+      expect(store.subscriberCount()).toBe(1);
 
       unsub1();
       unsub2();
@@ -190,17 +245,14 @@ describe('Lens System', () => {
         callCount++;
       });
 
-      // Update unrelated property
       store.value = { ...store.value, b: 3 };
       await aeNextTick();
       expect(callCount).toBe(0);
 
-      // Update targeted property with identical value
       aLens.value = 1;
       await aeNextTick();
       expect(callCount).toBe(0);
 
-      // Legit update
       aLens.value = 10;
       await aeNextTick();
       expect(callCount).toBe(1);
@@ -252,14 +304,11 @@ describe('Lens System', () => {
       const unsubLens = lens.subscribe(() => {});
       expect(store.subscriberCount()).toBe(1);
 
-      // Trigger unsubscribe which causes re-entrancy
       unsubLens();
 
-      // After unsubLens, we should still have the active nested subscription on the store
       expect(store.subscriberCount()).toBe(1);
       expect(lens.subscriberCount()).toBe(1);
 
-      // Cleaning up the nested subscription should successfully unsubscribe from the store
       tracker.cleanup();
       expect(store.subscriberCount()).toBe(0);
       expect(lens.subscriberCount()).toBe(0);
@@ -278,84 +327,12 @@ describe('Lens System', () => {
 
       unsubMerged();
 
-      // In the buggy implementation, self.#unsubs.length = 0 is run AFTER the loop,
-      // which clears the new unsubscriptions.
-      // So l1.subscriberCount() and l2.subscriberCount() would stay at 1.
       expect(merged.subscriberCount()).toBe(1);
 
-      // If we unsubscribe the nested subscription, it should clean up
       tracker.cleanup();
       expect(l1.subscriberCount()).toBe(0);
       expect(l2.subscriberCount()).toBe(0);
       expect(merged.subscriberCount()).toBe(0);
-    });
-
-    describe('Disposed Lens Resilience', () => {
-      it('should set isDisposed to true when dispose is called on LensImpl/MergedLensImpl', () => {
-        const store = atom({ x: 1, y: 2 });
-        const lens = atomLens(store, 'x');
-        const merged = mergeLenses(lens);
-
-        expect(Reflect.get(lens, 'isDisposed')).toBe(false);
-        expect(Reflect.get(merged, 'isDisposed')).toBe(false);
-
-        lens.dispose();
-        merged.dispose();
-
-        expect(Reflect.get(lens, 'isDisposed')).toBe(true);
-        expect(Reflect.get(merged, 'isDisposed')).toBe(true);
-      });
-
-      it('should immediately return no-op unsubscribe when subscribing to a disposed LensImpl', () => {
-        const store = atom({ x: 1 });
-        const lens = atomLens(store, 'x');
-
-        lens.dispose();
-
-        const unsub = lens.subscribe(() => {});
-        expect(store.subscriberCount()).toBe(0);
-        expect(lens.subscriberCount()).toBe(0);
-
-        expect(() => unsub()).not.toThrow();
-      });
-
-      it('should immediately return no-op unsubscribe when subscribing to a disposed MergedLensImpl', () => {
-        const store = atom({ x: 1, y: 2 });
-        const l1 = atomLens(store, 'x');
-        const l2 = atomLens(store, 'y');
-        const merged = mergeLenses(l1, l2);
-
-        merged.dispose();
-
-        const unsub = merged.subscribe(() => {});
-        expect(l1.subscriberCount()).toBe(0);
-        expect(l2.subscriberCount()).toBe(0);
-        expect(merged.subscriberCount()).toBe(0);
-
-        expect(() => unsub()).not.toThrow();
-      });
-    });
-  });
-
-  describe('Advanced Patterns & Composition', () => {
-    it('should support multi-tier composition via composeLens', async () => {
-      const store = atom({ a: { b: { c: 1 } } });
-      const ab = atomLens(store, 'a.b');
-      const abc = composeLens(ab, 'c');
-
-      expect(abc.value).toBe(1);
-      abc.value = 100;
-      expect(store.value.a.b.c).toBe(100);
-    });
-
-    it('should provide a lens factory via lensFor', () => {
-      const store = atom({ profile: { name: 'Alice' } });
-      const l = lensFor(store);
-      const nameLens = l('profile.name');
-
-      expect(nameLens.value).toBe('Alice');
-      nameLens.value = 'Bob';
-      expect(store.value.profile.name).toBe('Bob');
     });
 
     it('should preserve prototype of class instances', () => {
@@ -372,20 +349,14 @@ describe('Lens System', () => {
       expect(store.value.user).toBeInstanceOf(User);
       expect(store.value.user.greet()).toBe('Hi Bob');
     });
-  });
 
-  describe('Redundant State Verification', () => {
     it('should not throw or leak memory due to redundant _slots declarations on subclass', () => {
-      // In TS, if a property is redeclared, it overrides the base class property at runtime
-      // if assigned to null. This can lead to bugs where the base class methods use the
-      // original property but it's shadowed, or vice-versa.
       const store = atom({ x: 1, y: 2 });
       const myLens = atomLens(store, 'x');
 
       const unsub = myLens.subscribe(() => {});
       expect(myLens.subscriberCount()).toBe(1);
 
-      // Trigger notification
       myLens.value = 2;
 
       unsub();
@@ -398,7 +369,6 @@ describe('Lens System', () => {
       const mergedUnsub = merged.subscribe(() => {});
       expect(merged.subscriberCount()).toBe(1);
 
-      // Setting merged value
       Reflect.set(merged, 'value', { x: 3, y: 4 });
 
       mergedUnsub();
@@ -406,7 +376,53 @@ describe('Lens System', () => {
     });
   });
 
-  describe('Robustness & Security', () => {
+  describe('disposed lens behavior', () => {
+    it('should set isDisposed to true when dispose is called on LensImpl/MergedLensImpl', () => {
+      const store = atom({ x: 1, y: 2 });
+      const lens = atomLens(store, 'x');
+      const merged = mergeLenses(lens);
+
+      expect(Reflect.get(lens, 'isDisposed')).toBe(false);
+      expect(Reflect.get(merged, 'isDisposed')).toBe(false);
+
+      lens.dispose();
+      merged.dispose();
+
+      expect(Reflect.get(lens, 'isDisposed')).toBe(true);
+      expect(Reflect.get(merged, 'isDisposed')).toBe(true);
+    });
+
+    it('should immediately return no-op unsubscribe when subscribing to a disposed LensImpl', () => {
+      const store = atom({ x: 1 });
+      const lens = atomLens(store, 'x');
+
+      lens.dispose();
+
+      const unsub = lens.subscribe(() => {});
+      expect(store.subscriberCount()).toBe(0);
+      expect(lens.subscriberCount()).toBe(0);
+
+      expect(() => unsub()).not.toThrow();
+    });
+
+    it('should immediately return no-op unsubscribe when subscribing to a disposed MergedLensImpl', () => {
+      const store = atom({ x: 1, y: 2 });
+      const l1 = atomLens(store, 'x');
+      const l2 = atomLens(store, 'y');
+      const merged = mergeLenses(l1, l2);
+
+      merged.dispose();
+
+      const unsub = merged.subscribe(() => {});
+      expect(l1.subscriberCount()).toBe(0);
+      expect(l2.subscriberCount()).toBe(0);
+      expect(merged.subscriberCount()).toBe(0);
+
+      expect(() => unsub()).not.toThrow();
+    });
+  });
+
+  describe('security & prototype pollution', () => {
     it('should block prototype pollution attempts', () => {
       const store = atom({ data: {} });
       const malicious = ['__proto__.polluted', 'constructor.prototype.polluted'];
@@ -425,15 +441,13 @@ describe('Lens System', () => {
     });
   });
 
-  describe('JSDoc Examples Verification', () => {
+  describe('JSDoc examples validation', () => {
     it('should verify the JSDoc example for atomLens', () => {
       const user = atom({ profile: { name: 'Alice', age: 25 } });
-
-      // Create a two-way lens for the 'name' property
       const nameLens = atomLens(user, 'profile.name');
 
       expect(nameLens.value).toBe('Alice');
-      nameLens.value = 'Bob'; // Updates user.value.profile.name
+      nameLens.value = 'Bob';
       expect(user.value.profile.name).toBe('Bob');
     });
 
@@ -443,10 +457,8 @@ describe('Lens System', () => {
 
       const formState = mergeLenses(profile, preferences);
 
-      // Verify the read behavior from the example
       expect(formState.value).toEqual({ name: 'Alice', theme: 'dark' });
 
-      // Verify write propagation behavior (written in its entirety to each lens)
       formState.value = { name: 'Bob', theme: 'light' };
 
       expect(profile.value).toEqual({ name: 'Bob', theme: 'light' });
@@ -468,41 +480,6 @@ describe('Lens System', () => {
 
       expect(user.value.profile.name).toBe('Bob');
       expect(user.value.profile.age).toBe(30);
-    });
-  });
-
-  describe('getPathValue', () => {
-    it('should retrieve properties from standard objects', () => {
-      expect(getPathValue({ a: { b: 42 } }, ['a', 'b'])).toBe(42);
-    });
-
-    it('should retrieve properties from Map instances', () => {
-      const map = new Map<string, unknown>([['key', 'map-value']]);
-      expect(getPathValue(map, ['key'])).toBe('map-value');
-    });
-
-    it('should retrieve properties from functions', () => {
-      const func = Object.assign(() => {}, { customProp: 'hello-func' });
-      expect(getPathValue(func, ['customProp'])).toBe('hello-func');
-    });
-
-    it('should retrieve prototype properties from primitives', () => {
-      expect(getPathValue('hello', ['length'])).toBe(5);
-      expect(getPathValue(true, ['toString'])).toBeTypeOf('function');
-    });
-
-    it('should return undefined for nullish values or missing paths', () => {
-      expect(getPathValue(null, ['a'])).toBeUndefined();
-      expect(getPathValue(undefined, ['a'])).toBeUndefined();
-      expect(getPathValue({}, ['a'])).toBeUndefined();
-      expect(getPathValue('hello', ['invalidProp'])).toBeUndefined();
-    });
-
-    it('should block and return undefined for forbidden keys', () => {
-      const obj = {};
-      expect(getPathValue(obj, ['__proto__'])).toBeUndefined();
-      expect(getPathValue(obj, ['constructor'])).toBeUndefined();
-      expect(getPathValue(obj, ['prototype'])).toBeUndefined();
     });
   });
 });

@@ -11,6 +11,7 @@ export default defineVitestConfig(packageDir, {
         resolve: {
           alias: {
             '@': SRC_PATH,
+            '@tests': `${packageDir}/__tests__`,
           },
         },
         test: {
@@ -18,12 +19,14 @@ export default defineVitestConfig(packageDir, {
           environment: 'node',
           include: ['__tests__/**/*.test.ts', 'src/**/*.test.ts'],
           exclude: ['__tests__/dom/**', '**/*.dom.test.ts'],
+          setupFiles: [`${packageDir}/__tests__/utils/setup.ts`],
         },
       },
       {
         resolve: {
           alias: {
             '@': SRC_PATH,
+            '@tests': `${packageDir}/__tests__`,
           },
         },
         test: {
@@ -34,6 +37,7 @@ export default defineVitestConfig(packageDir, {
             instances: [{ browser: 'chromium' }],
           },
           include: ['__tests__/dom/**/*.test.ts', '**/*.dom.test.ts'],
+          setupFiles: [`${packageDir}/__tests__/utils/setup.ts`],
         },
       },
     ],

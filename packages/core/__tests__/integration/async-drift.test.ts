@@ -4,15 +4,11 @@
  * Documents exactly when REJECTED fires and when epoch-based reset prevents it.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '@tests/utils/test-helpers';
+import { describe, expect, it, vi } from 'vitest';
 import { AsyncState, atom, computed, effect } from '@/index';
-import { sleep } from '../utils/test-helpers';
 
 describe('Async Drift Constraint & Recovery', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it('resolves reliably without retries (maxAsyncRetries = 0) when dependencies remain stable', async () => {
     const src = atom(42);
 

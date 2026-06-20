@@ -1,6 +1,5 @@
 /**
  * @fileoverview DepBuffer Refactored Tests
- * @description High-density verification of core business logic (reuse, lifecycle, logical size).
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
@@ -35,11 +34,10 @@ function createDepBuffer(): ReactiveDependencyTracker {
   };
 }
 
-// Helper to create a structure compatible with DependencyLink for internal buffer testing
 const createLink = (node: Dependency, version: number, unsub?: () => void): DependencyLink =>
   createDependencyLink(node, version, unsub);
 
-describe('DepBuffer: Reuse & Lifecycle', () => {
+describe('DepBuffer', () => {
   const createMockDep = (id: number): Dependency => {
     const mock: Partial<Dependency> = {
       id,
@@ -51,8 +49,8 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     return mock as Dependency;
   };
 
-  describe('Basic Operations', () => {
-    it('claimExisting: should swap and relocate dependencies correctly', () => {
+  describe('claimExisting()', () => {
+    it('should swap and relocate dependencies correctly', () => {
       const buf = createDepBuffer();
       const deps = [0, 1, 2].map((id) => createMockDep(id));
       const [d0, d1, d2] = deps;
@@ -71,7 +69,7 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
       expect(claimExisting(buf, createMockDep(99), 0)).toBe(false);
     });
 
-    it('claimExisting: behavior with duplicate dependencies', () => {
+    it('handles duplicate dependencies by hitting the correct instances', () => {
       const buf = createDepBuffer();
       const d0 = createMockDep(0);
       const l0_a = createLink(d0, 1, vi.fn());
@@ -88,8 +86,10 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
       expect(claimExisting(buf, d0, 1)).toBe(true);
       expect(buf._depSlots.at(1)).toBe(l0_b);
     });
+  });
 
-    it('insertNew: should correctly manage logical size irrespective of occupancy', () => {
+  describe('insertNew()', () => {
+    it('should correctly manage logical size irrespective of occupancy', () => {
       const buf = createDepBuffer();
       const l0 = createLink(createMockDep(0), 1, vi.fn());
 
@@ -105,7 +105,7 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
       expect(buf._depSlots.has(l0)).toBe(true); // Occupant must be relocated, not deleted
     });
 
-    it('insertNew: repeated insertion into same empty slot should not inflate size', () => {
+    it('does not inflate size when doing repeated insertion into the same empty slot', () => {
       const buf = createDepBuffer();
       const d0 = createMockDep(0);
       const d1 = createMockDep(1);
@@ -121,8 +121,8 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     });
   });
 
-  describe('Lifecycle & Disposal', () => {
-    it('Lifecycle: truncateFrom & disposeAll must trigger unsubscriptions', () => {
+  describe('depBufferTruncateFrom() & disposeAll()', () => {
+    it('triggers unsubscriptions when truncating or disposing', () => {
       const buf = createDepBuffer();
       const unsubs = [vi.fn(), vi.fn(), vi.fn()];
       for (let i = 0; i < unsubs.length; i++) {
@@ -143,8 +143,8 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
     });
   });
 
-  describe('Error Propagation', () => {
-    it('isBufferDirty: should not swallow system-level exceptions', () => {
+  describe('isBufferDirty()', () => {
+    it('should not swallow system-level exceptions (e.g. RangeError)', () => {
       const buf = createDepBuffer();
 
       const systemErrorDep: Partial<Dependency> = {
@@ -159,11 +159,10 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
 
       depBufferPush(buf, createLink(systemErrorDep as Dependency, 1));
 
-      // Calling isBufferDirty should propagate the RangeError, not swallow it
       expect(() => isBufferDirty(buf)).toThrow(RangeError);
     });
 
-    it('isBufferDirty: should propagate non-system errors thrown during computed dependency evaluation', () => {
+    it('should propagate non-system errors thrown during computed dependency evaluation', () => {
       const buf = createDepBuffer();
 
       const customErrorDep: Partial<Dependency> = {
@@ -178,7 +177,6 @@ describe('DepBuffer: Reuse & Lifecycle', () => {
 
       depBufferPush(buf, createLink(customErrorDep as Dependency, 1));
 
-      // Calling isBufferDirty should propagate the custom Error, not swallow it
       expect(() => isBufferDirty(buf)).toThrowError('Custom computation error');
     });
   });

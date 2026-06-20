@@ -4,9 +4,9 @@
  * deterministically seeded for reproducibility.
  */
 
+import { seededRandom } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
 import { atom, batch, type ComputedAtom, computed, type WritableAtom } from '@/index';
-import { seededRandom } from '../../utils/test-helpers';
 
 function buildGraph(rand: () => number, atomCount = 5, computedCount = 20) {
   const atoms: WritableAtom<number>[] = [];
