@@ -3,6 +3,8 @@ import {
   aeNextTick,
   atom,
   atomLens,
+  BRAND,
+  BrandFlags,
   composeLens,
   getPathValue,
   lensFor,
@@ -480,6 +482,15 @@ describe('Lens System', () => {
 
       expect(user.value.profile.name).toBe('Bob');
       expect(user.value.profile.age).toBe(30);
+    });
+  });
+
+  describe('MergedWritableLensImpl mechanics', () => {
+    it('should expose the correct BRAND value', () => {
+      const a = atom({ x: 1 });
+      const b = atom({ y: 2 });
+      const merged = mergeLenses(a, b);
+      expect(merged[BRAND]).toBe(BrandFlags.Atom | BrandFlags.Writable);
     });
   });
 });

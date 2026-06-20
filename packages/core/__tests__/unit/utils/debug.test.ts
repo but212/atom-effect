@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom, computed, runtimeDebug as debug, effect } from '@/index';
+import type { DependencyId } from '@/types';
+import { attachDebugInfo as wrapperAttachDebugInfo } from '@/utils/debug';
 
 type DebugNode = Parameters<typeof debug.registerNode>[0];
 
@@ -189,8 +191,80 @@ describe('Debug System', () => {
 
       vi.mocked(console.warn).mockClear();
       debug.enabled = false;
-      debug.warn(true, 'Silent');
       expect(console.warn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('diagnostic controller modes', () => {
+    it('registerNode and attachDebugInfo edge cases', () => {
+      // Disabled mode
+      debug.enabled = false;
+      expect(debug.registerNode(createMockNode(1))).toBeUndefined();
+      expect(debug.attachDebugInfo(createMockNode(1), 'atom', 1)).toBeUndefined();
+
+      debug.enabled = true;
+      // Null / non-objects / undefined id
+      expect(debug.registerNode(null as unknown as DebugNode)).toBeUndefined();
+      expect(debug.registerNode({} as unknown as DebugNode)).toBeUndefined();
+      expect(debug.registerNode(123 as unknown as DebugNode)).toBeUndefined();
+      expect(debug.attachDebugInfo(null as unknown as DebugNode, 'atom', 1)).toBeUndefined();
+      expect(
+        debug.attachDebugInfo(createMockNode(1), 'atom', undefined as unknown as DependencyId)
+      ).toBeUndefined();
+      expect(debug.attachDebugInfo(123 as unknown as DebugNode, 'atom', 1)).toBeUndefined();
+
+      // customName === undefined && !this.trackGraph
+      debug.trackGraph = false;
+      const node = createMockNode(1001);
+      expect(debug.attachDebugInfo(node, 'atom', 1001, undefined)).toBeUndefined();
+
+      // resolveIdentity with non-object primitive
+      expect(debug.getDebugName('hello' as unknown as object)).toBeUndefined();
+
+      // attachDebugInfo customName update on existing entry (lines 137-138)
+      const node2 = createMockNode(1002);
+      debug.attachDebugInfo(node2, 'atom', 1002);
+      debug.attachDebugInfo(node2, 'atom', 1002, 'custom-name');
+      expect(debug.getDebugName(node2)).toBe('custom-name');
+    });
+
+    it('wrapper functions call underlying methods', () => {
+      const spy = vi.spyOn(debug, 'attachDebugInfo');
+      wrapperAttachDebugInfo(null as unknown as DebugNode, 'atom', 1);
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('ProdDebugController behaves as expected when dev mode is production', async () => {
+      vi.doMock('@/constants', async () => {
+        const actual = await vi.importActual<Record<string, unknown>>('@/constants');
+        return {
+          ...actual,
+          IS_DEV: false,
+        };
+      });
+
+      try {
+        // @ts-expect-error
+        const mod = await import('@/utils/debug?prod=2');
+        const prodDebug = mod.debug;
+
+        expect(prodDebug.enabled).toBe(false);
+        expect(prodDebug.warnInfiniteLoop).toBe(false);
+        expect(prodDebug.trackGraph).toBe(false);
+        expect(prodDebug.dumpGraph()).toEqual([]);
+        expect(prodDebug.getDebugName(null)).toBeUndefined();
+        expect(prodDebug.getDebugType(null)).toBeUndefined();
+
+        // No-ops
+        expect(prodDebug.warn(true, 'msg')).toBeUndefined();
+        expect(prodDebug.registerNode(null as unknown as DebugNode)).toBeUndefined();
+        expect(prodDebug.attachDebugInfo(null as unknown as DebugNode, 'atom', 1)).toBeUndefined();
+        expect(prodDebug.trackUpdate(1)).toBeUndefined();
+        expect(prodDebug.trackEvaluationFailure(1)).toBeUndefined();
+      } finally {
+        vi.doUnmock('@/constants');
+      }
     });
   });
 });

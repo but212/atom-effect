@@ -14,6 +14,7 @@ import {
   isEffect,
   isWritable,
 } from '@/index';
+import { mergeAtomValues, nextSmi } from '@/utils';
 
 describe('Core Symbols & Branding', () => {
   describe('BRAND & BrandFlags', () => {
@@ -92,6 +93,41 @@ describe('Core Symbols & Branding', () => {
       expect(isWritable(fakeAtom)).toBe(false);
       expect(isComputed(fakeAtom)).toBe(false);
       expect(isEffect(fakeAtom)).toBe(false);
+    });
+  });
+
+  describe('Utility Helpers', () => {
+    describe('nextSmi', () => {
+      it('should increment SMI values normally', () => {
+        expect(nextSmi(1)).toBe(2);
+      });
+
+      it('should wrap around to 1 when next reaches 0 (overflow SMI_MAX)', () => {
+        // SMI_MAX is 0x3fffffff
+        expect(nextSmi(0x3fffffff)).toBe(1);
+      });
+    });
+
+    describe('mergeAtomValues', () => {
+      it('should correctly merge object-based atoms', () => {
+        const a = atom({ x: 1 });
+        const b = atom({ y: 2 });
+        const res = mergeAtomValues([a, b]);
+        expect(res).toEqual({ x: 1, y: 2 });
+      });
+
+      it('should fall back to indexed properties when merging primitive values', () => {
+        const a = atom(42);
+        const b = atom('hello');
+        const res = mergeAtomValues([a, b]);
+        expect(res).toEqual({ '0': 42, '1': 'hello' });
+      });
+
+      it('should use peek when peek parameter is true', () => {
+        const a = atom({ val: 1 });
+        const res = mergeAtomValues([a], true);
+        expect(res).toEqual({ val: 1 });
+      });
     });
   });
 });

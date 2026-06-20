@@ -5,7 +5,7 @@
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { COMPUTED_STATE_FLAGS } from '@/constants';
-import { createDependencyLink } from '@/core/base';
+import { createDependencyLink, trackingContext } from '@/core/base';
 import {
   BUFFER_FLAGS,
   claimExisting,
@@ -178,6 +178,48 @@ describe('DepBuffer', () => {
       depBufferPush(buf, createLink(customErrorDep as Dependency, 1));
 
       expect(() => isBufferDirty(buf)).toThrowError('Custom computation error');
+    });
+
+    it('runs untracked if trackingContext.current is active during dirty check', () => {
+      const buf = createDepBuffer();
+      const depValSpy = vi.fn(() => 42);
+      const computedDep: Partial<Dependency> = {
+        id: 100,
+        version: 1,
+        flags: COMPUTED_STATE_FLAGS.IS_COMPUTED,
+        get value() {
+          return depValSpy();
+        },
+        subscribe: vi.fn(() => vi.fn()),
+      };
+      depBufferPush(buf, createLink(computedDep as Dependency, 1));
+
+      const mockContext = {
+        addDependency: vi.fn(),
+      };
+
+      const orig = trackingContext.current;
+      try {
+        trackingContext.current = mockContext;
+        const dirty = isBufferDirty(buf);
+        expect(dirty).toBe(false);
+        expect(depValSpy).toHaveBeenCalled();
+        expect(mockContext.addDependency).not.toHaveBeenCalled();
+      } finally {
+        trackingContext.current = orig;
+      }
+    });
+
+    it('handles unsubscribe callback throwing errors during truncation', () => {
+      const buf = createDepBuffer();
+      const badUnsub = () => {
+        throw new Error('Unsubscribe failed error');
+      };
+      depBufferPush(buf, createLink(createMockDep(1), 1, badUnsub));
+
+      expect(() => {
+        depBufferTruncateFrom(buf, 0);
+      }).not.toThrow();
     });
   });
 });

@@ -125,6 +125,31 @@ describe('Error Handling System', () => {
       expect(mid.cause?.name).toBe('TypeError');
       expect(mid.cause?.stack).toBeDefined();
     });
+
+    it('serializeError returns non-Error objects as is', () => {
+      const obj = { x: 1 };
+      expect(serializeError(obj)).toBe(obj);
+      expect(serializeError(123)).toBe(123);
+      expect(serializeError('hello')).toBe('hello');
+    });
+
+    it('serializeError handles circular reference metadata correctly', () => {
+      const circularErr = new Error('circular error');
+      circularErr.name = 'MyCustomError';
+      const circularErrExt = circularErr as unknown as Record<string, unknown>;
+      circularErrExt.recoverable = false;
+      circularErrExt.code = 'ERR_CODE';
+      circularErrExt.cause = circularErr;
+
+      const serialized = serializeError(circularErr);
+
+      expect(serialized.cause).toEqual({
+        name: 'MyCustomError',
+        message: '[Circular Reference]',
+        recoverable: false,
+        code: 'ERR_CODE',
+      });
+    });
   });
 
   describe('ERROR_STRATEGIES (brand and fallback strategies)', () => {
@@ -215,6 +240,23 @@ describe('Error Handling System', () => {
       expect(meta.name).toBe('');
       expect(meta.message).toBe('');
       expect(meta.code).toBeUndefined();
+    });
+
+    it('handles unexpected inputs for fetch and test on strategies', () => {
+      // brandStrategy test returns false for non-objects
+      expect(brandStrategy.test(null)).toBe(false);
+      expect(brandStrategy.test(123)).toBe(false);
+      expect(brandStrategy.test({})).toBe(false);
+
+      // brandStrategy fetch fallback
+      const brandMeta = brandStrategy.fetch(null);
+      expect(brandMeta.name).toBe('Object');
+      expect(brandMeta.message).toBe('Invalid error object');
+
+      // fallbackStrategy fetch fallback
+      const fallbackMeta = fallbackStrategy.fetch(null);
+      expect(fallbackMeta.name).toBe('Unexpected error');
+      expect(fallbackMeta.message).toBe('Invalid error object');
     });
   });
 });

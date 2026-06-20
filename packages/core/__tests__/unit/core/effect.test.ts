@@ -2,9 +2,10 @@
  * @fileoverview Effect Behavior Tests
  */
 
+import { Result } from '@but212/atom-effect-utils';
 import { sleep } from '@tests/utils/test-helpers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { atom, computed, EffectError, effect } from '@/index';
+import { atom, computed, EffectError, effect, globalScheduler } from '@/index';
 
 describe('Effect', () => {
   describe('with fake timers', () => {
@@ -242,6 +243,26 @@ describe('Effect', () => {
 
         eA.dispose();
         consoleSpy.mockRestore();
+      });
+
+      it('should return Result.ok(false) from prepareExecution when executing re-entrantly', () => {
+        const a = atom(0, { sync: true });
+        let e: unknown;
+        let executions = 0;
+        e = effect(
+          () => {
+            executions++;
+            a.value;
+            if (executions === 2) {
+              const res = (e as { execute: () => Result<void, Error> }).execute();
+              expect(Result.isOk(res)).toBe(true);
+            }
+          },
+          { sync: true }
+        );
+
+        a.value = 1;
+        expect(executions).toBe(2);
       });
     });
 
@@ -648,6 +669,52 @@ describe('Effect', () => {
         expect(() => e.run()).toThrow(EffectError);
 
         consoleSpy.mockRestore();
+      });
+
+      it('disposes effect and returns error if global scheduler flush execution count limit is exceeded', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const spy = vi
+          .spyOn(globalScheduler, 'incrementFlushExecutionCount')
+          .mockReturnValue(Result.err(new Error('Global flush limit exceeded')));
+
+        const a = atom(0);
+        expect(() => {
+          effect(() => {
+            a.value;
+          });
+        }).toThrow('Global flush limit exceeded');
+
+        spy.mockRestore();
+        consoleSpy.mockRestore();
+      });
+
+      it('disposes effect when executions per second limit is exceeded', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const a = atom(0, { sync: true });
+
+        const e = effect(
+          () => {
+            a.value;
+          },
+          { sync: true, maxExecutionsPerSecond: 1 }
+        );
+
+        a.value = 1;
+
+        expect(e.isDisposed).toBe(true);
+        expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
+
+        consoleSpy.mockRestore();
+      });
+    });
+
+    describe('internal constructor validation', () => {
+      it('should throw EffectMustBeFunction error when private EffectImpl constructor is invoked with a non-function', () => {
+        const e = effect(() => {});
+        const EffectImplClass = e.constructor;
+        expect(
+          () => new (EffectImplClass as unknown as new (fn: unknown) => unknown)(null)
+        ).toThrow(EffectError);
       });
     });
   });
