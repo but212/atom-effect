@@ -126,15 +126,15 @@ describe('Subscribe / Unsubscribe Hotpath', () => {
     {
       name: 'atom.subscribe + unsubscribe',
       run: () => {
-        const unsub = a.subscribe(() => {});
-        unsub();
+        const unsubscribeCallback = a.subscribe(() => {});
+        unsubscribeCallback();
       },
     },
     {
       name: 'computed.subscribe + unsubscribe',
       run: () => {
-        const unsub = c.subscribe(() => {});
-        unsub();
+        const unsubscribeCallback = c.subscribe(() => {});
+        unsubscribeCallback();
       },
     },
   ];

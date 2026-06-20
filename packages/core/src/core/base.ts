@@ -54,9 +54,9 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
   flags: number;
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  _k: typeof KIND.Obj = KIND.Obj;
+  _kind: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
-  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
+  _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
 
   constructor(initialFlags: number = 0) {
     this.flags = initialFlags;
@@ -103,9 +103,12 @@ export function pushTrackingSubscriber(
 
 /** @internal */
 export function popTrackingSubscriber(context: TrackingContext): void {
-  const stack = context.stack;
-  stack.pop();
-  context.current = stack.length > 0 ? (stack[stack.length - 1] ?? null) : null;
+  const trackingSubscriberStack = context.stack;
+  trackingSubscriberStack.pop();
+  context.current =
+    trackingSubscriberStack.length > 0
+      ? (trackingSubscriberStack[trackingSubscriberStack.length - 1] ?? null)
+      : null;
 }
 
 /**
@@ -180,9 +183,9 @@ export function untracked<T>(fn: () => T): T {
 export function createDependencyLink(
   node: Dependency,
   version: number,
-  unsub: (() => void) | undefined = undefined
+  unsubscribeCallback: (() => void) | undefined = undefined
 ): DependencyLink {
-  return { node, version, unsub };
+  return { node, version, unsubscribeCallback };
 }
 
 /**
@@ -197,27 +200,31 @@ export function createDependencyLink(
  */
 export function nodeTrackDependency(
   tracker: DependencyTracker & ReactiveDependencyTracker,
-  dep: Dependency,
+  dependency: Dependency,
   notifyCallback: () => void
 ): void {
   if (!tracker._depSlots) return;
 
   const trackEpoch = tracker._trackEpoch;
 
-  if (dep._lastSeenEpoch === trackEpoch) return;
-  dep._lastSeenEpoch = trackEpoch;
+  if (dependency._lastSeenEpoch === trackEpoch) return;
+  dependency._lastSeenEpoch = trackEpoch;
 
   const trackIndex = tracker._trackCount++;
 
   // Logic: Subscription Reconciliation
   // Attempts to reuse an existing subscription from a previous run to minimize
   // listener attachment overhead.
-  if (!claimExisting(tracker, dep, trackIndex)) {
-    const unsubscribe = dep.subscribe(notifyCallback);
-    insertNew(tracker, trackIndex, { node: dep, version: dep.version, unsub: unsubscribe });
+  if (!claimExisting(tracker, dependency, trackIndex)) {
+    const unsubscribe = dependency.subscribe(notifyCallback);
+    insertNew(tracker, trackIndex, {
+      node: dependency,
+      version: dependency.version,
+      unsubscribeCallback: unsubscribe,
+    });
   }
 
-  if (!(tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) && dep.isComputed) {
+  if (!(tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) && dependency.isComputed) {
     tracker._depFlags |= BUFFER_FLAGS.HAS_COMPUTEDS;
   }
 }
@@ -226,8 +233,8 @@ export function nodeTrackDependency(
  * Logic: SMI-safe increment to prevent V8 hidden class de-optimization.
  * @internal
  */
-export function nextVersion(v: number): number {
-  return nextSmi(v);
+export function nextVersion(version: number): number {
+  return nextSmi(version);
 }
 
 /**
@@ -245,10 +252,11 @@ export function nodeSubscribe<T>(
   node: ReactiveNode<T>,
   listener: SubscriberTarget<T>
 ): Result<() => void, Error> {
-  const isFn = typeof listener === 'function';
-  const isObj = !isFn && listener != null && typeof listener.execute === 'function';
+  const isFunctionListener = typeof listener === 'function';
+  const isObjectListener =
+    !isFunctionListener && listener != null && typeof listener.execute === 'function';
 
-  if (!isFn && !isObj) {
+  if (!isFunctionListener && !isObjectListener) {
     return Result.err(
       wrapError(
         new TypeError('Invalid subscriber'),
@@ -262,8 +270,8 @@ export function nodeSubscribe<T>(
     return Result.ok(() => {});
   }
 
-  node._slots ??= new SlotBuffer<SubscriberTarget<T>>();
-  const slots = node._slots;
+  node._subscriberSlots ??= new SlotBuffer<SubscriberTarget<T>>();
+  const slots = node._subscriberSlots;
 
   if (nodeHasSubscription(node, listener)) {
     if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
@@ -271,20 +279,20 @@ export function nodeSubscribe<T>(
   }
 
   slots.push(listener);
-  let n: ReactiveNode<T> | undefined = node;
-  let l: SubscriberTarget<T> | undefined = listener;
+  let targetNode: ReactiveNode<T> | undefined = node;
+  let subscriberListener: SubscriberTarget<T> | undefined = listener;
   return Result.ok(() => {
-    if (n && l) {
-      nodeUnsubscribe(n, l);
-      n = undefined;
-      l = undefined;
+    if (targetNode && subscriberListener) {
+      nodeUnsubscribe(targetNode, subscriberListener);
+      targetNode = undefined;
+      subscriberListener = undefined;
     }
   });
 }
 
 /** @internal */
 export function nodeUnsubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): void {
-  const slots = node._slots;
+  const slots = node._subscriberSlots;
   if (slots == null) return;
 
   if (slots.remove(listener)) {
@@ -308,7 +316,7 @@ export function nodeNotifySubscribers<T>(
   newValue: T | undefined,
   oldValue: T | undefined
 ): void {
-  const slots = node._slots;
+  const slots = node._subscriberSlots;
   if (slots == null || slots.size === 0) return;
 
   const ctx = trackingContext;
@@ -321,19 +329,19 @@ export function nodeNotifySubscribers<T>(
 
   slots.lock();
   try {
-    const len = slots.length;
+    const slotsLength = slots.length;
 
-    for (let i = 0; i < len; i++) {
-      const sub = slots.at(i);
-      if (sub) {
+    for (let i = 0; i < slotsLength; i++) {
+      const subscriber = slots.at(i);
+      if (subscriber) {
         try {
-          if (typeof sub === 'function') {
-            sub(newValue, oldValue);
+          if (typeof subscriber === 'function') {
+            subscriber(newValue, oldValue);
           } else {
-            sub.execute();
+            subscriber.execute();
           }
-        } catch (e) {
-          console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, e);
+        } catch (error) {
+          console.error(`${LOG_PREFIX} Subscriber failed on node ${node.id}:`, error);
         }
       }
     }
@@ -347,13 +355,13 @@ export function nodeNotifySubscribers<T>(
 
 /** @internal */
 export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown): boolean {
-  const slots = node._slots;
+  const slots = node._subscriberSlots;
   if (slots == null || slots.size === 0) return false;
 
-  const len = slots.length;
-  for (let i = 0; i < len; i++) {
-    const sub = slots.at(i);
-    if (sub != null && sub === listener) {
+  const slotsLength = slots.length;
+  for (let i = 0; i < slotsLength; i++) {
+    const subscriber = slots.at(i);
+    if (subscriber != null && subscriber === listener) {
       return true;
     }
   }
@@ -374,9 +382,9 @@ export function nodeStartTracking(
 export function nodeCommitDeps(node: DependencyTracker & ReactiveDependencyTracker): void {
   try {
     depBufferTruncateFrom(node, node._trackCount);
-  } catch (e) {
+  } catch (error) {
     if (IS_DEV) {
-      console.warn(`${LOG_PREFIX} nodeCommitDeps failed for node ${node.id}:`, e);
+      console.warn(`${LOG_PREFIX} nodeCommitDeps failed for node ${node.id}:`, error);
     }
   }
 }
@@ -394,11 +402,11 @@ export function nodeCommitDeps(node: DependencyTracker & ReactiveDependencyTrack
 export function nodeHandleError<T>(
   node: ReactiveNode<T> & { isComputed?: boolean; isRejected?: boolean; version: number },
   error: unknown,
-  ErrorClass: AtomErrorConstructor,
+  errorConstructor: AtomErrorConstructor,
   message: string,
   onError?: ((error: Error) => void) | ((error: unknown) => void) | null
 ): void {
-  const wrappedError = wrapError(error, ErrorClass, message);
+  const wrappedError = wrapError(error, errorConstructor, message);
 
   if (node.isComputed) {
     if (!node.isRejected || node._error !== wrappedError) {
@@ -412,8 +420,8 @@ export function nodeHandleError<T>(
   if (onError) {
     try {
       onError(wrappedError);
-    } catch (e) {
-      console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, e);
+    } catch (error) {
+      console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, error);
     }
   }
 
@@ -427,12 +435,12 @@ export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
 
 /** @internal - Checks if the slot buffer is locked during notification. */
 export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
-  return node._slots?.isLocked ?? false;
+  return node._subscriberSlots?.isLocked ?? false;
 }
 
 /** @internal - Returns active listener count. */
 export function nodeSubscriberCount<T>(node: ReactiveNode<T>): number {
-  return node._slots?.size ?? 0;
+  return node._subscriberSlots?.size ?? 0;
 }
 
 /** @internal - Deep check for upstream changes. */

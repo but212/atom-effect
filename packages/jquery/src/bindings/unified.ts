@@ -29,8 +29,8 @@ import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '@/utils/sanit
  * Converts a camelCase property name to kebab-case.
  * @internal
  */
-function toKebab(str: string): string {
-  return str.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+function toKebab(inputString: string): string {
+  return inputString.replace(/[A-Z]/g, (matchedLetter) => `-${matchedLetter.toLowerCase()}`);
 }
 
 /**
@@ -38,8 +38,8 @@ function toKebab(str: string): string {
  * Validates whether a property or attribute name is safe for reactive binding.
  */
 function checkBindingSafety(name: string, isProperty: boolean): string | undefined {
-  const lower = name.toLowerCase();
-  if (lower.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
+  const lowerCaseName = name.toLowerCase();
+  if (lowerCaseName.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
   if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
     return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
   }
@@ -53,9 +53,9 @@ function checkBindingSafety(name: string, isProperty: boolean): string | undefin
  */
 function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string, T][] {
   return Object.entries(map).filter(([name]) => {
-    const err = checkBindingSafety(name, isProperty);
-    if (err !== undefined) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${err}`);
+    const safetyError = checkBindingSafety(name, isProperty);
+    if (safetyError !== undefined) {
+      console.warn(`${SYSTEM_BINDING.PREFIX} ${safetyError}`);
       return false;
     }
     return true;
@@ -77,8 +77,8 @@ export function bindText<T = unknown>(
   registerReactiveEffect(
     element,
     value,
-    (val) => {
-      const textContent = formatter ? formatter(val) : String(val ?? '');
+    (rawValue) => {
+      const textContent = formatter ? formatter(rawValue) : String(rawValue ?? '');
       if (element.textContent !== textContent) {
         element.textContent = textContent;
       }
@@ -104,8 +104,8 @@ export function bindHtml(element: HTMLElement, value: AsyncReactiveValue<string>
   registerReactiveEffect(
     element,
     value,
-    (val) => {
-      const sanitized = sanitizeHtml(val);
+    (rawHtml) => {
+      const sanitized = sanitizeHtml(rawHtml);
       if (prevHtml !== sanitized) {
         registry.cleanupDescendants(element);
         element.innerHTML = sanitized;
@@ -158,7 +158,7 @@ export function bindClass(
       // Synchronizes the element's class list with the current state map
       // in a single pass using the native classList API.
       for (const tokens of tokensMap.values()) {
-        for (let i = 0, len = tokens.length; i < len; i++) {
+        for (let i = 0, tokensLength = tokens.length; i < tokensLength; i++) {
           const token = tokens[i];
           if (token !== undefined) {
             element.classList.toggle(token, activeTokens.has(token));
@@ -181,7 +181,7 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
   const { style } = element;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
   const metaMap: Record<string, string> = {};
-  const prev = new Map<string, string>();
+  const previousStyles = new Map<string, string>();
 
   for (const [property, value] of Object.entries(cssMap)) {
     const [source, unit] = Array.isArray(value) ? value : [value, ''];
@@ -197,13 +197,13 @@ export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>):
         if (Object.hasOwn(states, property)) {
           const value = states[property];
           const unit = metaMap[property] ?? '';
-          const str = unit ? `${value}${unit}` : String(value);
+          const cssValueString = unit ? `${value}${unit}` : String(value);
 
-          if (prev.get(property) !== str) {
-            if (!isDangerousCssValue(str)) {
-              style.setProperty(toKebab(property), str);
+          if (previousStyles.get(property) !== cssValueString) {
+            if (!isDangerousCssValue(cssValueString)) {
+              style.setProperty(toKebab(property), cssValueString);
             }
-            prev.set(property, str);
+            previousStyles.set(property, cssValueString);
           }
         }
       }
@@ -231,11 +231,11 @@ export function bindAttr(
   const safeEntries = getSafeEntries(attrMap, false);
   const safeMap = Object.fromEntries(safeEntries);
   const isAriaMap: Record<string, boolean> = {};
-  const prev: Record<string, string | null> = {};
+  const previousAttributes: Record<string, string | null> = {};
 
   for (const [name] of safeEntries) {
     isAriaMap[name] = name.toLowerCase().startsWith('aria-');
-    prev[name] = element.getAttribute(name);
+    previousAttributes[name] = element.getAttribute(name);
   }
 
   registerMapEffect(
@@ -249,30 +249,30 @@ export function bindAttr(
           if (isAria === undefined) continue;
 
           const value = states[name];
-          let attrVal: string | null = null;
+          let attributeValue: string | null = null;
           if (value !== null && value !== undefined) {
             if (typeof value === 'boolean') {
-              attrVal = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
+              attributeValue = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
             } else {
-              attrVal = String(value);
+              attributeValue = String(value);
             }
           }
 
           // 2. Validate and Apply
-          if (attrVal !== null && isDangerousUrl(name, attrVal)) {
+          if (attributeValue !== null && isDangerousUrl(name, attributeValue)) {
             console.warn(
               `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
             );
             continue;
           }
 
-          if (prev[name] !== attrVal) {
-            if (attrVal === null) {
+          if (previousAttributes[name] !== attributeValue) {
+            if (attributeValue === null) {
               element.removeAttribute(name);
             } else {
-              element.setAttribute(name, attrVal);
+              element.setAttribute(name, attributeValue);
             }
-            prev[name] = attrVal;
+            previousAttributes[name] = attributeValue;
           }
         }
       }
@@ -339,8 +339,8 @@ export function bindVisibility(
   registerReactiveEffect(
     element,
     condition,
-    (value) => {
-      const isVisible = invert !== !!value;
+    (conditionValue) => {
+      const isVisible = invert !== !!conditionValue;
       $element.toggle(isVisible);
     },
     invert ? 'hide' : 'show'
@@ -378,18 +378,18 @@ export function bindVal<T>(
 /**
  * Synchronizes the visual state of a radio button group.
  *
- * @param element - The radio input element that was recently selected.
+ * @param radioElement - The radio input element that was recently selected.
  * @internal
  */
-function syncRadios(element: HTMLInputElement): void {
-  if (element.type === 'radio' && element.name) {
-    const root = element.form || element.getRootNode();
-    const safeName = element.name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+function syncRadios(radioElement: HTMLInputElement): void {
+  if (radioElement.type === 'radio' && radioElement.name) {
+    const root = radioElement.form || radioElement.getRootNode();
+    const safeName = radioElement.name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     if (root instanceof Document || root instanceof DocumentFragment || root instanceof Element) {
       const group = root.querySelectorAll(`input[type="radio"][name="${safeName}"]`);
       for (let i = 0; i < group.length; i++) {
         const el = group[i];
-        if (el && el !== element) {
+        if (el && el !== radioElement) {
           $(el).trigger('change.atomRadioSync');
         }
       }

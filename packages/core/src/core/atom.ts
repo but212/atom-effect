@@ -59,21 +59,21 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   _trackEpoch: number = 0;
   _trackCount: number = 0;
   _error: Error | null = null;
-  _k: typeof KIND.Obj = KIND.Obj;
+  _kind: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
 
-  _slots: SlotBuffer<SubscriberTarget<T>> | null = null;
+  _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
 
   #value: T;
-  #pendingOldValue: T | typeof NO_VALUE = NO_VALUE;
-  #equal: (a: T, b: T) => boolean;
+  #pendingPreviousValue: T | typeof NO_VALUE = NO_VALUE;
+  #isEqual: (a: T, b: T) => boolean;
 
   /** @internal */
   readonly [BRAND] = BrandFlags.Atom | BrandFlags.Writable;
 
   constructor(initialValue: T, options?: AtomOptions<T>) {
     this.#value = initialValue;
-    this.#equal = options?.equal ?? DEFAULT_EQUAL;
+    this.#isEqual = options?.equal ?? DEFAULT_EQUAL;
 
     if (options?.sync) {
       this.flags |= ATOM_STATE_FLAGS.SYNC;
@@ -91,7 +91,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
   }
   get isNotifying(): boolean {
-    return this._slots?.isLocked ?? false;
+    return this._subscriberSlots?.isLocked ?? false;
   }
 
   /** @internal */
@@ -123,7 +123,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    */
   set value(newValue: T) {
     if (this.isDisposed) return;
-    if (this.#equal(this.#value, newValue)) return;
+    if (this.#isEqual(this.#value, newValue)) return;
 
     const oldValue = this.#value;
     this.#value = newValue;
@@ -162,12 +162,12 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   #scheduleNotification(oldValue: T): void {
     const flags = this.flags;
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
-    const slots = this._slots;
+    const slots = this._subscriberSlots;
 
     // Optimization: Avoid redundant scheduling if already queued or no subscribers exist.
     if ((flags & SCHED) !== 0 || !slots || slots.length === 0) return;
 
-    this.#pendingOldValue = oldValue;
+    this.#pendingPreviousValue = oldValue;
     this.flags |= SCHED;
 
     if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
@@ -197,17 +197,17 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
       (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
 
     while ((this.flags & MASK) === SCHED) {
-      const prev = this.#pendingOldValue;
+      const prev = this.#pendingPreviousValue;
       if (prev === NO_VALUE) {
         this.flags &= ~SCHED;
         break;
       }
       const next = this.#value;
 
-      this.#pendingOldValue = NO_VALUE;
+      this.#pendingPreviousValue = NO_VALUE;
       this.flags &= ~SCHED;
 
-      if (!this.#equal(next, prev)) {
+      if (!this.#isEqual(next, prev)) {
         nodeNotifySubscribers(this, next, prev);
       }
 
@@ -244,20 +244,19 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     if ((flags & DISP) !== 0) return;
 
     this.flags |= DISP;
-    const slots = this._slots;
+    const slots = this._subscriberSlots;
     if (slots) slots.clear();
 
     // Reason: Release references immediately to facilitate efficient GC.
     this.#value = undefined as T;
-    this.#pendingOldValue = NO_VALUE;
-    this.#equal = DEFAULT_EQUAL;
+    this.#pendingPreviousValue = NO_VALUE;
+    this.#isEqual = DEFAULT_EQUAL;
   }
 }
 
 function validateAtomOptions<T>(options: AtomOptions<T>): Result<void, Error> {
   if (options != null && typeof options === 'object') {
-    const opts = options;
-    if (opts.equal !== undefined && typeof opts.equal !== 'function') {
+    if (options.equal !== undefined && typeof options.equal !== 'function') {
       return Result.err(new AtomError('options.equal must be a function'));
     }
   }

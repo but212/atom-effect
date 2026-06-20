@@ -16,9 +16,12 @@
  *
  * @internal
  */
-export function atomEachElement(jq: JQuery, fn: (el: HTMLElement) => void): JQuery {
-  for (const node of jq) {
-    if (node.nodeType === Node.ELEMENT_NODE) fn(node);
+export function atomEachElement(
+  jqueryCollection: JQuery,
+  callback: (element: HTMLElement) => void
+): JQuery {
+  for (const node of jqueryCollection) {
+    if (node.nodeType === Node.ELEMENT_NODE) callback(node);
   }
-  return jq;
+  return jqueryCollection;
 }

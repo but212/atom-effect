@@ -135,12 +135,12 @@ describe('Atom', () => {
 
       it('should handle unsubscription safely during the notification loop (Re-entry)', () => {
         const a = atom(0, { sync: true });
-        let unsub: (() => void) | undefined;
+        let unsubscribeCallback: (() => void) | undefined;
         const log: number[] = [];
 
-        unsub = a.subscribe((nv) => {
+        unsubscribeCallback = a.subscribe((nv) => {
           log.push(nv ?? 0);
-          if (nv === 1) unsub?.();
+          if (nv === 1) unsubscribeCallback?.();
         });
         a.subscribe((nv) => log.push(nv ?? 0));
 
@@ -347,10 +347,10 @@ describe('Atom', () => {
     it('should not allow or retain subscriptions after disposal', () => {
       const a = atom(0);
       a.dispose();
-      const unsub = a.subscribe(() => {});
+      const unsubscribeCallback = a.subscribe(() => {});
       expect(a.subscriberCount()).toBe(0);
-      expect(() => unsub()).not.toThrow();
-      expect(Reflect.get(a, '_slots')).toBeNull();
+      expect(() => unsubscribeCallback()).not.toThrow();
+      expect(Reflect.get(a, '_subscriberSlots')).toBeNull();
     });
 
     it('should return undefined on read access after disposal', () => {

@@ -63,7 +63,7 @@ sequenceDiagram
 The system employs a dual-layer encapsulation model designed for both V8 JIT optimization and API safety.
 
 - **`ReactiveNode<T>`**: The foundation interface ensuring monomorphic property access across the engine.
-- **Public Engine Fields**: Properties required for graph traversal (`flags`, `version`, `_slots`) are public. This ensures V8 generates stable **Hidden Classes** with direct property access, bypassing getter/setter overhead in hot paths.
+- **Public Engine Fields**: Properties required for graph traversal (`flags`, `version`, `_subscriberSlots`) are public. This ensures V8 generates stable **Hidden Classes** with direct property access, bypassing getter/setter overhead in hot paths.
 - **Private Behavioral State**: Value storage (`#value`), computation logic (`#fn`), and budget states use **native private fields (`#`)**. This protects internal invariants and prevents external tampering.
 
 ### Node Roles
@@ -81,7 +81,7 @@ The system employs a dual-layer encapsulation model designed for both V8 JIT opt
 ### V8-Optimized Memory Layout
 
 1. **SMI (Small Integer) Safeguards**: All counters (Epoch, Version, ID) are bit-masked to 31 bits to ensure they remain within the SMI range, avoiding heap-allocated `HeapNumber` transitions.
-2. **SlotBuffer (SVO)**: Subscriber and dependency lists use `#s0`–`#s3` inline slots. This avoids array allocation for the majority of nodes that have fewer than 4 connections.
+2. **SlotBuffer (SVO)**: Subscriber and dependency lists use `#fastSlot0`–`#fastSlot3` inline slots. This avoids array allocation for the majority of nodes that have fewer than 4 connections.
 3. **Bitwise Partitioning**: Node state is packed into a single 31-bit integer. Offsets (Core, Computed, Async, Primitive) allow atomic state checks and transitions via bitwise masks.
 
 ### Subscription Reconciliation

@@ -73,9 +73,9 @@ export interface DiffSlot<T> {
   /** The index in the new state. */
   targetIndex: number;
   /** The current DOM handle. */
-  node: Node[] | undefined;
+  nodes: Node[] | undefined;
   /** The old DOM handle before replacement, used for ForceReplace swapping. */
-  oldNode?: Node[] | undefined;
+  oldNodes?: Node[] | undefined;
 }
 
 /**

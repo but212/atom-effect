@@ -496,7 +496,7 @@ describe('Effect', () => {
 
         const depSlots = Reflect.get(e, '_depSlots');
         depSlots.lock();
-        depSlots.push({ node: atom(0), version: 0, unsub: () => {} });
+        depSlots.push({ node: atom(0), version: 0, unsubscribeCallback: () => {} });
         depSlots.setAt(0, null);
         depSlots.unlock();
 
@@ -571,7 +571,7 @@ describe('Effect', () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const a = atom(0);
 
-        let firstReject!: (err: Error) => void;
+        let firstReject!: (error: Error) => void;
         let secondResolve!: (val: undefined) => void;
         let runIdx = 0;
 

@@ -20,15 +20,9 @@ import {
   SchedulerError,
   serializeError,
 } from '@/index';
-import { ERROR_STRATEGIES } from '@/utils';
+import { getErrorMetadata } from '@/utils';
 
 describe('Error Handling System', () => {
-  const [brandStrategy, fallbackStrategy] = ERROR_STRATEGIES;
-
-  if (brandStrategy === undefined || fallbackStrategy === undefined) {
-    throw new Error('ERROR_STRATEGIES must contain at least two strategies for testing');
-  }
-
   describe('Error classes (AtomError, ComputedError, etc.)', () => {
     const errorTypes = [
       { Class: AtomError, name: 'AtomError', recoverable: true, tag: 'AtomError' },
@@ -45,12 +39,12 @@ describe('Error Handling System', () => {
     }) => {
       const cause = new Error('root');
 
-      const err = new Class('msg', { cause });
-      expect(err).toBeInstanceOf(AtomError);
-      expect(err.name).toBe(name);
-      expect(err._tag).toBe(tag);
-      expect(err.recoverable).toBe(defaultRecoverable);
-      expect(err.cause).toBe(cause);
+      const error = new Class('msg', { cause });
+      expect(error).toBeInstanceOf(AtomError);
+      expect(error.name).toBe(name);
+      expect(error._tag).toBe(tag);
+      expect(error.recoverable).toBe(defaultRecoverable);
+      expect(error.cause).toBe(cause);
 
       const custom = new Class('msg', {
         cause: null,
@@ -152,38 +146,36 @@ describe('Error Handling System', () => {
     });
   });
 
-  describe('ERROR_STRATEGIES (brand and fallback strategies)', () => {
+  describe('getErrorMetadata (unified normalization)', () => {
     it('should not stringify missing name and message properties on brand-based errors to literal "undefined" strings', () => {
       const customBrandError = { _tag: 'CustomError' };
-
-      expect(brandStrategy.test(customBrandError)).toBe(true);
-
-      const meta = brandStrategy.fetch(customBrandError);
+      const meta = getErrorMetadata(customBrandError);
 
       expect(meta.name).not.toBe('undefined');
       expect(meta.message).not.toBe('undefined');
+      expect(meta.name).toBe('');
+      expect(meta.message).toBe('');
     });
 
-    it('should respect custom recoverable properties on standard Error objects in fallback strategy', () => {
+    it('should respect custom recoverable properties on standard Error objects', () => {
       const stdError = new Error('Some standard error');
       (stdError as { recoverable?: boolean }).recoverable = false;
 
-      expect(fallbackStrategy.test(stdError)).toBe(true);
-
-      const meta = fallbackStrategy.fetch(stdError);
-
+      const meta = getErrorMetadata(stdError);
       expect(meta.recoverable).toBe(false);
     });
 
-    it('identifies cross-realm error objects in fallback strategy', () => {
+    it('identifies cross-realm error objects correctly', () => {
       const context = vm.createContext();
       const crossRealmError = vm.runInContext('new Error("cross-realm")', context);
 
       expect(crossRealmError instanceof Error).toBe(false);
-      expect(fallbackStrategy.test(crossRealmError)).toBe(true);
+      const meta = getErrorMetadata(crossRealmError);
+      expect(meta.name).toBe('Error');
+      expect(meta.message).toBe('cross-realm');
     });
 
-    it('should not throw during Strategy 1 test check when e._tag property getter throws an error', () => {
+    it('should not throw when e._tag property getter throws an error', () => {
       const throwingObject = {};
       Object.defineProperty(throwingObject, '_tag', {
         get() {
@@ -193,14 +185,13 @@ describe('Error Handling System', () => {
         configurable: true,
       });
 
-      let isBrandError = false;
       expect(() => {
-        isBrandError = brandStrategy.test(throwingObject);
+        const meta = getErrorMetadata(throwingObject);
+        expect(meta.name).toBe('Unexpected error');
       }).not.toThrow();
-      expect(isBrandError).toBe(false);
     });
 
-    it('should not throw during Strategy 1 test check when e._tag toString throws', () => {
+    it('should not throw when e._tag toString throws', () => {
       const throwingObject = {
         _tag: {
           toString() {
@@ -209,17 +200,15 @@ describe('Error Handling System', () => {
         },
       };
 
-      let isBrandError = false;
       expect(() => {
-        isBrandError = brandStrategy.test(throwingObject);
+        const meta = getErrorMetadata(throwingObject);
+        expect(meta.name).toBe('Unexpected error');
       }).not.toThrow();
-      expect(isBrandError).toBe(false);
     });
 
     it('should validate and sanitize code property type to avoid type pollution', () => {
       const customBrandError = { _tag: 'CustomError', code: 500 };
-
-      const meta = brandStrategy.fetch(customBrandError);
+      const meta = getErrorMetadata(customBrandError);
 
       expect(typeof meta.code).not.toBe('number');
       expect(meta.code).toBe('500');
@@ -234,29 +223,55 @@ describe('Error Handling System', () => {
         code: nullPrototypeValue,
       };
 
-      expect(() => brandStrategy.fetch(customBrandError)).not.toThrow();
+      expect(() => getErrorMetadata(customBrandError)).not.toThrow();
 
-      const meta = brandStrategy.fetch(customBrandError);
+      const meta = getErrorMetadata(customBrandError);
       expect(meta.name).toBe('');
       expect(meta.message).toBe('');
       expect(meta.code).toBeUndefined();
     });
 
-    it('handles unexpected inputs for fetch and test on strategies', () => {
-      // brandStrategy test returns false for non-objects
-      expect(brandStrategy.test(null)).toBe(false);
-      expect(brandStrategy.test(123)).toBe(false);
-      expect(brandStrategy.test({})).toBe(false);
+    it('handles unexpected inputs (null, undefined, primitives) for getErrorMetadata', () => {
+      const nullMeta = getErrorMetadata(null);
+      expect(nullMeta.name).toBe('Unexpected error');
+      expect(nullMeta.message).toBe('');
 
-      // brandStrategy fetch fallback
-      const brandMeta = brandStrategy.fetch(null);
-      expect(brandMeta.name).toBe('Object');
-      expect(brandMeta.message).toBe('Invalid error object');
+      const undefinedMeta = getErrorMetadata(undefined);
+      expect(undefinedMeta.name).toBe('Unexpected error');
+      expect(undefinedMeta.message).toBe('');
 
-      // fallbackStrategy fetch fallback
-      const fallbackMeta = fallbackStrategy.fetch(null);
-      expect(fallbackMeta.name).toBe('Unexpected error');
-      expect(fallbackMeta.message).toBe('Invalid error object');
+      const numberMeta = getErrorMetadata(123);
+      expect(numberMeta.name).toBe('Unexpected error');
+      expect(numberMeta.message).toBe('123');
+
+      const stringMeta = getErrorMetadata('some raw error');
+      expect(stringMeta.name).toBe('Unexpected error');
+      expect(stringMeta.message).toBe('some raw error');
+    });
+
+    it('should handle Object.create(null) as input without throwing', () => {
+      const nullProtoError = Object.create(null);
+      nullProtoError.message = 'No prototype message';
+
+      expect(() => {
+        const meta = getErrorMetadata(nullProtoError);
+        expect(meta.message).toBe('');
+      }).not.toThrow();
+    });
+
+    it('serializeError handles deeply nested errors with circular reference correctly', () => {
+      const parent = new Error('Parent error');
+      const child = new Error('Child error');
+      parent.cause = child;
+      child.cause = parent; // circular dependency
+
+      const serialized = serializeError(parent) as {
+        message: string;
+        cause: { message: string; cause: { message: string } };
+      };
+      expect(serialized.message).toBe('Parent error');
+      expect(serialized.cause.message).toBe('Child error');
+      expect(serialized.cause.cause.message).toBe('[Circular Reference]');
     });
   });
 });

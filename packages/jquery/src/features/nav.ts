@@ -67,16 +67,16 @@ function reconcileDOM(
     // Constraint: Clean up internal atom bindings within the target before replacing HTML
     $target.children().atomUnbind();
 
-    const syncTitle = options.syncTitle ?? true;
-    if (syncTitle && state.title != null && win.document.title !== state.title) {
+    const shouldSyncTitle = options.syncTitle ?? true;
+    if (shouldSyncTitle && state.title != null && win.document.title !== state.title) {
       win.document.title = state.title;
     }
     if (state.meta) {
       syncMetaData(win, state.meta);
     }
-    const el = $target[0];
-    if (el && state.attributes) {
-      updateAttributes(el, state.attributes);
+    const element = $target[0];
+    if (element && state.attributes) {
+      updateAttributes(element, state.attributes);
     }
     $target.html(state.html);
 
@@ -214,14 +214,17 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         ...headers,
       },
       eager: false,
-      transform: (raw, xhr) => {
-        const result = extractContent({
-          html: String(raw),
+      transform: (htmlContent, xhr) => {
+        const extractedContent = extractContent({
+          html: String(htmlContent),
           selector: targetSelector,
           redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined,
           title: xhr?.getResponseHeader?.('X-PJAX-Title') ?? undefined,
         });
-        return { ...result, html: sanitizeHtml(result.html, NAV_POLICY).trim() };
+        return {
+          ...extractedContent,
+          html: sanitizeHtml(extractedContent.html, NAV_POLICY).trim(),
+        };
       },
     }
   );
@@ -296,28 +299,31 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   const handlePopState = (): void => {
     renewAbortSignal();
-    const loc = win.location;
-    intent.value = { url: loc.pathname + loc.search + loc.hash, type: 'pop' };
+    const windowLocation = win.location;
+    intent.value = {
+      url: windowLocation.pathname + windowLocation.search + windowLocation.hash,
+      type: 'pop',
+    };
   };
 
-  const handleLinkClick = (e: MouseEvent): void => {
-    if (e.defaultPrevented || !(e.target instanceof Element)) return;
-    const el = e.target.closest<HTMLAnchorElement>(selector);
-    if (!el) return;
+  const handleLinkClick = (event: MouseEvent): void => {
+    if (event.defaultPrevented || !(event.target instanceof Element)) return;
+    const anchorElement = event.target.closest<HTMLAnchorElement>(selector);
+    if (!anchorElement) return;
 
-    const targetAttr = el.dataset.target;
+    const targetAttr = anchorElement.dataset.target;
     const myId = $target.attr('id');
     const isExplicit = !!(targetAttr && myId && targetAttr === `#${myId}`);
     if (targetAttr) {
       if (!isExplicit) return;
     } else {
-      const closest = $(el).closest('[data-atom-nav-target="true"]')[0];
+      const closest = $(anchorElement).closest('[data-atom-nav-target="true"]')[0];
       if (closest && closest !== $target[0]) return;
     }
 
-    if (isNavigationClick(e) && isInterceptee(el, win)) {
-      e.preventDefault();
-      navigator.navigate(el.href);
+    if (isNavigationClick(event) && isInterceptee(anchorElement, win)) {
+      event.preventDefault();
+      navigator.navigate(anchorElement.href);
     }
   };
 
@@ -343,10 +349,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const type: NavigationType = navOptions.replace ? 'replace' : 'push';
 
       const base = win.document.baseURI ?? win.location.href;
-      const targetRes = getAbsoluteUrl(url, base);
-      if (Result.isErr(targetRes)) return;
+      const targetUrlResult = getAbsoluteUrl(url, base);
+      if (Result.isErr(targetUrlResult)) return;
 
-      const target = Result.unwrap(targetRes);
+      const target = Result.unwrap(targetUrlResult);
       const current = new URL(win.location.href);
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
@@ -368,8 +374,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       if (!isSamePath && options.onBeforeLoad) {
         pendingHooks.value++;
         try {
-          const ok = await options.onBeforeLoad(url, signal);
-          if (signal.aborted || ok === false) return;
+          const shouldContinue = await options.onBeforeLoad(url, signal);
+          if (signal.aborted || shouldContinue === false) return;
         } finally {
           pendingHooks.value = Math.max(0, pendingHooks.value - 1);
         }
@@ -403,8 +409,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         isPending,
         hasError,
       ];
-      for (const a of atoms) {
-        (a as ReadonlyAtom).dispose?.();
+      for (const atom of atoms) {
+        (atom as ReadonlyAtom).dispose?.();
       }
     },
   };

@@ -25,10 +25,10 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
   if (mode === 'history') {
     return {
       get: () => {
-        let p = location.pathname;
-        if (base && p.startsWith(base)) p = p.substring(base.length);
+        let rawPathname = location.pathname;
+        if (base && rawPathname.startsWith(base)) rawPathname = rawPathname.substring(base.length);
         return {
-          path: normalizePath(p),
+          path: normalizePath(rawPathname),
           query: parseQuery(location.search.substring(1)),
           url: location.pathname + location.search,
         };
@@ -49,19 +49,19 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
           url: urlStr,
         };
       },
-      revert: (prev) => {
-        if (location.pathname + location.search !== prev) {
+      revert: (previousUrl) => {
+        if (location.pathname + location.search !== previousUrl) {
           try {
-            history.replaceState(null, '', prev);
+            history.replaceState(null, '', previousUrl);
           } catch {
             /* ignore */
           }
         }
       },
-      resolveAnchor: (el) => resolveAnchorPath(el, base),
-      setupListener: (h) => {
-        window.addEventListener('popstate', h);
-        return () => window.removeEventListener('popstate', h);
+      resolveAnchor: (element) => resolveAnchorPath(element, base),
+      setupListener: (eventListener) => {
+        window.addEventListener('popstate', eventListener);
+        return () => window.removeEventListener('popstate', eventListener);
       },
     };
   }
@@ -80,10 +80,10 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
     revert: (prev) => {
       if (location.hash !== prev) location.hash = prev;
     },
-    resolveAnchor: (el) => resolveAnchorPath(el, base),
-    setupListener: (h) => {
-      window.addEventListener('hashchange', h);
-      return () => window.removeEventListener('hashchange', h);
+    resolveAnchor: (element) => resolveAnchorPath(element, base),
+    setupListener: (eventListener) => {
+      window.addEventListener('hashchange', eventListener);
+      return () => window.removeEventListener('hashchange', eventListener);
     },
   };
 }
@@ -92,7 +92,7 @@ export interface RouteMatcher {
   readonly exact: Map<string, RouteDefinition>;
   readonly dynamic: Array<{
     readonly pattern: string;
-    readonly def: RouteDefinition;
+    readonly routeDefinition: RouteDefinition;
     readonly regex: RegExp;
     readonly paramNames: string[];
   }>;
@@ -103,7 +103,7 @@ export interface RouteMatcher {
  * Compiles a route pattern containing parameters into a RegExp for matching
  * and extracts parameter names.
  */
-function compileDynamicRoute(pattern: string, def: RouteDefinition) {
+function compileDynamicRoute(pattern: string, routeDefinition: RouteDefinition) {
   const paramNames: string[] = [];
   const regex = new RegExp(
     `^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/:(\w+)/g, (_, name) => {
@@ -111,7 +111,7 @@ function compileDynamicRoute(pattern: string, def: RouteDefinition) {
       return '([^/]+)';
     })}$`
   );
-  return { pattern, def, regex, paramNames };
+  return { pattern, routeDefinition, regex, paramNames };
 }
 
 /**
@@ -124,13 +124,13 @@ export function createRouteMatcher(routes: Record<string, RouteDefinition>): Rou
   const dynamic: RouteMatcher['dynamic'] = [];
   for (const path in routes) {
     if (Object.hasOwn(routes, path)) {
-      const def = routes[path];
-      if (def === undefined) continue;
+      const routeDefinition = routes[path];
+      if (routeDefinition === undefined) continue;
       const normalized = normalizePath(path);
       if (normalized.includes(':')) {
-        dynamic.push(compileDynamicRoute(normalized, def));
+        dynamic.push(compileDynamicRoute(normalized, routeDefinition));
       } else {
-        exact.set(normalized, def);
+        exact.set(normalized, routeDefinition);
       }
     }
   }
@@ -142,31 +142,38 @@ export function createRouteMatcher(routes: Record<string, RouteDefinition>): Rou
  * Attempts to match a path against the compiled routing table.
  */
 export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
-  const exactDef = matcher.exact.get(path);
-  if (exactDef) {
-    return { route: { pattern: path, def: exactDef }, params: {} };
+  const exactRouteDefinition = matcher.exact.get(path);
+  if (exactRouteDefinition) {
+    return { route: { pattern: path, routeDefinition: exactRouteDefinition }, params: {} };
   }
-  for (let i = 0, len = matcher.dynamic.length; i < len; i++) {
-    const item = matcher.dynamic[i];
-    if (item === undefined) continue;
-    const match = path.match(item.regex);
+  for (let i = 0, dynamicRoutesLength = matcher.dynamic.length; i < dynamicRoutesLength; i++) {
+    const dynamicRoute = matcher.dynamic[i];
+    if (dynamicRoute === undefined) continue;
+    const match = path.match(dynamicRoute.regex);
     if (match) {
       const params: Record<string, string> = {};
-      for (let j = 0, pLen = item.paramNames.length; j < pLen; j++) {
-        const name = item.paramNames[j];
+      for (
+        let j = 0, parameterNamesLength = dynamicRoute.paramNames.length;
+        j < parameterNamesLength;
+        j++
+      ) {
+        const name = dynamicRoute.paramNames[j];
         if (name === undefined) continue;
-        const val = match[j + 1] || '';
-        if (val.indexOf('%') !== -1) {
+        const matchedValue = match[j + 1] || '';
+        if (matchedValue.indexOf('%') !== -1) {
           try {
-            params[name] = decodeURIComponent(val);
+            params[name] = decodeURIComponent(matchedValue);
             continue;
           } catch {
             /* fallback to raw value if decoding fails */
           }
         }
-        params[name] = val;
+        params[name] = matchedValue;
       }
-      return { route: { pattern: item.pattern, def: item.def }, params };
+      return {
+        route: { pattern: dynamicRoute.pattern, routeDefinition: dynamicRoute.routeDefinition },
+        params,
+      };
     }
   }
   return null;
@@ -196,14 +203,14 @@ export function resolveRoute(
   const match = matchRoute(matcher, normalized);
   if (match !== null) {
     return {
-      def: match.route.def,
+      routeDefinition: match.route.routeDefinition,
       pattern: match.route.pattern,
       params: match.params,
       isMatch: true,
     };
   }
   const fallback = notFoundPath ? routes[notFoundPath] : undefined;
-  return { def: fallback, pattern: normalized, params: {}, isMatch: false };
+  return { routeDefinition: fallback, pattern: normalized, params: {}, isMatch: false };
 }
 
 /**
@@ -222,24 +229,24 @@ export function resolveNavigation(
   router: Router
 ): NavigationResult {
   const {
-    def,
+    routeDefinition,
     pattern: routeName,
     params: matchParams,
     isMatch,
   } = resolveRoute(matcher, path || config.default, config.routes, config.notFound);
   const params = { ...query, ...matchParams };
 
-  if (!def && !isMatch) {
-    return { success: true, path: routeName, query, params, def: undefined };
+  if (!routeDefinition && !isMatch) {
+    return { success: true, path: routeName, query, params, routeDefinition: undefined };
   }
 
-  if (def?.onEnter) {
+  if (routeDefinition?.onEnter) {
     // Logic: Guard Execution
     // Guards are executed 'untracked' to prevent the router from becoming a dependency
     // of whatever reactive state the guard happens to read.
-    const res = untracked(() => def.onEnter?.(params, router));
-    if (res === false) return { success: false };
-    if (res) Object.assign(params, res);
+    const guardResult = untracked(() => routeDefinition.onEnter?.(params, router));
+    if (guardResult === false) return { success: false };
+    if (guardResult) Object.assign(params, guardResult);
   }
 
   return {
@@ -247,6 +254,6 @@ export function resolveNavigation(
     path: !path || path === '/' ? routeName : path,
     query,
     params,
-    def,
+    routeDefinition: routeDefinition,
   };
 }

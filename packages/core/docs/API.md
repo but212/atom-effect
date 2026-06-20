@@ -30,7 +30,7 @@ counter.value = 1;
 console.log(counter.peek()); 
 
 // Subscribe to changes
-const unsub = counter.subscribe((next, prev) => {
+const unsubscribeCallback = counter.subscribe((next, prev) => {
   console.log(`Changed from ${prev} to ${next}`);
 });
 
@@ -59,17 +59,17 @@ counter.dispose();
 
 ```typescript
 export function computed<T>(
-  fn: () => Promise<T>,
+  computationCallback: () => Promise<T>,
   options: ComputedOptions<T> & { defaultValue: T }
 ): ComputedAtom<T>;
 
 export function computed<T>(
-  fn: () => Promise<T>,
+  computationCallback: () => Promise<T>,
   options?: ComputedOptions<T>
 ): ComputedAtom<T>;
 
 export function computed<T>(
-  fn: () => T,
+  computationCallback: () => T,
   options?: ComputedOptions<T>
 ): ComputedAtom<T>;
 ```
@@ -150,7 +150,7 @@ Asynchronous computations can be defined by returning a `Promise`. The returned 
 
 ---
 
-## `effect(fn: EffectFunction, options?: EffectOptions)`
+## `effect(effectCallback: EffectFunction, options?: EffectOptions)`
 
 ### `EffectFunction` and `EffectCleanup` Types
 
@@ -213,7 +213,7 @@ Groups multiple state updates into a single notification cycle.
 
 ---
 
-## `aeNextTick(fn?: () => void): Promise<void>`
+## `aeNextTick(nextTickCallback?: () => void): Promise<void>`
 
 Returns a promise that resolves after the next scheduler flush. Recommended for waiting for asynchronous effects to settle during testing.
 
@@ -345,7 +345,7 @@ The `debug` object (exported as `runtimeDebug` in some contexts) provides tools 
 
 - `dumpGraph()`: Returns metadata for all currently active reactive nodes.
 - `trackUpdate(id, name)`: Increments the update count for a node (internal use).
-- **Automatic Naming**: Nodes are assigned IDs (e.g., `atom_1`, `calc_5`, `fx_3`) if no explicit name is provided.
+- **Automatic Naming**: Nodes are assigned IDs (e.g., `atom_1`, `calc_5`, `effect_3`) if no explicit name is provided.
 
 ---
 

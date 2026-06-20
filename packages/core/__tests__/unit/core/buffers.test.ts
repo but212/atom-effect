@@ -30,12 +30,15 @@ function createDepBuffer(): ReactiveDependencyTracker {
     _error: null,
     isRejected: false,
     id: 1,
-    _slots: null,
+    _subscriberSlots: null,
   };
 }
 
-const createLink = (node: Dependency, version: number, unsub?: () => void): DependencyLink =>
-  createDependencyLink(node, version, unsub);
+const createLink = (
+  node: Dependency,
+  version: number,
+  unsubscribeCallback?: () => void
+): DependencyLink => createDependencyLink(node, version, unsubscribeCallback);
 
 describe('DepBuffer', () => {
   const createMockDep = (id: number): Dependency => {

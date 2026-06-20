@@ -361,8 +361,8 @@ export const ERROR_MESSAGES = {
   EFFECT_CLEANUP_FAILED: 'Effect cleanup failed',
   EFFECT_DISPOSED: 'Attempted to run disposed effect',
 
-  SCHEDULER_FLUSH_OVERFLOW: (max: number, dropped: number): string =>
-    `Maximum flush iterations (${max}) exceeded. ${dropped} jobs dropped. Possible infinite loop.`,
+  SCHEDULER_FLUSH_OVERFLOW: (maxIterationsLimit: number, droppedJobsCount: number): string =>
+    `Maximum flush iterations (${maxIterationsLimit}) exceeded. ${droppedJobsCount} jobs dropped. Possible infinite loop.`,
 
   CALLBACK_ERROR_IN_ERROR_HANDLER: 'Exception encountered in onError handler',
   EFFECT_FREQUENCY_LIMIT_EXCEEDED:

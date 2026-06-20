@@ -44,7 +44,7 @@ export class ComponentState {
   /** Memoized lenses into `slotsAtom`. */
   slotLenses = new Map<string, WritableAtom<Node[]>>();
   /** Tracks whether the slot change listener has been attached to the resolved root. */
-  slotListenerAttached = false;
+  isSlotListenerAttached = false;
 
   constructor(public host: HTMLElement) {}
 
@@ -52,7 +52,7 @@ export class ComponentState {
    * Deterministically releases all reactive resources, observers, and event listeners.
    */
   dispose() {
-    this.effects.forEach((e) => e.dispose());
+    this.effects.forEach((effect) => effect.dispose());
     this.effects.dispose();
 
     // 2. Attribute Reset
@@ -62,7 +62,7 @@ export class ComponentState {
     // 3. Slot Reset
     this.slotsAtom = null;
     this.slotLenses.clear();
-    this.slotListenerAttached = false;
+    this.isSlotListenerAttached = false;
 
     // 4. Root Reset
     this.root = null;

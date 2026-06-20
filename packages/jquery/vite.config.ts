@@ -1,4 +1,4 @@
-import { defineViteConfig, isBundle } from '@but212/atom-effect-configs';
+import { defineViteConfig, isBundleBuild } from '@but212/atom-effect-configs';
 
 export default defineViteConfig(
   {
@@ -8,7 +8,7 @@ export default defineViteConfig(
   {
     build: {
       rollupOptions: {
-        external: isBundle ? ['jquery'] : ['jquery', '@but212/atom-effect'],
+        external: isBundleBuild ? ['jquery'] : ['jquery', '@but212/atom-effect'],
         output: {
           globals: {
             jquery: 'jQuery',

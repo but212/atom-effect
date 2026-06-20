@@ -44,12 +44,12 @@ export function buildIndices<T>(
   update: ListOptions<T>['update'],
   isEqual: ListOptions<T>['isEqual']
 ): PreparedDiff<T> {
-  const oldLen = snapshots.length;
+  const previousLength = snapshots.length;
   const newIndexMap = new Map<ListKey, number>();
-  const eq = isEqual || shallowEqual;
+  const isEqualFunction = isEqual || shallowEqual;
 
   let startIndex = 0;
-  let oldEndIndex = oldLen - 1;
+  let oldEndIndex = previousLength - 1;
   let newEndIndex = itemCount - 1;
 
   const slots: DiffSlot<T>[] = new Array(itemCount);
@@ -59,38 +59,50 @@ export function buildIndices<T>(
   while (startIndex <= oldEndIndex && startIndex <= newEndIndex) {
     const item = items[startIndex];
     if (item === undefined) break;
-    const k = getKey(item, startIndex);
-    const oldRow = snapshots[startIndex];
-    if (!oldRow || oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
+    const itemKey = getKey(item, startIndex);
+    const previousSnapshot = snapshots[startIndex];
+    if (
+      !previousSnapshot ||
+      previousSnapshot.key !== itemKey ||
+      !previousSnapshot.node ||
+      !isEqualFunction(previousSnapshot.item, item)
+    )
+      break;
 
     slots[startIndex] = {
-      key: k,
+      key: itemKey,
       item,
       state: ItemState.Unchanged,
       oldIndex: startIndex,
       targetIndex: startIndex,
-      node: oldRow.node,
+      nodes: previousSnapshot.node,
     };
-    newIndexMap.set(k, startIndex++);
+    newIndexMap.set(itemKey, startIndex++);
   }
 
   // Logic: PASS 2 — Tail Fast-Forward
   while (oldEndIndex >= startIndex && newEndIndex >= startIndex) {
     const item = items[newEndIndex];
     if (item === undefined) break;
-    const k = getKey(item, newEndIndex);
-    const oldRow = snapshots[oldEndIndex];
-    if (!oldRow || oldRow.key !== k || !oldRow.node || !eq(oldRow.item, item)) break;
+    const itemKey = getKey(item, newEndIndex);
+    const previousSnapshot = snapshots[oldEndIndex];
+    if (
+      !previousSnapshot ||
+      previousSnapshot.key !== itemKey ||
+      !previousSnapshot.node ||
+      !isEqualFunction(previousSnapshot.item, item)
+    )
+      break;
 
     slots[newEndIndex] = {
-      key: k,
+      key: itemKey,
       item,
       state: ItemState.Unchanged,
       oldIndex: oldEndIndex,
       targetIndex: newEndIndex,
-      node: oldRow.node,
+      nodes: previousSnapshot.node,
     };
-    newIndexMap.set(k, newEndIndex--);
+    newIndexMap.set(itemKey, newEndIndex--);
     oldEndIndex--;
   }
 
@@ -99,51 +111,52 @@ export function buildIndices<T>(
   for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i];
     if (item === undefined) continue;
-    const k = getKey(item, i);
+    const itemKey = getKey(item, i);
 
-    if (newIndexMap.has(k)) {
-      debug.warn(SYSTEM_LIST.PREFIX, SYSTEM_LIST.ERRORS.DUPLICATE_KEY(k, i));
+    if (newIndexMap.has(itemKey)) {
+      debug.warn(SYSTEM_LIST.PREFIX, SYSTEM_LIST.ERRORS.DUPLICATE_KEY(itemKey, i));
       slots[i] = {
-        key: k,
+        key: itemKey,
         item,
         state: ItemState.New,
         oldIndex: -1,
         targetIndex: i,
-        node: undefined,
+        nodes: undefined,
       };
       continue;
     }
 
-    newIndexMap.set(k, i);
+    newIndexMap.set(itemKey, i);
 
-    const foundIdx = oldIndexMap.get(k);
-    const oldIdx = foundIdx !== undefined && (!hasRemoving || !removingKeys.has(k)) ? foundIdx : -1;
+    const foundIndex = oldIndexMap.get(itemKey);
+    const previousIndex =
+      foundIndex !== undefined && (!hasRemoving || !removingKeys.has(itemKey)) ? foundIndex : -1;
 
-    if (oldIdx === -1) {
+    if (previousIndex === -1) {
       const slot: DiffSlot<T> = {
-        key: k,
+        key: itemKey,
         item,
         state: ItemState.New,
         oldIndex: -1,
         targetIndex: i,
-        node: undefined,
+        nodes: undefined,
       };
       slots[i] = slot;
       toRender.push(slot);
     } else {
-      const oldRow = snapshots[oldIdx];
-      if (!oldRow) continue;
-      const needsForceReplace = !update && !eq(oldRow.item, item);
+      const previousSnapshot = snapshots[previousIndex];
+      if (!previousSnapshot) continue;
+      const shouldForceReplace = !update && !isEqualFunction(previousSnapshot.item, item);
       const slot: DiffSlot<T> = {
-        key: k,
+        key: itemKey,
         item,
-        state: needsForceReplace ? ItemState.ForceReplace : ItemState.Existing,
-        oldIndex: oldIdx,
+        state: shouldForceReplace ? ItemState.ForceReplace : ItemState.Existing,
+        oldIndex: previousIndex,
         targetIndex: i,
-        node: oldRow.node,
+        nodes: previousSnapshot.node,
       };
       slots[i] = slot;
-      if (needsForceReplace) toRender.push(slot);
+      if (shouldForceReplace) toRender.push(slot);
     }
   }
 

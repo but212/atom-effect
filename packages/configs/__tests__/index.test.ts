@@ -11,6 +11,7 @@ vi.mock('unplugin-dts/vite', () => ({
 }));
 
 import {
+  activeBuildTarget,
   baseCoverageExclude,
   defineViteConfig,
   defineVitestBenchConfig,
@@ -19,10 +20,9 @@ import {
   getBaseVitestBenchConfig,
   getBaseVitestConfig,
   getResolveConfig,
-  isBundle,
-  isLib,
-  isTypes,
-  target,
+  isBundleBuild,
+  isLibraryBuild,
+  isTypesBuild,
   toKebabCase,
 } from '../src/index';
 
@@ -277,10 +277,10 @@ describe('packages/configs', () => {
       const originalTarget = process.env.BUILD_TARGET;
       try {
         process.env.BUILD_TARGET = envValue;
-        expect(target).toBe(envValue);
-        expect(isLib).toBe(expectedLib);
-        expect(isTypes).toBe(expectedTypes);
-        expect(isBundle).toBe(expectedBundle);
+        expect(activeBuildTarget).toBe(envValue);
+        expect(isLibraryBuild).toBe(expectedLib);
+        expect(isTypesBuild).toBe(expectedTypes);
+        expect(isBundleBuild).toBe(expectedBundle);
       } finally {
         process.env.BUILD_TARGET = originalTarget;
       }

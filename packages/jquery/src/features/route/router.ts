@@ -89,18 +89,22 @@ export class RouterImpl implements Router {
       routes: { ...config.routes },
     } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
 
-    const t = this.#config.target;
+    const targetOption = this.#config.target;
     this.#$target =
-      typeof t === 'string' ? $(t) : t instanceof HTMLElement ? $(t) : (t as JQuery<HTMLElement>);
+      typeof targetOption === 'string'
+        ? $(targetOption)
+        : targetOption instanceof HTMLElement
+          ? $(targetOption)
+          : (targetOption as JQuery<HTMLElement>);
     this.#urlAdapter = createAdapter(this.#config.mode, this.#config.basePath);
 
     const discovery = discoverRoutes();
 
     for (const [path, discovered] of Object.entries(discovery.routes)) {
-      const userDef = this.#config.routes[path];
-      if (userDef) {
-        if (discovered.title !== undefined) userDef.title ||= discovered.title;
-        if (discovered.template !== undefined) userDef.template ||= discovered.template;
+      const userRouteDefinition = this.#config.routes[path];
+      if (userRouteDefinition) {
+        if (discovered.title !== undefined) userRouteDefinition.title ||= discovered.title;
+        if (discovered.template !== undefined) userRouteDefinition.template ||= discovered.template;
       } else {
         this.#config.routes[path] = discovered;
       }
@@ -170,8 +174,8 @@ export class RouterImpl implements Router {
 
     if (this.#config.autoBindLinks) {
       this.#cleanups.push(
-        setupRouteInterceptor(this.#config, this.#matcher, scanner.resolvePath, (p) =>
-          this.navigate(p)
+        setupRouteInterceptor(this.#config, this.#matcher, scanner.resolvePath, (targetPath) =>
+          this.navigate(targetPath)
         )
       );
     }
@@ -189,11 +193,11 @@ export class RouterImpl implements Router {
     nextQuery: Record<string, string>,
     params: Record<string, string>
   ) {
-    const loc = this.#locationAtom.peek();
+    const currentLocation = this.#locationAtom.peek();
     if (
-      loc.path !== nextPath ||
-      !shallowEqual(loc.query, nextQuery) ||
-      !shallowEqual(loc.params, params)
+      currentLocation.path !== nextPath ||
+      !shallowEqual(currentLocation.query, nextQuery) ||
+      !shallowEqual(currentLocation.params, params)
     ) {
       batch(() => {
         this.#locationAtom.value = { path: nextPath, query: nextQuery, params };
@@ -261,10 +265,10 @@ export class RouterImpl implements Router {
     }
   }
 
-  #revertUrl(prevUrl: string) {
+  #revertUrl(previousUrl: string) {
     this.#isTransitioning = true;
     try {
-      this.#urlAdapter.revert(prevUrl);
+      this.#urlAdapter.revert(previousUrl);
     } finally {
       this.#isTransitioning = false;
     }
@@ -310,29 +314,31 @@ export class RouterImpl implements Router {
    * to the renderer.
    */
   #render(requestedPath: string): void {
-    const { def, pattern: routeName } = resolveRoute(
+    const { routeDefinition, pattern: routeName } = resolveRoute(
       this.#matcher,
       requestedPath,
       this.#config.routes,
       this.#config.notFound
     );
 
-    if (!def) {
+    if (!routeDefinition) {
       debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.NOT_FOUND(requestedPath));
       return;
     }
 
-    this.#currentDef = def;
+    this.#currentDef = routeDefinition;
     this.#previousUrl = this.#urlAdapter.get().url;
-    renderRoute(this.#renderer, def, routeName, this.params.peek(), this);
+    renderRoute(this.#renderer, routeDefinition, routeName, this.params.peek(), this);
   }
 
   /**
    * Executes the unmount guard for the current route.
    */
   #canLeave(): boolean {
-    const def = this.#currentDef || this.#config.routes[this.#config.notFound];
-    return def?.onLeave ? untracked(() => def.onLeave?.(this)) !== false : true;
+    const routeDefinition = this.#currentDef || this.#config.routes[this.#config.notFound];
+    return routeDefinition?.onLeave
+      ? untracked(() => routeDefinition.onLeave?.(this)) !== false
+      : true;
   }
 
   /**
@@ -344,7 +350,7 @@ export class RouterImpl implements Router {
     if (this.#isDestroyed) return;
     this.#isDestroyed = true;
     runRendererCleanups(this.#renderer);
-    this.#cleanups.forEach((fn: () => void) => Result.tryCatch(fn));
+    this.#cleanups.forEach((teardown: () => void) => Result.tryCatch(teardown));
     this.#cleanups.dispose();
   }
 }

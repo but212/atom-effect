@@ -192,7 +192,7 @@ export interface DependencyLink {
   /** The version of the node when the link was established. */
   version: number;
   /** The unsubscription cleanup function. */
-  unsub: (() => void) | undefined;
+  unsubscribeCallback: (() => void) | undefined;
 }
 
 /**
@@ -206,8 +206,8 @@ export interface ReactiveNodeBase {
   _error?: Error | null;
   readonly isRejected: boolean;
   readonly id: DependencyId;
-  _k?: typeof KIND.Obj | undefined;
-  _slots: unknown | null;
+  _kind?: typeof KIND.Obj | undefined;
+  _subscriberSlots: unknown | null;
 }
 
 /**
@@ -216,7 +216,7 @@ export interface ReactiveNodeBase {
  * @internal
  */
 export interface ReactiveNode<T> extends ReactiveNodeBase {
-  _slots: SlotBuffer<SubscriberTarget<T>> | null;
+  _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null;
 }
 
 /**
@@ -248,7 +248,7 @@ export interface TrackingContext {
  */
 export interface DependencySubscriber {
   /** Records a dependency in the current computation's tracking buffer. */
-  addDependency(dep: Dependency): void;
+  addDependency(dependency: Dependency): void;
 }
 
 /**
@@ -274,7 +274,7 @@ export interface SchedulerJobObject {
   /** Tracks the scheduler epoch in which this job was last added. */
   _nextEpoch?: number | undefined;
   /** Discriminator used for low-overhead dispatching. */
-  _k?: typeof KIND.Obj | undefined;
+  _kind?: typeof KIND.Obj | undefined;
 }
 
 /**
@@ -287,7 +287,7 @@ export interface SchedulerJobFunction {
   /** Tracks the scheduler epoch to prevent duplicate scheduling. */
   _nextEpoch?: number | undefined;
   /** Discriminator used for low-overhead dispatching. */
-  _k?: typeof KIND.Fn | undefined;
+  _kind?: typeof KIND.Fn | undefined;
 }
 
 /**

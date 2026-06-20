@@ -110,7 +110,7 @@ describe('Computeds: Reactive Logic', () => {
 describe('Computeds: Read Methods (.value vs .peek())', () => {
   const a = atom(42);
   const c = computed(() => a.value + 1);
-  let unsub: () => void;
+  let unsubscribeCallback: () => void;
 
   const rawFn = () => 43;
 
@@ -131,10 +131,10 @@ describe('Computeds: Read Methods (.value vs .peek())', () => {
       {
         ...microBenchOptions,
         setup: () => {
-          unsub = c.subscribe(() => {});
+          unsubscribeCallback = c.subscribe(() => {});
         },
         teardown: () => {
-          unsub();
+          unsubscribeCallback();
         },
       }
     );
