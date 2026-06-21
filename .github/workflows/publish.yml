@@ -24,7 +24,7 @@ jobs:
           install-playwright: "false"
 
       - name: Verify Version and Extract Changelog
-        run: node .github/scripts/release-helper.js
+        run: node scripts/release-helper.js
 
       - name: Build and Typecheck
         run: |
