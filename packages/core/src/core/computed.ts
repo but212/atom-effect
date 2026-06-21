@@ -209,8 +209,9 @@ class ComputedAtomImpl<T>
    * Accessing this property validates the entire upstream dependency sub-graph
    * and triggers evaluation if any node has transitioned.
    *
-   * Caution: Circular Dependencies
-   * If a node is accessed during its own execution (RECOMPUTING), it returns
+   * Caution: Circular Dependencies & Error Fallback
+   * If a node is accessed during its own execution (RECOMPUTING) or is in a failed
+   * error state (REJECTED due to sync/async computation failure), it returns
    * the `defaultValue` if provided, otherwise it throws a `ComputedError`.
    */
   get value(): T {
@@ -227,9 +228,17 @@ class ComputedAtomImpl<T>
     }
 
     const flags = this.flags;
+    if (
+      (flags & STATE_MASKS.ASYNC_MASK) === COMPUTED_STATE_FLAGS.REJECTED &&
+      (flags & COMPUTED_STATE_FLAGS.DIRTY) === 0
+    ) {
+      return this.#getFallbackOrError(this._error ?? new Error('REJECTED without error'));
+    }
+
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
-      if (this.#defaultValue !== NO_DEFAULT_VALUE) return Result.ok(this.#defaultValue);
-      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY));
+      return this.#getFallbackOrError(
+        new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY)
+      );
     }
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
@@ -247,13 +256,20 @@ class ComputedAtomImpl<T>
     const asyncState = nextFlags & STATE_MASKS.ASYNC_MASK;
     if (asyncState === COMPUTED_STATE_FLAGS.RESOLVED) return Result.ok(this.#value);
 
-    if (this.#defaultValue !== NO_DEFAULT_VALUE) return Result.ok(this.#defaultValue);
-
     if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
-      return Result.err(this._error ?? new Error('REJECTED without error'));
+      return this.#getFallbackOrError(this._error ?? new Error('REJECTED without error'));
     }
 
-    return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT));
+    return this.#getFallbackOrError(
+      new ComputedError(ERROR_MESSAGES.COMPUTED_ASYNC_PENDING_NO_DEFAULT)
+    );
+  }
+
+  #getFallbackOrError(error: Error): Result<T, Error> {
+    if (this.#defaultValue !== NO_DEFAULT_VALUE) {
+      return Result.ok(this.#defaultValue);
+    }
+    return Result.err(error);
   }
 
   /**
@@ -407,7 +423,6 @@ class ComputedAtomImpl<T>
         ) {
           throw computationError;
         }
-        nodeCommitDeps(this);
         this.#handleError(computationError, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
         return;
       }
@@ -457,10 +472,10 @@ class ComputedAtomImpl<T>
   }
 
   #handleError(error: unknown, message: string, shouldThrow = false): void {
-    nodeHandleError(this, error, ComputedError, message, this.#onErrorCallback);
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.REJECTED;
+    nodeHandleError(this, error, ComputedError, message, this.#onErrorCallback);
     if (shouldThrow) throw this._error;
   }
 

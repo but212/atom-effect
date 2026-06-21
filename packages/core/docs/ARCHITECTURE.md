@@ -117,6 +117,7 @@ To maintain a pure functional core and minimize internal `try-catch` performance
 1. **Internal Monadic Propagation**: Engine-internal checks—such as argument validation, loop budget boundaries, disposed state access, and circular dependency checks—return a monadic `Result<T, Error>` wrapper. They do not throw exceptions directly.
 2. **Synchronous Boundary Unwrapping**: At the public API boundaries (e.g., `.value` getters on Computeds, factory constructors, and public scheduler wrappers), the engine calls `Result.unwrap(result)`. This throws a standard JavaScript `Error` (e.g., `ComputedError`, `EffectError`, `SchedulerError`) when a failure is encountered, ensuring 100% backward compatibility with throwing consumer code.
 3. **Asynchronous Scheduler Isolation**: During batch updates in the microtask loop, if a scheduled job returns a failed `Result`, the scheduler intercepts the result and wraps it in a `SchedulerError` before logging it, avoiding unhandled promise rejections and preserving overall system stability.
+4. **Error Swallowing with `defaultValue`**: If a computed node is configured with a `defaultValue`, any computation failure (synchronous or asynchronous) or circular reference will be caught internally and the `defaultValue` is returned instead of throwing a `ComputedError`. The error itself is still recorded and exposed via the node's `errors` and `hasError` properties.
 
 ---
 

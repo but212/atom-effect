@@ -4,6 +4,7 @@
 
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it, vi } from 'vitest';
+import { scheduler } from '@/core/scheduler';
 import {
   AtomError,
   aeNextTick,
@@ -374,6 +375,33 @@ describe('Computed', () => {
 
       sub.dispose();
       consoleError.mockRestore();
+    });
+
+    it('should preserve dependencies when computed evaluation throws a system error (e.g., ReferenceError)', () => {
+      const a = atom(1);
+      const b = atom(2);
+
+      let shouldThrow = false;
+      const c = computed(() => {
+        a.value;
+        if (shouldThrow) {
+          throw new ReferenceError('System-level error simulating bug');
+        }
+        b.value;
+        return 10;
+      });
+
+      c.value;
+      expect((c as unknown as { _depSlots: { size: number } })._depSlots.size).toBe(2);
+
+      shouldThrow = true;
+      a.value = 2;
+      scheduler.flushSync();
+      expect(() => c.value).toThrow(ReferenceError);
+
+      // 3. Since a ReferenceError was thrown, nodeCommitDeps was bypassed.
+      // Therefore, the dependency to `b` should be preserved on the error path.
+      expect(b.subscriberCount()).toBe(1);
     });
 
     it('should surface error state when lazy:false computation throws', () => {

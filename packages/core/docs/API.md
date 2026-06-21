@@ -144,7 +144,7 @@ Asynchronous computations can be defined by returning a `Promise`. The returned 
 
 - `name`: (Optional) A debugging identifier.
 - `equal`: Custom equality check for the result to suppress redundant downstream updates.
-- `defaultValue`: Recommended fallback value for async computations; returned while a Promise is pending. If omitted, accessing `.value` during the pending state throws a `ComputedError`.
+- `defaultValue`: Recommended fallback value for async computations; returned while a Promise is pending. If provided, it also acts as an error fallback: any computation failures (synchronous or asynchronous) or circular references will be caught, and the `defaultValue` will be returned instead of throwing a `ComputedError`. If omitted, accessing `.value` during pending or error/circular states throws a `ComputedError`.
 - `lazy`: (Default: `true`) If `false`, the computation runs immediately upon creation.
 - `onError`: `(error: Error) => void`. Callback executed when the computation fails.
 
