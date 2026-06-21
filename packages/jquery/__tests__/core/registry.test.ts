@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOrCreateRootObserver, rootObserversMap } from '@/core/observer';
 import { registry } from '@/core/registry';
 import $, { cleanup, disableAutoCleanup } from '@/index';
-import { castTo } from '../utils/test-helpers';
+import { castTo, setupDOMCleanup } from '../utils/test-helpers';
 
 describe('Binding Registry', () => {
+  const { appendToBody } = setupDOMCleanup();
   beforeEach(() => {
     document.body.innerHTML = '';
     $.initAEJ({ patch: true, autoCleanup: true });
@@ -211,7 +212,7 @@ describe('Binding Registry', () => {
 
     it('should verify that disabling autoCleanup prevents automatic disposal', async () => {
       const root = document.createElement('div');
-      document.body.appendChild(root);
+      appendToBody(root);
 
       const atom = $.atom('v1');
       $.initAEJ({ autoCleanup: { root } });
@@ -233,7 +234,7 @@ describe('Binding Registry', () => {
 
     it('should not disconnect active node addition observers when disableAutoCleanup is called', async () => {
       const root = document.createElement('div');
-      document.body.appendChild(root);
+      appendToBody(root);
 
       // 1. Initialize auto-cleanup on root
       $.initAEJ({ autoCleanup: { root } });

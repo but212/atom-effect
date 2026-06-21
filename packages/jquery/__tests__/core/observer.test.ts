@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOrCreateRootObserver, RootObserver, rootObserversMap } from '@/core/observer';
+import { setupDOMCleanup } from '../utils/test-helpers';
 
 describe('RootObserver Engine', () => {
+  const { appendToBody } = setupDOMCleanup();
   let root: HTMLElement;
 
   beforeEach(() => {
     document.body.innerHTML = '';
     root = document.createElement('div');
-    document.body.appendChild(root);
+    appendToBody(root);
   });
 
   describe('Initialization & Retrieval', () => {

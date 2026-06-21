@@ -1,12 +1,16 @@
 import $ from 'jquery';
 import { describe, expect, it, vi } from 'vitest';
+import type { EqualFn } from '@/types';
+import { setupDOMCleanup } from '../utils/test-helpers';
 import '@/index';
 
 describe('Input Bindings (Two-way)', () => {
+  const { appendToBody } = setupDOMCleanup();
+
   describe('Core Synchronization', () => {
     it('should sync values between Atom and DOM with parse/format/debounce', async () => {
       const val = $.atom(10);
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
 
       $el.atomVal(val, {
         debounce: 20,
@@ -30,14 +34,12 @@ describe('Input Bindings (Two-way)', () => {
       val.value = 25; // Re-trigger effect with same value
       await $.nextTick();
       expect($el.val()).toBe('25.0'); // Should NOT be formatted back to "V:25" while focused
-
-      $el.remove();
     });
 
     it('should clear debounce timer on blur', async () => {
       vi.useFakeTimers();
       const val = $.atom('init');
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
 
       $el.atomVal(val, { debounce: 100 });
       await $.nextTick();
@@ -51,15 +53,12 @@ describe('Input Bindings (Two-way)', () => {
       vi.advanceTimersByTime(200);
       await $.nextTick();
       expect(val.value).toBe('typed');
-
-      $el.remove();
-      vi.useRealTimers();
     });
 
     it('should preserve cursor position and handle selection-restricted types', async () => {
       const val = $.atom('hello');
-      const $text = $('<input type="text">').appendTo(document.body);
-      const $num = $('<input type="number">').appendTo(document.body);
+      const $text = appendToBody('<input type="text">');
+      const $num = appendToBody('<input type="number">');
 
       $text.atomVal(val);
       $num.atomVal($.atom(123));
@@ -75,15 +74,12 @@ describe('Input Bindings (Two-way)', () => {
       // Should not throw when accessing selection properties on type="number"
       $num.trigger('focus');
       await $.nextTick(); // Validation: accessing el.selectionStart on number should be safely handled
-
-      $text.remove();
-      $num.remove();
     });
 
     it('should handle boolean and collection bindings (checkbox, select-multiple)', async () => {
       // Checkbox with Cycle Prevention
       const isChecked = $.atom(false);
-      const $cb = $('<input type="checkbox">').appendTo(document.body);
+      const $cb = appendToBody('<input type="checkbox">');
       $cb.atomChecked(isChecked);
       await $.nextTick();
 
@@ -107,13 +103,13 @@ describe('Input Bindings (Two-way)', () => {
 
       // Multiple Select
       const list = $.atom(['A', 'C']);
-      const $sel = $(`
+      const $sel = appendToBody(`
         <select multiple>
           <option value="A">A</option>
           <option value="B">B</option>
           <option value="C">C</option>
         </select>
-      `).appendTo(document.body);
+      `);
       $sel.atomVal(list);
       await $.nextTick();
       expect($sel.val()).toEqual(['A', 'C']);
@@ -122,14 +118,11 @@ describe('Input Bindings (Two-way)', () => {
       list.value = ['A', 'C'];
       await $.nextTick();
       expect($sel.val()).toEqual(['A', 'C']);
-
-      $cb.remove();
-      $sel.remove();
     });
 
     it('should dispose all effects and remove event listeners on unbind', async () => {
       const val = $.atom('initial');
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
 
       // Multiple namespaced events test
       $el.atomVal(val, { event: 'custom-a custom-b' });
@@ -145,8 +138,6 @@ describe('Input Bindings (Two-way)', () => {
       val.value = 'external';
       await $.nextTick();
       expect($el.val()).toBe('changed');
-
-      $el.remove();
     });
   });
 
@@ -155,7 +146,7 @@ describe('Input Bindings (Two-way)', () => {
       const val = $.atom('initial');
       let syncCount = 0;
 
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
       const el = $el[0] as HTMLInputElement;
 
       // Track atom setter calls to detect redundant syncs
@@ -188,13 +179,11 @@ describe('Input Bindings (Two-way)', () => {
       $el.trigger('blur');
       expect(val.value).toBe('가');
       expect(syncCount).toBe(1); // Must be exactly 1
-
-      $el.remove();
     });
 
     it('should ignore input event when isComposing is true', async () => {
       const val = $.atom('initial');
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
       $el.atomVal(val);
       await $.nextTick();
 
@@ -210,15 +199,13 @@ describe('Input Bindings (Two-way)', () => {
 
       // Since it's composing, atom should NOT be updated.
       expect(val.value).toBe('initial');
-
-      $el.remove();
     });
   });
 
   describe('Edge Cases & Error Resilience', () => {
     it('should normalize DOM value on blur even if parsed value matches atom', async () => {
       const val = $.atom(10);
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
 
       $el.atomVal(val, {
         parse: (v) => parseInt(v, 10),
@@ -241,13 +228,11 @@ describe('Input Bindings (Two-way)', () => {
 
       // DOM SHOULD be normalized back to "V:10" now that focus is lost
       expect($el.val()).toBe('V:10');
-
-      $el.remove();
     });
 
     it('should not perform redundant DOM writes if value is up-to-date', async () => {
       const val = $.atom('initial');
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
       const el = $el[0] as HTMLInputElement;
 
       $el.atomVal(val);
@@ -287,8 +272,6 @@ describe('Input Bindings (Two-way)', () => {
 
       // Redundant write count should be 0
       expect(writeCount).toBe(0);
-
-      $el.remove();
     });
 
     it('should log warnings when synchronization fails (Error Logging)', async () => {
@@ -296,7 +279,7 @@ describe('Input Bindings (Two-way)', () => {
       $.debug.enabled = true;
 
       const val = $.atom(1);
-      const $el = $('<input>').appendTo(document.body);
+      const $el = appendToBody('<input>');
 
       // 1. DOM -> Atom failure (parse error)
       $el.atomVal(val, {
@@ -316,7 +299,7 @@ describe('Input Bindings (Two-way)', () => {
       // 2. Atom -> DOM failure (format error)
       warnSpy.mockClear();
       const val2 = $.atom(1);
-      const $el2 = $('<input>').appendTo(document.body);
+      const $el2 = appendToBody('<input>');
       $el2.atomVal(val2, {
         format: () => {
           throw new Error('Format error');
@@ -333,7 +316,7 @@ describe('Input Bindings (Two-way)', () => {
       // 3. Atom -> DOM format error inside handleBlur (testing try...finally isInternalWrite reset)
       warnSpy.mockClear();
       const val3 = $.atom(1);
-      const $el3 = $('<input>').appendTo(document.body);
+      const $el3 = appendToBody('<input>');
       let formatShouldThrow = false;
 
       $el3.atomVal(val3, {
@@ -346,29 +329,21 @@ describe('Input Bindings (Two-way)', () => {
       formatShouldThrow = true;
       $el3.trigger('blur');
 
-      // The catch block will be hit internally inside handleBlur?
-      // Actually `handleBlur` does not have a catch block around `writeToDom`, it just throws if it fails.
-      // But we just want to ensure that if it throws, `isInternalWrite` is reset so we can type again.
       formatShouldThrow = false;
 
       // Now if we type, it should not be locked
       $el3.val('5').trigger('input');
       expect(val3.value).toBe('5'); // If it locked, it would be ignored and remain 1
-
-      $el.remove();
-      $el2.remove();
-      $el3.remove();
-      warnSpy.mockRestore();
     });
 
     it('should test select-multiple format strategy edge cases', async () => {
       const list = $.atom<unknown>(['A']);
-      const $sel = $(`
+      const $sel = appendToBody(`
         <select multiple>
           <option value="A">A</option>
           <option value="B">B</option>
         </select>
-      `).appendTo(document.body);
+      `);
 
       let formattedValue: unknown;
       $sel.atomVal(list, {
@@ -387,8 +362,99 @@ describe('Input Bindings (Two-way)', () => {
       $sel.atomVal(nonArrayList);
       await $.nextTick();
       expect($sel.val()).toEqual(['A']);
+    });
 
-      $sel.remove();
+    it('should not throw or fail synchronization when focused on input[type="number"] which does not support selection API', async () => {
+      const val = $.atom(10);
+      const $el = appendToBody('<input type="number">');
+
+      $el.atomVal(val);
+      await $.nextTick();
+      expect($el.val()).toBe('10');
+
+      // Focus the element to enter the selection preservation code path
+      $el.trigger('focus');
+
+      // Update value which triggers syncToDom
+      val.value = 20;
+      await $.nextTick();
+
+      // Value should be successfully updated and no errors should be thrown
+      expect($el.val()).toBe('20');
+    });
+
+    it('should respect custom options.equal comparator for array elements in select-multiple', async () => {
+      interface ItemType {
+        id: number;
+      }
+      const list = $.atom<ItemType[]>([{ id: 1 }, { id: 2 }]);
+      const $sel = appendToBody(`
+        <select multiple>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      `);
+
+      // Custom equal comparator checking objects' id
+      const customEqual: EqualFn<ItemType[]> = (first, second) => {
+        if (!first || !second || first.length !== second.length) return false;
+        return first.every((val, i) => val.id === second[i]?.id);
+      };
+
+      // Spy on customEqual
+      const equalSpy = vi.fn(customEqual);
+
+      $sel.atomVal(list, {
+        equal: equalSpy,
+        parse: (v) => [{ id: parseInt(v, 10) }],
+        format: (v) => v.map((item) => String(item.id)).join(','),
+      });
+      await $.nextTick();
+
+      // Trigger change by assigning a new array reference with functionally equal elements
+      equalSpy.mockClear();
+      list.value = [{ id: 1 }, { id: 2 }];
+      await $.nextTick();
+
+      // equalSpy should have been called and the value should be treated as equal (no DOM update or redundant cycles)
+      expect(equalSpy).toHaveBeenCalled();
+    });
+
+    it('should not perform redundant DOM writes for select-multiple when value is up-to-date', async () => {
+      const list = $.atom(['A', 'B']);
+      const $sel = appendToBody(`
+        <select multiple>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+        </select>
+      `);
+
+      $sel.atomVal(list);
+      await $.nextTick();
+
+      const originalFnVal = $.fn.val;
+      let valCallCount = 0;
+      $.fn.val = function (this: JQuery, ...args: unknown[]) {
+        if (args.length > 0 && this[0] === $sel[0]) {
+          valCallCount++;
+        }
+        return (originalFnVal as (...args: unknown[]) => unknown).apply(this, args);
+      } as typeof $.fn.val;
+
+      // Case 1: Atom updates to a new value
+      valCallCount = 0;
+      list.value = ['A', 'C'];
+      await $.nextTick();
+      expect(valCallCount).toBe(1);
+
+      // Case 2: Atom updates to the same values (functionally equal)
+      valCallCount = 0;
+      list.value = ['A', 'C'];
+      await $.nextTick();
+      expect(valCallCount).toBe(0);
+
+      $.fn.val = originalFnVal;
     });
   });
 });

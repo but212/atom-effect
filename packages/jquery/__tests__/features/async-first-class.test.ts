@@ -1,19 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import $ from '@/index';
-import { createMockJqXHR } from '../utils/test-helpers';
+import { createMockJqXHR, setupDOMCleanup } from '../utils/test-helpers';
 
 describe('First-class Asynchronous Objects (AEJ)', () => {
+  const { appendToBody } = setupDOMCleanup();
   let $fixture: JQuery;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    $fixture = $('<div id="fixture"></div>').appendTo('body');
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    $fixture.remove();
-    vi.restoreAllMocks();
+    $fixture = appendToBody('<div id="fixture"></div>');
   });
 
   /**

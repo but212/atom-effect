@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { DebugPortal } from '@/features/web-component/engine';
 import $ from '@/index';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 declare global {
   interface Window {
@@ -9,16 +10,7 @@ declare global {
 }
 
 describe('Web Components Synergy (useAtomComponent)', () => {
-  const createdElements: HTMLElement[] = [];
-
-  // Automated cleanup to ensure test isolation
-  afterEach(() => {
-    while (createdElements.length > 0) {
-      const el = createdElements.pop();
-      el?.remove();
-    }
-    vi.restoreAllMocks();
-  });
+  const { appendToBody } = setupDOMCleanup();
 
   /** Helper to define a unique custom element for a test case */
   const defineTestComponent = (ctor: CustomElementConstructor) => {
@@ -31,9 +23,7 @@ describe('Web Components Synergy (useAtomComponent)', () => {
   const renderTestComponent = (tagName: string, attrs: Record<string, string> = {}) => {
     const $el = $(document.createElement(tagName));
     for (const [key, val] of Object.entries(attrs)) $el.attr(key, val);
-    $el.appendTo(document.body);
-    const el = $el[0];
-    if (el) createdElements.push(el);
+    appendToBody($el);
     return $el;
   };
 

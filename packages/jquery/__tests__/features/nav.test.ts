@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $, { type AtomNav, type AtomNavOptions } from '@/index';
-import { castTo, createMockJqXHR } from '../utils/test-helpers';
+import { castTo, createMockJqXHR, setupDOMCleanup } from '../utils/test-helpers';
 
 /**
  * Constants & Test Data
@@ -20,8 +20,8 @@ class NavTestHarness {
   private activeNavs: AtomNav[] = [];
   public $target!: JQuery;
 
-  setup() {
-    this.$target = $(`<div id="${DEFAULT_TARGET.slice(1)}">Original</div>`).appendTo('body');
+  setup(appendToBody: (html: string | JQuery | Element) => JQuery) {
+    this.$target = appendToBody(`<div id="${DEFAULT_TARGET.slice(1)}">Original</div>`);
     window.history.replaceState(null, '', '/');
     this.activeNavs = [];
   }
@@ -30,9 +30,7 @@ class NavTestHarness {
     for (const nav of this.activeNavs) {
       nav.destroy();
     }
-    this.$target.remove();
     $('.nav-link, base, meta[name="description"], meta[name="keywords"]').remove();
-    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }
 
@@ -81,8 +79,9 @@ class NavTestHarness {
 
 describe('$.atomNav', () => {
   const harness = new NavTestHarness();
+  const { appendToBody } = setupDOMCleanup();
 
-  beforeEach(() => harness.setup());
+  beforeEach(() => harness.setup(appendToBody));
   afterEach(() => harness.teardown());
 
   describe('Core Initialization', () => {
@@ -113,9 +112,7 @@ describe('$.atomNav', () => {
     }) => {
       const ajaxSpy = harness.mockAjax();
       await harness.create({ selector: '.nav-link' });
-      const $link = $('<a class="nav-link"></a>')
-        .attr({ href, ...attrs })
-        .appendTo('body');
+      const $link = appendToBody($('<a class="nav-link"></a>').attr({ href, ...attrs }));
 
       let intercepted = false;
       const checkIntercept = (e: Event) => {
@@ -139,7 +136,7 @@ describe('$.atomNav', () => {
       harness.mockAjax({ data: 'Base Content' });
       const nav = await harness.create({ selector: '.nav-link' });
       $('<base href="/app/">').appendTo('head');
-      const $link = $('<a href="sub" class="nav-link"></a>').appendTo('body');
+      const $link = appendToBody('<a href="sub" class="nav-link"></a>');
 
       harness.simulateClick($link[0]);
       await vi.waitFor(() => expect(nav.currentUrl.value).toContain('/app/sub'));
@@ -505,11 +502,11 @@ describe('$.atomNav', () => {
       const ajaxSpy = harness.mockAjax({ data: 'Cross' });
       await harness.create({ selector: '.nav-link' });
 
-      const $same = $('<a href="#s" class="nav-link"></a>').appendTo('body');
+      const $same = appendToBody('<a href="#s" class="nav-link"></a>');
       harness.simulateClick($same[0]);
       expect(ajaxSpy).not.toHaveBeenCalled();
 
-      const $cross = $('<a href="/other#s" class="nav-link"></a>').appendTo('body');
+      const $cross = appendToBody('<a href="/other#s" class="nav-link"></a>');
       harness.simulateClick($cross[0]);
       await vi.waitFor(() => expect(ajaxSpy).toHaveBeenCalled());
     });
@@ -518,9 +515,9 @@ describe('$.atomNav', () => {
       const ajaxSpy = harness.mockAjax();
       await harness.create({ selector: '.nav-link' });
 
-      const $link = $(
+      const $link = appendToBody(
         '<a class="nav-link" data-target="#other-target" href="/other"></a>'
-      ).appendTo('body');
+      );
 
       let intercepted = false;
       const checkIntercept = (e: Event) => {

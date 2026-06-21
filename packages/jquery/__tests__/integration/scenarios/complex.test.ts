@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import $ from '@/index';
 import type { DisposableWritableAtom } from '@/types';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Complex App Scenarios', () => {
+  const { appendToBody } = setupDOMCleanup();
   it('should handle Todo List with Search (synergy between atomList, atomVal, and computed)', async () => {
     interface Todo {
       id: number;
@@ -22,7 +24,7 @@ describe('Complex App Scenarios', () => {
       return todos.value.filter((todo: Todo) => todo.text.toLowerCase().includes(query));
     });
 
-    const $app = $('<div id="todo-app">').appendTo(document.body);
+    const $app = appendToBody('<div id="todo-app">');
     $app.append('<input type="text" id="search" placeholder="Search...">');
     $app.append('<ul id="todo-list"></ul>');
 
@@ -71,7 +73,7 @@ describe('Complex App Scenarios', () => {
       return v !== null && v >= 18 && v <= 100;
     });
 
-    const $form = $('<div id="form">').appendTo(document.body);
+    const $form = appendToBody('<div id="form">');
     $form.append('<input type="text" id="age-input" placeholder="Enter age (18-100)">');
     $form.append('<span id="age-display"></span>');
     $form.append('<button id="submit">Submit</button>');
@@ -156,7 +158,7 @@ describe('Complex App Scenarios', () => {
       },
     ]);
 
-    const $app = $('<div id="nested-app">').appendTo(document.body);
+    const $app = appendToBody('<div id="nested-app">');
 
     $app.atomList(categories, {
       key: 'id',

@@ -20,10 +20,26 @@ import { debug } from '@/utils/debug';
 
 type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
+/**
+ * Checks if the element type supports selection API.
+ * Accessing selection properties on unsupported types (e.g. input[type=number]) throws.
+ * @internal
+ */
+function supportsSelection(
+  element: HTMLElement
+): element is HTMLInputElement | HTMLTextAreaElement {
+  if (element instanceof HTMLTextAreaElement) return true;
+  if (element instanceof HTMLInputElement) {
+    const type = element.type;
+    return !type || /^(?:text|search|url|tel|password)$/.test(type);
+  }
+  return false;
+}
+
 /** Represents a specialized synchronization strategy for different form element types. @internal */
-interface BindingStrategy<T> {
-  readonly read: (element: FormElement, parse?: (v: string) => T) => T;
-  readonly write: (element: FormElement, value: T, formatted: string) => void;
+interface BindingStrategy<T, E extends FormElement = FormElement> {
+  readonly read: (element: E, parse?: (v: string) => T) => T;
+  readonly write: (element: E, value: T, formatted: string) => void;
   readonly equal: (first: T, second: T, baseEqual: (first: T, second: T) => boolean) => boolean;
   readonly format: (value: T, customFormat?: (v: T) => string) => string;
 }
@@ -35,10 +51,7 @@ interface BindingStrategy<T> {
  */
 const STRATEGIES = {
   multipleSelect: {
-    read: (element) =>
-      element instanceof HTMLSelectElement
-        ? Array.from(element.selectedOptions, (opt) => opt.value)
-        : [],
+    read: (element) => Array.from(element.selectedOptions, (opt) => opt.value),
     write: (element, value) => {
       $(element).val(value as string[]);
     },
@@ -54,15 +67,12 @@ const STRATEGIES = {
         : Array.isArray(formattedValue)
           ? formattedValue.join(',')
           : String(formattedValue ?? ''),
-  } as BindingStrategy<unknown>,
+  } as BindingStrategy<unknown, HTMLSelectElement>,
 
   default: {
     read: (element, parse) => (parse ? parse(element.value) : element.value),
     write: (element, _, formatted) => {
-      if (
-        (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) &&
-        document.activeElement === element
-      ) {
+      if (supportsSelection(element) && document.activeElement === element) {
         try {
           const { selectionStart, selectionEnd } = element;
           element.value = formatted;
@@ -80,7 +90,7 @@ const STRATEGIES = {
     },
     equal: (first, second, baseEqual) => baseEqual(first, second),
     format: (v, custom) => (custom ? custom(v) : String(v ?? '')),
-  } as BindingStrategy<unknown>,
+  } as BindingStrategy<unknown, FormElement>,
 } as const;
 
 let instanceCounter = 0;
@@ -138,6 +148,9 @@ export function applyInputBinding<T>(
     // Logic: While the input is focused, we allow minor discrepancies (e.g.,
     // "1.0" in DOM vs 1 in Atom) to avoid disruptive formatting while the user is typing.
     if (document.activeElement === element) return true;
+
+    // Multiple Select doesn't use formatting for DOM writes, so matching parsed values is sufficient.
+    if (isMultipleSelect) return true;
 
     return formatValue(atomValue) === element.value;
   };

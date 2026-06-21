@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
-import { createMockJqXHR } from '../../utils/test-helpers';
+import { createMockJqXHR, setupDOMCleanup } from '../../utils/test-helpers';
 
 /**
  * HTML Templates for Integration Tests
@@ -65,8 +65,10 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
     return manager;
   };
 
+  const { appendToBody } = setupDOMCleanup();
+
   const setup = (html = '<div id="app"></div>') => {
-    const $target = $(html).appendTo(document.body);
+    const $target = appendToBody(html);
     return { $target, track };
   };
 
@@ -80,19 +82,15 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
     for (const m of activeManagers) {
       m.destroy();
     }
-    $(document.body).empty();
     $.initAEJ({ autoCleanup: false });
     window.location.hash = '';
     window.history.replaceState(null, '', '/');
-    vi.restoreAllMocks();
   });
 
   describe('Hierarchical Composition', () => {
     it('should coordinate atomNav (layout) and $.route (sub-views)', async () => {
       const { $target: $app, track } = setup();
-      const $navMenu = $('<nav><a data-nav href="/settings">Settings</a></nav>').appendTo(
-        document.body
-      );
+      const $navMenu = appendToBody('<nav><a data-nav href="/settings">Settings</a></nav>');
 
       setupMockAjax({ settings: TEMPLATE.SETTINGS, home: TEMPLATE.HOME });
 
@@ -184,12 +182,12 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
     it('should isolate traffic via selector and basePath coordination', async () => {
       const { $target: $pjaxArea, track } = setup('<div id="pjax"></div>');
       const { $target: $adminArea } = setup('<div id="admin"></div>');
-      const $nav = $(`
+      const $nav = appendToBody(`
         <nav>
           <a class="p-link" href="/dash">Dash</a>
           <a class="a-link" href="/admin/set">Admin</a>
         </nav>
-      `).appendTo(document.body);
+      `);
 
       const ajaxSpy = setupMockAjax({ dash: '<div>Dash Content</div>' });
 
@@ -296,9 +294,7 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
         })
       );
 
-      const $link = $('<a class="shared" href="/shared" data-route="shared">Go</a>').appendTo(
-        document.body
-      );
+      const $link = appendToBody('<a class="shared" href="/shared" data-route="shared">Go</a>');
       $link[0]?.click();
       await new Promise((r) => setTimeout(r, 100));
 
@@ -444,7 +440,7 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
 
     it('should not steal focus during atomNav transition', async () => {
       const { $target: $app, track } = setup();
-      const $input = $('<input id="ext" />').appendTo(document.body);
+      const $input = appendToBody('<input id="ext" />');
       ($input[0] as HTMLInputElement).focus();
 
       setupMockAjax({ focuspage: '<div id="f-sub"></div>' });

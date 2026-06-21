@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 import type { Router } from '@/types';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Context Injection Synergy (provide/inject)', () => {
+  const { appendToBody } = setupDOMCleanup();
   it('should inject and share global router state with nested child components using provideAtom', async () => {
-    const $app = $('<div id="route-app"><div id="router-view"></div></div>').appendTo(
-      document.body
-    );
+    const $app = appendToBody('<div id="route-app"><div id="router-view"></div></div>');
 
     const tagName = `route-child-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -66,7 +66,7 @@ describe('Context Injection Synergy (provide/inject)', () => {
     const themeAtom = $.atom('dark');
     const accentAtom = $.atom('#ff0000');
 
-    const $container = $('<div id="theme-container"></div>').appendTo(document.body);
+    const $container = appendToBody('<div id="theme-container"></div>');
 
     $.provideAtom($container, 'theme', themeAtom);
     $.provideAtom($container, 'accent-color', accentAtom);

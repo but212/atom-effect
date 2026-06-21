@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import $ from '@/index';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('SVG Support', () => {
+  const { appendToBody } = setupDOMCleanup();
+
   it('should handle SVG attributes correctly', async () => {
     // SVG namespaces
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(SVG_NS, 'svg');
-    const $svg = $(svg).appendTo(document.body);
+    const $svg = appendToBody(svg);
 
     const viewBox = $.atom('0 0 100 100');
     $svg.atomAttr('viewBox', viewBox);
@@ -20,8 +23,6 @@ describe('SVG Support', () => {
     viewBox.value = '0 0 200 200';
     await $.nextTick();
     expect($svg.attr('viewBox')).toBe('0 0 200 200');
-
-    $svg.remove();
   });
 
   it('should handle namespaced attributes (xlink:href)', async () => {
@@ -30,7 +31,7 @@ describe('SVG Support', () => {
     const use = document.createElementNS(SVG_NS, 'use');
     svg.appendChild(use);
     const $use = $(use);
-    $(svg).appendTo(document.body);
+    appendToBody(svg);
 
     const href = $.atom('#icon-1');
 
@@ -48,8 +49,6 @@ describe('SVG Support', () => {
     href.value = '#icon-2';
     await $.nextTick();
     expect($use.attr('xlink:href')).toBe('#icon-2');
-
-    $(svg).remove();
   });
 
   it('should toggle classes on SVG elements', async () => {
@@ -58,7 +57,7 @@ describe('SVG Support', () => {
     const circle = document.createElementNS(SVG_NS, 'circle');
     svg.appendChild(circle);
     const $circle = $(circle);
-    $(svg).appendTo(document.body);
+    appendToBody(svg);
 
     const isActive = $.atom(false);
     $circle.atomClass('active', isActive);
@@ -73,8 +72,6 @@ describe('SVG Support', () => {
     // Let's verify our wrapper works.
     expect($circle.hasClass('active')).toBe(true);
     expect(circle.getAttribute('class')).toContain('active');
-
-    $(svg).remove();
   });
 
   it('should render SVG lists correctly', async () => {
@@ -83,7 +80,7 @@ describe('SVG Support', () => {
     const g = document.createElementNS(SVG_NS, 'g');
     svg.appendChild(g);
     const $g = $(g);
-    $(svg).appendTo(document.body);
+    appendToBody(svg);
 
     const items = $.atom([1, 2, 3]);
 
@@ -107,7 +104,5 @@ describe('SVG Support', () => {
     // Check namespace of first child
     expect(children[0]?.namespaceURI).toBe(SVG_NS);
     expect(children[0]?.tagName).toMatch(/circle/i);
-
-    $(svg).remove();
   });
 });

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 import type { AtomNav } from '@/types';
-import { createMockJqXHR } from '../../utils/test-helpers';
+import { createMockJqXHR, setupDOMCleanup } from '../../utils/test-helpers';
 
 /**
  * Utility to setup AJAX mocks for PJAX/Navigation tests
@@ -44,10 +44,11 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
     return manager;
   };
 
+  const { appendToBody } = setupDOMCleanup();
   beforeEach(() => {
     document.body.innerHTML = '';
     activeManagers = [];
-    $app = $('<div id="app"></div>').appendTo(document.body);
+    $app = appendToBody('<div id="app"></div>');
     $.initAEJ({ autoCleanup: true });
     window.location.hash = '';
     window.history.replaceState(null, '', '/');
@@ -59,9 +60,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
         m.destroy();
       } catch {}
     }
-    $(document.body).empty();
     $.initAEJ({ autoCleanup: false });
-    vi.restoreAllMocks();
   });
 
   describe('Regression: Form Tag Preservation & atomForm Binding', () => {

@@ -1,23 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createListContext, resolveEventTarget } from '@/bindings/list/context';
 import { applyListBinding } from '@/bindings/list/index';
 import { injectKeyToHtml } from '@/bindings/list/utils';
 import { registry } from '@/core/registry';
 import $ from '@/index';
-import { castTo } from '../utils/test-helpers';
+import { castTo, setupDOMCleanup } from '../utils/test-helpers';
 
 describe('$.atomList (Integration)', () => {
   const EXPANDO = 'data-test-expando';
+  const { appendToBody } = setupDOMCleanup();
   let $container: JQuery;
 
   beforeEach(() => {
     document.body.innerHTML = '';
-    $container = $('<div>').appendTo(document.body);
-  });
-
-  afterEach(() => {
-    $container.remove();
-    $(document.body).empty();
+    $container = appendToBody('<div>');
   });
 
   /** Simulate a click on `el`, bubbling up through jQuery's event system. */
@@ -84,7 +80,7 @@ describe('$.atomList (Integration)', () => {
         { id: 2, text: 'B' },
         { id: 3, text: 'C' },
       ]);
-      const $ul = $('<ul>').appendTo(document.body);
+      const $ul = appendToBody('<ul>');
 
       $ul.atomList(items, {
         key: 'id',
@@ -119,7 +115,7 @@ describe('$.atomList (Integration)', () => {
 
     it('should handle middle insertion and reverse order efficiently', async () => {
       const items = $.atom([1, 3, 5]);
-      const $ul = $('<ul>').appendTo(document.body);
+      const $ul = appendToBody('<ul>');
 
       $ul.atomList(items, {
         key: (i: number) => i,
@@ -184,7 +180,7 @@ describe('$.atomList (Integration)', () => {
 
     it('should re-render when an item is shallow-copied after deep mutation (isEqual: false)', async () => {
       const items = $.atom([{ id: 1, nested: { val: 1 } }]);
-      const $ul = $('<ul>').appendTo(document.body);
+      const $ul = appendToBody('<ul>');
 
       $ul.atomList(items, {
         key: 'id',
@@ -208,7 +204,7 @@ describe('$.atomList (Integration)', () => {
     it('should support rendering fallback to standard path on text nodes and placeItems with callbacks/events', async () => {
       // 1. renderItems returning a text node -> allElements = false
       const list = $.atom(['A']);
-      const $container = $('<div>').appendTo(document.body);
+      const $container = appendToBody('<div>');
       $container.atomList(list, {
         key: (i) => i,
         render: (i) => `some text ${i}`, // text node
@@ -219,7 +215,7 @@ describe('$.atomList (Integration)', () => {
 
       // 2. placeItems fast-path (htmlFragments) with onAdd callback
       const list2 = $.atom(['A']);
-      const $container2 = $('<div>').appendTo(document.body);
+      const $container2 = appendToBody('<div>');
       const onAdd = vi.fn();
       $container2.atomList(list2, {
         key: (i) => i,
@@ -232,7 +228,7 @@ describe('$.atomList (Integration)', () => {
 
       // 3. placeItems standard path with events and onAdd callback
       const list3 = $.atom(['A']);
-      const $container3 = $('<div>').appendTo(document.body);
+      const $container3 = appendToBody('<div>');
       const onAdd3 = vi.fn();
       $container3.atomList(list3, {
         key: (i) => i,
@@ -299,7 +295,7 @@ describe('$.atomList (Integration)', () => {
     it('should clean up previous instance when atomList is called multiple times on the same element', async () => {
       const list1 = $.atom([1, 2]);
       const list2 = $.atom(['A', 'B']);
-      const $container = $('<ul>').appendTo(document.body);
+      const $container = appendToBody('<ul>');
       let render1Count = 0;
 
       $container.atomList(list1, {
@@ -462,7 +458,7 @@ describe('$.atomList (Integration)', () => {
       expect(handler.mock.calls[0]?.[1]).toBe(0);
 
       // 3. Child selector scoping (must not escape item root)
-      const $outer = $('<div class="outside-btn">').appendTo(document.body);
+      const $outer = appendToBody('<div class="outside-btn">');
       const handler2 = vi.fn();
       $container.atomList(items, {
         key: 'id',

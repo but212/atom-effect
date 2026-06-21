@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HYDRATION_MARKER } from '@/core/symbols';
 import $ from '@/index';
 import type { AtomComponentElement } from '@/types';
-import { castTo } from '../utils/test-helpers';
+import { castTo, setupDOMCleanup } from '../utils/test-helpers';
 
 // ─── Test Utilities ─────────────────────────────────────────────────────────
 
@@ -21,6 +21,8 @@ function defineAndCreate<T extends HTMLElement>(
 // ─── Test Suite ─────────────────────────────────────────────────────────────
 
 describe('Web Component Features', () => {
+  const { appendToBody } = setupDOMCleanup();
+
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.restoreAllMocks();
@@ -118,7 +120,7 @@ describe('Web Component Features', () => {
       );
 
       el.setAttribute('active', 'yes');
-      document.body.appendChild(el);
+      appendToBody(el);
       el.aej.setup();
 
       expect(el.aej.attrs('active').value).toBe('yes');
@@ -138,7 +140,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
 
       const slots = el.aej.slots;
       expect(slots('default').value.length).toBe(0);
@@ -163,7 +165,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
 
       const child = document.createElement('span');
       el.appendChild(child);
@@ -182,7 +184,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
 
       const child = document.createElement('span');
       el.appendChild(child);
@@ -217,7 +219,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
 
       const span = el.shadowRoot?.querySelector('span');
       expect(span?.textContent).toBe('Alice');
@@ -249,8 +251,8 @@ describe('Web Component Features', () => {
         }
       );
 
-      document.body.appendChild(el1);
-      document.body.appendChild(el2);
+      appendToBody(el1);
+      appendToBody(el2);
 
       const sheets1 = el1.shadowRoot?.adoptedStyleSheets;
       const sheets2 = el2.shadowRoot?.adoptedStyleSheets;
@@ -270,7 +272,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
 
       const span = el.shadowRoot?.querySelector('span') as HTMLElement & {
         [HYDRATION_MARKER]?: boolean;
@@ -290,7 +292,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
 
       const internals = el.aej.internals;
       if (!internals) throw new Error('Expected internals to be defined');
@@ -314,7 +316,7 @@ describe('Web Component Features', () => {
       );
 
       el.addEventListener('update', (e: Event) => spy((e as CustomEvent).detail.value));
-      document.body.appendChild(el);
+      appendToBody(el);
 
       count.value = 10;
       await $.nextTick();
@@ -336,7 +338,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
 
       const div = el.shadowRoot?.querySelector('div');
       if (!div) throw new Error('Expected div to exist in shadowRoot');
@@ -364,7 +366,7 @@ describe('Web Component Features', () => {
 
       const form = document.createElement('form');
       form.appendChild(el);
-      document.body.appendChild(form);
+      appendToBody(form);
 
       const formData = new FormData(form);
       expect(formData.get('username')).toBe('initial_value');
@@ -391,7 +393,7 @@ describe('Web Component Features', () => {
 
       const form = document.createElement('form');
       form.appendChild(el);
-      document.body.appendChild(form);
+      appendToBody(form);
 
       const formData = new FormData(form);
       expect(formData.get('user[first]')).toBe('John');
@@ -421,7 +423,7 @@ describe('Web Component Features', () => {
 
       const form = document.createElement('form');
       form.appendChild(el);
-      document.body.appendChild(form);
+      appendToBody(form);
 
       // Value check
       expect(new FormData(form).get('test')).toBe('v1');
@@ -452,7 +454,7 @@ describe('Web Component Features', () => {
 
       const form = document.createElement('form');
       form.appendChild(el);
-      document.body.appendChild(form);
+      appendToBody(form);
 
       expect(form.checkValidity()).toBe(false);
       expect(el.aej.internals?.validationMessage).toBe('Invalid email format');
@@ -481,7 +483,7 @@ describe('Web Component Features', () => {
 
       const form = document.createElement('form');
       form.appendChild(el);
-      document.body.appendChild(form);
+      appendToBody(form);
 
       expect(form.checkValidity()).toBe(false);
 
@@ -505,7 +507,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
       await $.nextTick();
 
       const sheets = el.shadowRoot?.adoptedStyleSheets;
@@ -528,7 +530,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
       await $.nextTick();
 
       const span = el.shadowRoot?.querySelector('span');
@@ -551,7 +553,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
       await $.nextTick();
 
       const internals = el.aej.internals;
@@ -577,7 +579,7 @@ describe('Web Component Features', () => {
           }
         }
       );
-      document.body.appendChild(el);
+      appendToBody(el);
       await $.nextTick();
 
       const div = el.shadowRoot?.querySelector('div');
@@ -604,7 +606,7 @@ describe('Web Component Features', () => {
       );
 
       el.addEventListener('update', (e: Event) => spy((e as CustomEvent).detail.value));
-      document.body.appendChild(el);
+      appendToBody(el);
       await $.nextTick();
 
       count.value = 100;
@@ -629,7 +631,7 @@ describe('Web Component Features', () => {
       el.setAttribute('name', 'test');
       const form = document.createElement('form');
       form.appendChild(el);
-      document.body.appendChild(form);
+      appendToBody(form);
       await $.nextTick();
 
       expect(new FormData(form).get('test')).toBe('initial');
@@ -662,7 +664,7 @@ describe('Web Component Features', () => {
 
     it('should maintain 0 subscriber count in stateless proxy WritableAtom', () => {
       const host = document.createElement('div');
-      document.body.appendChild(host);
+      appendToBody(host);
       $.provideAtom(host, 'context-proxy-key', $.atom(100));
 
       const proxyAtom = $.injectAtom<number>(host, 'context-proxy-key');
@@ -714,7 +716,7 @@ describe('Web Component Features', () => {
         }
       );
 
-      document.body.appendChild(el);
+      appendToBody(el);
       const sr = el.shadowRoot;
       if (!sr) throw new Error('Expected ShadowRoot to exist');
       expect(sr.adoptedStyleSheets.length).toBeGreaterThan(0);
@@ -738,7 +740,7 @@ describe('Web Component Features', () => {
         }
       );
 
-      document.body.appendChild(el);
+      appendToBody(el);
       await $.nextTick();
       const div = el.shadowRoot?.querySelector('div');
       if (!div) throw new Error('Expected div to exist');
@@ -775,7 +777,7 @@ describe('Web Component Features', () => {
 
       const form = document.createElement('form');
       form.appendChild(el);
-      document.body.appendChild(form);
+      appendToBody(form);
       await $.nextTick();
 
       expect(form.checkValidity()).toBe(true);

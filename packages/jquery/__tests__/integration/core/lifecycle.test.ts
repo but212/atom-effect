@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import $ from '@/index';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Core DOM Lifecycle', () => {
+  const { appendToBody } = setupDOMCleanup();
+
   it('should maintain reactivity after DOM reparenting', async () => {
     const count = $.atom(0);
-    const $parent1 = $('<div id="parent1">').appendTo(document.body);
-    const $parent2 = $('<div id="parent2">').appendTo(document.body);
+    const $parent1 = appendToBody('<div id="parent1">');
+    const $parent2 = appendToBody('<div id="parent2">');
     const $el = $('<div id="reactive-el">').appendTo($parent1);
 
     $el.atomText(count);
@@ -24,9 +27,6 @@ describe('Core DOM Lifecycle', () => {
     count.value = 1;
     await $.nextTick();
     expect($el.text()).toBe('1');
-
-    $parent1.remove();
-    $parent2.remove();
   });
 
   describe('jQuery Batching Documentation Verification', () => {
