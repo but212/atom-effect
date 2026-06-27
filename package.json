@@ -35,21 +35,21 @@
     "@biomejs/biome": "catalog:",
     "@microsoft/api-extractor": "^7.58.7",
     "@types/node": "catalog:",
-    "@vitest/browser": "catalog:",
-    "@vitest/browser-playwright": "catalog:",
-    "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:",
-    "cross-env": "catalog:",
-    "playwright": "catalog:",
+    "@vitest/browser": "catalog:test",
+    "@vitest/browser-playwright": "catalog:test",
+    "@vitest/coverage-v8": "catalog:test",
+    "@vitest/ui": "catalog:test",
+    "cross-env": "catalog:build",
+    "playwright": "catalog:test",
     "rimraf": "catalog:",
-    "tinybench": "catalog:",
+    "tinybench": "catalog:test",
     "turbo": "^2.9.16",
-    "typescript": "catalog:",
-    "unplugin-dts": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:build",
+    "unplugin-dts": "catalog:build",
+    "vite": "catalog:build",
+    "vitest": "catalog:test"
   },
-  "packageManager": "pnpm@11.5.1",
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.0.0"
   }

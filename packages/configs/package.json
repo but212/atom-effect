@@ -30,9 +30,9 @@
   },
   "devDependencies": {
     "rimraf": "catalog:",
-    "tsup": "catalog:",
-    "unplugin-dts": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "tsup": "catalog:build",
+    "unplugin-dts": "catalog:build",
+    "vite": "catalog:build",
+    "vitest": "catalog:test"
   }
 }
