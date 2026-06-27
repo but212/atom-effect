@@ -27,7 +27,7 @@ export class SlotBuffer<T> {
    * Logic: If > 0, compact() is deferred.
    */
   #lockCount = 0;
-  #pendingCompact = false;
+  #hasPendingCompact = false;
 
   /** Physical capacity (including null gaps). Safe for manual indexed loops. */
   get length(): number {
@@ -239,7 +239,7 @@ export class SlotBuffer<T> {
    */
   compact(): void {
     if (this.#lockCount > 0) {
-      this.#pendingCompact = true;
+      this.#hasPendingCompact = true;
       return;
     }
 
@@ -271,7 +271,7 @@ export class SlotBuffer<T> {
       else ov.length = writeIndex - FAST_CAPACITY;
     }
     this.#freeIndices.length = 0;
-    this.#pendingCompact = false;
+    this.#hasPendingCompact = false;
   }
 
   /** Iteration lock. */
@@ -282,7 +282,7 @@ export class SlotBuffer<T> {
   /** Iteration unlock. */
   unlock(): void {
     if (this.#lockCount <= 0) return;
-    if (--this.#lockCount === 0 && this.#pendingCompact) {
+    if (--this.#lockCount === 0 && this.#hasPendingCompact) {
       this.compact();
     }
   }
@@ -294,7 +294,7 @@ export class SlotBuffer<T> {
     this.#activeItemsCount = 0;
     this.#overflowBuffer = null;
     this.#freeIndices.length = 0;
-    this.#pendingCompact = false;
+    this.#hasPendingCompact = false;
   }
 
   /** Alias for `clear`. */

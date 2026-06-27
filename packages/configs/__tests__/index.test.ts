@@ -12,12 +12,12 @@ vi.mock('unplugin-dts/vite', () => ({
 
 import {
   activeBuildTarget,
-  baseCoverageExclude,
+  baseCoverageExclusionPatterns,
   defineViteConfig,
   defineVitestBenchConfig,
   defineVitestConfig,
   getBaseViteConfig,
-  getBaseVitestBenchConfig,
+  getBaseVitestBenchmarkConfig,
   getBaseVitestConfig,
   getResolveConfig,
   isBundleBuild,
@@ -199,7 +199,7 @@ describe('packages/configs', () => {
         expect(config.resolve?.alias).toEqual({ '@': `${TEST_DIR}/src` });
         expect(config.test?.globals).toBe(true);
         expect(config.test?.coverage?.provider).toBe('v8');
-        expect(config.test?.coverage?.exclude).toBe(baseCoverageExclude);
+        expect(config.test?.coverage?.exclude).toBe(baseCoverageExclusionPatterns);
       });
     });
 
@@ -225,7 +225,7 @@ describe('packages/configs', () => {
   describe('benchmark config helpers', () => {
     describe('getBaseVitestBenchConfig', () => {
       it('should generate base benchmarking configurations', () => {
-        const config = getBaseVitestBenchConfig(TEST_DIR);
+        const config = getBaseVitestBenchmarkConfig(TEST_DIR);
         expect(config.resolve?.alias).toEqual({ '@': `${TEST_DIR}/src` });
         expect(config.test?.benchmark?.include).toEqual(['__benchmarks__/**/*.bench.ts']);
       });
