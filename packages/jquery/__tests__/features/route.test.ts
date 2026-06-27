@@ -289,12 +289,12 @@ describe('$.route() - SPA Routing System', () => {
 
       const r1 = await createRouter({
         target: '#app1',
-        routes: { p1: { render: (el: HTMLElement) => (el.innerText = 'App1') } },
+        routes: { p1: { render: (element: HTMLElement) => (element.innerText = 'App1') } },
         default: '',
       });
       const r2 = await createRouter({
         target: '#app2',
-        routes: { p2: { render: (el: HTMLElement) => (el.innerText = 'App2') } },
+        routes: { p2: { render: (element: HTMLElement) => (element.innerText = 'App2') } },
         default: '',
       });
 
@@ -316,12 +316,12 @@ describe('$.route() - SPA Routing System', () => {
       await createRouter({
         target: '#area1',
         autoBindLinks: true,
-        routes: { home: { render: (el: HTMLElement) => (el.innerText = 'Home 1') } },
+        routes: { home: { render: (element: HTMLElement) => (element.innerText = 'Home 1') } },
       });
       await createRouter({
         target: '#area2',
         autoBindLinks: true,
-        routes: { home: { render: (el: HTMLElement) => (el.innerText = 'Home 2') } },
+        routes: { home: { render: (element: HTMLElement) => (element.innerText = 'Home 2') } },
       });
 
       const $link = $('<a href="#home" data-route="home">Click</a>').appendTo('body');

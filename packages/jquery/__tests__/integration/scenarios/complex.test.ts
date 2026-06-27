@@ -36,9 +36,9 @@ describe('Complex App Scenarios', () => {
       key: 'id',
       render: (todo: Todo) =>
         `<li id="todo-${todo.id}" class="${todo.done ? 'done' : ''}">${todo.text}</li>`,
-      update: ($el, todo: Todo) => {
-        $el.toggleClass('done', todo.done);
-        $el.text(todo.text);
+      update: ($element, todo: Todo) => {
+        $element.toggleClass('done', todo.done);
+        $element.text(todo.text);
       },
     });
 
@@ -69,8 +69,8 @@ describe('Complex App Scenarios', () => {
 
     // Derived validity
     const isValid = $.computed(() => {
-      const v = age.value;
-      return v !== null && v >= 18 && v <= 100;
+      const value = age.value;
+      return value !== null && value >= 18 && value <= 100;
     });
 
     const $form = appendToBody('<div id="form">');
@@ -86,11 +86,11 @@ describe('Complex App Scenarios', () => {
       val: [
         age,
         {
-          parse: (v: string) => {
-            const parsed = parseInt(v, 10);
+          parse: (value: string) => {
+            const parsed = parseInt(value, 10);
             return Number.isNaN(parsed) ? null : parsed;
           },
-          format: (v: unknown) => (v === null ? '' : String(v)),
+          format: (value: unknown) => (value === null ? '' : String(value)),
         },
       ],
       css: {
@@ -168,8 +168,8 @@ describe('Complex App Scenarios', () => {
           <ul class="item-list"></ul>
         </div>
       `,
-      bind: ($el, cat: Category) => {
-        $el.find('.item-list').atomList<Item>(cat.items, {
+      bind: ($element, cat: Category) => {
+        $element.find('.item-list').atomList<Item>(cat.items, {
           key: 'id',
           render: (item) => `<li id="item-${item.id}">${item.name}</li>`,
         });

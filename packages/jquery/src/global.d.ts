@@ -481,7 +481,7 @@ declare global {
      *   target: '#app',
      *   routes: {
      *     '/': { template: '#home-tmpl' },
-     *     '/users/:id': { render: (el, name, params) => renderUser(el, params.id) }
+     *     '/users/:id': { render: (element, name, params) => renderUser(element, params.id) }
      *   }
      * });
      * ```
@@ -535,7 +535,7 @@ declare global {
      * ```typescript
      * const nav = $.atomNav({
      *   target: '#main-content',
-     *   onMount: ($el) => console.log('Swapped!'),
+     *   onMount: ($element) => console.log('Swapped!'),
      * });
      *
      * // Monitor navigation status
@@ -564,7 +564,7 @@ declare global {
      *
      * @param element - The host element or collection acting as provider.
      * @param key - Unique identifier for the context.
-     * @param val - The reactive atom or static value to share.
+     * @param value - The reactive atom or static value to share.
      *
      * @example
      * ```typescript
@@ -575,7 +575,7 @@ declare global {
      * // .child { color: var(--aej-theme); }
      * ```
      */
-    provideAtom(element: HTMLElement | JQuery | string, key: string | symbol, val: unknown): void;
+    provideAtom(element: HTMLElement | JQuery | string, key: string | symbol, value: unknown): void;
 
     /**
      * Logic: Dependency Injection
@@ -687,10 +687,10 @@ declare global {
      *
      * @example
      * ```typescript
-     * $('.count-display').atomText(counterAtom, (val) => `Total: ${val}`);
+     * $('.count-display').atomText(counterAtom, (value) => `Total: ${value}`);
      * ```
      */
-    atomText<T>(src: AsyncReactiveValue<T>, fmt?: (v: T) => string): this;
+    atomText<T>(source: AsyncReactiveValue<T>, format?: (value: T) => string): this;
     /**
      * Binds the HTML content of elements to a reactive source.
      *
@@ -709,7 +709,7 @@ declare global {
      * $('.content').atomHtml(htmlAtom);
      * ```
      */
-    atomHtml(src: AsyncReactiveValue<string>): this;
+    atomHtml(source: AsyncReactiveValue<string>): this;
     /**
      * Binds CSS classes to reactive conditions.
      *
@@ -749,7 +749,7 @@ declare global {
      * $('.box').atomCss('width', widthAtom, 'px');
      * ```
      */
-    atomCss(prop: string, src: AsyncReactiveValue<string | number>, unit?: string): this;
+    atomCss(prop: string, source: AsyncReactiveValue<string | number>, unit?: string): this;
     atomCss(map: CssBindings): this;
     /**
      * Binds HTML attributes to reactive sources.
@@ -759,7 +759,7 @@ declare global {
      * $('.link').atomAttr('href', urlAtom);
      * ```
      */
-    atomAttr(name: string, src: AsyncReactiveValue<PrimitiveValue>): this;
+    atomAttr(name: string, source: AsyncReactiveValue<PrimitiveValue>): this;
     atomAttr(map: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
     /**
      * Binds DOM properties directly to reactive sources.
@@ -769,7 +769,7 @@ declare global {
      * $('.input').atomProp('disabled', disabledAtom);
      * ```
      */
-    atomProp<T>(name: string, src: AsyncReactiveValue<T>): this;
+    atomProp<T>(name: string, source: AsyncReactiveValue<T>): this;
     atomProp(map: Record<string, AsyncReactiveValue<unknown>>): this;
     /**
      * Controls the visibility of elements based on a reactive condition.
@@ -913,7 +913,7 @@ declare global {
      * });
      * ```
      */
-    atomList<T>(src: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
+    atomList<T>(source: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
 
     /**
      * Logic: Component Lifecycle Orchestration
@@ -932,9 +932,9 @@ declare global {
      * @example
      * ```typescript
      * // 1. Define a component
-     * const MyCounter = ($el, props) => {
+     * const MyCounter = ($element, props) => {
      *   const count = $.atom(0);
-     *   const fx = $.effect(() => $el.text(`${props.title}: ${count.value}`));
+     *   const fx = $.effect(() => $element.text(`${props.title}: ${count.value}`));
      *   return () => fx.dispose(); // Teardown hook
      * };
      *

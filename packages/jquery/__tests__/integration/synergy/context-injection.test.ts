@@ -14,8 +14,8 @@ describe('Context Injection Synergy (provide/inject)', () => {
       target: $app.find('#router-view'),
       mode: 'hash',
       routes: {
-        '/': { render: (el) => $(el).html(`<${tagName}></${tagName}>`) },
-        '/page/:id': { render: (el) => $(el).html(`<${tagName}></${tagName}>`) },
+        '/': { render: (element) => $(element).html(`<${tagName}></${tagName}>`) },
+        '/page/:id': { render: (element) => $(element).html(`<${tagName}></${tagName}>`) },
       },
     });
 
@@ -94,9 +94,9 @@ describe('Context Injection Synergy (provide/inject)', () => {
     $.debug.enabled = true;
 
     const tagName = `unregistered-inject-${Math.random().toString(36).slice(2, 9)}`;
-    const el = document.createElement(tagName);
+    const element = document.createElement(tagName);
 
-    $.injectAtom(el, 'some-key');
+    $.injectAtom(element, 'some-key');
 
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining(`[atom-component] Custom Element <${tagName}> is not registered.`)

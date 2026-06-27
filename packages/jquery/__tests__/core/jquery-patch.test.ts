@@ -116,19 +116,19 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
     });
 
     it('should ensure handler identification and unbinding works correctly', () => {
-      const $el = $('<div>').appendTo('body');
+      const $element = $('<div>').appendTo('body');
       let count = 0;
       const handler = () => {
         count++;
       };
 
       // 1. Verify unbinding with ORIGINAL handler works
-      $el.on('click', handler);
-      $el.trigger('click');
+      $element.on('click', handler);
+      $element.trigger('click');
       expect(count).toBe(1);
 
-      $el.off('click', handler);
-      $el.trigger('click');
+      $element.off('click', handler);
+      $element.trigger('click');
       expect(count).toBe(1); // Should not increase
 
       // Verify unbinding with event map containing ORIGINAL handler works
@@ -136,12 +136,12 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
       const mapHandler = () => {
         mapCount++;
       };
-      $el.on({ click: mapHandler });
-      $el.trigger('click');
+      $element.on({ click: mapHandler });
+      $element.trigger('click');
       expect(mapCount).toBe(1);
 
-      $el.off({ click: mapHandler });
-      $el.trigger('click');
+      $element.off({ click: mapHandler });
+      $element.trigger('click');
       expect(mapCount).toBe(1); // Should not increase
 
       // 2. Special handler (boolean false) compatibility
@@ -160,7 +160,7 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
       // Do not trigger submit again as it will cause a real navigation in the browser.
 
       form.remove();
-      $el.remove();
+      $element.remove();
     });
   });
 
@@ -200,8 +200,8 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
     });
 
     it('should handle null/undefined nodes in target collections during remove/detach without throwing', () => {
-      const $el = $('<span>').appendTo(document.body);
-      const $mixed = $el.add(castTo<Element>(null));
+      const $element = $('<span>').appendTo(document.body);
+      const $mixed = $element.add(castTo<Element>(null));
 
       expect(() => $mixed.remove()).not.toThrow();
 
@@ -209,7 +209,7 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
       const $mixed2 = $el2.add(castTo<Element>(undefined));
       expect(() => $mixed2.detach()).not.toThrow();
 
-      $el.remove();
+      $element.remove();
       $el2.remove();
     });
   });

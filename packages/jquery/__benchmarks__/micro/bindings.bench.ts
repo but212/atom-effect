@@ -45,16 +45,16 @@ describe('Bindings: One-way & Baselines', () => {
       container.appendChild(document.createElement('span'))
     );
     for (let i = 0; i < 50; i++) {
-      const val = `update-${i}`;
-      for (const el of elements) el.textContent = val;
+      const value = `update-${i}`;
+      for (const element of elements) element.textContent = value;
     }
   });
 
   run('jQuery: update text (100 elements x 50 updates)', ($c) => {
     const elements = Array.from({ length: 100 }, () => $('<span></span>').appendTo($c));
     for (let i = 0; i < 50; i++) {
-      const val = `update-${i}`;
-      for (const el of elements) el.text(val);
+      const value = `update-${i}`;
+      for (const element of elements) element.text(value);
     }
   });
 
@@ -115,17 +115,17 @@ describe('Bindings: Two-way & Unified', () => {
 
   const valueUpdates100 = Array.from({ length: 100 }, (_, i) => `value-${i}`);
 
-  run('atom → DOM: input val (100 inputs x 100 updates)', ($c) => {
+  run('atom → DOM: input value (100 inputs x 100 updates)', ($c) => {
     const source = $.atom('initial');
     for (let i = 0; i < 100; i++) {
       $('<input type="text">').appendTo($c).atomVal(source);
     }
-    for (const val of valueUpdates100) {
-      source.value = val;
+    for (const value of valueUpdates100) {
+      source.value = value;
     }
   });
 
-  run('DOM → atom: input val (trigger 100 events)', ($c) => {
+  run('DOM → atom: input value (trigger 100 events)', ($c) => {
     const source = $.atom('initial');
     const $input = $('<input type="text">').appendTo($c).atomVal(source);
     for (let i = 0; i < 100; i++) {
@@ -143,13 +143,13 @@ describe('Bindings: Two-way & Unified', () => {
     }
   });
 
-  run('textarea val (100 textareas x 100 updates)', ($c) => {
+  run('textarea value (100 textareas x 100 updates)', ($c) => {
     const source = $.atom('initial');
     for (let i = 0; i < 100; i++) {
       $('<textarea></textarea>').appendTo($c).atomVal(source);
     }
-    for (const val of valueUpdates100) {
-      source.value = val;
+    for (const value of valueUpdates100) {
+      source.value = value;
     }
   });
 
@@ -275,8 +275,8 @@ describe('Bindings: Form (atomForm)', () => {
     for (let i = 0; i < 10; i++) {
       $(createFormHtml()).appendTo($c).atomForm(profile);
     }
-    for (const val of profileUpdates) {
-      profile.value = val;
+    for (const value of profileUpdates) {
+      profile.value = value;
     }
   });
 
@@ -297,8 +297,8 @@ describe('Bindings: Form (atomForm)', () => {
   run('atomForm setup with validation hooks x 10 forms', ($c) => {
     const profile = $.atom<ProfileData>(getInitialProfile());
     const validationRules = {
-      name: (v: unknown) => (v ? true : 'Name is required'),
-      email: (v: unknown) => (String(v).includes('@') ? true : 'Invalid email'),
+      name: (value: unknown) => (value ? true : 'Name is required'),
+      email: (value: unknown) => (String(value).includes('@') ? true : 'Invalid email'),
     };
     for (let i = 0; i < 10; i++) {
       $(createFormHtml()).appendTo($c).atomForm(profile, { validation: validationRules });

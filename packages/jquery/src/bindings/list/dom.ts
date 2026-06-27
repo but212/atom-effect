@@ -74,9 +74,9 @@ export function handleEmpty<T>(
   $container: JQuery,
   empty: ListOptions<T>['empty']
 ): void {
-  if (ctx.$emptyEl && itemCount > 0) {
-    ctx.$emptyEl.remove();
-    ctx.$emptyEl = null;
+  if (ctx.$emptyElement && itemCount > 0) {
+    ctx.$emptyElement.remove();
+    ctx.$emptyElement = null;
   }
   if (itemCount !== 0) return;
 
@@ -90,12 +90,12 @@ export function handleEmpty<T>(
     $container.empty();
   }
 
-  if (empty && !ctx.$emptyEl) {
+  if (empty && !ctx.$emptyElement) {
     const elementSource = typeof empty === 'string' ? $.parseHTML(sanitizeHtml(empty)) : empty;
     if (elementSource) {
-      ctx.$emptyEl = $(elementSource as Element | ArrayLike<Element> | JQuery<Element>).appendTo(
-        $container
-      );
+      ctx.$emptyElement = $(
+        elementSource as Element | ArrayLike<Element> | JQuery<Element>
+      ).appendTo($container);
     }
   }
 
@@ -132,7 +132,11 @@ export function renderItems<T>(
 
   if (isInitial && isStringArray(sanitized) && !options.events) {
     const allNodes = $.parseHTML(sanitized.join(''));
-    if (allNodes && allNodes.length === renderCount && allNodes.every((n) => n.nodeType === 1)) {
+    if (
+      allNodes &&
+      allNodes.length === renderCount &&
+      allNodes.every((node) => node.nodeType === 1)
+    ) {
       return sanitized;
     }
   }
@@ -192,27 +196,27 @@ export function placeItems<T>(
 
   if (htmlFragments) {
     container.innerHTML = htmlFragments.join('');
-    let el = container.firstElementChild;
+    let element = container.firstElementChild;
     const { bind, onAdd } = callbacks;
 
     for (let i = 0; i < count; i++) {
-      if (!el) break;
+      if (!element) break;
       const slot = slots[i];
       if (!slot) continue;
       const { key, item } = slot;
 
       // Lazy wrapping: JQuery wrapper only allocated if callback exists
-      const $el = bind || onAdd ? $(el as HTMLElement) : null;
-      slot.nodes = [el];
+      const $element = bind || onAdd ? $(element as HTMLElement) : null;
+      slot.nodes = [element];
       slot.state = ItemState.Existing;
 
-      if (bind && $el) bind($el, item, i);
-      if (onAdd && $el) {
-        onAdd($el);
+      if (bind && $element) bind($element, item, i);
+      if (onAdd && $element) {
+        onAdd($element);
         ctx.removingKeys.delete(key);
-        debug.domUpdated(SYSTEM_LIST.PREFIX, $el, 'list.add', item);
+        debug.domUpdated(SYSTEM_LIST.PREFIX, $element, 'list.add', item);
       }
-      el = el.nextElementSibling;
+      element = element.nextElementSibling;
     }
     return;
   }

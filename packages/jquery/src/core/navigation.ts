@@ -95,9 +95,9 @@ export const META_SCHEMA = [
  * - Ensures SEO-critical tags stay in sync during SPA transitions
  *   without a full page reload.
  */
-export function syncMetaData(win: Window, meta?: Record<string, string>): void {
-  const doc = win.document;
-  const head = doc.head;
+export function syncMetaData(window: Window, meta?: Record<string, string>): void {
+  const document = window.document;
+  const head = document.head;
   for (const metaSchema of META_SCHEMA) {
     const value = meta ? meta[metaSchema.key] : undefined;
     const metaElement = head.querySelector(metaSchema.selector) as HTMLElement | null;
@@ -107,7 +107,7 @@ export function syncMetaData(win: Window, meta?: Record<string, string>): void {
       continue;
     }
 
-    const target = metaElement || head.appendChild(doc.createElement(metaSchema.tag));
+    const target = metaElement || head.appendChild(document.createElement(metaSchema.tag));
     if (!metaElement) {
       for (const [attributeName, attributeValue] of Object.entries(metaSchema.staticAttrs)) {
         target.setAttribute(attributeName, attributeValue);
@@ -128,9 +128,9 @@ export function syncMetaData(win: Window, meta?: Record<string, string>): void {
  * prevent breaking persistent DOM references.
  */
 export function updateAttributes(element: HTMLElement, next: Record<string, string>): void {
-  for (const attr of [...element.attributes]) {
-    if (!ATTR_PRESERVE.has(attr.name) && !Object.hasOwn(next, attr.name)) {
-      element.removeAttribute(attr.name);
+  for (const attributeValue of [...element.attributes]) {
+    if (!ATTR_PRESERVE.has(attributeValue.name) && !Object.hasOwn(next, attributeValue.name)) {
+      element.removeAttribute(attributeValue.name);
     }
   }
 
@@ -146,13 +146,13 @@ export function updateAttributes(element: HTMLElement, next: Record<string, stri
  * Manages viewport scrolling after a navigation event.
  * Priority: Hash element > Window top (if fallback enabled).
  */
-export function performScroll(win: Window, hash?: string, fallbackToTop = false): void {
+export function performScroll(window: Window, hash?: string, fallbackToTop = false): void {
   const id = decodeURIComponent(hash || '');
-  const hashElement = id ? win.document.getElementById(id) : null;
+  const hashElement = id ? window.document.getElementById(id) : null;
   if (hashElement) {
     hashElement.scrollIntoView({ behavior: 'auto', block: 'start' });
   } else if (!hash || fallbackToTop) {
-    win.scrollTo(0, 0);
+    window.scrollTo(0, 0);
   }
 }
 
@@ -227,12 +227,13 @@ export function isInterceptee(element: Element, win: Window = window): boolean {
   const hrefAttr = anchorElement.getAttribute('href');
   if (!hrefAttr || hrefAttr[0] === '#') return false;
 
-  const loc = win.location;
-  if (anchorElement.origin !== loc.origin || !/^https?:/.test(anchorElement.protocol)) return false;
+  const location = win.location;
+  if (anchorElement.origin !== location.origin || !/^https?:/.test(anchorElement.protocol))
+    return false;
 
   return !(
-    anchorElement.pathname === loc.pathname &&
-    anchorElement.search === loc.search &&
+    anchorElement.pathname === location.pathname &&
+    anchorElement.search === location.search &&
     anchorElement.hash.startsWith('#')
   );
 }
@@ -273,10 +274,10 @@ export function getScrollDecision(params: {
 }
 
 /** @internal */
-export function extractMetaData(doc: Document | Element): Record<string, string> {
+export function extractMetaData(document: Document | Element): Record<string, string> {
   const meta: Record<string, string> = {};
   for (const schema of META_SCHEMA) {
-    const metaElement = doc.querySelector(schema.selector);
+    const metaElement = document.querySelector(schema.selector);
     const value = metaElement?.getAttribute(schema.attr);
     if (value) meta[schema.key] = value;
   }
@@ -289,8 +290,8 @@ export function extractMetaData(doc: Document | Element): Record<string, string>
  * @internal
  */
 export function resolveAnchorPath(element: Element, base?: string): string {
-  const attr = element.getAttribute('href') || element.getAttribute('xlink:href') || '';
-  if (attr.startsWith('#')) return normalizePath(attr.substring(1));
+  const attributeValue = element.getAttribute('href') || element.getAttribute('xlink:href') || '';
+  if (attributeValue.startsWith('#')) return normalizePath(attributeValue.substring(1));
 
   let pathname: string;
   let searchQuery: string;
@@ -300,7 +301,7 @@ export function resolveAnchorPath(element: Element, base?: string): string {
     searchQuery = element.search;
   } else {
     const baseUrl = location.href.startsWith('http') ? `${location.origin}/` : 'http://localhost/';
-    const urlResult = getAbsoluteUrl(attr, baseUrl);
+    const urlResult = getAbsoluteUrl(attributeValue, baseUrl);
     if (Result.isErr(urlResult)) return '';
     const url = Result.unwrap(urlResult);
     pathname = url.pathname;
@@ -319,9 +320,9 @@ export function resolveAnchorPath(element: Element, base?: string): string {
 /** @internal */
 function getElementAttributes(element: Element): Record<string, string> {
   const attributes: Record<string, string> = {};
-  for (const attr of element.attributes) {
-    if (!ATTR_EXTRACT_EXCLUDE.has(attr.name)) {
-      attributes[attr.name] = attr.value;
+  for (const attributeValue of element.attributes) {
+    if (!ATTR_EXTRACT_EXCLUDE.has(attributeValue.name)) {
+      attributes[attributeValue.name] = attributeValue.value;
     }
   }
   return attributes;
@@ -346,20 +347,20 @@ export function extractContent(params: {
   title?: string | null | undefined;
 }): ContentState {
   const { html, selector, redirectUrl, title: titleOverride } = params;
-  const doc = PARSER.parseFromString(html, 'text/html');
+  const document = PARSER.parseFromString(html, 'text/html');
 
   // Logic: Header Priority
   // Header-provided titles take precedence to support minimal PJAX responses
   // that may omit the <title> tag for performance.
-  const title = titleOverride || doc.querySelector('title')?.textContent?.trim() || null;
-  const contentNode = selector ? doc.querySelector(selector) : null;
+  const title = titleOverride || document.querySelector('title')?.textContent?.trim() || null;
+  const contentNode = selector ? document.querySelector(selector) : null;
 
   return {
-    html: (contentNode?.innerHTML ?? doc.body?.innerHTML ?? html).trim(),
+    html: (contentNode?.innerHTML ?? document.body?.innerHTML ?? html).trim(),
     title,
     attributes: contentNode ? getElementAttributes(contentNode) : {},
     redirectUrl,
-    meta: extractMetaData(doc),
+    meta: extractMetaData(document),
   };
 }
 

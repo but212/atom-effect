@@ -209,10 +209,10 @@ describe('Form Binding (atomForm)', () => {
         `);
 
         $form.atomForm(data, {
-          transform: (p, v) => {
-            if (p === 'age') return Number(v);
-            if (p === 'ids' && Array.isArray(v)) return v.map(Number);
-            return v;
+          transform: (path, value) => {
+            if (path === 'age') return Number(value);
+            if (path === 'ids' && Array.isArray(value)) return value.map(Number);
+            return value;
           },
           onChange,
         });
@@ -241,12 +241,12 @@ describe('Form Binding (atomForm)', () => {
         `);
 
         $form.atomForm(data, {
-          transform: (p: string, v: unknown) => {
-            if (p === 'age') throw new Error('Transform error');
-            return v;
+          transform: (path: string, value: unknown) => {
+            if (path === 'age') throw new Error('Transform error');
+            return value;
           },
-          onChange: (p: string) => {
-            if (p === 'text') throw new Error('onChange error');
+          onChange: (path: string) => {
+            if (path === 'text') throw new Error('onChange error');
           },
         });
         await $.nextTick();
@@ -298,7 +298,7 @@ describe('Form Binding (atomForm)', () => {
 
         $form.atomForm(data, {
           validation: {
-            email: (v: unknown) => (String(v).includes('@') ? '' : 'Invalid Email'),
+            email: (value: unknown) => (String(value).includes('@') ? '' : 'Invalid Email'),
           },
         });
         await $.nextTick();
@@ -353,13 +353,13 @@ describe('Form Binding (atomForm)', () => {
           get value() {
             return this._value;
           }
-          set value(v) {
-            this._value = v;
-            this._internals.setFormValue(v);
+          set value(value) {
+            this._value = value;
+            this._internals.setFormValue(value);
           }
-          val(v?: unknown) {
-            if (v === undefined) return this.value;
-            this.value = v as string;
+          val(value?: unknown) {
+            if (value === undefined) return this.value;
+            this.value = value as string;
             return this;
           }
         }

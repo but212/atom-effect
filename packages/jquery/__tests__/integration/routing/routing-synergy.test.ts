@@ -98,10 +98,10 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el, url) => {
+          onMount: ($element, url) => {
             if (url.includes('settings')) {
               const router = $.route({
-                target: $el.find('#settings-view'),
+                target: $element.find('#settings-view'),
                 routes: {
                   profile: { template: '#tpl-profile' },
                   security: { template: '#tpl-security' },
@@ -146,13 +146,13 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el, url) => {
+          onMount: ($element, url) => {
             if (url.includes('guarded')) {
               $.route({
-                target: $el.find('#sub-target'),
+                target: $element.find('#sub-target'),
                 routes: {
                   form: {
-                    render: (el) => $(el).html('<div id="dirty">Unsaved</div>'),
+                    render: (element) => $(element).html('<div id="dirty">Unsaved</div>'),
                     onLeave: () => allowLeave,
                   },
                 },
@@ -196,7 +196,9 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
         $.route({
           target: $adminArea,
           basePath: '/admin',
-          routes: { set: { render: (el) => $(el).html('<div id="admin-view">Admin</div>') } },
+          routes: {
+            set: { render: (element) => $(element).html('<div id="admin-view">Admin</div>') },
+          },
           mode: 'history',
           autoBindLinks: true,
         })
@@ -228,9 +230,9 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
           mode: 'history',
           routes: {
             page: {
-              render: (el) => {
+              render: (element) => {
                 renderCount++;
-                $(el).html('<div>Route</div>');
+                $(element).html('<div>Route</div>');
               },
             },
           },
@@ -313,11 +315,13 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el, url) => {
+          onMount: ($element, url) => {
             if (url.includes('page1')) {
               const router = $.route({
-                target: $el.find('#r1'),
-                routes: { a: { render: (el) => $(el).html('<div id="route-a">A</div>') } },
+                target: $element.find('#r1'),
+                routes: {
+                  a: { render: (element) => $(element).html('<div id="route-a">A</div>') },
+                },
                 default: 'a',
                 mode: 'history',
                 basePath: '/page1',
@@ -357,14 +361,14 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
         $.atomNav({
           target: $app,
           syncTitle: true,
-          onMount: ($el) => {
+          onMount: ($element) => {
             track(
               $.route({
-                target: $el.find('#sub'),
+                target: $element.find('#sub'),
                 routes: {
                   home: {
                     title: 'Route Title',
-                    render: (el) => $(el).html('<div>Home</div>'),
+                    render: (element) => $(element).html('<div>Home</div>'),
                   },
                 },
                 default: 'home',
@@ -386,11 +390,11 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el) => {
+          onMount: ($element) => {
             track(
               $.route({
-                target: $el.find('#sub-meta'),
-                routes: { view: { render: (el) => $(el).html('<div>View</div>') } },
+                target: $element.find('#sub-meta'),
+                routes: { view: { render: (element) => $(element).html('<div>View</div>') } },
                 default: 'view',
               })
             );
@@ -412,14 +416,14 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el) => {
+          onMount: ($element) => {
             track(
               $.route({
-                target: $el.find('#sub-scroll'),
+                target: $element.find('#sub-scroll'),
                 routes: {
                   content: {
-                    render: (el) =>
-                      $(el).html('<div id="section-a" style="margin-top:1000px">A</div>'),
+                    render: (element) =>
+                      $(element).html('<div id="section-a" style="margin-top:1000px">A</div>'),
                   },
                 },
                 default: 'content',
@@ -448,12 +452,12 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el) => {
+          onMount: ($element) => {
             track(
               $.route({
-                target: $el.find('#f-sub'),
+                target: $element.find('#f-sub'),
                 routes: {
-                  main: { render: (el) => $(el).html('<h1>Header</h1><p>text</p>') },
+                  main: { render: (element) => $(element).html('<h1>Header</h1><p>text</p>') },
                 },
                 default: 'main',
               })
@@ -475,12 +479,14 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el, url) => {
+          onMount: ($element, url) => {
             if (url === '/target') {
               track(
                 $.route({
-                  target: $el.find('#root'),
-                  routes: { target: { render: (el) => $(el).html('<div id="v"></div>') } },
+                  target: $element.find('#root'),
+                  routes: {
+                    target: { render: (element) => $(element).html('<div id="v"></div>') },
+                  },
                   default: 'target',
                 })
               );
@@ -514,12 +520,12 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el, url) => {
+          onMount: ($element, url) => {
             const subId = url.includes('first') ? '#sub1' : '#sub2';
             track(
               $.route({
-                target: $el.find(subId),
-                routes: { view: { render: (el) => $(el).html('<div>View</div>') } },
+                target: $element.find(subId),
+                routes: { view: { render: (element) => $(element).html('<div>View</div>') } },
                 default: 'view',
               })
             );
@@ -548,14 +554,14 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const nav = track(
         $.atomNav({
           target: $app,
-          onMount: ($el, url) => {
+          onMount: ($element, url) => {
             const sel = url.includes('swap1') ? '#swap-sub' : '#swap-sub2';
             track(
               $.route({
-                target: $el.find(sel),
+                target: $element.find(sel),
                 routes: {
-                  x: { render: (el) => $(el).html('<div>X</div>') },
-                  z: { render: (el) => $(el).html('<div>Z</div>') },
+                  x: { render: (element) => $(element).html('<div>X</div>') },
+                  z: { render: (element) => $(element).html('<div>Z</div>') },
                 },
                 default: url.includes('swap1') ? 'x' : 'z',
                 activeClass: 'is-active',

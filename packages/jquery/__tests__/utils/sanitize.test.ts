@@ -15,39 +15,39 @@ import {
  */
 const TestKit = {
   async sanitize(html: string): Promise<string> {
-    const val = $.atom(html);
-    const $el = $('<div>').atomHtml(val);
+    const value = $.atom(html);
+    const $element = $('<div>').atomHtml(value);
     await $.nextTick();
-    const result = $el.html();
-    $el.atomUnbind();
+    const result = $element.html();
+    $element.atomUnbind();
     return result;
   },
 
   async sanitizeUpdate(initial: string, update: string): Promise<string> {
-    const val = $.atom(initial);
-    const $el = $('<div>').appendTo(document.body).atomHtml(val);
+    const value = $.atom(initial);
+    const $element = $('<div>').appendTo(document.body).atomHtml(value);
     await $.nextTick();
-    val.value = update;
+    value.value = update;
     await $.nextTick();
-    const result = $el.html();
-    $el.atomUnbind();
-    $el.remove();
+    const result = $element.html();
+    $element.atomUnbind();
+    $element.remove();
     return result;
   },
 
   async isUrlBlocked(attr: string, url: string): Promise<boolean> {
-    const $el = $('<a>').atomAttr(attr, $.atom(url));
+    const $element = $('<a>').atomAttr(attr, $.atom(url));
     await $.nextTick();
-    const val = $el.attr(attr);
-    $el.atomUnbind();
-    return val === undefined || val === 'data-unsafe-protocol:';
+    const value = $element.attr(attr);
+    $element.atomUnbind();
+    return value === undefined || value === 'data-unsafe-protocol:';
   },
 
-  async isCssBlocked(prop: string, val: string): Promise<boolean> {
-    const $el = $('<div>').atomCss(prop, $.atom(val));
+  async isCssBlocked(prop: string, value: string): Promise<boolean> {
+    const $element = $('<div>').atomCss(prop, $.atom(value));
     await $.nextTick();
-    const style = $el[0]?.style.getPropertyValue(prop);
-    $el.atomUnbind();
+    const style = $element[0]?.style.getPropertyValue(prop);
+    $element.atomUnbind();
     return style === '' || style === 'data-unsafe-css:';
   },
 };
@@ -236,9 +236,9 @@ describe('Atom-Effect: Security Specification', () => {
         ['width', 'expression(alert(1))'],
         ['-moz-binding', 'url(https://evil.com/xbl)'],
       ] as const;
-      for (const [prop, val] of patterns) {
-        const isBlocked = await TestKit.isCssBlocked(prop, val);
-        expect(isBlocked, `CSS property "${prop}" should block value: ${val}`).toBe(true);
+      for (const [prop, value] of patterns) {
+        const isBlocked = await TestKit.isCssBlocked(prop, value);
+        expect(isBlocked, `CSS property "${prop}" should block value: ${value}`).toBe(true);
       }
     });
 

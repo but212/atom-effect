@@ -59,10 +59,10 @@ describe('Atom List Edge Cases', () => {
     $container.atomList(items, {
       key: 'id',
       render: (item: { id: number; text: string }) => `<div class="item">${item.text}</div>`,
-      onRemove: async ($el: JQuery<HTMLElement>) => {
-        $el.addClass('removing');
+      onRemove: async ($element: JQuery<HTMLElement>) => {
+        $element.addClass('removing');
         await removePromise;
-        $el.remove();
+        $element.remove();
       },
     });
 

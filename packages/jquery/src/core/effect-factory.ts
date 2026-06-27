@@ -201,7 +201,7 @@ export function registerMapEffect<T>(
   }
 
   const collect = () => {
-    const resolved: Record<string, T> = {};
+    const resolvedMap: Record<string, T> = {};
     const promises: Promise<{ key: string; value: T }>[] = [];
 
     for (const key of keys) {
@@ -212,19 +212,19 @@ export function registerMapEffect<T>(
           (value as Promise<T>).then((resolvedValue) => ({ key, value: resolvedValue }))
         );
       } else {
-        resolved[key] = value as T;
+        resolvedMap[key] = value as T;
       }
     }
 
     if (promises.length > 0) {
       return Promise.all(promises).then((results) => {
         for (const result of results) {
-          resolved[result.key] = result.value;
+          resolvedMap[result.key] = result.value;
         }
-        return resolved;
+        return resolvedMap;
       });
     }
-    return resolved;
+    return resolvedMap;
   };
 
   if (activeBatchCollector) {
@@ -260,7 +260,7 @@ export function registerBatchedEffects(element: Element, tasks: BatchedTask[]): 
     }
   }
 
-  const runners = tasks.map((t) => t.run(element));
+  const runners = tasks.map((task) => task.run(element));
 
   if (hasReactive) {
     registry.trackEffect(

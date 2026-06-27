@@ -190,9 +190,9 @@ const DOM = {
   /** Retrieves the lowercase local name reliably via the prototype. */
   getLocalName: (node: Node) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    const el = node as Element;
+    const element = node as Element;
     const getter = _get(Element.prototype, 'localName') ?? _get(Node.prototype, 'nodeName');
-    return (getter ? (_call(getter, el) as string) : (el.localName ?? '')).toLowerCase();
+    return (getter ? (_call(getter, element) as string) : (element.localName ?? '')).toLowerCase();
   },
   /** Creates an HTMLElement in the current document context. */
   createElement: <T extends HTMLElement>(tag: string) => document.createElement(tag) as T,
@@ -208,9 +208,9 @@ const Guard = {
   decodeEntities(textToDecode: string): string {
     if (!textToDecode.includes('&')) return textToDecode;
     return textToDecode
-      .replace(REGEX.NUMERIC_ENTITY, (_, hex, dec) => {
-        const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10);
-        return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+      .replace(REGEX.NUMERIC_ENTITY, (_, hex, decimal) => {
+        const codePoint = hex ? parseInt(hex, 16) : parseInt(decimal, 10);
+        return codePoint >= 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '';
       })
       .replace(REGEX.NAMED_ENTITY, (_, name) => ENTITIES[name.toLowerCase()] ?? '');
   },
@@ -239,7 +239,8 @@ const Guard = {
    */
   isDangerousCss(value: string): boolean {
     const clean = this.normalize(value).replace(REGEX.CSS_CLEAN, '').toLowerCase();
-    if (['javascript:', 'expression(', '-moz-binding'].some((s) => clean.includes(s))) return true;
+    if (['javascript:', 'expression(', '-moz-binding'].some((pattern) => clean.includes(pattern)))
+      return true;
     const cssUrl = clean.match(/url\s*\(\s*["']?([^"')]*)["']?\s*\)/i)?.[1];
     return !!cssUrl && this.isDangerousUri(cssUrl);
   },
@@ -273,13 +274,13 @@ function _sanitize(html: string, policy: SanitizationPolicy): string {
  */
 const SPECIAL_ATTRIBUTES: Record<
   string,
-  (el: HTMLElement, name: string, value: string, policy: SanitizationPolicy) => void
+  (element: HTMLElement, name: string, value: string, policy: SanitizationPolicy) => void
 > = {
   style(element, name, value) {
     const safeStyles = value
       .split(';')
-      .map((p) => p.trim())
-      .filter((p) => p && !Guard.isDangerousCss(p));
+      .map((declaration) => declaration.trim())
+      .filter((declaration) => declaration && !Guard.isDangerousCss(declaration));
     DOM.setAttribute(
       element,
       name,
@@ -314,12 +315,12 @@ const isSensitiveSvg = (key: string, attributeValue: string) =>
   SENSITIVE_ATTRS.has(key) &&
   (attributeValue.startsWith('on') || Guard.isDangerousUri(attributeValue));
 
-const isDangerousContent = (key: string, val: string, lowerCaseValue: string) =>
+const isDangerousContent = (key: string, value: string, lowerCaseValue: string) =>
   key.includes('javascript') ||
   key.includes('expression') ||
   lowerCaseValue.includes('javascript') ||
   lowerCaseValue.includes('expression') ||
-  Guard.isDangerousUri(val);
+  Guard.isDangerousUri(value);
 
 /**
  * @internal

@@ -32,8 +32,8 @@ describe('RootObserver Engine', () => {
       const observer = getOrCreateRootObserver(root);
       const addedNodes: Element[] = [];
 
-      const unsubscribeCallback = observer.onNodeAdded('[data-test="active"]', (el) => {
-        addedNodes.push(el);
+      const unsubscribeCallback = observer.onNodeAdded('[data-test="active"]', (element) => {
+        addedNodes.push(element);
       });
 
       // 1. Adding non-matching element

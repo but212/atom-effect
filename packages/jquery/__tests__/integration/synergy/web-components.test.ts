@@ -21,10 +21,10 @@ describe('Web Components Synergy (useAtomComponent)', () => {
 
   /** Helper to render a component into the DOM and track it for cleanup */
   const renderTestComponent = (tagName: string, attrs: Record<string, string> = {}) => {
-    const $el = $(document.createElement(tagName));
-    for (const [key, val] of Object.entries(attrs)) $el.attr(key, val);
-    appendToBody($el);
-    return $el;
+    const $element = $(document.createElement(tagName));
+    for (const [key, value] of Object.entries(attrs)) $element.attr(key, value);
+    appendToBody($element);
+    return $element;
   };
 
   it('should re-fetch data automatically when component attributes change', async () => {
@@ -62,16 +62,16 @@ describe('Web Components Synergy (useAtomComponent)', () => {
       }
     );
 
-    const $el = renderTestComponent(tagName, { 'user-id': '1' });
+    const $element = renderTestComponent(tagName, { 'user-id': '1' });
 
     // 1. Initial Load
-    await vi.waitFor(() => expect($el.find('#user-name').text()).toBe('User 1'));
+    await vi.waitFor(() => expect($element.find('#user-name').text()).toBe('User 1'));
     expect(ajaxSpy).toHaveBeenCalled();
     ajaxSpy.mockClear();
 
     // 2. Reactive Update
-    $el.attr('user-id', '2');
-    await vi.waitFor(() => expect($el.find('#user-name').text()).toBe('User 2'));
+    $element.attr('user-id', '2');
+    await vi.waitFor(() => expect($element.find('#user-name').text()).toBe('User 2'));
     expect(ajaxSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -100,10 +100,10 @@ describe('Web Components Synergy (useAtomComponent)', () => {
       }
     );
 
-    const $el = renderTestComponent(tagName);
+    const $element = renderTestComponent(tagName);
     await $.nextTick();
 
-    const shadow = $el[0]?.shadowRoot;
+    const shadow = $element[0]?.shadowRoot;
     if (!shadow) throw new Error('Expected shadowRoot to be defined');
     const nameInput = shadow.querySelector('#name-input') as HTMLInputElement;
     const themeInput = shadow.querySelector('#theme-input') as HTMLInputElement;
@@ -153,14 +153,14 @@ describe('Web Components Synergy (useAtomComponent)', () => {
       }
     );
 
-    const $el = renderTestComponent(tagName);
+    const $element = renderTestComponent(tagName);
     await $.nextTick();
 
-    expect($el.find('li').length).toBe(2);
+    expect($element.find('li').length).toBe(2);
     expect(renderCount).toBe(2);
 
     // Verify Cleanup
-    $el.remove();
+    $element.remove();
     await new Promise((r) => setTimeout(r, 50)); // Wait for registry cleanup
 
     listData.value = [...listData.value, { id: 3, text: 'Item 3' }];

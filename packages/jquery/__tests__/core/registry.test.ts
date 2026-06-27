@@ -13,68 +13,68 @@ describe('Binding Registry', () => {
 
   describe('Cleanup Lifecycle (Manual)', () => {
     it('should be atomic and idempotent when removing marker classes', async () => {
-      const $el = $('<div class="_aes-bound"></div>');
+      const $element = $('<div class="_aes-bound"></div>');
 
       // 1. Unregistered element should just have its class removed
-      cleanup($el);
-      expect($el.hasClass('_aes-bound')).toBe(false);
+      cleanup($element);
+      expect($element.hasClass('_aes-bound')).toBe(false);
 
       // 2. Active binding should be disposed and class removed
       const atom = $.atom('initial');
-      $el.atomText(atom);
+      $element.atomText(atom);
       await $.nextTick();
-      expect($el.hasClass('_aes-bound')).toBe(true);
+      expect($element.hasClass('_aes-bound')).toBe(true);
 
-      cleanup($el);
-      expect($el.hasClass('_aes-bound')).toBe(false);
+      cleanup($element);
+      expect($element.hasClass('_aes-bound')).toBe(false);
 
       // Verify reactivity is terminated
       atom.value = 'updated';
-      expect($el.text()).not.toBe('updated');
+      expect($element.text()).not.toBe('updated');
     });
 
     it('should continue cleaning up even if individual disposals fail', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const $el = $('<div>').appendTo(document.body);
+      const $element = $('<div>').appendTo(document.body);
 
       // Register multiple features, one of which throws during cleanup
-      $el.atomText($.atom('test'));
-      $el.atomMount(() => () => {
+      $element.atomText($.atom('test'));
+      $element.atomMount(() => () => {
         throw new Error('cleanup error');
       });
 
-      cleanup($el);
+      cleanup($element);
 
       expect(errorSpy).toHaveBeenCalled();
-      expect($el.hasClass('_aes-bound')).toBe(false);
+      expect($element.hasClass('_aes-bound')).toBe(false);
       errorSpy.mockRestore();
     });
 
     it('should support manual cleanup with raw HTMLElement', async () => {
-      const el = document.createElement('div');
+      const element = document.createElement('div');
       const atom = $.atom('initial');
-      $(el).atomText(atom);
+      $(element).atomText(atom);
       await $.nextTick();
-      expect(el.textContent).toBe('initial');
+      expect(element.textContent).toBe('initial');
 
       // Call cleanup with raw HTMLElement
-      cleanup(el);
+      cleanup(element);
       atom.value = 'updated';
       await $.nextTick();
-      expect(el.textContent).not.toBe('updated');
+      expect(element.textContent).not.toBe('updated');
     });
 
     it('should log registry.trackEffect throws', () => {
       const errorSpy = vi.spyOn($.debug, 'error').mockImplementation(() => {});
       $.debug.enabled = true;
-      const el = document.createElement('div');
+      const element = document.createElement('div');
       const mockEffect = castTo<Parameters<typeof registry.trackEffect>[1]>({
         dispose: () => {
           throw new Error('dispose failed');
         },
       });
-      registry.trackEffect(el, mockEffect);
-      registry.cleanup(el);
+      registry.trackEffect(element, mockEffect);
+      registry.cleanup(element);
       expect(errorSpy).toHaveBeenCalled();
       errorSpy.mockRestore();
     });
@@ -82,29 +82,29 @@ describe('Binding Registry', () => {
     it('should log registry.onCleanup throws', () => {
       const errorSpy = vi.spyOn($.debug, 'error').mockImplementation(() => {});
       $.debug.enabled = true;
-      const el = document.createElement('div');
-      registry.onCleanup(el, () => {
+      const element = document.createElement('div');
+      registry.onCleanup(element, () => {
         throw new Error('cleanup failed');
       });
-      registry.cleanup(el);
+      registry.cleanup(element);
       expect(errorSpy).toHaveBeenCalled();
       errorSpy.mockRestore();
     });
 
     it('should correctly support registry.hasBind check', () => {
-      const el = document.createElement('div');
-      expect(registry.hasBind(el)).toBe(false);
-      $(el).atomText($.atom('test'));
-      expect(registry.hasBind(el)).toBe(true);
-      registry.cleanup(el);
+      const element = document.createElement('div');
+      expect(registry.hasBind(element)).toBe(false);
+      $(element).atomText($.atom('test'));
+      expect(registry.hasBind(element)).toBe(true);
+      registry.cleanup(element);
     });
 
     it('should support markIgnored and unmarkIgnored', () => {
-      const el = document.createElement('div');
-      registry.markIgnored(el);
-      expect(registry.isIgnored(el)).toBe(true);
-      registry.unmarkIgnored(el);
-      expect(registry.isIgnored(el)).toBe(false);
+      const element = document.createElement('div');
+      registry.markIgnored(element);
+      expect(registry.isIgnored(element)).toBe(true);
+      registry.unmarkIgnored(element);
+      expect(registry.isIgnored(element)).toBe(false);
     });
   });
 
@@ -124,15 +124,15 @@ describe('Binding Registry', () => {
       bodySpy.mockReturnValue(originalBody);
       $.initAEJ({ autoCleanup: true });
 
-      const $el = $('<span>').appendTo(document.body);
+      const $element = $('<span>').appendTo(document.body);
       await $.nextTick();
-      $el.atomText(atom);
+      $element.atomText(atom);
 
       // Remove and verify cleanup
-      $el[0]?.remove();
+      $element[0]?.remove();
       await vi.waitFor(() => {
         atom.value = 'v2';
-        return $el.text() !== 'v2';
+        return $element.text() !== 'v2';
       });
     });
 
@@ -217,19 +217,19 @@ describe('Binding Registry', () => {
       const atom = $.atom('v1');
       $.initAEJ({ autoCleanup: { root } });
 
-      const $el = $('<span>').appendTo(root);
-      $el.atomText(atom);
+      const $element = $('<span>').appendTo(root);
+      $element.atomText(atom);
 
       // Disable system globally
       $.initAEJ({ autoCleanup: false });
 
-      $el[0]?.remove();
+      $element[0]?.remove();
       await $.nextTick();
 
       // Should still be reactive (leaked)
       atom.value = 'leaked';
       await $.nextTick();
-      expect($el.text()).toBe('leaked');
+      expect($element.text()).toBe('leaked');
     });
 
     it('should not disconnect active node addition observers when disableAutoCleanup is called', async () => {
@@ -242,8 +242,8 @@ describe('Binding Registry', () => {
       // 2. Register an unrelated addition observer on the same root
       const observer = getOrCreateRootObserver(root);
       const addedList: Element[] = [];
-      const unsubscribeCallback = observer.onNodeAdded('.test-node', (el) => {
-        addedList.push(el);
+      const unsubscribeCallback = observer.onNodeAdded('.test-node', (element) => {
+        addedList.push(element);
       });
 
       // 3. Disable auto-cleanup globally (this should only unsubscribe auto-cleanup)
@@ -272,9 +272,9 @@ describe('Binding Registry', () => {
       disableAutoCleanup();
       expect(registry.isAutoCleanupScheduled()).toBe(false);
 
-      const $el = $('<div>');
+      const $element = $('<div>');
       const atom = $.atom('test');
-      $el.atomText(atom);
+      $element.atomText(atom);
 
       expect(registry.isAutoCleanupScheduled()).toBe(true);
     });

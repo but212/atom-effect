@@ -17,33 +17,33 @@ describe('DOM Core Utilities', () => {
     it('skips non-Element nodes gracefully', () => {
       const div = document.createElement('div');
       const text = document.createTextNode('text');
-      const atom = $.atom('val');
+      const atom = $.atom('value');
 
       // Should not throw and only update the div
       $([div, text] as HTMLElement[]).atomText(atom);
 
-      expect(div.textContent).toBe('val');
+      expect(div.textContent).toBe('value');
     });
   });
 
   describe('Value Unpacking ([source, options])', () => {
     it('handles [source, options] tuples in bindings', async () => {
-      const el = document.createElement('div');
+      const element = document.createElement('div');
       const atom = $.atom(10);
 
-      $(el).atomBind({
-        text: [atom, (v: number) => `Count: ${v}`],
+      $(element).atomBind({
+        text: [atom, (value: number) => `Count: ${value}`],
       });
       await $.nextTick();
-      expect(el.textContent).toBe('Count: 10');
+      expect(element.textContent).toBe('Count: 10');
     });
 
     it('handles plain objects and static values', () => {
-      const el = document.createElement('div');
-      $(el).atomBind({
+      const element = document.createElement('div');
+      $(element).atomBind({
         css: { color: 'red' },
       });
-      expect(el.style.color).toBe('red');
+      expect(element.style.color).toBe('red');
     });
   });
 });

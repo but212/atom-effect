@@ -58,7 +58,7 @@ function triggerVisualHighlight(element: Element): void {
   highlightAnimation.onfinish = () => animations.delete(element);
 }
 
-let enabled = resolveInitialState();
+let isEnabled = resolveInitialState();
 
 /**
  * Global diagnostic system for inspecting reactive behavior.
@@ -67,10 +67,10 @@ let enabled = resolveInitialState();
  */
 export const debug = {
   get enabled(): boolean {
-    return enabled;
+    return isEnabled;
   },
-  set enabled(isEnabled: boolean) {
-    enabled = isEnabled;
+  set enabled(value: boolean) {
+    isEnabled = value;
   },
 
   warn(prefix: string, message: string, ...rest: unknown[]): void {
@@ -87,7 +87,7 @@ export const debug = {
     type: string,
     value: unknown
   ): void {
-    if (!enabled || !target) return;
+    if (!isEnabled || !target) return;
 
     const element =
       target && typeof target === 'object' && 'jquery' in target

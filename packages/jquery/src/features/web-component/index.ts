@@ -158,7 +158,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         : $(selector, scopedContext as Element);
     }) as JQueryScopedSelector,
 
-    provideAtom: (key: string | symbol, val: unknown) => provideAtom(element, key, val),
+    provideAtom: (key: string | symbol, value: unknown) => provideAtom(element, key, value),
     injectAtom: <T = unknown>(key: string | symbol) => injectAtom<T>(element, key),
 
     /**
@@ -184,7 +184,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         aria: baseConfiguration.aria ?? componentConstructor.aejAria,
         parts: baseConfiguration.parts ?? componentConstructor.aejParts,
         dispatch: baseConfiguration.dispatch ?? componentConstructor.aejDispatch,
-        value: baseConfiguration.value ?? componentConstructor.aejValue,
+        val:
+          baseConfiguration.val ??
+          baseConfiguration.value ??
+          componentConstructor.aejVal ??
+          componentConstructor.aejValue,
         validation: baseConfiguration.validation ?? componentConstructor.aejValidation,
       };
 
@@ -267,8 +271,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (config.aria && internals) SetupFeatures.aria(internals, config.aria, state.effects);
       if (config.parts) SetupFeatures.parts(rootNode as Element, config.parts, state.effects);
 
-      if (internals && (config.value !== undefined || config.validation !== undefined)) {
-        SetupFeatures.form(element, internals, config.value, config.validation, state.effects);
+      if (internals && (config.val !== undefined || config.validation !== undefined)) {
+        SetupFeatures.form(element, internals, config.val, config.validation, state.effects);
       }
 
       state.isInitialized = true;
@@ -317,7 +321,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
  *
  * @param element - The host element or collection acting as provider.
  * @param key - Unique identifier for the context.
- * @param val - The reactive atom or static value to share.
+ * @param value - The reactive atom or static value to share.
  *
  * @example
  * ```typescript
@@ -331,7 +335,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 export function provideAtom(
   element: HTMLElement | JQuery | string,
   key: string | symbol,
-  val: unknown
+  value: unknown
 ): void {
   const targets =
     element instanceof HTMLElement
@@ -345,24 +349,24 @@ export function provideAtom(
     if (!state.providers) {
       state.providers = new Map();
     }
-    state.providers.set(key, val);
+    state.providers.set(key, value);
 
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
       const sync = (newValue: unknown) =>
         element.style.setProperty(varName, String(newValue ?? ''));
-      if (isAtom(val)) {
+      if (isAtom(value)) {
         if (!state.providerEffects) state.providerEffects = new Map();
         state.providerEffects.get(key)?.dispose();
         state.providerEffects.set(
           key,
           $.effect(() => {
-            sync(val.value);
+            sync(value.value);
             return undefined;
           })
         );
-      } else sync(val);
+      } else sync(value);
     }
   }
 }

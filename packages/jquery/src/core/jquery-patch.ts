@@ -79,14 +79,14 @@ function processEventMap(
   map: Record<string, JQueryEventHandler | undefined>,
   processor: (eventHandler: EventHandler) => EventHandler
 ): Record<string, JQueryEventHandler | undefined> {
-  const result: Record<string, JQueryEventHandler | undefined> = {};
+  const resultMap: Record<string, JQueryEventHandler | undefined> = {};
   for (const key in map) {
     if (Object.hasOwn(map, key)) {
-      const fn = map[key];
-      result[key] = typeof fn === 'function' ? processor(fn) : fn;
+      const eventHandler = map[key];
+      resultMap[key] = typeof eventHandler === 'function' ? processor(eventHandler) : eventHandler;
     }
   }
-  return result;
+  return resultMap;
 }
 
 /** @internal */

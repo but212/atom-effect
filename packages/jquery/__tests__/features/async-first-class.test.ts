@@ -27,7 +27,7 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
 
   describe('Scenario 1: Temporal Awareness (Metadata Binding)', () => {
     it('should react to isPending and hasError state in atomBind', async () => {
-      let resolveAjax!: (v: { name: string }[]) => void;
+      let resolveAjax!: (value: { name: string }[]) => void;
       vi.spyOn($, 'ajax').mockImplementation(() =>
         createMockJqXHR(
           new Promise((resolve) => {

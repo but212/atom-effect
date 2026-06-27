@@ -22,7 +22,7 @@ describe('Debug Diagnostics: Runtime Overhead', () => {
       name,
       withContainer(($c) => {
         $.debug.enabled = enabled;
-        const source = $.atom('val');
+        const source = $.atom('value');
         for (let i = 0; i < 100; i++) {
           $('<span></span>').appendTo($c).atomText(source);
         }

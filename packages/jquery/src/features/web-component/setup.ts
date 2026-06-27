@@ -36,7 +36,7 @@ export const SetupFeatures = {
    *
    * Logic: Payload Wrapping
    * - If the source is a function returning an object, it is used as the event `detail`.
-   * - Otherwise, the value is wrapped in `{ value: val }` for a predictable API.
+   * - Otherwise, the value is wrapped in `{ value: value }` for a predictable API.
    */
   dispatch(
     hostElement: HTMLElement,
@@ -46,12 +46,12 @@ export const SetupFeatures = {
     for (const [name, source] of Object.entries(mappings)) {
       effects.push(
         $.effect(() => {
-          const val = resolveValue(source);
+          const value = resolveValue(source);
 
           const detail =
-            typeof source === 'function' && typeof val === 'object' && val !== null
-              ? val
-              : { value: val };
+            typeof source === 'function' && typeof value === 'object' && value !== null
+              ? value
+              : { value: value };
           hostElement.dispatchEvent(
             new CustomEvent(name, { detail, bubbles: true, composed: true })
           );
@@ -89,10 +89,10 @@ export const SetupFeatures = {
     for (const [prop, atom] of Object.entries(aria)) {
       effects.push(
         $.effect(() => {
-          const val = atom.value;
+          const value = atom.value;
           // ElementInternals properties typically expect strings or null to remove the attribute
           (internals as ElementInternals & Record<string, unknown>)[prop] =
-            val == null ? null : String(val);
+            value == null ? null : String(value);
           return undefined;
         })
       );
@@ -125,10 +125,10 @@ export const SetupFeatures = {
       if (atom) {
         effects.push(
           $.effect(() => {
-            const val = String(atom.value ?? '');
+            const value = String(atom.value ?? '');
             // Why: Only update DOM if value actually changed to avoid layout thrashing
             // and unnecessary DOM mutations which can trigger further MutationObservers.
-            if (node.textContent !== val) node.textContent = val;
+            if (node.textContent !== value) node.textContent = value;
             return undefined;
           })
         );
@@ -169,16 +169,16 @@ export const SetupFeatures = {
       if (atom) {
         effects.push(
           $.effect(() => {
-            const val = atom.value;
+            const value = atom.value;
             let normalized: string;
 
-            if (typeof val === 'string') {
-              normalized = val;
-            } else if (Array.isArray(val)) {
-              normalized = val.join(' ');
-            } else if (typeof val === 'object' && val !== null) {
-              normalized = Object.keys(val)
-                .filter((k) => (val as Record<string, boolean>)[k])
+            if (typeof value === 'string') {
+              normalized = value;
+            } else if (Array.isArray(value)) {
+              normalized = value.join(' ');
+            } else if (typeof value === 'object' && value !== null) {
+              normalized = Object.keys(value)
+                .filter((k) => (value as Record<string, boolean>)[k])
                 .join(' ');
             } else {
               normalized = '';
@@ -201,7 +201,7 @@ export const SetupFeatures = {
   observe(
     root: ParentNode,
     selector: string,
-    apply: (n: Element) => void,
+    apply: (node: Element) => void,
     effects: SlotBuffer<Disposable>
   ) {
     // Phase 1: Initial sync for already existing nodes
@@ -228,21 +228,21 @@ export const SetupFeatures = {
    * (via `setValidity`), making the component behave like a native input.
    */
   form(
-    el: HTMLElement,
+    element: HTMLElement,
     internals: ElementInternals,
     value:
       | ReadonlyAtom<unknown>
-      | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> }
+      | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> }
       | undefined,
     validation:
       | ReadonlyAtom<ValidityStateFlags | string>
-      | ((val: unknown) => ValidityStateFlags | string)
+      | ((value: unknown) => ValidityStateFlags | string)
       | undefined,
     effects: SlotBuffer<Disposable>
   ) {
     const isAtomValue = isAtom(value);
     const valueAtom =
-      value && (isAtomValue ? value : (value as { val: ReadonlyAtom<unknown> }).val);
+      value && (isAtomValue ? value : (value as { value: ReadonlyAtom<unknown> }).value);
     const stateAtom =
       value && !isAtomValue ? (value as { state?: ReadonlyAtom<unknown> }).state : null;
 
@@ -261,7 +261,7 @@ export const SetupFeatures = {
             !(formValue instanceof Blob)
           ) {
             const formData = new FormData();
-            flattenToFormData(formData, el.getAttribute('name') || '', formValue);
+            flattenToFormData(formData, element.getAttribute('name') || '', formValue);
             internals.setFormValue(formData, formState as string | FormData | null);
           } else {
             // Fallback for primitives and binary types.
@@ -277,18 +277,18 @@ export const SetupFeatures = {
           const formValue = valueAtom ? valueAtom.value : undefined;
           const validationResult = isAtom(validation)
             ? (validation as ReadonlyAtom<ValidityStateFlags | string>).value
-            : (validation as (v: unknown) => ValidityStateFlags | string)(formValue);
+            : (validation as (value: unknown) => ValidityStateFlags | string)(formValue);
 
           if (typeof validationResult === 'string') {
             // If it's a string, we treat it as a custom error message.
             internals.setValidity(
               validationResult ? { customError: true } : {},
               validationResult,
-              el
+              element
             );
           } else {
             // Otherwise, we pass the raw ValidityStateFlags.
-            internals.setValidity(validationResult, undefined, el);
+            internals.setValidity(validationResult, undefined, element);
           }
         }
         return undefined;

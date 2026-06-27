@@ -117,7 +117,7 @@ export class RouterImpl implements Router {
     const initState = this.#urlAdapter.get();
     this.#previousUrl = initState.url;
 
-    const resolved = resolveNavigation(
+    const navigationResult = resolveNavigation(
       this.#matcher,
       this.#config,
       normalizePath(initState.path),
@@ -125,8 +125,12 @@ export class RouterImpl implements Router {
       this
     );
 
-    const initial = resolved.success
-      ? { path: resolved.path, query: resolved.query, params: resolved.params }
+    const initial = navigationResult.success
+      ? {
+          path: navigationResult.path,
+          query: navigationResult.query,
+          params: navigationResult.params,
+        }
       : { path: this.#config.default, query: {}, params: {} };
 
     this.#locationAtom = createAtom({
@@ -151,7 +155,7 @@ export class RouterImpl implements Router {
   #setupLifecycle() {
     this.#cleanups.push(this.#urlAdapter.setupListener(() => this.#handleBrowserSync()));
 
-    const renderSub = effect(() => {
+    const activeRenderEffect = effect(() => {
       // Logic: Rendering Trigger
       // We explicitly untrack the rendering logic to prevent the renderer
       // from becoming a dependency of its own DOM-cleaning side effects.
@@ -162,7 +166,7 @@ export class RouterImpl implements Router {
         this.#render(path);
       });
     });
-    this.#cleanups.push(() => renderSub.dispose());
+    this.#cleanups.push(() => activeRenderEffect.dispose());
 
     const scanner = setupRouteScanner(
       this.#matcher,
@@ -247,15 +251,15 @@ export class RouterImpl implements Router {
     this.#isTransitioning = true;
     try {
       const nextState = this.#urlAdapter.commit(fullPath);
-      const resolved = resolveNavigation(
+      const navigationResult = resolveNavigation(
         this.#matcher,
         this.#config,
         nextState.path,
         nextState.query,
         this
       );
-      if (resolved.success) {
-        this.#updateState(resolved.path, resolved.query, resolved.params);
+      if (navigationResult.success) {
+        this.#updateState(navigationResult.path, navigationResult.query, navigationResult.params);
       } else {
         // Revert: Navigation rejected by an 'onEnter' guard.
         this.#urlAdapter.revert(this.#previousUrl);
@@ -292,7 +296,7 @@ export class RouterImpl implements Router {
       return;
     }
 
-    const resolved = resolveNavigation(
+    const navigationResult = resolveNavigation(
       this.#matcher,
       this.#config,
       normalizePath(adapterState.path),
@@ -300,8 +304,8 @@ export class RouterImpl implements Router {
       this
     );
 
-    if (resolved.success) {
-      this.#updateState(resolved.path, resolved.query, resolved.params);
+    if (navigationResult.success) {
+      this.#updateState(navigationResult.path, navigationResult.query, navigationResult.params);
     } else {
       // Guard failure on browser-initiated navigation (Back/Forward).
       this.#revertUrl(this.#previousUrl);

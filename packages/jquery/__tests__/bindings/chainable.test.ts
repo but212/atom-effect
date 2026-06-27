@@ -10,130 +10,130 @@ describe('Chainable Methods', () => {
     it('atomText & atomHtml: basic content binding', async () => {
       const text = $.atom('text');
       const html = $.atom('<b>html</b>');
-      const $el = appendToBody('<div>');
+      const $element = appendToBody('<div>');
 
-      $el.atomText(text);
+      $element.atomText(text);
       await $.nextTick();
-      expect($el.text()).toBe('text');
+      expect($element.text()).toBe('text');
 
-      $el.atomHtml(html);
+      $element.atomHtml(html);
       await $.nextTick();
-      expect($el.html()).toBe('<b>html</b>');
+      expect($element.html()).toBe('<b>html</b>');
     });
 
     it('atomClass: handles multiple classes with overlapping protection', async () => {
       const a1 = $.atom(true);
       const a2 = $.atom(true);
       const isActive = $.atom(false);
-      const $el = appendToBody('<div>');
+      const $element = appendToBody('<div>');
 
       // Initial state
-      $el.atomClass(' bg-red-500  font-bold ', isActive);
-      $el.atomClass({ 'active highlight': a1, 'active large': a2 });
+      $element.atomClass(' bg-red-500  font-bold ', isActive);
+      $element.atomClass({ 'active highlight': a1, 'active large': a2 });
 
       await $.nextTick();
-      expect($el.hasClass('bg-red-500')).toBe(false);
-      expect($el.hasClass('active highlight large')).toBe(true);
+      expect($element.hasClass('bg-red-500')).toBe(false);
+      expect($element.hasClass('active highlight large')).toBe(true);
 
       // bug prevention: if a1 becomes false, 'active' should NOT be removed because a2 still needs it
       a1.value = false;
       await $.nextTick();
-      expect($el.hasClass('highlight')).toBe(false);
-      expect($el.hasClass('active')).toBe(true);
+      expect($element.hasClass('highlight')).toBe(false);
+      expect($element.hasClass('active')).toBe(true);
 
       // Static toggle
       isActive.value = true;
       await $.nextTick();
-      expect($el.hasClass('bg-red-500')).toBe(true);
+      expect($element.hasClass('bg-red-500')).toBe(true);
     });
 
     it('atomCss: supports units and value updates', async () => {
       const opacity = $.atom(0.5);
       const width = $.atom(100);
-      const $el = appendToBody('<div>');
+      const $element = appendToBody('<div>');
 
-      $el.atomCss({ opacity, width: [width, 'px'] });
+      $element.atomCss({ opacity, width: [width, 'px'] });
 
       await $.nextTick();
-      expect($el.css('opacity')).toBe('0.5');
-      expect($el.css('width')).toBe('100px');
+      expect($element.css('opacity')).toBe('0.5');
+      expect($element.css('width')).toBe('100px');
 
       width.value = 200;
       await $.nextTick();
-      expect($el.css('width')).toBe('200px');
+      expect($element.css('width')).toBe('200px');
     });
 
     it('atomCss: single property with unit option', async () => {
       const width = $.atom(120);
-      const $el = appendToBody('<div>');
+      const $element = appendToBody('<div>');
 
-      $el.atomCss('width', width, 'px');
+      $element.atomCss('width', width, 'px');
       await $.nextTick();
-      expect($el.css('width')).toBe('120px');
+      expect($element.css('width')).toBe('120px');
     });
 
     it('atomAttr: attribute lifecycle and ARIA boolean handling', async () => {
       const expanded = $.atom(true);
       const disabled = $.atom(false);
       const title = $.atom<string | null>('initial');
-      const $el = appendToBody('<button>');
+      const $element = appendToBody('<button>');
 
-      $el.atomAttr({ 'aria-expanded': expanded, disabled, title });
+      $element.atomAttr({ 'aria-expanded': expanded, disabled, title });
 
       await $.nextTick();
-      expect($el.attr('aria-expanded')).toBe('true');
-      expect($el.attr('disabled')).toBeUndefined();
-      expect($el.attr('title')).toBe('initial');
+      expect($element.attr('aria-expanded')).toBe('true');
+      expect($element.attr('disabled')).toBeUndefined();
+      expect($element.attr('title')).toBe('initial');
 
       expanded.value = false;
       title.value = null;
       await $.nextTick();
-      expect($el.attr('aria-expanded')).toBe('false');
-      expect($el.attr('title')).toBeUndefined();
+      expect($element.attr('aria-expanded')).toBe('false');
+      expect($element.attr('title')).toBeUndefined();
     });
 
     it('atomProp: basic property binding', async () => {
       const id = $.atom('my-id');
-      const $el = appendToBody('<div>');
+      const $element = appendToBody('<div>');
 
-      $el.atomProp('id', id);
+      $element.atomProp('id', id);
       await $.nextTick();
-      expect($el[0]?.id).toBe('my-id');
+      expect($element[0]?.id).toBe('my-id');
     });
 
     it('atomShow/Hide: preserves original style and supports subsequent changes', async () => {
       const isVisible = $.atom(true);
       const isHidden = $.atom(false);
-      const $el = appendToBody('<div style="display: block;">');
+      const $element = appendToBody('<div style="display: block;">');
 
-      $el.atomShow(isVisible).atomHide(isHidden);
+      $element.atomShow(isVisible).atomHide(isHidden);
       await $.nextTick();
-      expect($el.css('display')).toBe('block');
+      expect($element.css('display')).toBe('block');
 
       // Manually change base style to flex
-      $el.css('display', 'flex');
+      $element.css('display', 'flex');
 
       isVisible.value = false;
       await $.nextTick();
-      expect($el[0]?.style.display).toBe('none');
+      expect($element[0]?.style.display).toBe('none');
 
       isVisible.value = true;
       await $.nextTick();
       // Should revert to 'flex', not 'block'
-      expect($el.css('display')).toBe('flex');
+      expect($element.css('display')).toBe('flex');
     });
   });
 
   describe('Two-Way Bindings', () => {
     it('atomVal: two-way sync for input elements', async () => {
       const val = $.atom('test');
-      const $el = appendToBody('<input>');
+      const $element = appendToBody('<input>');
 
-      $el.atomVal(val);
+      $element.atomVal(val);
       await $.nextTick();
-      expect($el.val()).toBe('test');
+      expect($element.val()).toBe('test');
 
-      $el.val('new').trigger('input');
+      $element.val('new').trigger('input');
       expect(val.value).toBe('new');
     });
 
@@ -292,22 +292,22 @@ describe('Chainable Methods', () => {
     it('combines multiple behaviors and supports tuples', async () => {
       const text = $.atom(1);
       const val = $.atom('init');
-      const $el = appendToBody('<input>');
+      const $element = appendToBody('<input>');
 
-      $el.atomBind({
+      $element.atomBind({
         text: [text, (v: number) => `V:${v}`],
         val,
         attr: { 'data-bound': $.atom(true) },
       });
 
       await $.nextTick();
-      expect($el.text()).toBe('V:1');
-      expect($el.val()).toBe('init');
-      expect($el.attr('data-bound')).toBe('data-bound');
+      expect($element.text()).toBe('V:1');
+      expect($element.val()).toBe('init');
+      expect($element.attr('data-bound')).toBe('data-bound');
 
       text.value = 2;
       await $.nextTick();
-      expect($el.text()).toBe('V:2');
+      expect($element.text()).toBe('V:2');
     });
 
     it('should cover all option tasks in atomBind (html, show, hide, checked, form, on, class, css, prop)', async () => {
@@ -362,30 +362,30 @@ describe('Chainable Methods', () => {
 
   describe('Events & Lifecycle', () => {
     it('atomOn: binds event and cleans up on atomUnbind', () => {
-      const $el = appendToBody('<button>');
+      const $element = appendToBody('<button>');
       const handler = vi.fn();
 
-      $el.atomOn('click', handler);
-      $el.trigger('click');
+      $element.atomOn('click', handler);
+      $element.trigger('click');
       expect(handler).toHaveBeenCalledTimes(1);
 
-      $el.atomUnbind();
-      $el.trigger('click');
+      $element.atomUnbind();
+      $element.trigger('click');
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
     it('unpacking handles null or undefined as second argument without crashing', async () => {
-      const el = document.createElement('div');
+      const element = document.createElement('div');
       const val = $.atom(10);
       // Passing null to ensure the unpack logic respects the tuple shape.
       expect(() => {
-        $(el).atomBind({
+        $(element).atomBind({
           val: [val, null],
         });
       }).not.toThrow();
 
       expect(() => {
-        $(el).atomBind({
+        $(element).atomBind({
           val: [val, undefined],
         });
       }).not.toThrow();
@@ -415,14 +415,14 @@ describe('Chainable Methods', () => {
   describe('Safety & Robustness', () => {
     it('Security: blocks dangerous attributes and properties', async () => {
       const warnSpy = vi.spyOn(console, 'warn');
-      const $el = $('<div>');
+      const $element = $('<div>');
 
-      $el.atomAttr('onclick', $.atom('alert(1)'));
-      $el.atomProp('innerHTML', $.atom('<script>'));
+      $element.atomAttr('onclick', $.atom('alert(1)'));
+      $element.atomProp('innerHTML', $.atom('<script>'));
 
       await $.nextTick();
-      expect($el.attr('onclick')).toBeUndefined();
-      expect($el.html()).toBe('');
+      expect($element.attr('onclick')).toBeUndefined();
+      expect($element.html()).toBe('');
       expect(warnSpy).toHaveBeenCalled();
     });
 
@@ -472,18 +472,18 @@ describe('Chainable Methods', () => {
 
     it('atomProp: blocks dangerous URL properties', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const $el = $('<img>');
-      $el.atomProp('src', $.atom('javascript:alert(1)'));
+      const $element = $('<img>');
+      $element.atomProp('src', $.atom('javascript:alert(1)'));
       await $.nextTick();
-      expect(($el[0] as HTMLImageElement | undefined)?.src).toBe('');
+      expect(($element[0] as HTMLImageElement | undefined)?.src).toBe('');
       expect(warnSpy).toHaveBeenCalled();
     });
 
     it('resolveArgs: should handle null/falsy map gracefully', () => {
-      const $el = $('<div>');
+      const $element = $('<div>');
       // @ts-expect-error
-      $el.atomClass(null);
-      expect($el).toBeInstanceOf($);
+      $element.atomClass(null);
+      expect($element).toBeInstanceOf($);
     });
   });
 });

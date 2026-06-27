@@ -42,13 +42,13 @@ export interface ListContext<T> {
   /** Inverse lookup for O(1) index retrieval from a key. */
   keyToIndex: Map<ListKey, number>;
   /** Cached reference to the placeholder element shown when the list is empty. */
-  $emptyEl: JQuery<Element> | null;
+  $emptyElement: JQuery<Element> | null;
   /** The reactive effect controlling this list. Needed to check disposal state during async tasks. */
   reactiveEffect: EffectObject | undefined;
   /** Target container element. */
   readonly $container: JQuery;
   /** Optional removal lifecycle hook. */
-  readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined;
+  readonly onRemove: (($element: JQuery) => Promise<void> | void) | undefined;
 }
 
 /**
@@ -56,13 +56,13 @@ export interface ListContext<T> {
  */
 export function createListContext<T>(
   $container: JQuery,
-  onRemove: (($el: JQuery) => Promise<void> | void) | undefined
+  onRemove: (($element: JQuery) => Promise<void> | void) | undefined
 ): ListContext<T> {
   return {
     snapshots: [],
     removingKeys: new Set<ListKey>(),
     keyToIndex: new Map<ListKey, number>(),
-    $emptyEl: null,
+    $emptyElement: null,
     reactiveEffect: undefined,
     $container,
     onRemove,
@@ -165,7 +165,7 @@ export function disposeContext<T>(listContext: ListContext<T>): void {
   listContext.removingKeys.clear();
   listContext.snapshots = [];
   listContext.keyToIndex.clear();
-  listContext.$emptyEl?.remove();
-  listContext.$emptyEl = null;
+  listContext.$emptyElement?.remove();
+  listContext.$emptyElement = null;
   listContext.$container.off('.atomList');
 }

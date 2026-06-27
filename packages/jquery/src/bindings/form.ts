@@ -178,11 +178,11 @@ function syncValidationEffect(
 function syncToggleEffect(
   toggleElement: HTMLInputElement,
   atom: WritableAtom<unknown>,
-  val: string,
+  value: string,
   isCheck: boolean
 ) {
   return effect(() => {
-    const checked = isToggleChecked(atom.value, val, isCheck);
+    const checked = isToggleChecked(atom.value, value, isCheck);
     if (toggleElement.checked !== checked) toggleElement.checked = checked;
   });
 }
@@ -212,13 +212,13 @@ function syncToggleEffect(
  *   validation: {
  *     'profile.name': (v) => v ? true : 'Name is required'
  *   },
- *   onChange: (path, val) => console.log(`${path} changed to ${val}`)
+ *   onChange: (path, value) => console.log(`${path} changed to ${value}`)
  * });
  * ```
  */
-function getElementNameProperty(el: HTMLElement): string | undefined {
-  if ('name' in el) {
-    const nameValue = (el as Record<string, unknown>).name;
+function getElementNameProperty(element: HTMLElement): string | undefined {
+  if ('name' in element) {
+    const nameValue = (element as Record<string, unknown>).name;
     return nameValue == null ? undefined : String(nameValue);
   }
   return undefined;
@@ -235,7 +235,7 @@ export function bindForm<T extends object, U = unknown>(
   const entries = new Map<string, FieldEntry>();
   const names = new WeakMap<Element, string>();
 
-  const unbindField = (el: Element, name: string): void => {
+  const unbindField = (element: Element, name: string): void => {
     const entry = entries.get(name);
     if (entry && --entry.refCount <= 0) {
       const disposableAtom = entry.atom;
@@ -244,7 +244,7 @@ export function bindForm<T extends object, U = unknown>(
       }
       entries.delete(name);
     }
-    registry.cleanup(el);
+    registry.cleanup(element);
   };
 
   const ensureField = (name: string): FieldEntry => {
@@ -275,28 +275,28 @@ export function bindForm<T extends object, U = unknown>(
   };
 
   const bindToggle = (
-    el: HTMLInputElement,
+    element: HTMLInputElement,
     atom: WritableAtom<unknown>,
-    val: string,
+    value: string,
     isCheck: boolean
   ): void => {
     const handler = () => {
-      atom.value = getNextToggleValue(atom.peek(), el.checked, val, isCheck);
+      atom.value = getNextToggleValue(atom.peek(), element.checked, value, isCheck);
     };
 
     markInternal(handler);
-    $(el).on('change', handler);
-    registry.onCleanup(el, () => $(el).off('change', handler));
+    $(element).on('change', handler);
+    registry.onCleanup(element, () => $(element).off('change', handler));
 
-    registry.trackEffect(el, syncToggleEffect(el, atom, val, isCheck));
+    registry.trackEffect(element, syncToggleEffect(element, atom, value, isCheck));
   };
 
-  const bindField = (el: Element): void => {
-    if (!(el instanceof HTMLElement)) return;
-    const name = el.getAttribute('name') || getElementNameProperty(el);
+  const bindField = (element: Element): void => {
+    if (!(element instanceof HTMLElement)) return;
+    const name = element.getAttribute('name') || getElementNameProperty(element);
     if (!name) return;
 
-    const control = el as HTMLElement & { name?: string; value?: string; type?: string };
+    const control = element as HTMLElement & { name?: string; value?: string; type?: string };
 
     const oldName = names.get(control);
     if (oldName === name) return;
@@ -325,15 +325,15 @@ export function bindForm<T extends object, U = unknown>(
     applyValidation(control, name, entry.atom);
   };
 
-  const bindSubtree = (el: Element): void => {
-    if (el === form) {
+  const bindSubtree = (element: Element): void => {
+    if (element === form) {
       for (const control of form.elements) {
         bindField(control);
       }
-    } else if (el.matches?.(SELECTOR)) {
-      bindField(el);
+    } else if (element.matches?.(SELECTOR)) {
+      bindField(element);
     } else {
-      const targets = el.querySelectorAll?.(SELECTOR);
+      const targets = element.querySelectorAll?.(SELECTOR);
       if (targets) {
         for (const target of targets) {
           bindField(target);
@@ -345,10 +345,10 @@ export function bindForm<T extends object, U = unknown>(
   bindSubtree(form);
 
   const rootObserver = getOrCreateRootObserver(form);
-  const unsubscribeNodeAdded = rootObserver.onNodeAdded(SELECTOR, (el) => bindField(el));
-  const unsubscribeAttributeChanged = rootObserver.onAttributeChanged('name', (el) => {
-    if (el.matches(SELECTOR)) {
-      bindField(el);
+  const unsubscribeNodeAdded = rootObserver.onNodeAdded(SELECTOR, (element) => bindField(element));
+  const unsubscribeAttributeChanged = rootObserver.onAttributeChanged('name', (element) => {
+    if (element.matches(SELECTOR)) {
+      bindField(element);
     }
   });
 

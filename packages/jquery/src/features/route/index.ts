@@ -22,7 +22,7 @@ import { RouterImpl } from './router';
  *   target: '#app',
  *   routes: {
  *     '/': { template: '#home-tmpl' },
- *     '/users/:id': { render: (el, name, params) => renderUser(el, params.id) }
+ *     '/users/:id': { render: (element, name, params) => renderUser(element, params.id) }
  *   }
  * });
  * ```

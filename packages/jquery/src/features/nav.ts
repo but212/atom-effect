@@ -89,7 +89,7 @@ function reconcileDOM(
  * Performs DOM updates and browser history synchronization within a single reactive batch.
  */
 function applyNavigationState(
-  win: Window,
+  window: Window,
   $target: JQuery,
   intent: WritableAtom<NavState>,
   rendered: WritableAtom<{ url: string; path: string }>,
@@ -97,31 +97,31 @@ function applyNavigationState(
   url: string,
   hash: string,
   type: NavigationType,
-  curRendered: { url: string; path: string },
+  currentRendered: { url: string; path: string },
   options: AtomNavOptions
 ): void {
   const isRedirect = !!(pjaxState.redirectUrl && pjaxState.redirectUrl !== url);
-  const previousUrl = curRendered.url;
+  const previousUrl = currentRendered.url;
 
   let finalUrl = isRedirect ? (pjaxState.redirectUrl as string) : url;
   if (isRedirect && hash && !finalUrl.includes('#')) {
     finalUrl += `#${hash}`;
   }
 
-  const { pathAndSearch: finalPath } = getUrlParts(finalUrl, win.location.href);
-  const isNewTarget = finalPath !== curRendered.path;
+  const { pathAndSearch: finalPath } = getUrlParts(finalUrl, window.location.href);
+  const isNewTarget = finalPath !== currentRendered.path;
 
   $.batch(() => {
     if (isRedirect) {
-      win.history.replaceState(null, '', finalUrl);
+      window.history.replaceState(null, '', finalUrl);
       intent.value = { url: finalUrl, type: 'push' };
     }
 
     if (isNewTarget || isRedirect) {
-      reconcileDOM($target, pjaxState, finalUrl, previousUrl, win, options);
+      reconcileDOM($target, pjaxState, finalUrl, previousUrl, window, options);
     }
 
-    const prevHash = getUrlParts(curRendered.url, win.location.href).hash;
+    const prevHash = getUrlParts(currentRendered.url, window.location.href).hash;
     const { shouldScroll, resetScroll } = getScrollDecision({
       hash,
       type,
@@ -130,7 +130,7 @@ function applyNavigationState(
       scrollToTop: options.scrollToTop ?? true,
     });
 
-    if (shouldScroll) performScroll(win, hash, resetScroll);
+    if (shouldScroll) performScroll(window, hash, resetScroll);
     rendered.value = { url: finalUrl, path: finalPath };
   });
 }
@@ -158,7 +158,7 @@ function resolveTargetSelector(target: unknown, $target: JQuery): string | undef
  * ```typescript
  * const nav = $.atomNav({
  *   target: '#main-content',
- *   onMount: ($el) => console.log('Swapped!'),
+ *   onMount: ($element) => console.log('Swapped!'),
  * });
  *
  * // Monitor navigation status
@@ -183,9 +183,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   $target.attr('data-atom-nav-target', 'true');
 
-  const initialUrlObj = new URL(win.location.href);
-  const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
-  const initialPath = initialUrlObj.pathname + initialUrlObj.search;
+  const initialUrlObject = new URL(win.location.href);
+  const initialUrl = initialUrlObject.pathname + initialUrlObject.search + initialUrlObject.hash;
+  const initialPath = initialUrlObject.pathname + initialUrlObject.search;
 
   // Reactivity State
   const intent = $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' });
@@ -250,17 +250,17 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     (): undefined => {
       const { url, type } = intent.value;
       const { pathAndSearch, hash } = getUrlParts(url, win.location.href);
-      const curRendered = $.untracked(() => rendered.value);
+      const currentRendered = $.untracked(() => rendered.value);
 
-      if (pathAndSearch === curRendered.path) {
+      if (pathAndSearch === currentRendered.path) {
         $.untracked(() => {
           if (hash) performScroll(win, hash);
 
           if (type === 'init') {
             options.onMount?.($target, url);
             intent.value = { ...intent.peek(), type: 'push' };
-          } else if (url !== curRendered.url) {
-            rendered.value = { ...curRendered, url };
+          } else if (url !== currentRendered.url) {
+            rendered.value = { ...currentRendered, url };
           }
         });
         return undefined;
@@ -288,7 +288,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         url,
         hash,
         type,
-        curRendered,
+        currentRendered,
         options
       );
 

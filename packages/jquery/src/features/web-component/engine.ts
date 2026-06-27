@@ -142,11 +142,11 @@ export function createContextProxy<T>(
       // resolution value and subscribe to it. If the user wants to react to *movement* in the DOM,
       // they must explicitly re-evaluate or use a component lifecycle hook.
       // This enforces explicit bounds over implicit magical DOM tracking.
-      const shared = $.computed(() => resolve(false));
-      const unsubscribeCallback = shared.subscribe(callback);
+      const sharedComputed = $.computed(() => resolve(false));
+      const unsubscribeCallback = sharedComputed.subscribe(callback);
       return () => {
         unsubscribeCallback();
-        shared.dispose();
+        sharedComputed.dispose();
       };
     },
     subscriberCount: () => 0, // Proxy has no permanent subscribers.
