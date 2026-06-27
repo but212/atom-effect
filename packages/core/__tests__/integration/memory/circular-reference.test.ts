@@ -80,8 +80,8 @@ describe('Dependency Graph Safety', () => {
       const counter = atom(0);
 
       const fx = effect(() => {
-        const val = counter.value;
-        if (val < 200) counter.value = val + 1;
+        const value = counter.value;
+        if (value < 200) counter.value = value + 1;
       });
 
       await aeNextTick();

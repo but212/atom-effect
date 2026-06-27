@@ -65,16 +65,16 @@
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
-    "@types/jquery": "^4.0.0",
+    "@types/jquery": "^4.0.1",
+    "@vitest/browser": "catalog:test",
+    "@vitest/browser-playwright": "catalog:test",
+    "@vitest/coverage-v8": "catalog:test",
+    "cross-env": "catalog:build",
     "jquery": "^4.0.0",
     "rimraf": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:",
-    "typescript": "catalog:",
-    "cross-env": "catalog:",
-    "tinybench": "catalog:",
-    "@vitest/browser": "catalog:",
-    "@vitest/browser-playwright": "catalog:",
-    "@vitest/coverage-v8": "catalog:"
+    "tinybench": "catalog:test",
+    "typescript": "catalog:build",
+    "vite": "catalog:build",
+    "vitest": "catalog:test"
   }
 }

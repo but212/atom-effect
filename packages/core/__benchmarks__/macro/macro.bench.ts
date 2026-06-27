@@ -77,7 +77,7 @@ describe('Todo App: Comprehensive Workflow', () => {
   const todoStats = computed(() => {
     const todos = todosWorkflow.value;
     const total = todos.length;
-    const completed = todos.filter((t) => t.completed).length;
+    const completed = todos.filter((todo: TodoItem) => todo.completed).length;
     return {
       filteredLength: filteredWorkflow.value.length,
       rate: total === 0 ? 0 : (completed / total) * 100,
@@ -99,8 +99,8 @@ describe('Todo App: Comprehensive Workflow', () => {
         text: 'New',
         completed: false,
       }));
-      todosWorkflow.value = todosWorkflow.value.map((t, i) =>
-        i < 50 ? { ...t, completed: true } : t
+      todosWorkflow.value = todosWorkflow.value.map((todo: TodoItem, index: number) =>
+        index < 50 ? { ...todo, completed: true } : todo
       );
       filterWorkflow.value = 'active';
       todosWorkflow.value = todosWorkflow.value.slice(20);
@@ -182,7 +182,7 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
 
   const departmentFilter = atom<string>('Engineering');
   const filteredRows = computed(() =>
-    rows.value.filter((row) => row.department === departmentFilter.value)
+    rows.value.filter((row: DataGridRow) => row.department === departmentFilter.value)
   );
 
   bench(
@@ -421,12 +421,12 @@ describe('Dynamic Dependency Patterns', () => {
 });
 
 describe('Large Grid with Lenses (50x50)', () => {
-  type Cell = { v: number; color: string };
+  type Cell = { value: number; color: string };
   const ROWS = 50;
   const COLS = 50;
 
   const initialGrid: Cell[][] = Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => ({ v: 0, color: 'white' }))
+    Array.from({ length: COLS }, () => ({ value: 0, color: 'white' }))
   );
   const gridAtom = atom(initialGrid);
   const cellLenses = initialGrid.map((row, r) =>
@@ -436,7 +436,7 @@ describe('Large Grid with Lenses (50x50)', () => {
   const randomUpdates = Array.from({ length: 10 }, () => ({
     r: Math.floor(Math.random() * ROWS),
     c: Math.floor(Math.random() * COLS),
-    v: Math.random(),
+    value: Math.random(),
   }));
 
   bench(
@@ -445,7 +445,7 @@ describe('Large Grid with Lenses (50x50)', () => {
       for (const update of randomUpdates) {
         const cell = cellLenses[update.r]?.[update.c];
         if (cell) {
-          cell.value = { v: Math.random(), color: 'blue' };
+          cell.value = { value: Math.random(), color: 'blue' };
         }
       }
     },
@@ -457,7 +457,7 @@ describe('Large Grid with Lenses (50x50)', () => {
     () => {
       gridAtom.value = gridAtom
         .peek()
-        .map((row) => row.map((cell) => ({ v: cell.v + 1, color: 'red' })));
+        .map((row: Cell[]) => row.map((cell: Cell) => ({ value: cell.value + 1, color: 'red' })));
     },
     macroBenchOptions
   );
@@ -541,8 +541,8 @@ describe('Memory & GC pressure', () => {
     () => {
       const a = atom(0);
       for (let i = 0; i < 1000; i++) {
-        const unsub = a.subscribe(() => {});
-        unsub();
+        const unsubscribeCallback = a.subscribe(() => {});
+        unsubscribeCallback();
       }
       a.dispose();
     },

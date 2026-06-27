@@ -66,7 +66,7 @@ export function createRouteRenderer(
  */
 export function renderRoute(
   renderer: RouteRenderer,
-  def: RouteDefinition,
+  routeDefinition: RouteDefinition,
   routeName: string,
   params: Record<string, string>,
   router: Router
@@ -75,29 +75,29 @@ export function renderRoute(
   if (!container) return;
 
   untracked(() => renderer.config.beforeTransition(renderer.previousPath, routeName));
-  if (def.title) document.title = def.title;
-  if (def.meta) syncMetaData(window, def.meta);
+  if (routeDefinition.title) document.title = routeDefinition.title;
+  if (routeDefinition.meta) syncMetaData(window, routeDefinition.meta);
 
   // Logic: DOM Refresh
   // Ensures a clean slate and resets the cleanup buffer for the new view lifecycle.
   container.replaceChildren();
-  const onUnmount = (fn: () => void) => renderer.cleanups.push(fn);
+  const onUnmount = (teardown: () => void) => renderer.cleanups.push(teardown);
 
-  if (def.render) {
-    def.render(container, routeName, params, onUnmount, router);
-  } else if (def.template) {
-    const tmpl = document.querySelector(def.template);
-    if (tmpl instanceof HTMLTemplateElement) {
-      container.appendChild(tmpl.content.cloneNode(true));
-      def.onMount?.($(container).children(), onUnmount, router);
+  if (routeDefinition.render) {
+    routeDefinition.render(container, routeName, params, onUnmount, router);
+  } else if (routeDefinition.template) {
+    const templateElement = document.querySelector(routeDefinition.template);
+    if (templateElement instanceof HTMLTemplateElement) {
+      container.appendChild(templateElement.content.cloneNode(true));
+      routeDefinition.onMount?.($(container).children(), onUnmount, router);
     }
   }
 
   // Security & DX: Validate that all components in the new view are registered.
   // Prevents "silent failures" where custom elements appear as empty tags.
   if (debug.enabled && typeof customElements !== 'undefined') {
-    for (const el of container.querySelectorAll(':not(:defined)')) {
-      const tagName = el.tagName.toLowerCase();
+    for (const element of container.querySelectorAll(':not(:defined)')) {
+      const tagName = element.tagName.toLowerCase();
       if (tagName.includes('-')) {
         debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
       }
@@ -158,73 +158,73 @@ export function setupRouteScanner(
   const pathCache = new WeakMap<Element, string>();
   const activeStateCache = new WeakMap<Element, boolean>();
 
-  const resolvePath = (el: Element, stripQuery = false) => {
-    const attr = el.getAttribute('data-route');
-    const path = attr || urlAdapter.resolveAnchor(el);
+  const resolvePath = (element: Element, stripQuery = false) => {
+    const routeAttribute = element.getAttribute('data-route');
+    const path = routeAttribute || urlAdapter.resolveAnchor(element);
     if (!path) return '';
     return stripQuery ? splitPath(path).route : path;
   };
 
   const currentPatternAtom = computed(() => getRoutePattern(matcher, currentRouteAtom.value));
 
-  const updateActive = (el: Element, current: string, pattern: string) => {
-    const path = pathCache.get(el) || resolvePath(el, true);
+  const updateActive = (element: Element, current: string, pattern: string) => {
+    const path = pathCache.get(element) || resolvePath(element, true);
     const active = path === current || path === pattern;
-    if (activeStateCache.get(el) === active) return;
-    activeStateCache.set(el, active);
-    updateActiveState({ el, active, activeClass });
+    if (activeStateCache.get(element) === active) return;
+    activeStateCache.set(element, active);
+    updateActiveState({ element: element, active, activeClass });
   };
 
-  const trackLink = (el: Element) => {
-    const path = resolvePath(el, true);
-    pathCache.set(el, path);
+  const trackLink = (element: Element) => {
+    const path = resolvePath(element, true);
+    pathCache.set(element, path);
 
-    if (trackedLinks.has(el)) {
-      updateActive(el, currentRouteAtom.peek(), currentPatternAtom.peek());
+    if (trackedLinks.has(element)) {
+      updateActive(element, currentRouteAtom.peek(), currentPatternAtom.peek());
       return;
     }
 
-    trackedLinks.add(el);
-    updateActive(el, currentRouteAtom.peek(), currentPatternAtom.peek());
+    trackedLinks.add(element);
+    updateActive(element, currentRouteAtom.peek(), currentPatternAtom.peek());
 
     // Cleanup: Leverages the registry to ensure memory is released when the link is destroyed.
-    registry.onCleanup(el, () => {
-      trackedLinks.delete(el);
+    registry.onCleanup(element, () => {
+      trackedLinks.delete(element);
     });
   };
 
   const scan = () => {
-    for (const el of document.querySelectorAll<HTMLElement>(NAV_SPEC.selectors)) {
-      trackLink(el);
+    for (const element of document.querySelectorAll<HTMLElement>(NAV_SPEC.selectors)) {
+      trackLink(element);
     }
   };
 
   // Logic: Centralized Active Link Sync
   // Instead of creating O(N) effects per link, we use a single effect that iterates
   // over the centralized set of tracked links.
-  const syncSub = effect(() => {
+  const activeLinkSubscription = effect(() => {
     const current = currentRouteAtom.value;
     const pattern = currentPatternAtom.value;
-    for (const el of trackedLinks) {
-      updateActive(el, current, pattern);
+    for (const element of trackedLinks) {
+      updateActive(element, current, pattern);
     }
   });
 
   // Logic: Dynamic Content Support
   // Handles scenarios where links are added dynamically (e.g., list rendering or async components).
   const linkObserver = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      if (m.type === 'childList') {
-        for (const node of m.addedNodes) {
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList') {
+        for (const node of mutation.addedNodes) {
           if (node.nodeType === 1) {
-            const el = node as Element;
-            if (el.matches(NAV_SPEC.selectors)) trackLink(el);
-            for (const c of el.querySelectorAll(NAV_SPEC.selectors)) {
-              trackLink(c);
+            const element = node as Element;
+            if (element.matches(NAV_SPEC.selectors)) trackLink(element);
+            for (const childElement of element.querySelectorAll(NAV_SPEC.selectors)) {
+              trackLink(childElement);
             }
           }
         }
-      } else if (m.type === 'attributes') trackLink(m.target as Element);
+      } else if (mutation.type === 'attributes') trackLink(mutation.target as Element);
     }
   });
 
@@ -240,7 +240,7 @@ export function setupRouteScanner(
     scan,
     resolvePath,
     disconnect: () => {
-      syncSub.dispose();
+      activeLinkSubscription.dispose();
       linkObserver.disconnect();
     },
   };
@@ -261,17 +261,20 @@ export function discoverRoutes(): {
   const routes: Record<string, RouteDefinition> = {};
   let defaultPath: string | undefined;
 
-  for (const tmpl of document.querySelectorAll<HTMLTemplateElement>('template[data-path]')) {
-    const path = normalizePath(tmpl.getAttribute('data-path') ?? '');
-    const title = tmpl.getAttribute('title') ?? tmpl.getAttribute('data-title');
+  for (const templateElement of document.querySelectorAll<HTMLTemplateElement>(
+    'template[data-path]'
+  )) {
+    const path = normalizePath(templateElement.getAttribute('data-path') ?? '');
+    const title =
+      templateElement.getAttribute('title') ?? templateElement.getAttribute('data-title');
     if (!routes[path]) {
-      tmpl.id ||= `route-${Math.random().toString(36).slice(2, 11)}`;
-      routes[path] = { template: `#${tmpl.id}`, ...(title ? { title } : {}) };
+      templateElement.id ||= `route-${Math.random().toString(36).slice(2, 11)}`;
+      routes[path] = { template: `#${templateElement.id}`, ...(title ? { title } : {}) };
     } else if (title && !routes[path].title) {
       routes[path].title = title;
     }
 
-    if (tmpl.hasAttribute('data-default')) {
+    if (templateElement.hasAttribute('data-default')) {
       defaultPath = path;
     }
   }
@@ -292,26 +295,26 @@ export function discoverRoutes(): {
 export function setupRouteInterceptor(
   config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> },
   matcher: RouteMatcher,
-  resolvePath: (el: Element) => string,
+  resolvePath: (element: Element) => string,
   navigate: (path: string) => Promise<void>
 ): () => void {
-  const shouldIntercept = (path: string, el: Element): boolean => {
+  const shouldIntercept = (path: string, anchorElement: Element): boolean => {
     // Reason: Avoid hijacking clicks for file downloads (e.g., resume.pdf).
     // If a path contains an extension, we only intercept if it specifically matches a route pattern.
-    if (el instanceof HTMLAnchorElement) {
+    if (anchorElement instanceof HTMLAnchorElement) {
       const last = path.split('/').pop() ?? '';
       if (last.includes('.') && !getRoutePattern(matcher, splitPath(path).route)) return false;
     }
     return !!getRoutePattern(matcher, splitPath(path).route) || !!config.notFound;
   };
 
-  const onClick = (e: JQuery.TriggeredEvent) => {
-    if (e.isDefaultPrevented() || !isNavigationClick(e)) return;
-    const el = e.currentTarget as HTMLElement;
-    if (!isInterceptee(el)) return;
-    const path = resolvePath(el);
-    if (path && shouldIntercept(path, el)) {
-      e.preventDefault();
+  const onClick = (event: JQuery.TriggeredEvent) => {
+    if (event.isDefaultPrevented() || !isNavigationClick(event)) return;
+    const clickedElement = event.currentTarget as HTMLElement;
+    if (!isInterceptee(clickedElement)) return;
+    const path = resolvePath(clickedElement);
+    if (path && shouldIntercept(path, clickedElement)) {
+      event.preventDefault();
       navigate(path);
     }
   };

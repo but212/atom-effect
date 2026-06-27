@@ -38,10 +38,10 @@ export const macroBenchOptions: BenchOptions = {
  * Creates a fresh container element attached to document.body.
  */
 export const createContainer = (): JQuery => {
-  const el = document.createElement('div');
-  el.className = 'bench-root';
-  document.body.appendChild(el);
-  return $(el);
+  const element = document.createElement('div');
+  element.className = 'bench-root';
+  document.body.appendChild(element);
+  return $(element);
 };
 
 /**

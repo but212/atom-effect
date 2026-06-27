@@ -67,16 +67,16 @@ function reconcileDOM(
     // Constraint: Clean up internal atom bindings within the target before replacing HTML
     $target.children().atomUnbind();
 
-    const syncTitle = options.syncTitle ?? true;
-    if (syncTitle && state.title != null && win.document.title !== state.title) {
+    const shouldSyncTitle = options.syncTitle ?? true;
+    if (shouldSyncTitle && state.title != null && win.document.title !== state.title) {
       win.document.title = state.title;
     }
     if (state.meta) {
       syncMetaData(win, state.meta);
     }
-    const el = $target[0];
-    if (el && state.attributes) {
-      updateAttributes(el, state.attributes);
+    const element = $target[0];
+    if (element && state.attributes) {
+      updateAttributes(element, state.attributes);
     }
     $target.html(state.html);
 
@@ -89,7 +89,7 @@ function reconcileDOM(
  * Performs DOM updates and browser history synchronization within a single reactive batch.
  */
 function applyNavigationState(
-  win: Window,
+  window: Window,
   $target: JQuery,
   intent: WritableAtom<NavState>,
   rendered: WritableAtom<{ url: string; path: string }>,
@@ -97,31 +97,31 @@ function applyNavigationState(
   url: string,
   hash: string,
   type: NavigationType,
-  curRendered: { url: string; path: string },
+  currentRendered: { url: string; path: string },
   options: AtomNavOptions
 ): void {
   const isRedirect = !!(pjaxState.redirectUrl && pjaxState.redirectUrl !== url);
-  const previousUrl = curRendered.url;
+  const previousUrl = currentRendered.url;
 
   let finalUrl = isRedirect ? (pjaxState.redirectUrl as string) : url;
   if (isRedirect && hash && !finalUrl.includes('#')) {
     finalUrl += `#${hash}`;
   }
 
-  const { pathAndSearch: finalPath } = getUrlParts(finalUrl, win.location.href);
-  const isNewTarget = finalPath !== curRendered.path;
+  const { pathAndSearch: finalPath } = getUrlParts(finalUrl, window.location.href);
+  const isNewTarget = finalPath !== currentRendered.path;
 
   $.batch(() => {
     if (isRedirect) {
-      win.history.replaceState(null, '', finalUrl);
+      window.history.replaceState(null, '', finalUrl);
       intent.value = { url: finalUrl, type: 'push' };
     }
 
     if (isNewTarget || isRedirect) {
-      reconcileDOM($target, pjaxState, finalUrl, previousUrl, win, options);
+      reconcileDOM($target, pjaxState, finalUrl, previousUrl, window, options);
     }
 
-    const prevHash = getUrlParts(curRendered.url, win.location.href).hash;
+    const prevHash = getUrlParts(currentRendered.url, window.location.href).hash;
     const { shouldScroll, resetScroll } = getScrollDecision({
       hash,
       type,
@@ -130,7 +130,7 @@ function applyNavigationState(
       scrollToTop: options.scrollToTop ?? true,
     });
 
-    if (shouldScroll) performScroll(win, hash, resetScroll);
+    if (shouldScroll) performScroll(window, hash, resetScroll);
     rendered.value = { url: finalUrl, path: finalPath };
   });
 }
@@ -158,7 +158,7 @@ function resolveTargetSelector(target: unknown, $target: JQuery): string | undef
  * ```typescript
  * const nav = $.atomNav({
  *   target: '#main-content',
- *   onMount: ($el) => console.log('Swapped!'),
+ *   onMount: ($element) => console.log('Swapped!'),
  * });
  *
  * // Monitor navigation status
@@ -183,9 +183,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   $target.attr('data-atom-nav-target', 'true');
 
-  const initialUrlObj = new URL(win.location.href);
-  const initialUrl = initialUrlObj.pathname + initialUrlObj.search + initialUrlObj.hash;
-  const initialPath = initialUrlObj.pathname + initialUrlObj.search;
+  const initialUrlObject = new URL(win.location.href);
+  const initialUrl = initialUrlObject.pathname + initialUrlObject.search + initialUrlObject.hash;
+  const initialPath = initialUrlObject.pathname + initialUrlObject.search;
 
   // Reactivity State
   const intent = $.atom<NavState>({ url: initialUrl, type: 'init' }, { name: 'nav:intent' });
@@ -214,14 +214,17 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         ...headers,
       },
       eager: false,
-      transform: (raw, xhr) => {
-        const result = extractContent({
-          html: String(raw),
+      transform: (htmlContent, xhr) => {
+        const extractedContent = extractContent({
+          html: String(htmlContent),
           selector: targetSelector,
           redirectUrl: xhr?.getResponseHeader?.('X-PJAX-URL') ?? undefined,
           title: xhr?.getResponseHeader?.('X-PJAX-Title') ?? undefined,
         });
-        return { ...result, html: sanitizeHtml(result.html, NAV_POLICY).trim() };
+        return {
+          ...extractedContent,
+          html: sanitizeHtml(extractedContent.html, NAV_POLICY).trim(),
+        };
       },
     }
   );
@@ -247,17 +250,17 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     (): undefined => {
       const { url, type } = intent.value;
       const { pathAndSearch, hash } = getUrlParts(url, win.location.href);
-      const curRendered = $.untracked(() => rendered.value);
+      const currentRendered = $.untracked(() => rendered.value);
 
-      if (pathAndSearch === curRendered.path) {
+      if (pathAndSearch === currentRendered.path) {
         $.untracked(() => {
           if (hash) performScroll(win, hash);
 
           if (type === 'init') {
             options.onMount?.($target, url);
             intent.value = { ...intent.peek(), type: 'push' };
-          } else if (url !== curRendered.url) {
-            rendered.value = { ...curRendered, url };
+          } else if (url !== currentRendered.url) {
+            rendered.value = { ...currentRendered, url };
           }
         });
         return undefined;
@@ -285,7 +288,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         url,
         hash,
         type,
-        curRendered,
+        currentRendered,
         options
       );
 
@@ -296,28 +299,31 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   const handlePopState = (): void => {
     renewAbortSignal();
-    const loc = win.location;
-    intent.value = { url: loc.pathname + loc.search + loc.hash, type: 'pop' };
+    const windowLocation = win.location;
+    intent.value = {
+      url: windowLocation.pathname + windowLocation.search + windowLocation.hash,
+      type: 'pop',
+    };
   };
 
-  const handleLinkClick = (e: MouseEvent): void => {
-    if (e.defaultPrevented || !(e.target instanceof Element)) return;
-    const el = e.target.closest<HTMLAnchorElement>(selector);
-    if (!el) return;
+  const handleLinkClick = (event: MouseEvent): void => {
+    if (event.defaultPrevented || !(event.target instanceof Element)) return;
+    const anchorElement = event.target.closest<HTMLAnchorElement>(selector);
+    if (!anchorElement) return;
 
-    const targetAttr = el.dataset.target;
+    const targetAttr = anchorElement.dataset.target;
     const myId = $target.attr('id');
     const isExplicit = !!(targetAttr && myId && targetAttr === `#${myId}`);
     if (targetAttr) {
       if (!isExplicit) return;
     } else {
-      const closest = $(el).closest('[data-atom-nav-target="true"]')[0];
+      const closest = $(anchorElement).closest('[data-atom-nav-target="true"]')[0];
       if (closest && closest !== $target[0]) return;
     }
 
-    if (isNavigationClick(e) && isInterceptee(el, win)) {
-      e.preventDefault();
-      navigator.navigate(el.href);
+    if (isNavigationClick(event) && isInterceptee(anchorElement, win)) {
+      event.preventDefault();
+      navigator.navigate(anchorElement.href);
     }
   };
 
@@ -343,10 +349,10 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       const type: NavigationType = navOptions.replace ? 'replace' : 'push';
 
       const base = win.document.baseURI ?? win.location.href;
-      const targetRes = getAbsoluteUrl(url, base);
-      if (Result.isErr(targetRes)) return;
+      const targetUrlResult = getAbsoluteUrl(url, base);
+      if (Result.isErr(targetUrlResult)) return;
 
-      const target = Result.unwrap(targetRes);
+      const target = Result.unwrap(targetUrlResult);
       const current = new URL(win.location.href);
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
@@ -368,8 +374,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       if (!isSamePath && options.onBeforeLoad) {
         pendingHooks.value++;
         try {
-          const ok = await options.onBeforeLoad(url, signal);
-          if (signal.aborted || ok === false) return;
+          const shouldContinue = await options.onBeforeLoad(url, signal);
+          if (signal.aborted || shouldContinue === false) return;
         } finally {
           pendingHooks.value = Math.max(0, pendingHooks.value - 1);
         }
@@ -403,8 +409,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
         isPending,
         hasError,
       ];
-      for (const a of atoms) {
-        (a as ReadonlyAtom).dispose?.();
+      for (const atom of atoms) {
+        (atom as ReadonlyAtom).dispose?.();
       }
     },
   };

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import $ from '@/index';
 import type { DisposableWritableAtom } from '@/types';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Complex App Scenarios', () => {
+  const { appendToBody } = setupDOMCleanup();
   it('should handle Todo List with Search (synergy between atomList, atomVal, and computed)', async () => {
     interface Todo {
       id: number;
@@ -22,7 +24,7 @@ describe('Complex App Scenarios', () => {
       return todos.value.filter((todo: Todo) => todo.text.toLowerCase().includes(query));
     });
 
-    const $app = $('<div id="todo-app">').appendTo(document.body);
+    const $app = appendToBody('<div id="todo-app">');
     $app.append('<input type="text" id="search" placeholder="Search...">');
     $app.append('<ul id="todo-list"></ul>');
 
@@ -34,9 +36,9 @@ describe('Complex App Scenarios', () => {
       key: 'id',
       render: (todo: Todo) =>
         `<li id="todo-${todo.id}" class="${todo.done ? 'done' : ''}">${todo.text}</li>`,
-      update: ($el, todo: Todo) => {
-        $el.toggleClass('done', todo.done);
-        $el.text(todo.text);
+      update: ($element, todo: Todo) => {
+        $element.toggleClass('done', todo.done);
+        $element.text(todo.text);
       },
     });
 
@@ -67,11 +69,11 @@ describe('Complex App Scenarios', () => {
 
     // Derived validity
     const isValid = $.computed(() => {
-      const v = age.value;
-      return v !== null && v >= 18 && v <= 100;
+      const value = age.value;
+      return value !== null && value >= 18 && value <= 100;
     });
 
-    const $form = $('<div id="form">').appendTo(document.body);
+    const $form = appendToBody('<div id="form">');
     $form.append('<input type="text" id="age-input" placeholder="Enter age (18-100)">');
     $form.append('<span id="age-display"></span>');
     $form.append('<button id="submit">Submit</button>');
@@ -84,11 +86,11 @@ describe('Complex App Scenarios', () => {
       val: [
         age,
         {
-          parse: (v: string) => {
-            const parsed = parseInt(v, 10);
+          parse: (value: string) => {
+            const parsed = parseInt(value, 10);
             return Number.isNaN(parsed) ? null : parsed;
           },
-          format: (v: unknown) => (v === null ? '' : String(v)),
+          format: (value: unknown) => (value === null ? '' : String(value)),
         },
       ],
       css: {
@@ -156,7 +158,7 @@ describe('Complex App Scenarios', () => {
       },
     ]);
 
-    const $app = $('<div id="nested-app">').appendTo(document.body);
+    const $app = appendToBody('<div id="nested-app">');
 
     $app.atomList(categories, {
       key: 'id',
@@ -166,8 +168,8 @@ describe('Complex App Scenarios', () => {
           <ul class="item-list"></ul>
         </div>
       `,
-      bind: ($el, cat: Category) => {
-        $el.find('.item-list').atomList<Item>(cat.items, {
+      bind: ($element, cat: Category) => {
+        $element.find('.item-list').atomList<Item>(cat.items, {
           key: 'id',
           render: (item) => `<li id="item-${item.id}">${item.name}</li>`,
         });

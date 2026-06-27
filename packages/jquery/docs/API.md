@@ -74,7 +74,7 @@ $('.user-card').atomBind({
   prop: { 'disabled': isDisabled },// DOM property
   show: isVisible,                // Toggles display (show/hide)
   hide: isHidden,                 // Inverse of show
-  val: inputAtom,                 // Two-way binding for form inputs
+  value: inputAtom,                 // Two-way binding for form inputs
   checked: isChecked,             // Two-way binding for checkboxes/radios
   form: userAtom,                 // Automated form synchronization
   on: { click: handleClick }      // Event handler
@@ -97,14 +97,14 @@ $('.list-item').atomUnbind().remove();
 
 Updates `textContent`. Supports `AsyncReactiveValue` (direct Promise or atom yielding Promise).
 
-- **formatter**: Optional function `(val) => string`.
+- **formatter**: Optional function `(value) => string`.
 - **Tuple Support**: When used inside `.atomBind()`, can be expressed as a tuple `text: [source, formatter]`.
 
 ```javascript
 $('#price').atomText(price, p => `$${p.toFixed(2)}`);
 
 // Using atomBind
-$el.atomBind({ text: [count, c => `Count: ${c}`] });
+$element.atomBind({ text: [count, c => `Count: ${c}`] });
 ```
 
 ### `.atomHtml(atom)`
@@ -138,7 +138,7 @@ Toggles CSS classes based on truthiness. Supports multiple space-separated class
 
 ```javascript
 $('#btn').atomClass('disabled', isLoading);
-$el.atomClass({ 'active highlight': atom1, 'active large': atom2 });
+$element.atomClass({ 'active highlight': atom1, 'active large': atom2 });
 ```
 
 ### `.atomCss(property, atom, unit?)` or `.atomCss(propertyMap)`
@@ -194,8 +194,8 @@ Renders and reconciles a list of DOM elements against an array.
 
 - **`key`**: `keyof T | (item, index) => string | number` (Required) — Function or property name returning a unique identifier.
 - **`render`**: `(item, index) => string | Element | DocumentFragment | JQuery` — Template generator for new items.
-- **`bind`**: `($el, item, index) => void` — Applies reactive bindings to newly rendered elements.
-- **`update`**: `($el, item, index) => void` — Manual reconciliation logic for existing elements.
+- **`bind`**: `($element, item, index) => void` — Applies reactive bindings to newly rendered elements.
+- **`update`**: `($element, item, index) => void` — Manual reconciliation logic for existing elements.
 - **`onAdd`** / **`onRemove`**: Lifecycle hooks. `onRemove` supports asynchronous execution for exit animations.
 - **`empty`**: `string | Element | DocumentFragment | JQuery` (Optional) — Custom HTML string or DOM content to display when the list array is empty.
 - **`isEqual`**: `(a, b) => boolean` — Custom equality check for item comparisons.
@@ -205,8 +205,8 @@ Renders and reconciles a list of DOM elements against an array.
 $('ul').atomList(usersAtom, {
   key: u => u.id,
   render: u => `<li class="user-item"></li>`,
-  bind: ($el, user) => {
-    $el.atomText(user.name);
+  bind: ($element, user) => {
+    $element.atomText(user.name);
   }
 });
 ```
@@ -267,7 +267,7 @@ const user = $.atom({ name: 'Alice', age: 30 });
 
 $('form').atomForm(user, {
   debounce: 200,
-  transform: (path, val) => (path === 'age' ? Number(val) : val),
+  transform: (path, value) => (path === 'age' ? Number(value) : value),
   validation: {
     'name': (v) => (v ? '' : 'Name is required'),
     'age': (v) => (v >= 18 ? true : 'Must be an adult')
@@ -295,9 +295,9 @@ Mounts a functional component structure to the selected elements.
 - **Isolation**: Runs within an `untracked()` scope to prevent unintentional subscription to parent reactive contexts.
 
 ```javascript
-const UserProfile = ($el, { id }) => {
+const UserProfile = ($element, { id }) => {
   const data = $.atomFetch(`/api/user/${id}`, { defaultValue: {} });
-  $el.atomText($.computed(() => data.value.name));
+  $element.atomText($.computed(() => data.value.name));
 
   return () => console.log('Cleanup execution');
 };
@@ -345,8 +345,8 @@ Custom Elements can configure reactivity via static properties.
 | `aejAria` | `Record<string, ReadonlyAtom<any>>` | Reactive ARIA synchronization via `ElementInternals`. |
 | `aejParts` | `Record<string, ReadonlyAtom<any>>` | Reactive CSS Shadow Parts control. |
 | `aejDispatch` | `Record<string, ReactiveValue<any>>` | Automatic `CustomEvent` dispatching on state changes. |
-| `aejValue` | `ReadonlyAtom<any> \| { val: ReadonlyAtom<any>, state?: ReadonlyAtom<any> }` | Form-Associated Custom Element (FACE) data synchronization. |
-| `aejValidation` | `ReadonlyAtom<ValidityStateFlags \| string> \| ((val: unknown) => ValidityStateFlags \| string)` | Native Constraint Validation API integration. |
+| `aejValue` | `ReadonlyAtom<any> \| { value: ReadonlyAtom<any>, state?: ReadonlyAtom<any> }` | Form-Associated Custom Element (FACE) data synchronization. |
+| `aejValidation` | `ReadonlyAtom<ValidityStateFlags \| string> \| ((value: unknown) => ValidityStateFlags \| string)` | Native Constraint Validation API integration. |
 
 > [!IMPORTANT]
 > **Static Property State Sharing**: Because static properties (such as `aejBind` and `aejValue`) are defined on the class constructor, any reactive primitives (like `$.atom` or `$.computed`) assigned directly to them are shared across all instances of the custom element. If instance-specific reactive state is required, initialize the state dynamically inside the constructor or `connectedCallback`, and register them via `this.aej.setup({ ... })`.
@@ -359,7 +359,7 @@ Custom Elements can configure reactivity via static properties.
 - **`slots(name: string)`**: Returns a `ReadonlyAtom<Node[]>` representing the assigned nodes of a Shadow DOM `<slot>` with the specified name (use `'default'` or `''` for the default unnamed slot).
 - **`internals`**: Provides access to the `ElementInternals` object.
 - **`$(selector)`**: A scoped jQuery selector isolated to the component's `ShadowRoot` or host container.
-- **`provideAtom(key: string | symbol, val: any)`**: Registers a reactive provider on the host element for dependency injection.
+- **`provideAtom(key: string | symbol, value: any)`**: Registers a reactive provider on the host element for dependency injection.
 - **`injectAtom(key: string | symbol)`**: Injects a reactive context value provided by an ancestor element.
 - **`teardown()`**: Releases all reactive resources and disposes of internal states.
 - **`setup(options?)`**: Bootstraps the reactive features based on the provided configuration or static specs.
@@ -434,11 +434,11 @@ Combines object-based atoms into a read-only computed atom with a flattened type
 
 Unifies writable lenses. Setting the unified value propagates changes back to the respective source lenses.
 
-### `$.isAtom(val)` / `$.isComputed(val)` / `$.isEffect(val)`
+### `$.isAtom(value)` / `$.isComputed(value)` / `$.isEffect(value)`
 
 Runtime type guards for reactive primitives.
 
-### `$.isPromise(val)`
+### `$.isPromise(value)`
 
 Identifies `Promise` or thenable objects.
 

@@ -157,7 +157,8 @@ const REGEX = {
  * preventing attackers from shadowing these methods on the instance.
  */
 const _call = Function.prototype.call.bind(Function.prototype.call);
-const _get = (p: object, k: string) => Object.getOwnPropertyDescriptor(p, k)?.get;
+const _get = (prototypeObject: object, propertyName: string) =>
+  Object.getOwnPropertyDescriptor(prototypeObject, propertyName)?.get;
 
 /**
  * Logic: Prototype-Bound Bridge
@@ -167,16 +168,17 @@ const _get = (p: object, k: string) => Object.getOwnPropertyDescriptor(p, k)?.ge
  */
 const DOM = {
   /** Retrieves all attributes from the prototype to ensure integrity. */
-  getAttributes: (el: Element) => {
+  getAttributes: (element: Element) => {
     const getter = _get(Element.prototype, 'attributes');
-    const attrs = (getter ? _call(getter, el) : el.attributes) as NamedNodeMap;
+    const attrs = (getter ? _call(getter, element) : element.attributes) as NamedNodeMap;
     return Array.from(attrs, ({ name, value }) => ({ name, value }));
   },
   /** Sets an attribute bypassing instance-level shadowing. */
-  setAttribute: (el: Element, key: string, val: string) =>
-    _call(Element.prototype.setAttribute, el, key, val),
+  setAttribute: (element: Element, key: string, value: string) =>
+    _call(Element.prototype.setAttribute, element, key, value),
   /** Removes an attribute bypassing instance-level shadowing. */
-  removeAttribute: (el: Element, key: string) => _call(Element.prototype.removeAttribute, el, key),
+  removeAttribute: (element: Element, key: string) =>
+    _call(Element.prototype.removeAttribute, element, key),
   /** Replaces one node with another in the DOM tree. */
   replaceNode: (oldNode: Node, newNode: Node) => {
     if (oldNode.parentNode) {
@@ -188,9 +190,9 @@ const DOM = {
   /** Retrieves the lowercase local name reliably via the prototype. */
   getLocalName: (node: Node) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    const el = node as Element;
+    const element = node as Element;
     const getter = _get(Element.prototype, 'localName') ?? _get(Node.prototype, 'nodeName');
-    return (getter ? (_call(getter, el) as string) : (el.localName ?? '')).toLowerCase();
+    return (getter ? (_call(getter, element) as string) : (element.localName ?? '')).toLowerCase();
   },
   /** Creates an HTMLElement in the current document context. */
   createElement: <T extends HTMLElement>(tag: string) => document.createElement(tag) as T,
@@ -203,12 +205,12 @@ const DOM = {
  */
 const Guard = {
   /** Resolves HTML entities to their literal characters. */
-  decodeEntities(val: string): string {
-    if (!val.includes('&')) return val;
-    return val
-      .replace(REGEX.NUMERIC_ENTITY, (_, hex, dec) => {
-        const cp = hex ? parseInt(hex, 16) : parseInt(dec, 10);
-        return cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+  decodeEntities(textToDecode: string): string {
+    if (!textToDecode.includes('&')) return textToDecode;
+    return textToDecode
+      .replace(REGEX.NUMERIC_ENTITY, (_, hex, decimal) => {
+        const codePoint = hex ? parseInt(hex, 16) : parseInt(decimal, 10);
+        return codePoint >= 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '';
       })
       .replace(REGEX.NAMED_ENTITY, (_, name) => ENTITIES[name.toLowerCase()] ?? '');
   },
@@ -218,28 +220,29 @@ const Guard = {
    * Normalizes a string by decoding entities twice (to catch double-encoding)
    * and stripping non-printable/control characters.
    */
-  normalize(val: string): string {
-    if (typeof val !== 'string') return '';
-    if (!val.includes('&') && !REGEX.CONTROL_CHARS.test(val)) return val;
-    return this.decodeEntities(this.decodeEntities(val)).replace(REGEX.CONTROL_CHARS, '');
+  normalize(value: string): string {
+    if (typeof value !== 'string') return '';
+    if (!value.includes('&') && !REGEX.CONTROL_CHARS.test(value)) return value;
+    return this.decodeEntities(this.decodeEntities(value)).replace(REGEX.CONTROL_CHARS, '');
   },
 
   /** Validates if a URI contains dangerous protocols or data types. */
-  isDangerousUri(val: string): boolean {
-    if (!val.includes(':') && !val.includes('&')) return false;
-    const clean = this.normalize(val).replace(/\s+/g, '');
-    return REGEX.PROTOCOL.test(clean) || REGEX.DATA_URI.test(clean);
+  isDangerousUri(value: string): boolean {
+    if (!value.includes(':') && !value.includes('&')) return false;
+    const normalizedUri = this.normalize(value).replace(/\s+/g, '');
+    return REGEX.PROTOCOL.test(normalizedUri) || REGEX.DATA_URI.test(normalizedUri);
   },
 
   /**
    * Security: CSS Filtering
    * Detects script injection patterns in CSS declarations (e.g., expression, url(javascript)).
    */
-  isDangerousCss(val: string): boolean {
-    const clean = this.normalize(val).replace(REGEX.CSS_CLEAN, '').toLowerCase();
-    if (['javascript:', 'expression(', '-moz-binding'].some((s) => clean.includes(s))) return true;
-    const url = clean.match(/url\s*\(\s*["']?([^"')]*)["']?\s*\)/i)?.[1];
-    return !!url && this.isDangerousUri(url);
+  isDangerousCss(value: string): boolean {
+    const clean = this.normalize(value).replace(REGEX.CSS_CLEAN, '').toLowerCase();
+    if (['javascript:', 'expression(', '-moz-binding'].some((pattern) => clean.includes(pattern)))
+      return true;
+    const cssUrl = clean.match(/url\s*\(\s*["']?([^"')]*)["']?\s*\)/i)?.[1];
+    return !!cssUrl && this.isDangerousUri(cssUrl);
   },
 };
 
@@ -271,33 +274,33 @@ function _sanitize(html: string, policy: SanitizationPolicy): string {
  */
 const SPECIAL_ATTRIBUTES: Record<
   string,
-  (el: HTMLElement, name: string, value: string, policy: SanitizationPolicy) => void
+  (element: HTMLElement, name: string, value: string, policy: SanitizationPolicy) => void
 > = {
-  style(el, name, value) {
+  style(element, name, value) {
     const safeStyles = value
       .split(';')
-      .map((p) => p.trim())
-      .filter((p) => p && !Guard.isDangerousCss(p));
+      .map((declaration) => declaration.trim())
+      .filter((declaration) => declaration && !Guard.isDangerousCss(declaration));
     DOM.setAttribute(
-      el,
+      element,
       name,
       safeStyles.length ? `${safeStyles.join('; ')};` : 'data-unsafe-css:'
     );
   },
-  srcdoc(el, name, value, policy) {
-    DOM.setAttribute(el, name, _sanitize(value, policy));
+  srcdoc(element, name, value, policy) {
+    DOM.setAttribute(element, name, _sanitize(value, policy));
   },
-  srcset(el, name, value) {
+  srcset(element, name, value) {
     const parts = value.split(',').map((part) => {
       const trimmed = part.trim();
       if (!trimmed) return part;
-      const [url, ...meta] = trimmed.split(/\s+/);
+      const [url, ...metadata] = trimmed.split(/\s+/);
       if (url === undefined) return part;
       return Guard.isDangerousUri(url)
-        ? ['data-unsafe-protocol:', ...meta].join(' ')
-        : [Guard.normalize(url), ...meta].join(' ');
+        ? ['data-unsafe-protocol:', ...metadata].join(' ')
+        : [Guard.normalize(url), ...metadata].join(' ');
     });
-    DOM.setAttribute(el, name, parts.join(', '));
+    DOM.setAttribute(element, name, parts.join(', '));
   },
 };
 
@@ -305,67 +308,68 @@ const SPECIAL_ATTRIBUTES: Record<
  * @internal
  * Predicates to identify dangerous attributes and values.
  */
-const isClobbered = (key: string, lowerVal: string) =>
-  CLOBBER_ATTRS.has(key) && CLOBBER_VALUES.has(lowerVal);
+const isClobbered = (key: string, lowerCaseValue: string) =>
+  CLOBBER_ATTRS.has(key) && CLOBBER_VALUES.has(lowerCaseValue);
 
-const isSensitiveSvg = (key: string, val: string) =>
-  SENSITIVE_ATTRS.has(key) && (val.startsWith('on') || Guard.isDangerousUri(val));
+const isSensitiveSvg = (key: string, attributeValue: string) =>
+  SENSITIVE_ATTRS.has(key) &&
+  (attributeValue.startsWith('on') || Guard.isDangerousUri(attributeValue));
 
-const isDangerousContent = (key: string, val: string, lowerVal: string) =>
+const isDangerousContent = (key: string, value: string, lowerCaseValue: string) =>
   key.includes('javascript') ||
   key.includes('expression') ||
-  lowerVal.includes('javascript') ||
-  lowerVal.includes('expression') ||
-  Guard.isDangerousUri(val);
+  lowerCaseValue.includes('javascript') ||
+  lowerCaseValue.includes('expression') ||
+  Guard.isDangerousUri(value);
 
 /**
  * @internal
  * Logic: Attribute Scrubbing
  * Iterates through all attributes of an element and applies defense rules.
  */
-function scrubElement(el: HTMLElement, policy: SanitizationPolicy): void {
-  const attrs = DOM.getAttributes(el);
+function scrubElement(elementToScrub: HTMLElement, policy: SanitizationPolicy): void {
+  const attrs = DOM.getAttributes(elementToScrub);
   let detectedEvents: string[] | null = null;
 
   for (const { name, value } of attrs) {
     const key = name.toLowerCase();
-    const lowerVal = value.toLowerCase();
+    const lowerCaseValue = value.toLowerCase();
 
     // 1. Event Handlers
     if (key.startsWith('on')) {
       if (!detectedEvents) detectedEvents = [];
       detectedEvents.push(name);
-      DOM.removeAttribute(el, name);
+      DOM.removeAttribute(elementToScrub, name);
       continue;
     }
 
     // 2. Special attributes (style, srcdoc, srcset)
     const specialHandler = SPECIAL_ATTRIBUTES[key];
     if (specialHandler) {
-      specialHandler(el, name, value, policy);
+      specialHandler(elementToScrub, name, value, policy);
       continue;
     }
 
     // 3. Registered URL attributes
     if (policy.urlAttributes.includes(key)) {
       if (Guard.isDangerousUri(value)) {
-        DOM.setAttribute(el, name, 'data-unsafe-protocol:');
+        DOM.setAttribute(elementToScrub, name, 'data-unsafe-protocol:');
       }
       continue;
     }
 
     // 4. Security Blocks (DOM Clobbering, SVG Injection, & general dangerous patterns)
     if (
-      isClobbered(key, lowerVal) ||
+      isClobbered(key, lowerCaseValue) ||
       isSensitiveSvg(key, value) ||
-      isDangerousContent(key, value, lowerVal)
+      isDangerousContent(key, value, lowerCaseValue)
     ) {
-      DOM.removeAttribute(el, name);
+      DOM.removeAttribute(elementToScrub, name);
     }
   }
 
   if (detectedEvents?.length) {
-    DOM.setAttribute(el, 'data-unsafe-attr', detectedEvents.join(','));
+    DOM.setAttribute(elementToScrub, 'data-unsafe-attr', detectedEvents.join(','));
   }
 }
 
@@ -400,32 +404,32 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
 
   // 2. Logic: Element Processing
   if (node.nodeType !== Node.ELEMENT_NODE) return node;
-  const el = node as HTMLElement;
-  const tag = DOM.getLocalName(el);
+  const element = node as HTMLElement;
+  const tag = DOM.getLocalName(element);
 
-  scrubElement(el, policy);
+  scrubElement(element, policy);
 
   // 3. Logic: Blacklist Neutralization
   // Replaces forbidden elements with <span> while preserving attributes and children.
   if (policy.blacklistedTags.includes(tag)) {
     const span = DOM.createElement('span');
     // Simplified attribute mirroring.
-    for (const a of DOM.getAttributes(el)) {
-      span.setAttribute(a.name, a.value);
+    for (const attribute of DOM.getAttributes(element)) {
+      span.setAttribute(attribute.name, attribute.value);
     }
     scrubElement(span, policy);
 
     // Security: Recursive Style Protection
-    if (tag === 'style' && Guard.isDangerousCss(el.textContent ?? '')) {
+    if (tag === 'style' && Guard.isDangerousCss(element.textContent ?? '')) {
       span.textContent = '/* blocked */';
     } else {
-      while (el.firstChild) span.appendChild(el.firstChild);
+      while (element.firstChild) span.appendChild(element.firstChild);
     }
 
-    return DOM.replaceNode(el, span) ? span : el;
+    return DOM.replaceNode(element, span) ? span : element;
   }
 
-  return el;
+  return element;
 }
 
 /**
@@ -519,18 +523,18 @@ export function sanitizeHtml(
  */
 export const isDangerousUrl = (
   attr: string,
-  val: string,
+  urlValue: string,
   policy: SanitizationPolicy = DEFAULT_POLICY
 ): boolean => {
   const key = attr.toLowerCase();
-  return (key === 'srcdoc' || policy.urlAttributes.includes(key)) && Guard.isDangerousUri(val);
+  return (key === 'srcdoc' || policy.urlAttributes.includes(key)) && Guard.isDangerousUri(urlValue);
 };
 
 /**
  * Validates if a CSS value contains dangerous patterns.
  *
- * @param val The CSS property value to check.
+ * @param cssValue The CSS property value to check.
  * @returns True if dangerous patterns (e.g., expression, javascript) are detected.
  */
-export const isDangerousCssValue = (val: unknown): boolean =>
-  typeof val === 'string' ? Guard.isDangerousCss(val) : false;
+export const isDangerousCssValue = (cssValue: unknown): boolean =>
+  typeof cssValue === 'string' ? Guard.isDangerousCss(cssValue) : false;

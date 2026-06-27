@@ -1,23 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
+import { setupDOMCleanup } from '../utils/test-helpers';
 
 /** Helper to wait for MutationObserver and microtask flushes */
 const waitMutation = () => new Promise((r) => setTimeout(r, 20));
 
 describe('Form Binding (atomForm)', () => {
+  const { appendToBody } = setupDOMCleanup();
+
   beforeEach(() => {
     document.body.innerHTML = '';
     $.initAEJ({ patch: true, autoCleanup: true });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   describe('Two-way Binding by Input Type', () => {
     it('should synchronize text inputs and deep paths', async () => {
       const data = $.atom({ user: { name: 'Alice' } });
-      const $form = $('<form><input name="user.name"></form>').appendTo(document.body);
+      const $form = appendToBody('<form><input name="user.name"></form>');
 
       $form.atomForm(data);
       await $.nextTick();
@@ -33,12 +32,12 @@ describe('Form Binding (atomForm)', () => {
 
     it('should synchronize radio buttons', async () => {
       const data = $.atom({ gender: 'male' });
-      const $form = $(`
+      const $form = appendToBody(`
         <form>
           <input type="radio" name="gender" value="male" id="r-male">
           <input type="radio" name="gender" value="female" id="r-female">
         </form>
-      `).appendTo(document.body);
+      `);
 
       $form.atomForm(data);
       await $.nextTick();
@@ -52,12 +51,12 @@ describe('Form Binding (atomForm)', () => {
 
     it('should synchronize checkbox arrays', async () => {
       const data = $.atom({ hobbies: ['coding'] });
-      const $form = $(`
+      const $form = appendToBody(`
         <form>
           <input type="checkbox" name="hobbies" value="coding" id="cb-coding">
           <input type="checkbox" name="hobbies" value="music" id="cb-music">
         </form>
-      `).appendTo(document.body);
+      `);
 
       $form.atomForm(data);
       await $.nextTick();
@@ -84,9 +83,9 @@ describe('Form Binding (atomForm)', () => {
 
     it('should synchronize boolean toggles (single checkbox)', async () => {
       const data = $.atom({ isActive: true });
-      const $form = $(
+      const $form = appendToBody(
         '<form><input type="checkbox" name="isActive" id="cb-active"></form>'
-      ).appendTo(document.body);
+      );
 
       $form.atomForm(data);
       await $.nextTick();
@@ -102,7 +101,7 @@ describe('Form Binding (atomForm)', () => {
   describe('Reactivity & Lifecycle', () => {
     it('should reflect bulk atom updates to the DOM', async () => {
       const data = $.atom({ status: 'active' });
-      const $form = $('<form><input name="status"></form>').appendTo(document.body);
+      const $form = appendToBody('<form><input name="status"></form>');
 
       $form.atomForm(data);
       await $.nextTick();
@@ -115,7 +114,7 @@ describe('Form Binding (atomForm)', () => {
     it('should co-exist safely with other bindings and prevent infinite loops', async () => {
       const data = $.atom({ text: 'val' });
       const active = $.atom(true);
-      const $form = $('<form><input name="text"></form>').appendTo(document.body);
+      const $form = appendToBody('<form><input name="text"></form>');
       const $input = $form.find('input');
 
       $input.atomClass('active', active);
@@ -140,12 +139,12 @@ describe('Form Binding (atomForm)', () => {
       const user = $.atom({ name: 'Alice' });
       const settings = $.atom({ theme: 'dark' });
 
-      const $form = $(`
+      const $form = appendToBody(`
         <form>
           <input name="name">
           <input name="theme">
         </form>
-      `).appendTo(document.body);
+      `);
 
       $form.atomForm([user, settings]);
       await $.nextTick();
@@ -172,7 +171,7 @@ describe('Form Binding (atomForm)', () => {
   describe('Dynamic DOM Discovery (MutationObserver)', () => {
     it('should handle dynamic element addition, renaming, and removal', async () => {
       const data = $.atom({ a: '1', b: '2', c: '3' });
-      const $form = $('<form><input name="a" id="id-a"></form>').appendTo(document.body);
+      const $form = appendToBody('<form><input name="a" id="id-a"></form>');
 
       $form.atomForm(data);
       await $.nextTick();
@@ -202,18 +201,18 @@ describe('Form Binding (atomForm)', () => {
       it('should apply transform and trigger onChange correctly', async () => {
         const data = $.atom({ age: 20, ids: [1] });
         const onChange = vi.fn();
-        const $form = $(`
+        const $form = appendToBody(`
           <form>
             <input name="age">
             <input type="checkbox" name="ids" value="2" id="id-2">
           </form>
-        `).appendTo(document.body);
+        `);
 
         $form.atomForm(data, {
-          transform: (p, v) => {
-            if (p === 'age') return Number(v);
-            if (p === 'ids' && Array.isArray(v)) return v.map(Number);
-            return v;
+          transform: (path, value) => {
+            if (path === 'age') return Number(value);
+            if (path === 'ids' && Array.isArray(value)) return value.map(Number);
+            return value;
           },
           onChange,
         });
@@ -234,20 +233,20 @@ describe('Form Binding (atomForm)', () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const data = $.atom({ age: 20, text: 'init' });
 
-        const $form = $(`
+        const $form = appendToBody(`
           <form>
             <input name="age">
             <input name="text">
           </form>
-        `).appendTo(document.body);
+        `);
 
         $form.atomForm(data, {
-          transform: (p: string, v: unknown) => {
-            if (p === 'age') throw new Error('Transform error');
-            return v;
+          transform: (path: string, value: unknown) => {
+            if (path === 'age') throw new Error('Transform error');
+            return value;
           },
-          onChange: (p: string) => {
-            if (p === 'text') throw new Error('onChange error');
+          onChange: (path: string) => {
+            if (path === 'text') throw new Error('onChange error');
           },
         });
         await $.nextTick();
@@ -276,7 +275,7 @@ describe('Form Binding (atomForm)', () => {
       it('should debounce rapid input events', async () => {
         vi.useFakeTimers();
         const data = $.atom({ text: 'init' });
-        const $form = $('<form><input name="text"></form>').appendTo(document.body);
+        const $form = appendToBody('<form><input name="text"></form>');
 
         $form.atomForm(data, { debounce: 30 });
         await $.nextTick();
@@ -295,13 +294,11 @@ describe('Form Binding (atomForm)', () => {
     describe('validation', () => {
       it('should integrate declarative validation with form controls', async () => {
         const data = $.atom({ email: 'invalid' });
-        const $form = $('<form><input name="email" id="email-input"></form>').appendTo(
-          document.body
-        );
+        const $form = appendToBody('<form><input name="email" id="email-input"></form>');
 
         $form.atomForm(data, {
           validation: {
-            email: (v: unknown) => (String(v).includes('@') ? '' : 'Invalid Email'),
+            email: (value: unknown) => (String(value).includes('@') ? '' : 'Invalid Email'),
           },
         });
         await $.nextTick();
@@ -323,7 +320,7 @@ describe('Form Binding (atomForm)', () => {
       it('should handle validation exceptions gracefully', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const data = $.atom({ name: 'fail' });
-        const $form = $('<form><input name="name" id="name-input"></form>').appendTo(document.body);
+        const $form = appendToBody('<form><input name="name" id="name-input"></form>');
 
         $form.atomForm(data, {
           validation: {
@@ -356,21 +353,19 @@ describe('Form Binding (atomForm)', () => {
           get value() {
             return this._value;
           }
-          set value(v) {
-            this._value = v;
-            this._internals.setFormValue(v);
+          set value(value) {
+            this._value = value;
+            this._internals.setFormValue(value);
           }
-          val(v?: unknown) {
-            if (v === undefined) return this.value;
-            this.value = v as string;
+          val(value?: unknown) {
+            if (value === undefined) return this.value;
+            this.value = value as string;
             return this;
           }
         }
       );
 
-      const $form = $(`<form><${tagName} name="custom"></${tagName}></form>`).appendTo(
-        document.body
-      );
+      const $form = appendToBody(`<form><${tagName} name="custom"></${tagName}></form>`);
 
       $form.atomForm(data);
       await $.nextTick();
@@ -388,7 +383,7 @@ describe('Form Binding (atomForm)', () => {
   describe('Safety & Robustness', () => {
     it('should skip elements if name property is null or undefined to avoid coercing to string "null"/"undefined"', async () => {
       const data = $.atom<Record<string, unknown>>({ name: 'initial' });
-      const $form = $('<form><input id="test-input"></form>').appendTo(document.body);
+      const $form = appendToBody('<form><input id="test-input"></form>');
       const input = $form.find('input')[0];
 
       Object.defineProperty(input, 'name', {

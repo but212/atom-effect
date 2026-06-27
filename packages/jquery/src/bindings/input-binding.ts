@@ -20,12 +20,28 @@ import { debug } from '@/utils/debug';
 
 type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
+/**
+ * Checks if the element type supports selection API.
+ * Accessing selection properties on unsupported types (e.g. input[type=number]) throws.
+ * @internal
+ */
+function supportsSelection(
+  element: HTMLElement
+): element is HTMLInputElement | HTMLTextAreaElement {
+  if (element instanceof HTMLTextAreaElement) return true;
+  if (element instanceof HTMLInputElement) {
+    const type = element.type;
+    return !type || /^(?:text|search|url|tel|password)$/.test(type);
+  }
+  return false;
+}
+
 /** Represents a specialized synchronization strategy for different form element types. @internal */
-interface BindingStrategy<T> {
-  readonly read: (el: FormElement, parse?: (v: string) => T) => T;
-  readonly write: (el: FormElement, value: T, formatted: string) => void;
-  readonly equal: (a: T, b: T, baseEqual: (a: T, b: T) => boolean) => boolean;
-  readonly format: (value: T, customFormat?: (v: T) => string) => string;
+interface BindingStrategy<T, E extends FormElement = FormElement> {
+  readonly read: (element: E, parse?: (value: string) => T) => T;
+  readonly write: (element: E, value: T, formatted: string) => void;
+  readonly equal: (first: T, second: T, baseEqual: (first: T, second: T) => boolean) => boolean;
+  readonly format: (value: T, customFormat?: (value: T) => string) => string;
 }
 
 /**
@@ -35,41 +51,46 @@ interface BindingStrategy<T> {
  */
 const STRATEGIES = {
   multipleSelect: {
-    read: (el) =>
-      el instanceof HTMLSelectElement ? Array.from(el.selectedOptions, (opt) => opt.value) : [],
-    write: (el, value) => {
-      $(el).val(value as string[]);
+    read: (element) => Array.from(element.selectedOptions, (opt) => opt.value),
+    write: (element, value) => {
+      $(element).val(value as string[]);
     },
-    equal: (a, b, baseEqual) => {
-      if (baseEqual(a, b)) return true;
-      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-      return a.every((val, i) => Object.is(val, b[i]));
+    equal: (first, second, baseEqual) => {
+      if (baseEqual(first, second)) return true;
+      if (!Array.isArray(first) || !Array.isArray(second) || first.length !== second.length)
+        return false;
+      return first.every((val, i) => Object.is(val, second[i]));
     },
-    format: (v, custom) => (custom ? custom(v) : Array.isArray(v) ? v.join(',') : String(v ?? '')),
-  } as BindingStrategy<unknown>,
+    format: (formattedValue, customFormatter) =>
+      customFormatter
+        ? customFormatter(formattedValue)
+        : Array.isArray(formattedValue)
+          ? formattedValue.join(',')
+          : String(formattedValue ?? ''),
+  } as BindingStrategy<unknown, HTMLSelectElement>,
 
   default: {
-    read: (el, parse) => (parse ? parse(el.value) : el.value),
-    write: (el, _, formatted) => {
-      if (
-        (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
-        document.activeElement === el
-      ) {
+    read: (element, parse) => (parse ? parse(element.value) : element.value),
+    write: (element, _, formatted) => {
+      if (supportsSelection(element) && document.activeElement === element) {
         try {
-          const { selectionStart, selectionEnd } = el;
-          el.value = formatted;
+          const { selectionStart, selectionEnd } = element;
+          element.value = formatted;
           if (selectionStart !== null && selectionEnd !== null) {
-            const len = formatted.length;
-            el.setSelectionRange(Math.min(selectionStart, len), Math.min(selectionEnd, len));
+            const formattedLength = formatted.length;
+            element.setSelectionRange(
+              Math.min(selectionStart, formattedLength),
+              Math.min(selectionEnd, formattedLength)
+            );
           }
           return;
         } catch {}
       }
-      el.value = formatted;
+      element.value = formatted;
     },
-    equal: (a, b, baseEqual) => baseEqual(a, b),
-    format: (v, custom) => (custom ? custom(v) : String(v ?? '')),
-  } as BindingStrategy<unknown>,
+    equal: (first, second, baseEqual) => baseEqual(first, second),
+    format: (value, custom) => (custom ? custom(value) : String(value ?? '')),
+  } as BindingStrategy<unknown, FormElement>,
 } as const;
 
 let instanceCounter = 0;
@@ -91,7 +112,7 @@ let instanceCounter = 0;
  * const name = $.atom('Jane Doe');
  * const binding = applyInputBinding($('#name-input'), name, {
  *   debounce: 100,
- *   format: (val) => val.toUpperCase(),
+ *   format: (value) => value.toUpperCase(),
  * });
  * // To tear down bindings:
  * binding.cleanup();
@@ -117,7 +138,8 @@ export function applyInputBinding<T>(
 
   const readValue = () => strategy.read(element, options.parse);
   const writeToDom = (value: T, formatted: string) => strategy.write(element, value, formatted);
-  const areEqual = (a: T, b: T) => strategy.equal(a, b, options.equal ?? Object.is);
+  const areEqual = (first: T, second: T) =>
+    strategy.equal(first, second, options.equal ?? Object.is);
   const formatValue = (value: T) => strategy.format(value, options.format);
 
   const isDomUpToDate = (atomValue: T) => {
@@ -126,6 +148,9 @@ export function applyInputBinding<T>(
     // Logic: While the input is focused, we allow minor discrepancies (e.g.,
     // "1.0" in DOM vs 1 in Atom) to avoid disruptive formatting while the user is typing.
     if (document.activeElement === element) return true;
+
+    // Multiple Select doesn't use formatting for DOM writes, so matching parsed values is sufficient.
+    if (isMultipleSelect) return true;
 
     return formatValue(atomValue) === element.value;
   };
@@ -137,8 +162,8 @@ export function applyInputBinding<T>(
       if (!areEqual(atom.peek(), domValue)) {
         atom.value = domValue;
       }
-    } catch (err) {
-      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', err);
+    } catch (error) {
+      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', error);
     }
   };
 
@@ -151,8 +176,8 @@ export function applyInputBinding<T>(
         const formatted = formatValue(atomValue);
         writeToDom(atomValue, formatted);
         debug.domUpdated(SYSTEM_BINDING.PREFIX, $(element), 'val', formatted);
-      } catch (err) {
-        debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom failed:', err);
+      } catch (error) {
+        debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom failed:', error);
       } finally {
         isInternalWrite = false;
       }
@@ -174,8 +199,8 @@ export function applyInputBinding<T>(
         isInternalWrite = true;
         writeToDom(atomValue, formatValue(atomValue));
       }
-    } catch (err) {
-      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom (blur format) failed:', err);
+    } catch (error) {
+      debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom (blur format) failed:', error);
     } finally {
       isInternalWrite = false;
     }
@@ -183,10 +208,10 @@ export function applyInputBinding<T>(
 
   const debounce = options.debounce ?? SYSTEM_BINDING.INPUT_DEFAULTS.debounce;
 
-  const handleInput = (e?: Event | JQuery.TriggeredEvent) => {
+  const handleInput = (event?: Event | JQuery.TriggeredEvent) => {
     if (isInternalWrite) return;
 
-    const native = (e && 'originalEvent' in e ? e.originalEvent : e) as InputEvent;
+    const native = (event && 'originalEvent' in event ? event.originalEvent : event) as InputEvent;
     // Logic: Synchronization is deferred while an IME composition is active (Standard InputEvent).
     if (native?.isComposing) return;
 
@@ -205,7 +230,7 @@ export function applyInputBinding<T>(
   const eventNames = rawEventNames
     .trim()
     .split(/\s+/)
-    .map((n) => n + eventNamespace)
+    .map((name) => name + eventNamespace)
     .join(' ');
 
   $(element).on(`blur${eventNamespace}`, handleBlur).on(eventNames, handleInput);

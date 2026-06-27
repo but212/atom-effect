@@ -15,8 +15,8 @@ import type { Dependency, MergedDependencyValue } from '@/types';
  * heap allocation and maintain high-performance object property access.
  * @internal
  */
-export const nextSmi = (v: number): number => {
-  const next = (v + 1) & SMI_MAX;
+export const nextSmi = (value: number): number => {
+  const next = (value + 1) & SMI_MAX;
   return next === 0 ? 1 : next;
 };
 
@@ -36,18 +36,18 @@ export function mergeAtomValues<T extends Dependency<unknown>[]>(
   atoms: T,
   peek = false
 ): MergedDependencyValue<T> {
-  const result = {} as MergedDependencyValue<T>;
+  const mergedResult = {} as MergedDependencyValue<T>;
 
   for (let i = 0; i < atoms.length; i++) {
-    const val = peek ? atoms[i]?.peek() : atoms[i]?.value;
-    if (val != null && typeof val === 'object') {
-      Object.assign(result, val);
-    } else if (val != null) {
-      (result as Record<string, unknown>)[i] = val;
+    const value = peek ? atoms[i]?.peek() : atoms[i]?.value;
+    if (value != null && typeof value === 'object') {
+      Object.assign(mergedResult, value);
+    } else if (value != null) {
+      (mergedResult as Record<string, unknown>)[i] = value;
     }
   }
 
-  return result;
+  return mergedResult;
 }
 
 export { NO_DEFAULT_VALUE } from '@/constants';
@@ -56,9 +56,9 @@ export {
   AtomError,
   ComputedError,
   EffectError,
-  ERROR_STRATEGIES,
-  type ErrorStrategy,
+  type ErrorMetadata,
   getErrorChain,
+  getErrorMetadata,
   SchedulerError,
   serializeError,
   wrapError,

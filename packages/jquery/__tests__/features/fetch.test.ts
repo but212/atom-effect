@@ -44,7 +44,7 @@ describe('$.atomFetch', () => {
     });
 
     it('should expose accurate isPending/isResolved state', async () => {
-      let resolveAjax!: (v: unknown) => void;
+      let resolveAjax!: (value: unknown) => void;
       vi.spyOn($, 'ajax').mockImplementation(() =>
         createMockJqXHR(
           new Promise((resolve) => {
@@ -66,18 +66,18 @@ describe('$.atomFetch', () => {
     });
 
     it('should refetch on invalidate()', async () => {
-      vi.spyOn($, 'ajax').mockResolvedValueOnce({ v: 1 }).mockResolvedValueOnce({ v: 2 });
+      vi.spyOn($, 'ajax').mockResolvedValueOnce({ value: 1 }).mockResolvedValueOnce({ value: 2 });
 
-      const data = $.atomFetch('/api/data', { defaultValue: { v: 0 } });
+      const data = $.atomFetch('/api/data', { defaultValue: { value: 0 } });
 
       await $.nextTick();
-      expect(data.value).toEqual({ v: 1 });
+      expect(data.value).toEqual({ value: 1 });
 
       data.invalidate();
       void data.value;
       await $.nextTick();
 
-      expect(data.value).toEqual({ v: 2 });
+      expect(data.value).toEqual({ value: 2 });
       expect($.ajax).toHaveBeenCalledTimes(2);
     });
   });

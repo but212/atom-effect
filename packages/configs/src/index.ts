@@ -26,15 +26,18 @@ import { defineConfig as defineVitest, type ViteUserConfig } from 'vitest/config
  * When to use:
  * - Recommended for mapping library package names to standardized minified bundle filenames.
  *
- * @param str - The target string to convert.
+ * @param targetString - The target string to convert.
  * @returns The converted kebab-case string.
  *
  * @example
  * const kebab = toKebabCase('AtomEffectJQuery');
  * // => 'atom-effect-jquery'
  */
-export const toKebabCase = (str: string): string =>
-  str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+export const toKebabCase = (targetString: string): string =>
+  targetString
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase();
 
 /**
  * Generates resolve-alias configuration for a package directory.
@@ -51,7 +54,7 @@ export const toKebabCase = (str: string): string =>
  */
 export const getResolveConfig = (packageDir: string) => ({
   alias: {
-    '@': `${packageDir}/src`,
+    '@': `${packageDir.replace(/\\/g, '/')}/src`,
   },
 });
 
@@ -99,22 +102,53 @@ export interface BaseViteConfigOptions {
 /**
  * The build target derived from the `BUILD_TARGET` environment variable.
  */
-export const target = process.env.BUILD_TARGET;
+export let activeBuildTarget = process.env.BUILD_TARGET;
+
+const updateBuildTarget = (newBuildTarget: string | undefined) => {
+  activeBuildTarget = newBuildTarget;
+  isTypesBuild = newBuildTarget === 'types';
+  isBundleBuild = newBuildTarget === 'bundle';
+  isLibraryBuild = newBuildTarget === 'lib';
+};
+
+if (typeof process === 'object' && process !== null) {
+  const originalEnv = process.env;
+  const envProxy = new Proxy(originalEnv, {
+    get(targetEnv, propertyKey) {
+      return targetEnv[propertyKey as string];
+    },
+    set(targetEnv, propertyKey, newTargetValue) {
+      targetEnv[propertyKey as string] = newTargetValue;
+      if (propertyKey === 'BUILD_TARGET') {
+        updateBuildTarget(newTargetValue);
+      }
+      return true;
+    },
+  });
+
+  Object.defineProperty(process, 'env', {
+    get() {
+      return envProxy;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+}
 
 /**
  * Tracks if the build target is 'types' (only TypeScript declarations).
  */
-export const isTypes = target === 'types';
+export let isTypesBuild = activeBuildTarget === 'types';
 
 /**
  * Tracks if the build target is 'bundle' (bundled UMD builds).
  */
-export const isBundle = target === 'bundle';
+export let isBundleBuild = activeBuildTarget === 'bundle';
 
 /**
  * Tracks if the build target is 'lib' (esm/cjs library builds).
  */
-export const isLib = target === 'lib';
+export let isLibraryBuild = activeBuildTarget === 'lib';
 
 /**
  * Generates a base Vite configuration for building libraries and bundles.
@@ -132,10 +166,10 @@ export const isLib = target === 'lib';
  * });
  */
 export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig => {
-  const activeTarget = options.buildTarget ?? target;
-  const targetIsTypes = activeTarget === 'types';
-  const targetIsBundle = activeTarget === 'bundle';
-  const targetIsLib = activeTarget === 'lib';
+  const activeTarget = options.buildTarget ?? activeBuildTarget;
+  const isTargetTypes = activeTarget === 'types';
+  const isTargetBundle = activeTarget === 'bundle';
+  const isTargetLibrary = activeTarget === 'lib';
 
   const {
     packageDir,
@@ -143,12 +177,12 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
     entry = `${packageDir}/src/index.ts`,
     libFileNames,
     dtsOptions,
-    formats = targetIsBundle ? ['umd'] : targetIsLib ? ['es', 'cjs'] : ['es'],
-    emptyOutDir = targetIsTypes,
-    skipDts = !targetIsTypes,
+    formats = isTargetBundle ? ['umd'] : isTargetLibrary ? ['es', 'cjs'] : ['es'],
+    emptyOutDir = isTargetTypes,
+    skipDts = !isTargetTypes,
   } = options;
 
-  const kebabName = toKebabCase(name);
+  const kebabCaseName = toKebabCase(name);
 
   return {
     resolve: getResolveConfig(packageDir),
@@ -164,7 +198,9 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         formats,
         fileName: (format: string) =>
           libFileNames?.[format] ??
-          (format === 'umd' ? `${kebabName}.min.js` : `index.${format === 'es' ? 'mjs' : format}`),
+          (format === 'umd'
+            ? `${kebabCaseName}.min.js`
+            : `index.${format === 'es' ? 'mjs' : format}`),
       },
       rollupOptions: {
         output: {
@@ -178,7 +214,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
           dts({
             include: ['src/**/*'],
             exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
-            tsconfigPath: './tsconfig.build.json',
+            tsconfigPath: `${packageDir}/tsconfig.build.json`,
             bundleTypes: true,
             ...dtsOptions,
           }),
@@ -210,7 +246,7 @@ export const defineViteConfig = (
 /**
  * Base coverage exclusion patterns for Vitest.
  */
-export const baseCoverageExclude = [
+export const baseCoverageExclusionPatterns = [
   'node_modules/**',
   'dist/**',
   '**/*.config.ts',
@@ -241,7 +277,7 @@ export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => ({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: baseCoverageExclude,
+      exclude: baseCoverageExclusionPatterns,
     },
   },
 });
@@ -274,9 +310,9 @@ export const defineVitestConfig = (packageDir: string, overrides: ViteUserConfig
  * @returns A Vitest benchmark configuration object.
  *
  * @example
- * const config = getBaseVitestBenchConfig(import.meta.dirname);
+ * const config = getBaseVitestBenchmarkConfig(import.meta.dirname);
  */
-export const getBaseVitestBenchConfig = (packageDir: string): ViteUserConfig => ({
+export const getBaseVitestBenchmarkConfig = (packageDir: string): ViteUserConfig => ({
   resolve: getResolveConfig(packageDir),
   test: {
     benchmark: {
@@ -302,4 +338,15 @@ export const getBaseVitestBenchConfig = (packageDir: string): ViteUserConfig => 
  * });
  */
 export const defineVitestBenchConfig = (packageDir: string, overrides: ViteUserConfig = {}) =>
-  defineVitest(() => mergeConfig(getBaseVitestBenchConfig(packageDir), overrides));
+  defineVitest(() => {
+    const mergedConfig = mergeConfig(getBaseVitestBenchmarkConfig(packageDir), overrides);
+
+    // Vite's mergeConfig concatenates arrays. We explicitly override the benchmark include array
+    // if the user provided it in their custom overrides configuration.
+    const customIncludePatterns = overrides.test?.benchmark?.include;
+    if (customIncludePatterns && mergedConfig.test?.benchmark) {
+      mergedConfig.test.benchmark.include = customIncludePatterns;
+    }
+
+    return mergedConfig;
+  });

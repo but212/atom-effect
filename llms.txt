@@ -11,8 +11,8 @@ atom-effect is a high-performance reactive state management library designed for
 
 - **Reactive Primitives**:
   - `atom(value)`: Mutable state container.
-  - `computed(fn)`: Derived state with lazy evaluation, caching, and native `async/await` support.
-  - `effect(fn)`: Immediate and reactive side effects with automatic dependency tracking.
+  - `computed(computationCallback)`: Derived state with lazy evaluation, caching, and native `async/await` support.
+  - `effect(effectCallback)`: Immediate and reactive side effects with automatic dependency tracking.
 - **Engine Architecture**:
   - **Epoch-based Propagation**: Uses a global epoch and local versions to ensure glitch-free updates and avoid unnecessary re-calculations.
   - **V8 Monomorphism**: Optimized internal `ReactiveNode` base class for near-native property access speeds.

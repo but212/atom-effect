@@ -35,7 +35,7 @@ export interface UrlAdapter {
   readonly revert: (previousUrl: string) => void;
 
   /** Resolves an anchor element's destination relative to the base path. */
-  readonly resolveAnchor: (el: Element) => string;
+  readonly resolveAnchor: (element: Element) => string;
 
   /** Sets up a listener for browser navigation events (popstate or hashchange). */
   readonly setupListener: (handler: () => void) => () => void;
@@ -47,7 +47,7 @@ export interface UrlAdapter {
  */
 export interface CompiledRoute {
   readonly pattern: string;
-  readonly def: RouteDefinition;
+  readonly routeDefinition: RouteDefinition;
 }
 
 /**
@@ -72,5 +72,5 @@ export type NavigationResult =
       readonly path: string;
       readonly query: Record<string, string>;
       readonly params: Record<string, string>;
-      readonly def: RouteDefinition | undefined;
+      readonly routeDefinition: RouteDefinition | undefined;
     };

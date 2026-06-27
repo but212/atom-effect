@@ -129,12 +129,14 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
      */
     get slots() {
       if (!state.slotsAtom) {
-        const sr = resolveShadowRoot(element, state.root);
-        const { atom, listener } = SetupFeatures.slots(sr);
+        const shadowRoot = resolveShadowRoot(element, state.root);
+        const { atom, listener } = SetupFeatures.slots(shadowRoot);
         state.slotsAtom = atom;
-        if (sr) {
-          state.slotListenerAttached = true;
-          state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        if (shadowRoot) {
+          state.isSlotListenerAttached = true;
+          state.effects.push({
+            dispose: () => shadowRoot.removeEventListener('slotchange', listener),
+          });
         }
       }
       return (name: string) => {
@@ -149,14 +151,14 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     },
 
     $: ((selector, context) => {
-      const ctx = context ?? state.root ?? element;
+      const scopedContext = context ?? state.root ?? element;
       if (typeof selector !== 'string') return $(selector);
-      return ctx instanceof DocumentFragment
-        ? $(ctx.querySelectorAll(selector))
-        : $(selector, ctx as Element);
+      return scopedContext instanceof DocumentFragment
+        ? $(scopedContext.querySelectorAll(selector))
+        : $(selector, scopedContext as Element);
     }) as JQueryScopedSelector,
 
-    provideAtom: (key: string | symbol, val: unknown) => provideAtom(element, key, val),
+    provideAtom: (key: string | symbol, value: unknown) => provideAtom(element, key, value),
     injectAtom: <T = unknown>(key: string | symbol) => injectAtom<T>(element, key),
 
     /**
@@ -172,26 +174,30 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         return;
       }
 
-      const ctor = element.constructor as typeof HTMLElement & AtomComponentStatic;
-      const baseConfig = options instanceof Node ? { shadowRoot: options } : (options ?? {});
+      const componentConstructor = element.constructor as typeof HTMLElement & AtomComponentStatic;
+      const baseConfiguration = options instanceof Node ? { shadowRoot: options } : (options ?? {});
 
       const config = {
-        shadowRoot: baseConfig.shadowRoot,
-        styles: baseConfig.styles ?? ctor.aejStyles,
-        bind: baseConfig.bind ?? ctor.aejBind,
-        aria: baseConfig.aria ?? ctor.aejAria,
-        parts: baseConfig.parts ?? ctor.aejParts,
-        dispatch: baseConfig.dispatch ?? ctor.aejDispatch,
-        value: baseConfig.value ?? ctor.aejValue,
-        validation: baseConfig.validation ?? ctor.aejValidation,
+        shadowRoot: baseConfiguration.shadowRoot,
+        styles: baseConfiguration.styles ?? componentConstructor.aejStyles,
+        bind: baseConfiguration.bind ?? componentConstructor.aejBind,
+        aria: baseConfiguration.aria ?? componentConstructor.aejAria,
+        parts: baseConfiguration.parts ?? componentConstructor.aejParts,
+        dispatch: baseConfiguration.dispatch ?? componentConstructor.aejDispatch,
+        val:
+          baseConfiguration.val ??
+          baseConfiguration.value ??
+          componentConstructor.aejVal ??
+          componentConstructor.aejValue,
+        validation: baseConfiguration.validation ?? componentConstructor.aejValidation,
       };
 
       const root = config.shadowRoot ?? element.shadowRoot ?? null;
-      const sr = root instanceof ShadowRoot ? root : null;
+      const shadowRoot = root instanceof ShadowRoot ? root : null;
 
-      if (sr) {
+      if (shadowRoot) {
         registry.markHost(element);
-        registry.registerShadow(element, sr);
+        registry.registerShadow(element, shadowRoot);
       }
 
       const rootNode = (root ?? element) as (Element | ShadowRoot) & {
@@ -211,15 +217,17 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       }
 
       if (!state.slotsAtom) {
-        const { atom, listener } = SetupFeatures.slots(sr);
+        const { atom, listener } = SetupFeatures.slots(shadowRoot);
         state.slotsAtom = atom;
-        if (sr) {
-          state.slotListenerAttached = true;
-          state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
+        if (shadowRoot) {
+          state.isSlotListenerAttached = true;
+          state.effects.push({
+            dispose: () => shadowRoot.removeEventListener('slotchange', listener),
+          });
         }
-      } else if (sr && !state.slotListenerAttached) {
-        const listener = (e: Event) => {
-          const target = e.target as HTMLSlotElement;
+      } else if (shadowRoot && !state.isSlotListenerAttached) {
+        const listener = (event: Event) => {
+          const target = event.target as HTMLSlotElement;
           const slotsAtom = state.slotsAtom;
           if (slotsAtom) {
             slotsAtom.value = {
@@ -228,13 +236,15 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
             };
           }
         };
-        sr.addEventListener('slotchange', listener);
-        state.effects.push({ dispose: () => sr.removeEventListener('slotchange', listener) });
-        state.slotListenerAttached = true;
+        shadowRoot.addEventListener('slotchange', listener);
+        state.effects.push({
+          dispose: () => shadowRoot.removeEventListener('slotchange', listener),
+        });
+        state.isSlotListenerAttached = true;
 
         const next: Record<string, Node[]> = {};
-        for (const s of sr.querySelectorAll('slot')) {
-          next[s.name || ''] = s.assignedNodes();
+        for (const slotElement of shadowRoot.querySelectorAll('slot')) {
+          next[slotElement.name || ''] = slotElement.assignedNodes();
         }
         state.slotsAtom.value = next;
       }
@@ -261,8 +271,8 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       if (config.aria && internals) SetupFeatures.aria(internals, config.aria, state.effects);
       if (config.parts) SetupFeatures.parts(rootNode as Element, config.parts, state.effects);
 
-      if (internals && (config.value !== undefined || config.validation !== undefined)) {
-        SetupFeatures.form(element, internals, config.value, config.validation, state.effects);
+      if (internals && (config.val !== undefined || config.validation !== undefined)) {
+        SetupFeatures.form(element, internals, config.val, config.validation, state.effects);
       }
 
       state.isInitialized = true;
@@ -274,17 +284,17 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
      * associated with this component instance.
      */
     teardown() {
-      const s = nodeStateMap.get(element);
-      if (s) {
-        s.providers?.clear();
+      const componentState = nodeStateMap.get(element);
+      if (componentState) {
+        componentState.providers?.clear();
 
-        if (s.providerEffects) {
-          for (const e of s.providerEffects.values()) {
-            e.dispose();
+        if (componentState.providerEffects) {
+          for (const providerEffect of componentState.providerEffects.values()) {
+            providerEffect.dispose();
           }
         }
-        s.providerEffects?.clear();
-        s.injects?.clear();
+        componentState.providerEffects?.clear();
+        componentState.injects?.clear();
       }
 
       state.dispose();
@@ -311,7 +321,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
  *
  * @param element - The host element or collection acting as provider.
  * @param key - Unique identifier for the context.
- * @param val - The reactive atom or static value to share.
+ * @param value - The reactive atom or static value to share.
  *
  * @example
  * ```typescript
@@ -325,7 +335,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
 export function provideAtom(
   element: HTMLElement | JQuery | string,
   key: string | symbol,
-  val: unknown
+  value: unknown
 ): void {
   const targets =
     element instanceof HTMLElement
@@ -334,28 +344,29 @@ export function provideAtom(
         ? Array.from(document.querySelectorAll<HTMLElement>(element))
         : ((element as JQuery).toArray() as HTMLElement[]);
 
-  for (const el of targets) {
-    const state = getInternalState(el);
+  for (const element of targets) {
+    const state = getInternalState(element);
     if (!state.providers) {
       state.providers = new Map();
     }
-    state.providers.set(key, val);
+    state.providers.set(key, value);
 
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
-      const sync = (v: unknown) => el.style.setProperty(varName, String(v ?? ''));
-      if (isAtom(val)) {
+      const sync = (newValue: unknown) =>
+        element.style.setProperty(varName, String(newValue ?? ''));
+      if (isAtom(value)) {
         if (!state.providerEffects) state.providerEffects = new Map();
         state.providerEffects.get(key)?.dispose();
         state.providerEffects.set(
           key,
           $.effect(() => {
-            sync(val.value);
+            sync(value.value);
             return undefined;
           })
         );
-      } else sync(val);
+      } else sync(value);
     }
   }
 }
@@ -392,27 +403,27 @@ export function injectAtom<T = unknown>(
   element: HTMLElement | JQuery | string,
   key: string | symbol
 ): WritableAtom<T | null> | null {
-  const target =
+  const targetElement =
     element instanceof HTMLElement
       ? element
       : typeof element === 'string'
         ? document.querySelector<HTMLElement>(element)
         : ((element as JQuery)[0] as HTMLElement);
 
-  if (!target) return null;
+  if (!targetElement) return null;
 
   if (debug.enabled && typeof customElements !== 'undefined') {
-    const tagName = target.tagName.toLowerCase();
+    const tagName = targetElement.tagName.toLowerCase();
     if (tagName.includes('-') && !customElements.get(tagName)) {
       debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
     }
   }
 
-  const state = getInternalState(target);
+  const state = getInternalState(targetElement);
   if (!state.injects) state.injects = new Map();
   let existing = state.injects.get(key);
   if (!existing) {
-    existing = createContextProxy<T>(target, key) as WritableAtom<unknown>;
+    existing = createContextProxy<T>(targetElement, key) as WritableAtom<unknown>;
     state.injects.set(key, existing);
   }
   return existing as WritableAtom<T | null>;

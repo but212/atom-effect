@@ -25,14 +25,14 @@ import {
 import type { DebugConfig, DependencyId, IdentifiableNode, NodeMetadata } from '@/types';
 
 /** Shared no-op function to reduce memory pressure in production. @internal */
-const noop = () => {};
+const noopCallback = () => {};
 
 /** Helper to resolve fallback node identity structurally. @internal */
-const getFallbackIdentity = (obj: object, id: DependencyId): NodeMetadata => {
-  const brand = (obj as { [BRAND]?: number })[BRAND];
-  const info = brand === undefined ? undefined : BRAND_IDENTITY_MAP[brand & BRAND_MASK];
-  const type = info?.type ?? 'unknown';
-  const prefix = info?.prefix ?? `${type}_`;
+const getFallbackIdentity = (targetObject: object, id: DependencyId): NodeMetadata => {
+  const brand = (targetObject as { [BRAND]?: number })[BRAND];
+  const brandMetadata = brand === undefined ? undefined : BRAND_IDENTITY_MAP[brand & BRAND_MASK];
+  const type = brandMetadata?.type ?? 'unknown';
+  const prefix = brandMetadata?.prefix ?? `${type}_`;
   return { name: `${prefix}${id}`, type };
 };
 
@@ -46,8 +46,8 @@ class DevDebugEngine implements DebugConfig {
   #updateCounts = new Map<DependencyId, number>();
   #registry = new Map<DependencyId, NodeMetadata>();
   #failedEvaluations = new Set<DependencyId>();
-  #cleanupScheduled = false;
-  #failureCleanupScheduled = false;
+  #isCleanupScheduled = false;
+  #isFailureCleanupScheduled = false;
 
   #pruneNode(id: DependencyId): void {
     this.#registry.delete(id);
@@ -61,9 +61,9 @@ class DevDebugEngine implements DebugConfig {
    */
   #finalizer = new FinalizationRegistry((id: DependencyId) => this.#pruneNode(id));
 
-  enabled = true;
-  warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
-  trackGraph = false;
+  isEnabled = true;
+  shouldWarnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
+  shouldTrackGraph = false;
 
   /**
    * Logic: Structural Identity Resolution
@@ -71,46 +71,46 @@ class DevDebugEngine implements DebugConfig {
    * BRAND discriminator. Falls back to structural probing if the node is not
    * yet registered.
    */
-  #resolveIdentity(obj: object): { name: string; type: string } | undefined {
-    if (obj === null || typeof obj !== 'object') {
+  #resolveIdentity(targetObject: object): { name: string; type: string } | undefined {
+    if (targetObject === null || typeof targetObject !== 'object') {
       return undefined;
     }
 
-    const id = (obj as { id?: DependencyId }).id;
+    const id = (targetObject as { id?: DependencyId }).id;
     if (id === undefined) {
       return undefined;
     }
 
-    return this.#registry.get(id) ?? getFallbackIdentity(obj, id);
+    return this.#registry.get(id) ?? getFallbackIdentity(targetObject, id);
   }
 
-  #getOrCreateMetadata(obj: object, id: DependencyId): NodeMetadata {
-    let entry = this.#registry.get(id);
-    if (!entry) {
-      entry = getFallbackIdentity(obj, id);
-      this.#registry.set(id, entry);
+  #getOrCreateMetadata(targetObject: object, id: DependencyId): NodeMetadata {
+    let nodeMetadata = this.#registry.get(id);
+    if (!nodeMetadata) {
+      nodeMetadata = getFallbackIdentity(targetObject, id);
+      this.#registry.set(id, nodeMetadata);
     }
-    return entry;
+    return nodeMetadata;
   }
 
   #resetUpdateCounts = (): void => {
     this.#updateCounts.clear();
-    this.#cleanupScheduled = false;
+    this.#isCleanupScheduled = false;
   };
 
   #resetFailedEvaluations = (): void => {
     this.#failedEvaluations.clear();
-    this.#failureCleanupScheduled = false;
+    this.#isFailureCleanupScheduled = false;
   };
 
-  warn(cond: boolean, msg: string): void {
-    if (this.enabled && cond) {
-      console.warn(`${DEBUG_PREFIX} ${msg}`);
+  isWarningCondition(isWarningCondition: boolean, warningMessage: string): void {
+    if (this.isEnabled && isWarningCondition) {
+      console.warn(`${DEBUG_PREFIX} ${warningMessage}`);
     }
   }
 
   registerNode(node: IdentifiableNode): void {
-    if (!this.enabled || node === null || typeof node !== 'object' || node.id === undefined) {
+    if (!this.isEnabled || node === null || typeof node !== 'object' || node.id === undefined) {
       return;
     }
     const id = node.id;
@@ -121,31 +121,35 @@ class DevDebugEngine implements DebugConfig {
   }
 
   attachDebugInfo(
-    obj: IdentifiableNode,
+    targetObject: IdentifiableNode,
     type: string,
     id: DependencyId,
     customName?: string
   ): void {
-    if (!this.enabled) return;
+    if (!this.isEnabled) return;
     const hasEntry = this.#registry.has(id);
-    if (!hasEntry && customName === undefined && !this.trackGraph) return;
-    if (obj === null || typeof obj !== 'object' || id === undefined) return;
+    if (!hasEntry && customName === undefined && !this.shouldTrackGraph) return;
+    if (targetObject === null || typeof targetObject !== 'object' || id === undefined) return;
 
-    let entry = this.#registry.get(id);
-    if (entry) {
+    let nodeMetadata = this.#registry.get(id);
+    if (nodeMetadata) {
       if (customName !== undefined) {
-        entry.name = customName;
-        entry.custom = true;
-      } else if (!entry.custom) {
-        entry.name = `${type}_${id}`;
+        nodeMetadata.name = customName;
+        nodeMetadata.custom = true;
+      } else if (!nodeMetadata.custom) {
+        nodeMetadata.name = `${type}_${id}`;
       }
-      entry.type = type;
+      nodeMetadata.type = type;
     } else {
-      entry = { name: customName ?? `${type}_${id}`, type, custom: customName !== undefined };
-      this.#registry.set(id, entry);
+      nodeMetadata = {
+        name: customName ?? `${type}_${id}`,
+        type,
+        custom: customName !== undefined,
+      };
+      this.#registry.set(id, nodeMetadata);
     }
 
-    this.registerNode(obj);
+    this.registerNode(targetObject);
   }
 
   /**
@@ -158,66 +162,66 @@ class DevDebugEngine implements DebugConfig {
    * single reactive flush cycle, avoiding false positives across user interactions.
    */
   trackUpdate(id: DependencyId, name?: string): void {
-    if (!this.enabled || !this.warnInfiniteLoop) return;
+    if (!this.isEnabled || !this.shouldWarnInfiniteLoop) return;
 
-    const count = (this.#updateCounts.get(id) || 0) + 1;
-    this.#updateCounts.set(id, count);
+    const updateCount = (this.#updateCounts.get(id) || 0) + 1;
+    this.#updateCounts.set(id, updateCount);
 
     const threshold = DEBUG_CONFIG.LOOP_THRESHOLD;
-    if (count > threshold) {
-      if (count === threshold + 1) {
+    if (updateCount > threshold) {
+      if (updateCount === threshold + 1) {
         console.warn(
           `${DEBUG_PREFIX} Infinite loop detected for ${name ?? `dependency ${id}`}. ` +
-            `Detected ${count} updates within a single execution scope, exceeding the threshold of ${threshold}.`
+            `Detected ${updateCount} updates within a single execution scope, exceeding the threshold of ${threshold}.`
         );
       }
     }
 
-    if (!this.#cleanupScheduled) {
-      this.#cleanupScheduled = true;
+    if (!this.#isCleanupScheduled) {
+      this.#isCleanupScheduled = true;
       queueMicrotask(this.#resetUpdateCounts);
     }
   }
 
   trackEvaluationFailure(id: DependencyId): void {
-    if (!this.enabled || this.#failedEvaluations.has(id)) return;
+    if (!this.isEnabled || this.#failedEvaluations.has(id)) return;
 
     this.#failedEvaluations.add(id);
     console.warn(`${DEBUG_PREFIX} Dependency #${id} evaluation failed during dirty check.`);
 
-    if (!this.#failureCleanupScheduled) {
-      this.#failureCleanupScheduled = true;
+    if (!this.#isFailureCleanupScheduled) {
+      this.#isFailureCleanupScheduled = true;
       queueMicrotask(this.#resetFailedEvaluations);
     }
   }
 
-  getDebugName(obj: object | null | undefined): string | undefined {
-    if (!this.enabled || !obj) return undefined;
-    return this.#resolveIdentity(obj)?.name;
+  getDebugName(targetObject: object | null | undefined): string | undefined {
+    if (!this.isEnabled || !targetObject) return undefined;
+    return this.#resolveIdentity(targetObject)?.name;
   }
 
-  getDebugType(obj: object | null | undefined): string | undefined {
-    if (!this.enabled || !obj) return undefined;
-    return this.#resolveIdentity(obj)?.type;
+  getDebugType(targetObject: object | null | undefined): string | undefined {
+    if (!this.isEnabled || !targetObject) return undefined;
+    return this.#resolveIdentity(targetObject)?.type;
   }
 
   dumpGraph(): Record<string, unknown>[] {
-    if (!this.enabled || this.#registry.size === 0) return [];
+    if (!this.isEnabled || this.#registry.size === 0) return [];
 
-    const result: Record<string, unknown>[] = [];
+    const graphMetadataList: Record<string, unknown>[] = [];
     for (const [id, meta] of this.#registry) {
       if (meta.ref?.deref() === undefined) {
         this.#pruneNode(id);
         continue;
       }
-      result.push({
+      graphMetadataList.push({
         id,
         name: meta.name,
         type: meta.type,
         updateCount: this.#updateCounts.get(id) ?? 0,
       });
     }
-    return result;
+    return graphMetadataList;
   }
 }
 
@@ -228,17 +232,17 @@ class DevDebugEngine implements DebugConfig {
  * @internal
  */
 const ProdDebugController: DebugConfig = {
-  enabled: false,
-  warnInfiniteLoop: false,
-  trackGraph: false,
-  warn: noop,
-  registerNode: noop,
-  attachDebugInfo: noop,
-  trackUpdate: noop,
+  isEnabled: false,
+  shouldWarnInfiniteLoop: false,
+  shouldTrackGraph: false,
+  isWarningCondition: noopCallback,
+  registerNode: noopCallback,
+  attachDebugInfo: noopCallback,
+  trackUpdate: noopCallback,
   dumpGraph: () => [],
   getDebugName: () => undefined,
   getDebugType: () => undefined,
-  trackEvaluationFailure: noop,
+  trackEvaluationFailure: noopCallback,
 };
 
 /**
@@ -251,22 +255,25 @@ export const debug: DebugConfig = IS_DEV ? new DevDebugEngine() : ProdDebugContr
 /**
  * Individual exports for direct usage (proxied to the debug singleton).
  */
-export const warn = (cond: boolean, msg: string) => debug.warn(cond, msg);
+export const isWarningCondition = (condition: boolean, message: string) =>
+  debug.isWarningCondition(condition, message);
 export const registerNode = (node: IdentifiableNode) => debug.registerNode(node);
 export const attachDebugInfo = (
-  obj: IdentifiableNode,
+  targetObject: IdentifiableNode,
   type: string,
   id: DependencyId,
   customName?: string
-) => debug.attachDebugInfo(obj, type, id, customName);
+) => debug.attachDebugInfo(targetObject, type, id, customName);
 export const trackUpdate = (id: DependencyId, name?: string) => debug.trackUpdate(id, name);
 export const trackEvaluationFailure = (id: DependencyId) => debug.trackEvaluationFailure(id);
-export const getDebugName = (obj: object | null | undefined) => debug.getDebugName(obj);
-export const getDebugType = (obj: object | null | undefined) => debug.getDebugType(obj);
+export const getDebugName = (targetObject: object | null | undefined) =>
+  debug.getDebugName(targetObject);
+export const getDebugType = (targetObject: object | null | undefined) =>
+  debug.getDebugType(targetObject);
 export const dumpGraph = () => debug.dumpGraph();
 
 /** @internal */
-let nextId = 1;
+let nextNodeId = 1;
 
 /**
  * Logic: Unique Node Identity
@@ -275,4 +282,4 @@ let nextId = 1;
  *
  * @returns A unique `DependencyId`.
  */
-export const generateId = (): DependencyId => nextId++;
+export const generateId = (): DependencyId => nextNodeId++;

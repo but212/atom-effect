@@ -32,17 +32,17 @@ export type BindingDebugType =
 
 export interface BatchedTask {
   isReactive: boolean;
-  run: (el: Element) => () => void;
+  run: (element: Element) => () => void;
 }
 
 let activeBatchCollector: BatchedTask[] | null = null;
 
-export function withBatchCollection(fn: () => void): BatchedTask[] {
+export function withBatchCollection(callback: () => void): BatchedTask[] {
   const previous = activeBatchCollector;
   const current: BatchedTask[] = [];
   activeBatchCollector = current;
   try {
-    fn();
+    callback();
   } finally {
     activeBatchCollector = previous;
   }
@@ -69,24 +69,24 @@ const getSourceValue = <T>(source: AsyncReactiveValue<T>): T | Promise<T> => {
 };
 
 function createAsyncRunner<T>(
-  el: Element,
+  element: Element,
   debugType: BindingDebugType,
   updater: (value: T) => void
 ) {
   let activeVersion = 0;
   let isDisposed = false;
-  let cleanupRegistered = false;
+  let isCleanupRegistered = false;
 
-  const runUpdate = (value: T, isAsync: boolean) => {
+  const runUpdate = (targetValue: T, isAsync: boolean) => {
     if (isDisposed) return;
     untracked(() => {
       try {
-        updater(value);
+        updater(targetValue);
         debug.domUpdated(
           SYSTEM_BINDING.PREFIX,
-          el,
+          element,
           isAsync ? `${debugType} (async)` : debugType,
-          value
+          targetValue
         );
       } catch (error) {
         debug.error(
@@ -106,11 +106,11 @@ function createAsyncRunner<T>(
       return;
     }
 
-    if (!cleanupRegistered) {
-      registry.onCleanup(el, () => {
+    if (!isCleanupRegistered) {
+      registry.onCleanup(element, () => {
         isDisposed = true;
       });
-      cleanupRegistered = true;
+      isCleanupRegistered = true;
     }
 
     value.then(
@@ -143,7 +143,7 @@ function createAsyncRunner<T>(
  * @internal
  */
 export function registerReactiveEffect<T>(
-  el: Element,
+  element: Element,
   source: AsyncReactiveValue<T>,
   updater: (value: T) => void,
   debugType: BindingDebugType
@@ -161,11 +161,11 @@ export function registerReactiveEffect<T>(
     return;
   }
 
-  const runner = createAsyncRunner(el, debugType, updater);
+  const runner = createAsyncRunner(element, debugType, updater);
 
   if (hasReactive) {
     registry.trackEffect(
-      el,
+      element,
       effect(() => runner(getSourceValue(source)), { name: debugType })
     );
   } else {
@@ -184,7 +184,7 @@ export function registerReactiveEffect<T>(
  * @internal
  */
 export function registerMapEffect<T>(
-  el: Element,
+  element: Element,
   sourceMap: Record<string, AsyncReactiveValue<T>>,
   updater: (map: Record<string, T>) => void,
   debugType: BindingDebugType
@@ -193,36 +193,38 @@ export function registerMapEffect<T>(
 
   let hasReactive = false;
   for (const key of keys) {
-    const val = sourceMap[key];
-    if (isAtom(val) || typeof val === 'function') {
+    const sourceValue = sourceMap[key];
+    if (isAtom(sourceValue) || typeof sourceValue === 'function') {
       hasReactive = true;
       break;
     }
   }
 
   const collect = () => {
-    const resolved: Record<string, T> = {};
+    const resolvedMap: Record<string, T> = {};
     const promises: Promise<{ key: string; value: T }>[] = [];
 
     for (const key of keys) {
       const value = getSourceValue(sourceMap[key]);
 
       if (isPromise(value)) {
-        promises.push((value as Promise<T>).then((v) => ({ key, value: v })));
+        promises.push(
+          (value as Promise<T>).then((resolvedValue) => ({ key, value: resolvedValue }))
+        );
       } else {
-        resolved[key] = value as T;
+        resolvedMap[key] = value as T;
       }
     }
 
     if (promises.length > 0) {
       return Promise.all(promises).then((results) => {
-        for (const res of results) {
-          resolved[res.key] = res.value;
+        for (const result of results) {
+          resolvedMap[result.key] = result.value;
         }
-        return resolved;
+        return resolvedMap;
       });
     }
-    return resolved;
+    return resolvedMap;
   };
 
   if (activeBatchCollector) {
@@ -236,11 +238,11 @@ export function registerMapEffect<T>(
     return;
   }
 
-  const runner = createAsyncRunner(el, debugType, updater);
+  const runner = createAsyncRunner(element, debugType, updater);
 
   if (hasReactive) {
     registry.trackEffect(
-      el,
+      element,
       effect(() => runner(collect()), { name: debugType })
     );
   } else {
@@ -248,21 +250,21 @@ export function registerMapEffect<T>(
   }
 }
 
-export function registerBatchedEffects(el: Element, tasks: BatchedTask[]): void {
+export function registerBatchedEffects(element: Element, tasks: BatchedTask[]): void {
   let hasReactive = false;
   for (let i = 0; i < tasks.length; i++) {
-    const t = tasks[i];
-    if (t?.isReactive) {
+    const task = tasks[i];
+    if (task?.isReactive) {
       hasReactive = true;
       break;
     }
   }
 
-  const runners = tasks.map((t) => t.run(el));
+  const runners = tasks.map((task) => task.run(element));
 
   if (hasReactive) {
     registry.trackEffect(
-      el,
+      element,
       effect(
         () => {
           for (let i = 0; i < runners.length; i++) {

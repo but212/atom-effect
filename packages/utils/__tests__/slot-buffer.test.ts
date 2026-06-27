@@ -446,9 +446,9 @@ describe('SlotBuffer', () => {
       for (let i = 0; i < 10; i++) buf.push(i);
 
       let countFast = 0;
-      const foundFast = buf.some((val) => {
+      const foundFast = buf.some((value) => {
         countFast++;
-        return val === 2; // Index 2 (s2)
+        return value === 2; // Index 2 (s2)
       });
       expect(foundFast).toBe(true);
       expect(countFast).toBe(3); // 0, 1, 2
@@ -459,9 +459,9 @@ describe('SlotBuffer', () => {
       for (let i = 0; i < 10; i++) buf.push(i);
 
       let count = 0;
-      const found = buf.some((val) => {
+      const found = buf.some((value) => {
         count++;
-        return val === 5;
+        return value === 5;
       });
 
       expect(found).toBe(true);
@@ -472,13 +472,13 @@ describe('SlotBuffer', () => {
       const buf = new SlotBuffer<number>();
       buf.push(10);
       buf.push(20);
-      expect(buf.some((val) => val === 99)).toBe(false);
+      expect(buf.some((value) => value === 99)).toBe(false);
     });
 
     it('some() should return false when element is not found (large buffer)', () => {
       const buf = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) buf.push(i);
-      expect(buf.some((val) => val === 99)).toBe(false);
+      expect(buf.some((value) => value === 99)).toBe(false);
     });
 
     it('some() should return false on empty buffer', () => {

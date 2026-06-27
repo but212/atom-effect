@@ -30,7 +30,7 @@ counter.value = 1;
 console.log(counter.peek()); 
 
 // Subscribe to changes
-const unsub = counter.subscribe((next, prev) => {
+const unsubscribeCallback = counter.subscribe((next, prev) => {
   console.log(`Changed from ${prev} to ${next}`);
 });
 
@@ -59,17 +59,17 @@ counter.dispose();
 
 ```typescript
 export function computed<T>(
-  fn: () => Promise<T>,
+  computationCallback: () => Promise<T>,
   options: ComputedOptions<T> & { defaultValue: T }
 ): ComputedAtom<T>;
 
 export function computed<T>(
-  fn: () => Promise<T>,
+  computationCallback: () => Promise<T>,
   options?: ComputedOptions<T>
 ): ComputedAtom<T>;
 
 export function computed<T>(
-  fn: () => T,
+  computationCallback: () => T,
   options?: ComputedOptions<T>
 ): ComputedAtom<T>;
 ```
@@ -144,13 +144,13 @@ Asynchronous computations can be defined by returning a `Promise`. The returned 
 
 - `name`: (Optional) A debugging identifier.
 - `equal`: Custom equality check for the result to suppress redundant downstream updates.
-- `defaultValue`: Recommended fallback value for async computations; returned while a Promise is pending. If omitted, accessing `.value` during the pending state throws a `ComputedError`.
+- `defaultValue`: Recommended fallback value for async computations; returned while a Promise is pending. If provided, it also acts as an error fallback: any computation failures (synchronous or asynchronous) or circular references will be caught, and the `defaultValue` will be returned instead of throwing a `ComputedError`. If omitted, accessing `.value` during pending or error/circular states throws a `ComputedError`.
 - `lazy`: (Default: `true`) If `false`, the computation runs immediately upon creation.
 - `onError`: `(error: Error) => void`. Callback executed when the computation fails.
 
 ---
 
-## `effect(fn: EffectFunction, options?: EffectOptions)`
+## `effect(effectCallback: EffectFunction, options?: EffectOptions)`
 
 ### `EffectFunction` and `EffectCleanup` Types
 
@@ -213,7 +213,7 @@ Groups multiple state updates into a single notification cycle.
 
 ---
 
-## `aeNextTick(fn?: () => void): Promise<void>`
+## `aeNextTick(nextTickCallback?: () => void): Promise<void>`
 
 Returns a promise that resolves after the next scheduler flush. Recommended for waiting for asynchronous effects to settle during testing.
 
@@ -345,7 +345,7 @@ The `debug` object (exported as `runtimeDebug` in some contexts) provides tools 
 
 - `dumpGraph()`: Returns metadata for all currently active reactive nodes.
 - `trackUpdate(id, name)`: Increments the update count for a node (internal use).
-- **Automatic Naming**: Nodes are assigned IDs (e.g., `atom_1`, `calc_5`, `fx_3`) if no explicit name is provided.
+- **Automatic Naming**: Nodes are assigned IDs (e.g., `atom_1`, `calc_5`, `effect_3`) if no explicit name is provided.
 
 ---
 

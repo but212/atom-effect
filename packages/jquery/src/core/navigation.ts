@@ -42,10 +42,13 @@ export const normalizePath = (path: string): string => path.replace(/^\/+|\/+$/g
  * @internal
  */
 export const splitPath = (path: string): { route: string; query: string | null } => {
-  const idx = path.indexOf('?');
-  return idx === -1
+  const questionMarkIndex = path.indexOf('?');
+  return questionMarkIndex === -1
     ? { route: normalizePath(path), query: null }
-    : { route: normalizePath(path.slice(0, idx)), query: path.slice(idx + 1) };
+    : {
+        route: normalizePath(path.slice(0, questionMarkIndex)),
+        query: path.slice(questionMarkIndex + 1),
+      };
 };
 
 /** @internal */
@@ -92,26 +95,26 @@ export const META_SCHEMA = [
  * - Ensures SEO-critical tags stay in sync during SPA transitions
  *   without a full page reload.
  */
-export function syncMetaData(win: Window, meta?: Record<string, string>): void {
-  const doc = win.document;
-  const head = doc.head;
-  for (const s of META_SCHEMA) {
-    const value = meta ? meta[s.key] : undefined;
-    const el = head.querySelector(s.selector) as HTMLElement | null;
+export function syncMetaData(window: Window, meta?: Record<string, string>): void {
+  const document = window.document;
+  const head = document.head;
+  for (const metaSchema of META_SCHEMA) {
+    const value = meta ? meta[metaSchema.key] : undefined;
+    const metaElement = head.querySelector(metaSchema.selector) as HTMLElement | null;
 
     if (value === undefined) {
-      if (el) el.remove();
+      if (metaElement) metaElement.remove();
       continue;
     }
 
-    const target = el || head.appendChild(doc.createElement(s.tag));
-    if (!el) {
-      for (const [k, val] of Object.entries(s.staticAttrs)) {
-        target.setAttribute(k, val);
+    const target = metaElement || head.appendChild(document.createElement(metaSchema.tag));
+    if (!metaElement) {
+      for (const [attributeName, attributeValue] of Object.entries(metaSchema.staticAttrs)) {
+        target.setAttribute(attributeName, attributeValue);
       }
     }
-    if (target.getAttribute(s.attr) !== value) {
-      target.setAttribute(s.attr, value);
+    if (target.getAttribute(metaSchema.attr) !== value) {
+      target.setAttribute(metaSchema.attr, value);
     }
   }
 }
@@ -124,16 +127,16 @@ export function syncMetaData(win: Window, meta?: Record<string, string>): void {
  * Attributes in `ATTR_PRESERVE` (like `id`) are never removed to
  * prevent breaking persistent DOM references.
  */
-export function updateAttributes(el: HTMLElement, next: Record<string, string>): void {
-  for (const attr of [...el.attributes]) {
-    if (!ATTR_PRESERVE.has(attr.name) && !Object.hasOwn(next, attr.name)) {
-      el.removeAttribute(attr.name);
+export function updateAttributes(element: HTMLElement, next: Record<string, string>): void {
+  for (const attributeValue of [...element.attributes]) {
+    if (!ATTR_PRESERVE.has(attributeValue.name) && !Object.hasOwn(next, attributeValue.name)) {
+      element.removeAttribute(attributeValue.name);
     }
   }
 
   for (const [name, value] of Object.entries(next)) {
-    if (value !== undefined && el.getAttribute(name) !== value) {
-      el.setAttribute(name, value);
+    if (value !== undefined && element.getAttribute(name) !== value) {
+      element.setAttribute(name, value);
     }
   }
 }
@@ -143,13 +146,13 @@ export function updateAttributes(el: HTMLElement, next: Record<string, string>):
  * Manages viewport scrolling after a navigation event.
  * Priority: Hash element > Window top (if fallback enabled).
  */
-export function performScroll(win: Window, hash?: string, fallbackToTop = false): void {
+export function performScroll(window: Window, hash?: string, fallbackToTop = false): void {
   const id = decodeURIComponent(hash || '');
-  const el = id ? win.document.getElementById(id) : null;
-  if (el) {
-    el.scrollIntoView({ behavior: 'auto', block: 'start' });
+  const hashElement = id ? window.document.getElementById(id) : null;
+  if (hashElement) {
+    hashElement.scrollIntoView({ behavior: 'auto', block: 'start' });
   } else if (!hash || fallbackToTop) {
-    win.scrollTo(0, 0);
+    window.scrollTo(0, 0);
   }
 }
 
@@ -172,18 +175,27 @@ interface NavEventLike {
  * Why: Ignores modified clicks (Ctrl+Click) or right-clicks to preserve native
  * browser features like "Open in new tab".
  */
-export function isNavigationClick(e: MouseEvent | JQuery.TriggeredEvent): boolean {
-  const ne = e as NavEventLike;
-  const me = ne.originalEvent || ne;
+export function isNavigationClick(event: MouseEvent | JQuery.TriggeredEvent): boolean {
+  const navEvent = event as NavEventLike;
+  const originalOrNavEvent = navEvent.originalEvent || navEvent;
 
-  if (ne.defaultPrevented || ne.isDefaultPrevented?.() || me.defaultPrevented) {
+  if (
+    navEvent.defaultPrevented ||
+    navEvent.isDefaultPrevented?.() ||
+    originalOrNavEvent.defaultPrevented
+  ) {
     return false;
   }
   // Reason: Modified clicks imply native browser intent (new tab, bookmark, etc).
-  if (me.ctrlKey || me.metaKey || me.altKey || me.shiftKey) {
+  if (
+    originalOrNavEvent.ctrlKey ||
+    originalOrNavEvent.metaKey ||
+    originalOrNavEvent.altKey ||
+    originalOrNavEvent.shiftKey
+  ) {
     return false;
   }
-  return me.button === 0 || me.button === undefined;
+  return originalOrNavEvent.button === 0 || originalOrNavEvent.button === undefined;
 }
 
 /**
@@ -195,40 +207,45 @@ export function isNavigationClick(e: MouseEvent | JQuery.TriggeredEvent): boolea
  * Rules prioritize developer intent (data-nav="false") and security
  * (cross-origin checks) over automatic PJAX tracking.
  */
-export function isInterceptee(el: Element, win: Window = window): boolean {
+export function isInterceptee(element: Element, win: Window = window): boolean {
   if (
-    el.getAttribute('data-nav') === 'false' ||
-    el.hasAttribute('data-ignore') ||
-    el.hasAttribute('download') ||
-    el.getAttribute('rel') === 'external' ||
-    (el as HTMLAnchorElement).rel === 'external'
+    element.getAttribute('data-nav') === 'false' ||
+    element.hasAttribute('data-ignore') ||
+    element.hasAttribute('download') ||
+    element.getAttribute('rel') === 'external' ||
+    (element as HTMLAnchorElement).rel === 'external'
   ) {
     return false;
   }
-  if (el.hasAttribute('data-route') || el.hasAttribute('data-path')) return true;
+  if (element.hasAttribute('data-route') || element.hasAttribute('data-path')) return true;
 
-  const target = el.getAttribute('target');
+  const target = element.getAttribute('target');
   if (target && target !== '_self') return false;
-  if (el.tagName.toUpperCase() !== 'A') return false;
+  if (element.tagName.toUpperCase() !== 'A') return false;
 
-  const a = el as HTMLAnchorElement;
-  const hrefAttr = a.getAttribute('href');
+  const anchorElement = element as HTMLAnchorElement;
+  const hrefAttr = anchorElement.getAttribute('href');
   if (!hrefAttr || hrefAttr[0] === '#') return false;
 
-  const loc = win.location;
-  if (a.origin !== loc.origin || !/^https?:/.test(a.protocol)) return false;
+  const location = win.location;
+  if (anchorElement.origin !== location.origin || !/^https?:/.test(anchorElement.protocol))
+    return false;
 
-  return !(a.pathname === loc.pathname && a.search === loc.search && a.hash.startsWith('#'));
+  return !(
+    anchorElement.pathname === location.pathname &&
+    anchorElement.search === location.search &&
+    anchorElement.hash.startsWith('#')
+  );
 }
 
 /** @internal */
 export function getUrlParts(url: string, base: string): { pathAndSearch: string; hash: string } {
-  const res = getAbsoluteUrl(url, base);
-  if (Result.isErr(res)) return { pathAndSearch: url, hash: '' };
-  const obj = Result.unwrap(res);
+  const urlResult = getAbsoluteUrl(url, base);
+  if (Result.isErr(urlResult)) return { pathAndSearch: url, hash: '' };
+  const urlObject = Result.unwrap(urlResult);
   return {
-    pathAndSearch: obj.pathname + obj.search,
-    hash: obj.hash.slice(1),
+    pathAndSearch: urlObject.pathname + urlObject.search,
+    hash: urlObject.hash.slice(1),
   };
 }
 
@@ -257,11 +274,11 @@ export function getScrollDecision(params: {
 }
 
 /** @internal */
-export function extractMetaData(doc: Document | Element): Record<string, string> {
+export function extractMetaData(document: Document | Element): Record<string, string> {
   const meta: Record<string, string> = {};
   for (const schema of META_SCHEMA) {
-    const el = doc.querySelector(schema.selector);
-    const value = el?.getAttribute(schema.attr);
+    const metaElement = document.querySelector(schema.selector);
+    const value = metaElement?.getAttribute(schema.attr);
     if (value) meta[schema.key] = value;
   }
   return meta;
@@ -272,40 +289,40 @@ export function extractMetaData(doc: Document | Element): Record<string, string>
  * Extracts a router-compatible path relative to a base from an element.
  * @internal
  */
-export function resolveAnchorPath(el: Element, base?: string): string {
-  const attr = el.getAttribute('href') || el.getAttribute('xlink:href') || '';
-  if (attr.startsWith('#')) return normalizePath(attr.substring(1));
+export function resolveAnchorPath(element: Element, base?: string): string {
+  const attributeValue = element.getAttribute('href') || element.getAttribute('xlink:href') || '';
+  if (attributeValue.startsWith('#')) return normalizePath(attributeValue.substring(1));
 
-  let p: string;
-  let s: string;
+  let pathname: string;
+  let searchQuery: string;
 
-  if (el instanceof HTMLAnchorElement && el.href) {
-    p = el.pathname;
-    s = el.search;
+  if (element instanceof HTMLAnchorElement && element.href) {
+    pathname = element.pathname;
+    searchQuery = element.search;
   } else {
     const baseUrl = location.href.startsWith('http') ? `${location.origin}/` : 'http://localhost/';
-    const res = getAbsoluteUrl(attr, baseUrl);
-    if (Result.isErr(res)) return '';
-    const url = Result.unwrap(res);
-    p = url.pathname;
-    s = url.search;
+    const urlResult = getAbsoluteUrl(attributeValue, baseUrl);
+    if (Result.isErr(urlResult)) return '';
+    const url = Result.unwrap(urlResult);
+    pathname = url.pathname;
+    searchQuery = url.search;
   }
 
-  if (!p.startsWith('/')) p = `/${p}`;
+  if (!pathname.startsWith('/')) pathname = `/${pathname}`;
   if (base) {
-    const b = base.endsWith('/') ? base : `${base}/`;
-    const normalizedP = p.endsWith('/') ? p : `${p}/`;
-    if (normalizedP.startsWith(b)) p = p.substring(base.length);
+    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+    const normalizedPathname = pathname.endsWith('/') ? pathname : `${pathname}/`;
+    if (normalizedPathname.startsWith(normalizedBase)) pathname = pathname.substring(base.length);
   }
-  return normalizePath(p) + s;
+  return normalizePath(pathname) + searchQuery;
 }
 
 /** @internal */
-function getElementAttributes(el: Element): Record<string, string> {
+function getElementAttributes(element: Element): Record<string, string> {
   const attributes: Record<string, string> = {};
-  for (const attr of el.attributes) {
-    if (!ATTR_EXTRACT_EXCLUDE.has(attr.name)) {
-      attributes[attr.name] = attr.value;
+  for (const attributeValue of element.attributes) {
+    if (!ATTR_EXTRACT_EXCLUDE.has(attributeValue.name)) {
+      attributes[attributeValue.name] = attributeValue.value;
     }
   }
   return attributes;
@@ -330,33 +347,33 @@ export function extractContent(params: {
   title?: string | null | undefined;
 }): ContentState {
   const { html, selector, redirectUrl, title: titleOverride } = params;
-  const doc = PARSER.parseFromString(html, 'text/html');
+  const document = PARSER.parseFromString(html, 'text/html');
 
   // Logic: Header Priority
   // Header-provided titles take precedence to support minimal PJAX responses
   // that may omit the <title> tag for performance.
-  const title = titleOverride || doc.querySelector('title')?.textContent?.trim() || null;
-  const contentNode = selector ? doc.querySelector(selector) : null;
+  const title = titleOverride || document.querySelector('title')?.textContent?.trim() || null;
+  const contentNode = selector ? document.querySelector(selector) : null;
 
   return {
-    html: (contentNode?.innerHTML ?? doc.body?.innerHTML ?? html).trim(),
+    html: (contentNode?.innerHTML ?? document.body?.innerHTML ?? html).trim(),
     title,
     attributes: contentNode ? getElementAttributes(contentNode) : {},
     redirectUrl,
-    meta: extractMetaData(doc),
+    meta: extractMetaData(document),
   };
 }
 
 /** @internal */
 export function updateActiveState(params: {
-  el: Element;
+  element: Element;
   active: boolean;
   activeClass: string;
 }): void {
-  const { el, active, activeClass } = params;
-  el.classList.toggle(activeClass, active);
-  if (active) el.setAttribute('aria-current', 'page');
-  else el.removeAttribute('aria-current');
+  const { element, active, activeClass } = params;
+  element.classList.toggle(activeClass, active);
+  if (active) element.setAttribute('aria-current', 'page');
+  else element.removeAttribute('aria-current');
 }
 
 /** @internal SPA Link Recognition Specification */
@@ -416,8 +433,8 @@ class NavigationCoordinator {
    */
   canLeaveWithin(container: Element): boolean {
     if (this.#managers.size === 0) return true;
-    for (const [el, manager] of this.#managers) {
-      if (manager.canLeave && container.contains(el)) {
+    for (const [element, manager] of this.#managers) {
+      if (manager.canLeave && container.contains(element)) {
         if (manager.canLeave() === false) return false;
       }
     }
@@ -425,12 +442,12 @@ class NavigationCoordinator {
   }
 
   /** @internal */
-  isNestedIn(el: Element, type: NavFeatureType): boolean {
-    let curr: Element | null = el.parentElement;
-    while (curr) {
-      const manager = this.#managers.get(curr);
+  isNestedIn(element: Element, type: NavFeatureType): boolean {
+    let currentElement: Element | null = element.parentElement;
+    while (currentElement) {
+      const manager = this.#managers.get(currentElement);
       if (manager?.type === type) return true;
-      curr = curr.parentElement;
+      currentElement = currentElement.parentElement;
     }
     return false;
   }

@@ -9,6 +9,7 @@ Welcome to the `@but212/atom-effect-jquery` integration! This guide provides the
 Traditional jQuery relies on imperative DOM manipulation (e.g., listening to events and manually calling `.text()`, `.addClass()`, or `.show()`).
 
 This package shifts you to a **Declarative & Reactive** model:
+
 1. **State is the Single Source of Truth**: You define your data using Atoms.
 2. **DOM is a Projection of State**: You bind jQuery elements to these Atoms.
 3. **Automatic Synchronization**: When the Atom changes, the DOM updates automatically.
@@ -26,6 +27,7 @@ This package shifts you to a **Declarative & Reactive** model:
 Before touching the DOM, you need to understand the core state containers.
 
 ### `$.atom(initialValue)`
+
 Atoms hold your mutable state.
 
 ```javascript
@@ -39,7 +41,8 @@ console.log(count.value); // 0
 count.value = 1;
 ```
 
-### `$.computed(fn)`
+### `$.computed(computationCallback)`
+
 Computeds derive state from atoms. They re-calculate automatically when their sources change.
 
 ```javascript
@@ -47,7 +50,8 @@ const price = $.atom(10);
 const total = $.computed(() => price.value * 1.2); // Adds 20% tax
 ```
 
-### `$.effect(fn)`
+### `$.effect(effectCallback)`
+
 Effects execute arbitrary code when state changes. (Most of the time, the jQuery bindings do this for you under the hood).
 
 ```javascript
@@ -121,10 +125,10 @@ const todos = $.atom([
 $('#todo-list').atomList(todos, {
   key: todo => todo.id, // Critical for performance
   render: todo => `<li class="todo-item"></li>`,
-  bind: ($el, todo) => {
+  bind: ($element, todo) => {
     // This function runs once when the element is created.
     // If 'todo' is static data, bind directly:
-    $el.atomText(todo.text);
+    $element.atomText(todo.text);
   }
 });
 ```

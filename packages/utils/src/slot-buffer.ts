@@ -5,19 +5,19 @@ const FAST_CAPACITY = 4;
 
 export class SlotBuffer<T> {
   /** Physical capacity including null gaps. Tracking this avoids unnecessary array scans. */
-  #count = 0;
+  #physicalCapacity = 0;
 
   /** Actual number of non-null items stored. Used for early-exit in iterations. */
-  #actualCount = 0;
+  #activeItemsCount = 0;
 
   /** Fast-lane slots (separate fields for V8 hidden class optimization) */
-  #s0: T | null = null;
-  #s1: T | null = null;
-  #s2: T | null = null;
-  #s3: T | null = null;
+  #fastSlot0: T | null = null;
+  #fastSlot1: T | null = null;
+  #fastSlot2: T | null = null;
+  #fastSlot3: T | null = null;
 
   /** Overflow array for index >= 4 */
-  #overflow: (T | null)[] | null = null;
+  #overflowBuffer: (T | null)[] | null = null;
 
   /** LIFO queue of vacated slot indices for reuse */
   #freeIndices: number[] = [];
@@ -27,16 +27,16 @@ export class SlotBuffer<T> {
    * Logic: If > 0, compact() is deferred.
    */
   #lockCount = 0;
-  #pendingCompact = false;
+  #hasPendingCompact = false;
 
   /** Physical capacity (including null gaps). Safe for manual indexed loops. */
   get length(): number {
-    return this.#count;
+    return this.#physicalCapacity;
   }
 
   /** Logical size (number of non-null items). */
   get size(): number {
-    return this.#actualCount;
+    return this.#activeItemsCount;
   }
 
   /** Returns true if the buffer's structure is locked during iteration. */
@@ -50,14 +50,14 @@ export class SlotBuffer<T> {
    */
   at(index: number): T | null {
     if (index < FAST_CAPACITY) {
-      if (index === 0) return this.#s0;
-      if (index === 1) return this.#s1;
-      if (index === 2) return this.#s2;
-      if (index === 3) return this.#s3;
+      if (index === 0) return this.#fastSlot0;
+      if (index === 1) return this.#fastSlot1;
+      if (index === 2) return this.#fastSlot2;
+      if (index === 3) return this.#fastSlot3;
     } else {
-      const ov = this.#overflow;
-      if (ov !== null && index < this.#count) {
-        return ov[index - FAST_CAPACITY] ?? null;
+      const overflowBuffer = this.#overflowBuffer;
+      if (overflowBuffer !== null && index < this.#physicalCapacity) {
+        return overflowBuffer[index - FAST_CAPACITY] ?? null;
       }
     }
     return null;
@@ -66,20 +66,20 @@ export class SlotBuffer<T> {
   /** Return true if the buffer contains the given item. */
   has(item: T): boolean {
     if (item === null || item === undefined) return false;
-    if (this.#actualCount === 0) return false;
+    if (this.#activeItemsCount === 0) return false;
 
-    if (this.#s0 === item) return true;
-    if (this.#s1 === item) return true;
-    if (this.#s2 === item) return true;
-    if (this.#s3 === item) return true;
+    if (this.#fastSlot0 === item) return true;
+    if (this.#fastSlot1 === item) return true;
+    if (this.#fastSlot2 === item) return true;
+    if (this.#fastSlot3 === item) return true;
 
-    const len = this.#count - FAST_CAPACITY;
-    if (len <= 0) return false;
+    const overflowCount = this.#physicalCapacity - FAST_CAPACITY;
+    if (overflowCount <= 0) return false;
 
-    const ov = this.#overflow;
-    if (ov !== null) {
-      for (let i = 0; i < len; i++) {
-        if (ov[i] === item) return true;
+    const overflowBuffer = this.#overflowBuffer;
+    if (overflowBuffer !== null) {
+      for (let i = 0; i < overflowCount; i++) {
+        if (overflowBuffer[i] === item) return true;
       }
     }
     return false;
@@ -88,28 +88,28 @@ export class SlotBuffer<T> {
   /**
    * Iterates through all non-null items in order.
    */
-  forEach(fn: (item: T) => void): void {
-    if (this.#actualCount === 0) return;
+  forEach(callback: (item: T) => void): void {
+    if (this.#activeItemsCount === 0) return;
 
     this.lock();
     try {
-      const s0 = this.#s0;
-      if (s0 !== null) fn(s0);
-      const s1 = this.#s1;
-      if (s1 !== null) fn(s1);
-      const s2 = this.#s2;
-      if (s2 !== null) fn(s2);
-      const s3 = this.#s3;
-      if (s3 !== null) fn(s3);
+      const s0 = this.#fastSlot0;
+      if (s0 !== null) callback(s0);
+      const s1 = this.#fastSlot1;
+      if (s1 !== null) callback(s1);
+      const s2 = this.#fastSlot2;
+      if (s2 !== null) callback(s2);
+      const s3 = this.#fastSlot3;
+      if (s3 !== null) callback(s3);
 
-      const len = this.#count - FAST_CAPACITY;
-      if (len <= 0) return;
+      const overflowCount = this.#physicalCapacity - FAST_CAPACITY;
+      if (overflowCount <= 0) return;
 
-      const ov = this.#overflow;
-      if (ov !== null) {
-        for (let i = 0; i < len; i++) {
-          const item = ov[i];
-          if (item !== null && item !== undefined) fn(item);
+      const overflowBuffer = this.#overflowBuffer;
+      if (overflowBuffer !== null) {
+        for (let i = 0; i < overflowCount; i++) {
+          const item = overflowBuffer[i];
+          if (item !== null && item !== undefined) callback(item);
         }
       }
     } finally {
@@ -121,26 +121,26 @@ export class SlotBuffer<T> {
    * Returns true if at least one item satisfies the predicate.
    */
   some(predicate: (item: T) => boolean): boolean {
-    if (this.#actualCount === 0) return false;
+    if (this.#activeItemsCount === 0) return false;
 
     this.lock();
     try {
-      const s0 = this.#s0;
+      const s0 = this.#fastSlot0;
       if (s0 !== null && predicate(s0)) return true;
-      const s1 = this.#s1;
+      const s1 = this.#fastSlot1;
       if (s1 !== null && predicate(s1)) return true;
-      const s2 = this.#s2;
+      const s2 = this.#fastSlot2;
       if (s2 !== null && predicate(s2)) return true;
-      const s3 = this.#s3;
+      const s3 = this.#fastSlot3;
       if (s3 !== null && predicate(s3)) return true;
 
-      const len = this.#count - FAST_CAPACITY;
-      if (len <= 0) return false;
+      const overflowCount = this.#physicalCapacity - FAST_CAPACITY;
+      if (overflowCount <= 0) return false;
 
-      const ov = this.#overflow;
-      if (ov !== null) {
-        for (let i = 0; i < len; i++) {
-          const item = ov[i];
+      const overflowBuffer = this.#overflowBuffer;
+      if (overflowBuffer !== null) {
+        for (let i = 0; i < overflowCount; i++) {
+          const item = overflowBuffer[i];
           if (item !== null && item !== undefined && predicate(item)) return true;
         }
       }
@@ -155,10 +155,10 @@ export class SlotBuffer<T> {
    * @returns The index where the item was stored.
    */
   push(item: T): number {
-    const idx = this.#rawAdd(item);
-    if (idx >= this.#count) this.#count = idx + 1;
-    this.#actualCount++;
-    return idx;
+    const storedIndex = this.#rawAdd(item);
+    if (storedIndex >= this.#physicalCapacity) this.#physicalCapacity = storedIndex + 1;
+    this.#activeItemsCount++;
+    return storedIndex;
   }
 
   /**
@@ -167,20 +167,20 @@ export class SlotBuffer<T> {
    */
   remove(item: T): boolean {
     if (item === null || item === undefined) return false;
-    if (this.#actualCount === 0) return false;
+    if (this.#activeItemsCount === 0) return false;
 
-    if (this.#s0 === item) return this.#removeAt(0);
-    if (this.#s1 === item) return this.#removeAt(1);
-    if (this.#s2 === item) return this.#removeAt(2);
-    if (this.#s3 === item) return this.#removeAt(3);
+    if (this.#fastSlot0 === item) return this.#removeAt(0);
+    if (this.#fastSlot1 === item) return this.#removeAt(1);
+    if (this.#fastSlot2 === item) return this.#removeAt(2);
+    if (this.#fastSlot3 === item) return this.#removeAt(3);
 
-    const len = this.#count - FAST_CAPACITY;
-    if (len <= 0) return false;
+    const overflowCount = this.#physicalCapacity - FAST_CAPACITY;
+    if (overflowCount <= 0) return false;
 
-    const ov = this.#overflow;
-    if (ov !== null) {
-      for (let i = 0; i < len; i++) {
-        if (ov[i] === item) {
+    const overflowBuffer = this.#overflowBuffer;
+    if (overflowBuffer !== null) {
+      for (let i = 0; i < overflowCount; i++) {
+        if (overflowBuffer[i] === item) {
           return this.#removeAt(i + FAST_CAPACITY);
         }
       }
@@ -193,44 +193,44 @@ export class SlotBuffer<T> {
    * Caution: Manual indexing can create gaps. Use compact() if order/density matters.
    */
   setAt(index: number, item: T | null): void {
-    const old = this.at(index);
-    if (old === item) return;
+    const previousItem = this.at(index);
+    if (previousItem === item) return;
 
     if (item === null) {
       this.#removeAt(index);
     } else {
       this.#rawWrite(index, item);
-      if (old === null) {
-        this.#actualCount++;
+      if (previousItem === null) {
+        this.#activeItemsCount++;
       }
-      if (index >= this.#count) {
-        this.#count = index + 1;
+      if (index >= this.#physicalCapacity) {
+        this.#physicalCapacity = index + 1;
       }
     }
   }
 
   truncateFrom(index: number): void {
-    const limit = this.#count;
-    if (index >= limit) return;
+    const physicalCapacityLimit = this.#physicalCapacity;
+    if (index >= physicalCapacityLimit) return;
 
-    for (let i = index; i < limit; i++) {
+    for (let i = index; i < physicalCapacityLimit; i++) {
       if (this.at(i) !== null) {
-        this.#actualCount--;
+        this.#activeItemsCount--;
       }
     }
 
-    const fastLimit = Math.min(limit, FAST_CAPACITY);
-    for (let i = index; i < fastLimit; i++) {
+    const fastCapacityLimit = Math.min(physicalCapacityLimit, FAST_CAPACITY);
+    for (let i = index; i < fastCapacityLimit; i++) {
       this.#rawWrite(i, null);
     }
 
     if (index <= FAST_CAPACITY) {
-      this.#overflow = null;
-    } else if (this.#overflow !== null) {
-      this.#overflow.length = index - FAST_CAPACITY;
+      this.#overflowBuffer = null;
+    } else if (this.#overflowBuffer !== null) {
+      this.#overflowBuffer.length = index - FAST_CAPACITY;
     }
 
-    this.#count = index;
+    this.#physicalCapacity = index;
     this.#freeIndices = this.#freeIndices.filter((i) => i < index);
   }
 
@@ -239,39 +239,39 @@ export class SlotBuffer<T> {
    */
   compact(): void {
     if (this.#lockCount > 0) {
-      this.#pendingCompact = true;
+      this.#hasPendingCompact = true;
       return;
     }
 
-    const actual = this.#actualCount;
-    const currentCount = this.#count;
-    if (actual === currentCount) return;
+    const activeItemsCount = this.#activeItemsCount;
+    const physicalCapacityCount = this.#physicalCapacity;
+    if (activeItemsCount === physicalCapacityCount) return;
 
-    if (actual === 0) {
+    if (activeItemsCount === 0) {
       this.clear();
       return;
     }
 
-    let writeIdx = 0;
-    for (let readIdx = 0; readIdx < currentCount; readIdx++) {
-      const item = this.at(readIdx);
+    let writeIndex = 0;
+    for (let readIndex = 0; readIndex < physicalCapacityCount; readIndex++) {
+      const item = this.at(readIndex);
       if (item !== null) {
-        if (readIdx !== writeIdx) {
-          this.#rawWrite(writeIdx, item);
-          this.#rawWrite(readIdx, null);
+        if (readIndex !== writeIndex) {
+          this.#rawWrite(writeIndex, item);
+          this.#rawWrite(readIndex, null);
         }
-        if (++writeIdx === actual) break;
+        if (++writeIndex === activeItemsCount) break;
       }
     }
 
-    this.#count = actual;
-    const ov = this.#overflow;
+    this.#physicalCapacity = activeItemsCount;
+    const ov = this.#overflowBuffer;
     if (ov !== null) {
-      if (writeIdx <= FAST_CAPACITY) this.#overflow = null;
-      else ov.length = writeIdx - FAST_CAPACITY;
+      if (writeIndex <= FAST_CAPACITY) this.#overflowBuffer = null;
+      else ov.length = writeIndex - FAST_CAPACITY;
     }
     this.#freeIndices.length = 0;
-    this.#pendingCompact = false;
+    this.#hasPendingCompact = false;
   }
 
   /** Iteration lock. */
@@ -282,19 +282,19 @@ export class SlotBuffer<T> {
   /** Iteration unlock. */
   unlock(): void {
     if (this.#lockCount <= 0) return;
-    if (--this.#lockCount === 0 && this.#pendingCompact) {
+    if (--this.#lockCount === 0 && this.#hasPendingCompact) {
       this.compact();
     }
   }
 
   /** Reset the buffer to an empty state. */
   clear(): void {
-    this.#s0 = this.#s1 = this.#s2 = this.#s3 = null;
-    this.#count = 0;
-    this.#actualCount = 0;
-    this.#overflow = null;
+    this.#fastSlot0 = this.#fastSlot1 = this.#fastSlot2 = this.#fastSlot3 = null;
+    this.#physicalCapacity = 0;
+    this.#activeItemsCount = 0;
+    this.#overflowBuffer = null;
     this.#freeIndices.length = 0;
-    this.#pendingCompact = false;
+    this.#hasPendingCompact = false;
   }
 
   /** Alias for `clear`. */
@@ -304,32 +304,32 @@ export class SlotBuffer<T> {
 
   #rawWrite(index: number, item: T | null): void {
     if (index < FAST_CAPACITY) {
-      if (index === 0) this.#s0 = item;
-      else if (index === 1) this.#s1 = item;
-      else if (index === 2) this.#s2 = item;
-      else this.#s3 = item;
+      if (index === 0) this.#fastSlot0 = item;
+      else if (index === 1) this.#fastSlot1 = item;
+      else if (index === 2) this.#fastSlot2 = item;
+      else this.#fastSlot3 = item;
     } else {
-      if (this.#overflow === null) this.#overflow = [];
-      this.#overflow[index - FAST_CAPACITY] = item;
+      if (this.#overflowBuffer === null) this.#overflowBuffer = [];
+      this.#overflowBuffer[index - FAST_CAPACITY] = item;
     }
   }
 
   /** Logic: Finds a vacant slot using the free index stack or physical append. */
   #rawAdd(item: T): number {
-    const reuseIdx = this.isLocked ? undefined : this.#freeIndices.pop();
-    if (reuseIdx !== undefined) {
-      this.#rawWrite(reuseIdx, item);
-      return reuseIdx;
+    const reusableIndex = this.isLocked ? undefined : this.#freeIndices.pop();
+    if (reusableIndex !== undefined) {
+      this.#rawWrite(reusableIndex, item);
+      return reusableIndex;
     }
-    const nextIdx = this.#count;
-    this.#rawWrite(nextIdx, item);
-    return nextIdx;
+    const nextSlotIndex = this.#physicalCapacity;
+    this.#rawWrite(nextSlotIndex, item);
+    return nextSlotIndex;
   }
 
   /** Helper method to remove item at specific index. */
   #removeAt(index: number): boolean {
     this.#rawWrite(index, null);
-    this.#actualCount--;
+    this.#activeItemsCount--;
     this.#shrinkPhysicalSizeFrom(index);
     this.#freeIndices.push(index);
     return true;
@@ -341,15 +341,15 @@ export class SlotBuffer<T> {
    */
   #shrinkPhysicalSizeFrom(index: number): void {
     if (this.isLocked) return;
-    if (index !== this.#count - 1) return;
+    if (index !== this.#physicalCapacity - 1) return;
 
-    while (this.#count > 0 && this.at(this.#count - 1) === null) {
-      this.#count--;
+    while (this.#physicalCapacity > 0 && this.at(this.#physicalCapacity - 1) === null) {
+      this.#physicalCapacity--;
     }
-    if (this.#count <= FAST_CAPACITY) {
-      this.#overflow = null;
-    } else if (this.#overflow !== null) {
-      this.#overflow.length = this.#count - FAST_CAPACITY;
+    if (this.#physicalCapacity <= FAST_CAPACITY) {
+      this.#overflowBuffer = null;
+    } else if (this.#overflowBuffer !== null) {
+      this.#overflowBuffer.length = this.#physicalCapacity - FAST_CAPACITY;
     }
   }
 }

@@ -50,7 +50,7 @@ import type {
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
-import { currentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
+import { getCurrentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
 
 class EffectImpl
   implements
@@ -68,10 +68,10 @@ class EffectImpl
   _trackEpoch: number = 0;
   _trackCount: number = 0;
   _error: Error | null = null;
-  _k: typeof KIND.Obj = KIND.Obj;
+  _kind: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId() & SMI_MAX;
 
-  _slots: SlotBuffer<SubscriberTarget<void>> | null = null;
+  _subscriberSlots: SlotBuffer<SubscriberTarget<void>> | null = null;
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
   _depMap: Map<Dependency, number> | null = null;
   _depFlags: number = BUFFER_FLAGS.NONE;
@@ -83,37 +83,38 @@ class EffectImpl
   // Session IDs ensure that cleanup handles from asynchronous operations are
   // discarded if a new tracking cycle starts before the Promise resolves.
   #trackSessionId = 0;
-  #cleanup: (() => void) | null = null;
+  #cleanupCallback: (() => void) | null = null;
 
-  #fn: EffectFunction;
-  #onError: ((error: unknown) => void) | null;
+  #effectCallback: EffectFunction;
+  #onErrorCallback: ((error: unknown) => void) | null;
   #notifyCallback: () => void;
 
-  #maxPerFlush: number;
-  #maxPerSecond: number;
-  #loopCount = 0;
+  #maxExecutionsPerFlushLimit: number;
+  #maxExecutionsPerSecondLimit: number;
+  #flushIterationCount = 0;
   #lastFlushEpoch = EPOCH_CONSTANTS.UNINITIALIZED;
-  #windowCount = 0;
-  #windowStart = 0;
-  #totalExecutions = 0;
+  #windowExecutionCount = 0;
+  #windowStartTimestampMs = 0;
+  #totalExecutionCount = 0;
 
-  constructor(fn: EffectFunction, options: EffectOptions = {}) {
-    if (typeof fn !== 'function') {
+  constructor(effectCallback: EffectFunction, options: EffectOptions = {}) {
+    if (typeof effectCallback !== 'function') {
       throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
     }
-    this.#fn = fn;
-    this.#onError = options.onError ?? null;
+    this.#effectCallback = effectCallback;
+    this.#onErrorCallback = options.onError ?? null;
 
-    this.#maxPerSecond =
+    this.#maxExecutionsPerSecondLimit =
       options.maxExecutionsPerSecond ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_SECOND;
-    this.#maxPerFlush = options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
+    this.#maxExecutionsPerFlushLimit =
+      options.maxExecutionsPerFlush ?? SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT;
 
     this.#notifyCallback =
       (options.sync ?? false)
         ? () => {
-            const res = this.execute();
-            if (Result.isErr(res)) {
-              console.error(res.error);
+            const executionResult = this.execute();
+            if (Result.isErr(executionResult)) {
+              console.error(executionResult.error);
             }
           }
         : () => schedulerSchedule(scheduler, this);
@@ -147,7 +148,7 @@ class EffectImpl
 
   /** Total executions since initialization. */
   get executionCount(): number {
-    return this.#totalExecutions;
+    return this.#totalExecutionCount;
   }
 
   /** Returns true if the effect is currently executing its function. */
@@ -165,9 +166,9 @@ class EffectImpl
    * Synchronizes the effect state with its captured dependencies.
    */
   execute(force = false): Result<void, Error> {
-    const prep = this.#prepareExecution(force);
-    if (Result.isErr(prep)) return prep;
-    if (!prep.value) return Result.ok(undefined);
+    const preparationResult = this.#prepareExecution(force);
+    if (Result.isErr(preparationResult)) return preparationResult;
+    if (!preparationResult.value) return Result.ok(undefined);
 
     this.#execCleanup();
 
@@ -175,11 +176,11 @@ class EffectImpl
     prepareTracking(this);
 
     try {
-      const val = runInTrackingContext(trackingContext, this, this.#fn);
+      const executionResult = runInTrackingContext(trackingContext, this, this.#effectCallback);
       nodeCommitDeps(this);
-      this.#handleResult(val);
-    } catch (e) {
-      this.#handleExecutionError(e);
+      this.#handleResult(executionResult);
+    } catch (executionError) {
+      this.#handleExecutionError(executionError);
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
     }
@@ -198,8 +199,8 @@ class EffectImpl
     // redundant computations during the flush cycle.
     if (!(force || this._depSlots.size === 0 || nodeIsDirty(this))) return Result.ok(false);
 
-    const budgetRes = this.#validateBudget();
-    if (Result.isErr(budgetRes)) return budgetRes;
+    const budgetValidationResult = this.#validateBudget();
+    if (Result.isErr(budgetValidationResult)) return budgetValidationResult;
     if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
     this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
@@ -207,27 +208,27 @@ class EffectImpl
   }
 
   /** Registers a dependency during the tracking session. */
-  addDependency(dep: Dependency): void {
+  addDependency(dependency: Dependency): void {
     if (!this.isExecuting) return;
-    nodeTrackDependency(this, dep, this.#notifyCallback);
+    nodeTrackDependency(this, dependency, this.#notifyCallback);
   }
 
   /**
    * Logic: Resolution Handling
    * Synchronously assigns the cleanup handle or delegates to the async handler.
    */
-  #handleResult(val: ReturnType<EffectFunction>): void {
-    if (val === undefined || val === null) {
-      this.#cleanup = null;
+  #handleResult(executionResult: ReturnType<EffectFunction>): void {
+    if (executionResult === undefined || executionResult === null) {
+      this.#cleanupCallback = null;
       return;
     }
 
-    if (typeof val === 'function') {
-      this.#cleanup = val;
-    } else if (isPromise(val)) {
-      this.#handleAsyncResult(val);
+    if (typeof executionResult === 'function') {
+      this.#cleanupCallback = executionResult;
+    } else if (isPromise(executionResult)) {
+      this.#handleAsyncResult(executionResult);
     } else {
-      this.#cleanup = null;
+      this.#cleanupCallback = null;
     }
   }
 
@@ -241,81 +242,84 @@ class EffectImpl
     const sessionId = ++this.#trackSessionId;
 
     promise.then(
-      (cleanup) => {
+      (cleanupCallback) => {
         const isStale = this.#trackSessionId !== sessionId || this.isDisposed;
-        if (typeof cleanup !== 'function') return;
+        if (typeof cleanupCallback !== 'function') return;
 
         if (isStale) {
           // Logic: Stale or Disposed Teardown
           // If the handle arrived after a new session started, it is invoked
           // immediately and discarded to prevent memory leaks.
           try {
-            cleanup();
+            cleanupCallback();
           } catch (e) {
             this.#handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
           }
           return;
         }
 
-        this.#cleanup = cleanup;
+        this.#cleanupCallback = cleanupCallback;
       },
-      (err) => {
+      (executionError) => {
         if (this.#trackSessionId === sessionId) {
-          this.#handleExecutionError(err);
+          this.#handleExecutionError(executionError);
         }
       }
     );
   }
 
   #execCleanup(): void {
-    const fn = this.#cleanup;
-    if (!fn) return;
+    const cleanupCallback = this.#cleanupCallback;
+    if (!cleanupCallback) return;
 
-    this.#cleanup = null;
+    this.#cleanupCallback = null;
 
     try {
-      fn();
-    } catch (e) {
-      this.#handleExecutionError(e, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
+      cleanupCallback();
+    } catch (cleanupError) {
+      this.#handleExecutionError(cleanupError, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
     }
   }
 
   #validateBudget(): Result<void, Error> {
-    const epoch = currentFlushEpoch();
+    const epoch = getCurrentFlushEpoch();
     if (this.#lastFlushEpoch !== epoch) {
       this.#lastFlushEpoch = epoch;
-      this.#loopCount = 0;
+      this.#flushIterationCount = 0;
     }
 
-    if (++this.#loopCount > this.#maxPerFlush) {
-      const err = new EffectError(
-        `Infinite loop detected (per-effect): executed ${this.#loopCount} times in current flush.`
+    if (++this.#flushIterationCount > this.#maxExecutionsPerFlushLimit) {
+      const error = new EffectError(
+        `Infinite loop detected (per-effect): executed ${this.#flushIterationCount} times in current flush.`
       );
       this.dispose();
-      return Result.err(err);
+      return Result.err(error);
     }
 
     // Constraint: Global safeguard against aggregate scheduler instability.
-    const globalCount = scheduler.incrementFlushExecutionCount();
-    if (Result.isErr(globalCount)) {
+    const globalExecutionCountResult = scheduler.incrementFlushExecutionCount();
+    if (Result.isErr(globalExecutionCountResult)) {
       this.dispose();
-      return globalCount;
+      return globalExecutionCountResult;
     }
 
-    this.#totalExecutions++;
+    this.#totalExecutionCount++;
 
     if (IS_DEV) {
-      const limit = this.#maxPerSecond;
-      if (Number.isFinite(limit)) {
-        const now = Date.now();
-        if (now - this.#windowStart >= DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW) {
-          this.#windowStart = now;
-          this.#windowCount = 1;
-        } else if (++this.#windowCount > limit) {
-          const err = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
+      const executionsPerSecondLimit = this.#maxExecutionsPerSecondLimit;
+      if (Number.isFinite(executionsPerSecondLimit)) {
+        const currentTimestampMs = Date.now();
+        if (
+          currentTimestampMs - this.#windowStartTimestampMs >=
+          DEBUG_CONFIG.EFFECT_FREQUENCY_WINDOW
+        ) {
+          this.#windowStartTimestampMs = currentTimestampMs;
+          this.#windowExecutionCount = 1;
+        } else if (++this.#windowExecutionCount > executionsPerSecondLimit) {
+          const error = new EffectError(ERROR_MESSAGES.EFFECT_FREQUENCY_LIMIT_EXCEEDED);
           this.dispose();
-          this.#handleExecutionError(err);
-          return Result.err(err);
+          this.#handleExecutionError(error);
+          return Result.err(error);
         }
       }
     }
@@ -324,10 +328,10 @@ class EffectImpl
   }
 
   #handleExecutionError(
-    error: unknown,
+    executionError: unknown,
     message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
   ): void {
-    nodeHandleError(this, error, EffectError, message, this.#onError);
+    nodeHandleError(this, executionError, EffectError, message, this.#onErrorCallback);
   }
 }
 
@@ -339,11 +343,11 @@ class EffectImpl
  * - To perform logging, monitoring, or diagnostic tasks.
  * - To manage timers, network requests, or global subscriptions.
  *
- * @param fn - The function to execute. Can return a synchronous or asynchronous cleanup handle.
+ * @param effectCallback - The function to execute. Can return a synchronous or asynchronous cleanup handle.
  * @param options - Configuration for execution limits, custom error handlers, and sync delivery.
  * @returns An `EffectObject` used to manually trigger or stop the effect.
  *
- * @throws {EffectError} If the provided `fn` is not a function.
+ * @throws {EffectError} If the provided `effectCallback` is not a function.
  *
  * @example
  * ```typescript
@@ -363,11 +367,11 @@ class EffectImpl
  * sub.dispose(); // Stops the effect
  * ```
  */
-export function effect(fn: EffectFunction, options: EffectOptions = {}): EffectObject {
-  if (typeof fn !== 'function') {
+export function effect(effectCallback: EffectFunction, options: EffectOptions = {}): EffectObject {
+  if (typeof effectCallback !== 'function') {
     throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
   }
-  const effectInstance = new EffectImpl(fn, options);
+  const effectInstance = new EffectImpl(effectCallback, options);
   Result.unwrap(effectInstance.execute());
   return effectInstance;
 }

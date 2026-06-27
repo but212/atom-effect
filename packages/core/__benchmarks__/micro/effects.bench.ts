@@ -41,8 +41,8 @@ describe('Effects: Life-cycle & Propagation', () => {
     get value() {
       return this._value;
     },
-    set value(v) {
-      this._value = v;
+    set value(value) {
+      this._value = value;
       for (const listener of rawListeners) listener();
     },
   };
@@ -126,15 +126,15 @@ describe('Subscribe / Unsubscribe Hotpath', () => {
     {
       name: 'atom.subscribe + unsubscribe',
       run: () => {
-        const unsub = a.subscribe(() => {});
-        unsub();
+        const unsubscribeCallback = a.subscribe(() => {});
+        unsubscribeCallback();
       },
     },
     {
       name: 'computed.subscribe + unsubscribe',
       run: () => {
-        const unsub = c.subscribe(() => {});
-        unsub();
+        const unsubscribeCallback = c.subscribe(() => {});
+        unsubscribeCallback();
       },
     },
   ];

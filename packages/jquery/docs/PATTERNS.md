@@ -219,7 +219,7 @@ const price = $.atom(9.99);
 
 $('#price-input').atomVal(price, {
   parse:  str => parseFloat(str) || 0,
-  format: val => val.toFixed(2),
+  format: value => value.toFixed(2),
   debounce: 300,
 });
 ```
@@ -270,8 +270,8 @@ const users = $.atom([
 $('ul').atomList(users, {
   key: u => u.id,
   render: u => `<li class="user-item"><span>${u.name}</span><button class="del">✕</button></li>`,
-  onAdd:    $el => $el.hide().fadeIn(200),
-  onRemove: $el => $el.fadeOut(200).promise(),
+  onAdd:    $element => $element.hide().fadeIn(200),
+  onRemove: $element => $element.fadeOut(200).promise(),
   events: {
     'click .del': (user, index, e) => removeUser(user.id),
   },
@@ -285,10 +285,10 @@ $('ul').atomList(users, {
 The `atomMount` method encapsulates DOM structure and reactive bindings into isolated units with automatic disposal.
 
 ```javascript
-const UserCard = ($el, { userId }) => {
+const UserCard = ($element, { userId }) => {
   const user = $.atomFetch(() => `/api/users/${userId}`, { defaultValue: null });
 
-  $el.atomBind({
+  $element.atomBind({
     html: $.computed(() => `<h2>${user.value?.name ?? ''}</h2>`),
     class: { 'loading': user.isPending },
   });

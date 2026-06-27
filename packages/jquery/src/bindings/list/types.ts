@@ -73,9 +73,9 @@ export interface DiffSlot<T> {
   /** The index in the new state. */
   targetIndex: number;
   /** The current DOM handle. */
-  node: Node[] | undefined;
+  nodes: Node[] | undefined;
   /** The old DOM handle before replacement, used for ForceReplace swapping. */
-  oldNode?: Node[] | undefined;
+  oldNodes?: Node[] | undefined;
 }
 
 /**
@@ -106,11 +106,11 @@ export interface PreparedDiff<T> {
  */
 export interface PlaceCallbacks<T> {
   /** Invoked once when an element is first bound to a reactive item. */
-  bind?: (($el: JQuery, item: T, index: number) => void) | undefined;
+  bind?: (($element: JQuery, item: T, index: number) => void) | undefined;
   /** Invoked on subsequent updates when item data changes. */
-  update?: (($el: JQuery, item: T, index: number) => void) | undefined;
+  update?: (($element: JQuery, item: T, index: number) => void) | undefined;
   /** Invoked when a new item is physically added to the DOM. */
-  onAdd?: (($el: JQuery) => void) | undefined;
+  onAdd?: (($element: JQuery) => void) | undefined;
   /** Invoked to manage the removal of an item, supporting asynchronous transitions. */
   onRemove?: ListOptions<T>['onRemove'] | undefined;
   /** Delegated event listeners for the list container. */

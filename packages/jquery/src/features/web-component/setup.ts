@@ -36,23 +36,25 @@ export const SetupFeatures = {
    *
    * Logic: Payload Wrapping
    * - If the source is a function returning an object, it is used as the event `detail`.
-   * - Otherwise, the value is wrapped in `{ value: val }` for a predictable API.
+   * - Otherwise, the value is wrapped in `{ value: value }` for a predictable API.
    */
   dispatch(
-    el: HTMLElement,
+    hostElement: HTMLElement,
     mappings: Record<string, ReactiveValue<unknown>>,
     effects: SlotBuffer<Disposable>
   ) {
     for (const [name, source] of Object.entries(mappings)) {
       effects.push(
         $.effect(() => {
-          const val = resolveValue(source);
+          const value = resolveValue(source);
 
           const detail =
-            typeof source === 'function' && typeof val === 'object' && val !== null
-              ? val
-              : { value: val };
-          el.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+            typeof source === 'function' && typeof value === 'object' && value !== null
+              ? value
+              : { value: value };
+          hostElement.dispatchEvent(
+            new CustomEvent(name, { detail, bubbles: true, composed: true })
+          );
           return undefined;
         })
       );
@@ -87,10 +89,10 @@ export const SetupFeatures = {
     for (const [prop, atom] of Object.entries(aria)) {
       effects.push(
         $.effect(() => {
-          const val = atom.value;
+          const value = atom.value;
           // ElementInternals properties typically expect strings or null to remove the attribute
           (internals as ElementInternals & Record<string, unknown>)[prop] =
-            val == null ? null : String(val);
+            value == null ? null : String(value);
           return undefined;
         })
       );
@@ -123,10 +125,10 @@ export const SetupFeatures = {
       if (atom) {
         effects.push(
           $.effect(() => {
-            const val = String(atom.value ?? '');
+            const value = String(atom.value ?? '');
             // Why: Only update DOM if value actually changed to avoid layout thrashing
             // and unnecessary DOM mutations which can trigger further MutationObservers.
-            if (node.textContent !== val) node.textContent = val;
+            if (node.textContent !== value) node.textContent = value;
             return undefined;
           })
         );
@@ -167,16 +169,16 @@ export const SetupFeatures = {
       if (atom) {
         effects.push(
           $.effect(() => {
-            const val = atom.value;
+            const value = atom.value;
             let normalized: string;
 
-            if (typeof val === 'string') {
-              normalized = val;
-            } else if (Array.isArray(val)) {
-              normalized = val.join(' ');
-            } else if (typeof val === 'object' && val !== null) {
-              normalized = Object.keys(val)
-                .filter((k) => (val as Record<string, boolean>)[k])
+            if (typeof value === 'string') {
+              normalized = value;
+            } else if (Array.isArray(value)) {
+              normalized = value.join(' ');
+            } else if (typeof value === 'object' && value !== null) {
+              normalized = Object.keys(value)
+                .filter((k) => (value as Record<string, boolean>)[k])
                 .join(' ');
             } else {
               normalized = '';
@@ -199,7 +201,7 @@ export const SetupFeatures = {
   observe(
     root: ParentNode,
     selector: string,
-    apply: (n: Element) => void,
+    apply: (node: Element) => void,
     effects: SlotBuffer<Disposable>
   ) {
     // Phase 1: Initial sync for already existing nodes
@@ -226,57 +228,67 @@ export const SetupFeatures = {
    * (via `setValidity`), making the component behave like a native input.
    */
   form(
-    el: HTMLElement,
+    element: HTMLElement,
     internals: ElementInternals,
     value:
       | ReadonlyAtom<unknown>
-      | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> }
+      | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> }
       | undefined,
     validation:
       | ReadonlyAtom<ValidityStateFlags | string>
-      | ((val: unknown) => ValidityStateFlags | string)
+      | ((value: unknown) => ValidityStateFlags | string)
       | undefined,
     effects: SlotBuffer<Disposable>
   ) {
-    const isAtomVal = isAtom(value);
-    const valAtom = value && (isAtomVal ? value : (value as { val: ReadonlyAtom<unknown> }).val);
+    const isAtomValue = isAtom(value);
+    const valueAtom =
+      value && (isAtomValue ? value : (value as { value: ReadonlyAtom<unknown> }).value);
     const stateAtom =
-      value && !isAtomVal ? (value as { state?: ReadonlyAtom<unknown> }).state : null;
+      value && !isAtomValue ? (value as { state?: ReadonlyAtom<unknown> }).state : null;
 
     effects.push(
       $.effect(() => {
         // Sync Value
-        if (valAtom) {
-          const v = valAtom.value;
-          const s = stateAtom ? stateAtom.value : null;
+        if (valueAtom) {
+          const formValue = valueAtom.value;
+          const formState = stateAtom ? stateAtom.value : null;
 
           // Reason: Complex objects are flattened to FormData to support multi-value field synchronization.
-          if (typeof v === 'object' && v !== null && !(v instanceof File) && !(v instanceof Blob)) {
-            const fd = new FormData();
-            flattenToFormData(fd, el.getAttribute('name') || '', v);
-            internals.setFormValue(fd, s as string | FormData | null);
+          if (
+            typeof formValue === 'object' &&
+            formValue !== null &&
+            !(formValue instanceof File) &&
+            !(formValue instanceof Blob)
+          ) {
+            const formData = new FormData();
+            flattenToFormData(formData, element.getAttribute('name') || '', formValue);
+            internals.setFormValue(formData, formState as string | FormData | null);
           } else {
             // Fallback for primitives and binary types.
             internals.setFormValue(
-              v as string | File | FormData | null,
-              s as string | FormData | null
+              formValue as string | File | FormData | null,
+              formState as string | FormData | null
             );
           }
         }
 
         // Sync Validity
         if (validation) {
-          const val = valAtom ? valAtom.value : undefined;
-          const res = isAtom(validation)
+          const formValue = valueAtom ? valueAtom.value : undefined;
+          const validationResult = isAtom(validation)
             ? (validation as ReadonlyAtom<ValidityStateFlags | string>).value
-            : (validation as (v: unknown) => ValidityStateFlags | string)(val);
+            : (validation as (value: unknown) => ValidityStateFlags | string)(formValue);
 
-          if (typeof res === 'string') {
+          if (typeof validationResult === 'string') {
             // If it's a string, we treat it as a custom error message.
-            internals.setValidity(res ? { customError: true } : {}, res, el);
+            internals.setValidity(
+              validationResult ? { customError: true } : {},
+              validationResult,
+              element
+            );
           } else {
             // Otherwise, we pass the raw ValidityStateFlags.
-            internals.setValidity(res, undefined, el);
+            internals.setValidity(validationResult, undefined, element);
           }
         }
         return undefined;
@@ -301,18 +313,18 @@ export const SetupFeatures = {
         .observedAttributes || [];
 
     const snapshot = () => {
-      const res: Record<string, string | null> = {};
+      const attributesSnapshot: Record<string, string | null> = {};
       if (observed.length > 0) {
         for (const name of observed) {
-          res[name] = host.getAttribute(name);
+          attributesSnapshot[name] = host.getAttribute(name);
         }
       } else {
         // Fallback: watch ALL attributes if no whitelist provided.
-        for (const a of host.attributes) {
-          res[a.name] = a.value;
+        for (const attribute of host.attributes) {
+          attributesSnapshot[attribute.name] = attribute.value;
         }
       }
-      return res;
+      return attributesSnapshot;
     };
 
     const atom = $.atom(snapshot());
@@ -336,14 +348,14 @@ export const SetupFeatures = {
    */
   slots(root: ShadowRoot | null): {
     atom: ReadonlyAtom<Record<string, Node[]>>;
-    listener: (e: Event) => void;
+    listener: (event: Event) => void;
   } {
     const snapshot = () => {
       const next: Record<string, Node[]> = {};
       if (root) {
         const slots = root.querySelectorAll('slot');
-        for (const s of slots) {
-          next[s.name || ''] = s.assignedNodes();
+        for (const slotElement of slots) {
+          next[slotElement.name || ''] = slotElement.assignedNodes();
         }
       }
       return next;
@@ -351,8 +363,8 @@ export const SetupFeatures = {
 
     const atom = $.atom(snapshot());
 
-    const listener = (e: Event) => {
-      const target = e.target as HTMLSlotElement;
+    const listener = (event: Event) => {
+      const target = event.target as HTMLSlotElement;
       atom.value = {
         ...atom.peek(),
         [target.name || '']: target.assignedNodes(),

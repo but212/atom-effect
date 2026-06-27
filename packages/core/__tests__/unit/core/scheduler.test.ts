@@ -9,8 +9,8 @@ import {
   runInFlushScope,
   scheduler,
   schedulerEndBatch,
+  schedulerGetQueueSize,
   schedulerIsBatching,
-  schedulerQueueSize,
   schedulerSchedule,
   schedulerSetMaxFlushIterations,
 } from '@/core/scheduler';
@@ -26,14 +26,14 @@ describe('Scheduler Engine', () => {
       schedulerSchedule(scheduler, job1);
       schedulerSchedule(scheduler, job2);
 
-      expect(schedulerQueueSize(scheduler)).toBe(2);
+      expect(schedulerGetQueueSize(scheduler)).toBe(2);
       expect(job1).not.toHaveBeenCalled();
 
       await sleep(10);
 
       expect(job1).toHaveBeenCalledTimes(1);
       expect(job2).toHaveBeenCalledTimes(1);
-      expect(schedulerQueueSize(scheduler)).toBe(0);
+      expect(schedulerGetQueueSize(scheduler)).toBe(0);
     });
 
     it('ensures nested schedules are deferred to the next iteration (double buffering)', async () => {
@@ -42,7 +42,7 @@ describe('Scheduler Engine', () => {
       const initialJob = vi.fn(() => {
         log.push('initial');
         schedulerSchedule(scheduler, nestedJob);
-        expect(schedulerQueueSize(scheduler)).toBe(1);
+        expect(schedulerGetQueueSize(scheduler)).toBe(1);
       });
 
       schedulerSchedule(scheduler, initialJob);
@@ -100,11 +100,11 @@ describe('Scheduler Engine', () => {
 
     it('prevents stack overflow through flat execution loops', () => {
       const depth = 500;
-      const fn = (d: number) => {
-        if (d > 0) batch(() => fn(d - 1));
+      const batchedCallback = (d: number) => {
+        if (d > 0) batch(() => batchedCallback(d - 1));
       };
 
-      expect(() => fn(depth)).not.toThrow();
+      expect(() => batchedCallback(depth)).not.toThrow();
     });
 
     it('handles nested batch scopes correctly', () => {
@@ -145,9 +145,9 @@ describe('Scheduler Engine', () => {
     });
 
     it('should execute optional callback and resolve correctly', async () => {
-      const cb = vi.fn();
-      await aeNextTick(cb);
-      expect(cb).toHaveBeenCalled();
+      const callback = vi.fn();
+      await aeNextTick(callback);
+      expect(callback).toHaveBeenCalled();
     });
 
     it('should propagate errors from the callback', async () => {
@@ -195,7 +195,7 @@ describe('Scheduler Engine', () => {
 
       expect(onOverflow).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
-      expect(schedulerQueueSize(scheduler)).toBe(0);
+      expect(schedulerGetQueueSize(scheduler)).toBe(0);
 
       scheduler.onOverflow = null;
       expect(scheduler.onOverflow).toBeNull();
@@ -264,8 +264,8 @@ describe('Scheduler Engine', () => {
         });
 
         let uncaughtError: Error | null = null;
-        const handler = (err: unknown) => {
-          uncaughtError = err as Error;
+        const handler = (error: unknown) => {
+          uncaughtError = error as Error;
         };
         process.on('uncaughtException', handler);
 

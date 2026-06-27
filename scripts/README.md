@@ -44,3 +44,33 @@ node scripts/update-benchmarks.js
 - **Utility Package**:
   - `packages/utils/docs/BENCHMARKS.md` (Overview table)
   - `packages/utils/docs/BENCHMARKS_DETAILED.md` (Detailed tables)
+
+## Release Helper (`release-helper.js`)
+
+The `release-helper.js` script validates package versions and extracts version-specific release notes from `CHANGELOG.md` during the release workflow.
+
+### How It Works
+
+1. **Version Validation**:
+   - Reads the target release version from the `GITHUB_REF_NAME` environment variable (stripping the leading `v` prefix).
+   - Verifies that this version matches the `version` field in the root `package.json` and in every package's `package.json` under the `packages` directory (skipping private packages).
+   - Aborts and exits with an error code if there is any mismatch.
+2. **Release Notes Extraction**:
+   - Parses `CHANGELOG.md` and locates the section corresponding to the target version (`## [version]`).
+   - Extracts the notes for that version, strips the header, and writes the contents to a new file named `RELEASE_NOTES.md`.
+
+### Prerequisites
+
+The environment variable `GITHUB_REF_NAME` must be set. For example:
+
+```bash
+$env:GITHUB_REF_NAME="v1.0.0"
+```
+
+### Usage
+
+Run the script from the monorepo root directory:
+
+```bash
+node scripts/release-helper.js
+```

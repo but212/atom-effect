@@ -11,31 +11,31 @@ describe('Patch: jQuery method overrides overhead', () => {
     {
       name: 'text() - Patch disabled (Native jQuery, 1000 calls)',
       patch: false,
-      run: ($el: JQuery) => {
-        for (let i = 0; i < 1000; i++) $el.text(`val-${i}`);
+      run: ($element: JQuery) => {
+        for (let i = 0; i < 1000; i++) $element.text(`value-${i}`);
       },
     },
     {
       name: 'text() - Patch enabled (Reactive jQuery, 1000 calls)',
       patch: true,
-      run: ($el: JQuery) => {
-        for (let i = 0; i < 1000; i++) $el.text(`val-${i}`);
+      run: ($element: JQuery) => {
+        for (let i = 0; i < 1000; i++) $element.text(`value-${i}`);
       },
     },
     {
       name: 'html() - Patch disabled (Native jQuery, 1000 calls)',
       patch: false,
       html: true,
-      run: ($el: JQuery) => {
-        for (let i = 0; i < 1000; i++) $el.html(`<span>val-${i}</span>`);
+      run: ($element: JQuery) => {
+        for (let i = 0; i < 1000; i++) $element.html(`<span>value-${i}</span>`);
       },
     },
     {
       name: 'html() - Patch enabled (Reactive jQuery, 1000 calls)',
       patch: true,
       html: true,
-      run: ($el: JQuery) => {
-        for (let i = 0; i < 1000; i++) $el.html(`<span>val-${i}</span>`);
+      run: ($element: JQuery) => {
+        for (let i = 0; i < 1000; i++) $element.html(`<span>value-${i}</span>`);
       },
     },
   ];

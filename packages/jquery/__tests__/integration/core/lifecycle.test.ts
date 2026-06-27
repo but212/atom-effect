@@ -1,32 +1,32 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import $ from '@/index';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Core DOM Lifecycle', () => {
+  const { appendToBody } = setupDOMCleanup();
+
   it('should maintain reactivity after DOM reparenting', async () => {
     const count = $.atom(0);
-    const $parent1 = $('<div id="parent1">').appendTo(document.body);
-    const $parent2 = $('<div id="parent2">').appendTo(document.body);
-    const $el = $('<div id="reactive-el">').appendTo($parent1);
+    const $parent1 = appendToBody('<div id="parent1">');
+    const $parent2 = appendToBody('<div id="parent2">');
+    const $element = $('<div id="reactive-element">').appendTo($parent1);
 
-    $el.atomText(count);
+    $element.atomText(count);
 
     await $.nextTick();
-    expect($el.text()).toBe('0');
-    expect($parent1.find('#reactive-el').length).toBe(1);
+    expect($element.text()).toBe('0');
+    expect($parent1.find('#reactive-element').length).toBe(1);
 
     // Reparent to parent2
-    $el.appendTo($parent2);
+    $element.appendTo($parent2);
     await $.nextTick();
-    expect($parent1.find('#reactive-el').length).toBe(0);
-    expect($parent2.find('#reactive-el').length).toBe(1);
+    expect($parent1.find('#reactive-element').length).toBe(0);
+    expect($parent2.find('#reactive-element').length).toBe(1);
 
     // Update atom
     count.value = 1;
     await $.nextTick();
-    expect($el.text()).toBe('1');
-
-    $parent1.remove();
-    $parent2.remove();
+    expect($element.text()).toBe('1');
   });
 
   describe('jQuery Batching Documentation Verification', () => {

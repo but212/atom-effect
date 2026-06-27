@@ -42,7 +42,7 @@ describe('Cold Start: First Evaluation', () => {
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const x = Math.random();
-        keep(((v: number) => v * 2)(x));
+        keep(((value: number) => value * 2)(x));
       }
     },
     coldBenchOptions
@@ -181,26 +181,26 @@ describe('Cold vs Warm: Computed Cache', () => {
 });
 
 describe('Cold vs Warm: Effect Subscription', () => {
-  const src = atom(0);
+  const source = atom(0);
 
   bench(
     `[Cold] effect create + first run + dispose (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const e = effect(() => keep(src.value), benchEffectOptions);
+        const e = effect(() => keep(source.value), benchEffectOptions);
         e.dispose();
       }
     },
     coldBenchOptions
   );
 
-  const warmEffect = effect(() => keep(src.value), benchEffectOptions);
+  const warmEffect = effect(() => keep(source.value), benchEffectOptions);
   keep(warmEffect); // prevent DCE
 
   bench(
     '[Warm] effect repeated trigger (x100)',
     () => {
-      for (let i = 0; i < 100; i++) src.value = i;
+      for (let i = 0; i < 100; i++) source.value = i;
     },
     microBenchOptions
   );

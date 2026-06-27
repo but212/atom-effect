@@ -63,7 +63,7 @@ sequenceDiagram
 The system employs a dual-layer encapsulation model designed for both V8 JIT optimization and API safety.
 
 - **`ReactiveNode<T>`**: The foundation interface ensuring monomorphic property access across the engine.
-- **Public Engine Fields**: Properties required for graph traversal (`flags`, `version`, `_slots`) are public. This ensures V8 generates stable **Hidden Classes** with direct property access, bypassing getter/setter overhead in hot paths.
+- **Public Engine Fields**: Properties required for graph traversal (`flags`, `version`, `_subscriberSlots`) are public. This ensures V8 generates stable **Hidden Classes** with direct property access, bypassing getter/setter overhead in hot paths.
 - **Private Behavioral State**: Value storage (`#value`), computation logic (`#fn`), and budget states use **native private fields (`#`)**. This protects internal invariants and prevents external tampering.
 
 ### Node Roles
@@ -81,7 +81,7 @@ The system employs a dual-layer encapsulation model designed for both V8 JIT opt
 ### V8-Optimized Memory Layout
 
 1. **SMI (Small Integer) Safeguards**: All counters (Epoch, Version, ID) are bit-masked to 31 bits to ensure they remain within the SMI range, avoiding heap-allocated `HeapNumber` transitions.
-2. **SlotBuffer (SVO)**: Subscriber and dependency lists use `#s0`–`#s3` inline slots. This avoids array allocation for the majority of nodes that have fewer than 4 connections.
+2. **SlotBuffer (SVO)**: Subscriber and dependency lists use `#fastSlot0`–`#fastSlot3` inline slots. This avoids array allocation for the majority of nodes that have fewer than 4 connections.
 3. **Bitwise Partitioning**: Node state is packed into a single 31-bit integer. Offsets (Core, Computed, Async, Primitive) allow atomic state checks and transitions via bitwise masks.
 
 ### Subscription Reconciliation
@@ -117,6 +117,7 @@ To maintain a pure functional core and minimize internal `try-catch` performance
 1. **Internal Monadic Propagation**: Engine-internal checks—such as argument validation, loop budget boundaries, disposed state access, and circular dependency checks—return a monadic `Result<T, Error>` wrapper. They do not throw exceptions directly.
 2. **Synchronous Boundary Unwrapping**: At the public API boundaries (e.g., `.value` getters on Computeds, factory constructors, and public scheduler wrappers), the engine calls `Result.unwrap(result)`. This throws a standard JavaScript `Error` (e.g., `ComputedError`, `EffectError`, `SchedulerError`) when a failure is encountered, ensuring 100% backward compatibility with throwing consumer code.
 3. **Asynchronous Scheduler Isolation**: During batch updates in the microtask loop, if a scheduled job returns a failed `Result`, the scheduler intercepts the result and wraps it in a `SchedulerError` before logging it, avoiding unhandled promise rejections and preserving overall system stability.
+4. **Error Swallowing with `defaultValue`**: If a computed node is configured with a `defaultValue`, any computation failure (synchronous or asynchronous) or circular reference will be caught internally and the `defaultValue` is returned instead of throwing a `ComputedError`. The error itself is still recorded and exposed via the node's `errors` and `hasError` properties.
 
 ---
 

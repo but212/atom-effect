@@ -89,18 +89,22 @@ export class RouterImpl implements Router {
       routes: { ...config.routes },
     } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
 
-    const t = this.#config.target;
+    const targetOption = this.#config.target;
     this.#$target =
-      typeof t === 'string' ? $(t) : t instanceof HTMLElement ? $(t) : (t as JQuery<HTMLElement>);
+      typeof targetOption === 'string'
+        ? $(targetOption)
+        : targetOption instanceof HTMLElement
+          ? $(targetOption)
+          : (targetOption as JQuery<HTMLElement>);
     this.#urlAdapter = createAdapter(this.#config.mode, this.#config.basePath);
 
     const discovery = discoverRoutes();
 
     for (const [path, discovered] of Object.entries(discovery.routes)) {
-      const userDef = this.#config.routes[path];
-      if (userDef) {
-        if (discovered.title !== undefined) userDef.title ||= discovered.title;
-        if (discovered.template !== undefined) userDef.template ||= discovered.template;
+      const userRouteDefinition = this.#config.routes[path];
+      if (userRouteDefinition) {
+        if (discovered.title !== undefined) userRouteDefinition.title ||= discovered.title;
+        if (discovered.template !== undefined) userRouteDefinition.template ||= discovered.template;
       } else {
         this.#config.routes[path] = discovered;
       }
@@ -113,7 +117,7 @@ export class RouterImpl implements Router {
     const initState = this.#urlAdapter.get();
     this.#previousUrl = initState.url;
 
-    const resolved = resolveNavigation(
+    const navigationResult = resolveNavigation(
       this.#matcher,
       this.#config,
       normalizePath(initState.path),
@@ -121,8 +125,12 @@ export class RouterImpl implements Router {
       this
     );
 
-    const initial = resolved.success
-      ? { path: resolved.path, query: resolved.query, params: resolved.params }
+    const initial = navigationResult.success
+      ? {
+          path: navigationResult.path,
+          query: navigationResult.query,
+          params: navigationResult.params,
+        }
       : { path: this.#config.default, query: {}, params: {} };
 
     this.#locationAtom = createAtom({
@@ -147,7 +155,7 @@ export class RouterImpl implements Router {
   #setupLifecycle() {
     this.#cleanups.push(this.#urlAdapter.setupListener(() => this.#handleBrowserSync()));
 
-    const renderSub = effect(() => {
+    const activeRenderEffect = effect(() => {
       // Logic: Rendering Trigger
       // We explicitly untrack the rendering logic to prevent the renderer
       // from becoming a dependency of its own DOM-cleaning side effects.
@@ -158,7 +166,7 @@ export class RouterImpl implements Router {
         this.#render(path);
       });
     });
-    this.#cleanups.push(() => renderSub.dispose());
+    this.#cleanups.push(() => activeRenderEffect.dispose());
 
     const scanner = setupRouteScanner(
       this.#matcher,
@@ -170,8 +178,8 @@ export class RouterImpl implements Router {
 
     if (this.#config.autoBindLinks) {
       this.#cleanups.push(
-        setupRouteInterceptor(this.#config, this.#matcher, scanner.resolvePath, (p) =>
-          this.navigate(p)
+        setupRouteInterceptor(this.#config, this.#matcher, scanner.resolvePath, (targetPath) =>
+          this.navigate(targetPath)
         )
       );
     }
@@ -189,11 +197,11 @@ export class RouterImpl implements Router {
     nextQuery: Record<string, string>,
     params: Record<string, string>
   ) {
-    const loc = this.#locationAtom.peek();
+    const currentLocation = this.#locationAtom.peek();
     if (
-      loc.path !== nextPath ||
-      !shallowEqual(loc.query, nextQuery) ||
-      !shallowEqual(loc.params, params)
+      currentLocation.path !== nextPath ||
+      !shallowEqual(currentLocation.query, nextQuery) ||
+      !shallowEqual(currentLocation.params, params)
     ) {
       batch(() => {
         this.#locationAtom.value = { path: nextPath, query: nextQuery, params };
@@ -243,15 +251,15 @@ export class RouterImpl implements Router {
     this.#isTransitioning = true;
     try {
       const nextState = this.#urlAdapter.commit(fullPath);
-      const resolved = resolveNavigation(
+      const navigationResult = resolveNavigation(
         this.#matcher,
         this.#config,
         nextState.path,
         nextState.query,
         this
       );
-      if (resolved.success) {
-        this.#updateState(resolved.path, resolved.query, resolved.params);
+      if (navigationResult.success) {
+        this.#updateState(navigationResult.path, navigationResult.query, navigationResult.params);
       } else {
         // Revert: Navigation rejected by an 'onEnter' guard.
         this.#urlAdapter.revert(this.#previousUrl);
@@ -261,10 +269,10 @@ export class RouterImpl implements Router {
     }
   }
 
-  #revertUrl(prevUrl: string) {
+  #revertUrl(previousUrl: string) {
     this.#isTransitioning = true;
     try {
-      this.#urlAdapter.revert(prevUrl);
+      this.#urlAdapter.revert(previousUrl);
     } finally {
       this.#isTransitioning = false;
     }
@@ -288,7 +296,7 @@ export class RouterImpl implements Router {
       return;
     }
 
-    const resolved = resolveNavigation(
+    const navigationResult = resolveNavigation(
       this.#matcher,
       this.#config,
       normalizePath(adapterState.path),
@@ -296,8 +304,8 @@ export class RouterImpl implements Router {
       this
     );
 
-    if (resolved.success) {
-      this.#updateState(resolved.path, resolved.query, resolved.params);
+    if (navigationResult.success) {
+      this.#updateState(navigationResult.path, navigationResult.query, navigationResult.params);
     } else {
       // Guard failure on browser-initiated navigation (Back/Forward).
       this.#revertUrl(this.#previousUrl);
@@ -310,29 +318,31 @@ export class RouterImpl implements Router {
    * to the renderer.
    */
   #render(requestedPath: string): void {
-    const { def, pattern: routeName } = resolveRoute(
+    const { routeDefinition, pattern: routeName } = resolveRoute(
       this.#matcher,
       requestedPath,
       this.#config.routes,
       this.#config.notFound
     );
 
-    if (!def) {
+    if (!routeDefinition) {
       debug.warn(SYSTEM_ROUTE.PREFIX, SYSTEM_ROUTE.ERRORS.NOT_FOUND(requestedPath));
       return;
     }
 
-    this.#currentDef = def;
+    this.#currentDef = routeDefinition;
     this.#previousUrl = this.#urlAdapter.get().url;
-    renderRoute(this.#renderer, def, routeName, this.params.peek(), this);
+    renderRoute(this.#renderer, routeDefinition, routeName, this.params.peek(), this);
   }
 
   /**
    * Executes the unmount guard for the current route.
    */
   #canLeave(): boolean {
-    const def = this.#currentDef || this.#config.routes[this.#config.notFound];
-    return def?.onLeave ? untracked(() => def.onLeave?.(this)) !== false : true;
+    const routeDefinition = this.#currentDef || this.#config.routes[this.#config.notFound];
+    return routeDefinition?.onLeave
+      ? untracked(() => routeDefinition.onLeave?.(this)) !== false
+      : true;
   }
 
   /**
@@ -344,7 +354,7 @@ export class RouterImpl implements Router {
     if (this.#isDestroyed) return;
     this.#isDestroyed = true;
     runRendererCleanups(this.#renderer);
-    this.#cleanups.forEach((fn: () => void) => Result.tryCatch(fn));
+    this.#cleanups.forEach((teardown: () => void) => Result.tryCatch(teardown));
     this.#cleanups.dispose();
   }
 }

@@ -45,9 +45,9 @@ describe('List Rendering: Initial Render (1000 items)', () => {
     $c.atomList(items, {
       key: 'id',
       render: () => '<div class="item"><span class="label"></span></div>',
-      bind: ($el, item) => {
-        $el.find('.label').atomText($.atom(item.text));
-        $el.atomClass('even', $.atom(item.id % 2 === 0));
+      bind: ($element, item) => {
+        $element.find('.label').atomText($.atom(item.text));
+        $element.atomClass('even', $.atom(item.id % 2 === 0));
       },
     });
   });

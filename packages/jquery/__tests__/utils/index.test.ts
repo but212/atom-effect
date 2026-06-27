@@ -11,23 +11,23 @@ describe('Utils', () => {
 
       const cases = [
         {
-          el: Object.assign(document.createElement('div'), { id: 'test-id' }),
+          element: Object.assign(document.createElement('div'), { id: 'test-id' }),
           expected: 'div#test-id',
         },
         {
-          el: Object.assign(document.createElement('div'), { className: 'foo bar' }),
+          element: Object.assign(document.createElement('div'), { className: 'foo bar' }),
           expected: 'div.foo.bar',
         },
-        { el: document.createElement('span'), expected: 'span' },
+        { element: document.createElement('span'), expected: 'span' },
         {
-          el: Object.assign(document.createElement('div'), { className: '   ' }),
+          element: Object.assign(document.createElement('div'), { className: '   ' }),
           expected: 'div',
         },
-        { el: svg, expected: 'svg.foo.bar' },
+        { element: svg, expected: 'svg.foo.bar' },
       ];
 
-      for (const { el, expected } of cases) {
-        expect(getSelector(el)).toBe(expected);
+      for (const { element, expected } of cases) {
+        expect(getSelector(element)).toBe(expected);
       }
     });
   });

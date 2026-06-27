@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 import type { Router } from '@/types';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Context Injection Synergy (provide/inject)', () => {
+  const { appendToBody } = setupDOMCleanup();
   it('should inject and share global router state with nested child components using provideAtom', async () => {
-    const $app = $('<div id="route-app"><div id="router-view"></div></div>').appendTo(
-      document.body
-    );
+    const $app = appendToBody('<div id="route-app"><div id="router-view"></div></div>');
 
     const tagName = `route-child-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -14,8 +14,8 @@ describe('Context Injection Synergy (provide/inject)', () => {
       target: $app.find('#router-view'),
       mode: 'hash',
       routes: {
-        '/': { render: (el) => $(el).html(`<${tagName}></${tagName}>`) },
-        '/page/:id': { render: (el) => $(el).html(`<${tagName}></${tagName}>`) },
+        '/': { render: (element) => $(element).html(`<${tagName}></${tagName}>`) },
+        '/page/:id': { render: (element) => $(element).html(`<${tagName}></${tagName}>`) },
       },
     });
 
@@ -66,7 +66,7 @@ describe('Context Injection Synergy (provide/inject)', () => {
     const themeAtom = $.atom('dark');
     const accentAtom = $.atom('#ff0000');
 
-    const $container = $('<div id="theme-container"></div>').appendTo(document.body);
+    const $container = appendToBody('<div id="theme-container"></div>');
 
     $.provideAtom($container, 'theme', themeAtom);
     $.provideAtom($container, 'accent-color', accentAtom);
@@ -94,9 +94,9 @@ describe('Context Injection Synergy (provide/inject)', () => {
     $.debug.enabled = true;
 
     const tagName = `unregistered-inject-${Math.random().toString(36).slice(2, 9)}`;
-    const el = document.createElement(tagName);
+    const element = document.createElement(tagName);
 
-    $.injectAtom(el, 'some-key');
+    $.injectAtom(element, 'some-key');
 
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining(`[atom-component] Custom Element <${tagName}> is not registered.`)

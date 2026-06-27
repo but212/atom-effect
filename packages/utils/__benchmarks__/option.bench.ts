@@ -85,11 +85,11 @@ describe('Option', () => {
 
     bench(`If-Else branch (mixed, x${REPEATS})`, () => {
       for (let i = 0; i < REPEATS; i++) {
-        const val = mixedRawVals[i];
-        if (val == null) {
+        const value = mixedRawVals[i];
+        if (value == null) {
           keep(0);
         } else {
-          keep(val);
+          keep(value);
         }
       }
     });

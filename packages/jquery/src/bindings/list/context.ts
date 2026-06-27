@@ -42,13 +42,13 @@ export interface ListContext<T> {
   /** Inverse lookup for O(1) index retrieval from a key. */
   keyToIndex: Map<ListKey, number>;
   /** Cached reference to the placeholder element shown when the list is empty. */
-  $emptyEl: JQuery<Element> | null;
+  $emptyElement: JQuery<Element> | null;
   /** The reactive effect controlling this list. Needed to check disposal state during async tasks. */
-  fx: EffectObject | undefined;
+  reactiveEffect: EffectObject | undefined;
   /** Target container element. */
   readonly $container: JQuery;
   /** Optional removal lifecycle hook. */
-  readonly onRemove: (($el: JQuery) => Promise<void> | void) | undefined;
+  readonly onRemove: (($element: JQuery) => Promise<void> | void) | undefined;
 }
 
 /**
@@ -56,14 +56,14 @@ export interface ListContext<T> {
  */
 export function createListContext<T>(
   $container: JQuery,
-  onRemove: (($el: JQuery) => Promise<void> | void) | undefined
+  onRemove: (($element: JQuery) => Promise<void> | void) | undefined
 ): ListContext<T> {
   return {
     snapshots: [],
     removingKeys: new Set<ListKey>(),
     keyToIndex: new Map<ListKey, number>(),
-    $emptyEl: null,
-    fx: undefined,
+    $emptyElement: null,
+    reactiveEffect: undefined,
     $container,
     onRemove,
   };
@@ -72,56 +72,64 @@ export function createListContext<T>(
 /**
  * Retrieves the index of a key, handling string-to-number normalization.
  */
-export function getIndex<T>(ctx: ListContext<T>, key: string): number | undefined {
-  const idx = ctx.keyToIndex.get(key);
-  if (idx !== undefined) return idx;
-  const n = Number(key);
-  return Number.isNaN(n) ? undefined : ctx.keyToIndex.get(n);
+export function getIndex<T>(listContext: ListContext<T>, key: string): number | undefined {
+  const index = listContext.keyToIndex.get(key);
+  if (index !== undefined) return index;
+  const numericKey = Number(key);
+  return Number.isNaN(numericKey) ? undefined : listContext.keyToIndex.get(numericKey);
 }
 
 /**
  * Marks a key as "in transit" and starts the removal lifecycle.
  */
-export function removeNode<T>(ctx: ListContext<T>, k: ListKey, nodes: Node[]): void {
+export function removeNode<T>(listContext: ListContext<T>, itemKey: ListKey, nodes: Node[]): void {
   setAtomKey(nodes, null);
-  ctx.removingKeys.add(k);
-  scheduleRemoval(ctx, k, nodes);
+  listContext.removingKeys.add(itemKey);
+  scheduleRemoval(listContext, itemKey, nodes);
 }
 
 /**
  * Initiates the physical removal of an element.
  */
-export function scheduleRemoval<T>(ctx: ListContext<T>, k: ListKey, nodes: Node[]): void {
-  const $el = $(nodes as HTMLElement[]);
-  const res = ctx.onRemove?.($el);
+export function scheduleRemoval<T>(
+  listContext: ListContext<T>,
+  itemKey: ListKey,
+  nodes: Node[]
+): void {
+  const $element = $(nodes as HTMLElement[]);
+  const removalResult = listContext.onRemove?.($element);
 
-  if (res instanceof Promise) {
-    const commit = () => commitRemoval(ctx, k, nodes);
-    res.then(commit, commit);
+  if (removalResult instanceof Promise) {
+    const commit = () => commitRemoval(listContext, itemKey, nodes);
+    removalResult.then(commit, commit);
   } else {
-    commitRemoval(ctx, k, nodes);
+    commitRemoval(listContext, itemKey, nodes);
   }
 }
 
 /**
  * Finalizes DOM removal and state cleanup.
  */
-export function commitRemoval<T>(ctx: ListContext<T>, k: ListKey, nodes: Node[]): void {
-  if (ctx.fx?.isDisposed) return;
+export function commitRemoval<T>(
+  listContext: ListContext<T>,
+  itemKey: ListKey,
+  nodes: Node[]
+): void {
+  if (listContext.reactiveEffect?.isDisposed) return;
 
-  const first = nodes[0];
+  const firstElement = nodes[0];
   // Check if the element was re-bound to the list while we were waiting.
-  if (first instanceof Element && first.hasAttribute('data-atom-key')) return;
+  if (firstElement instanceof Element && firstElement.hasAttribute('data-atom-key')) return;
 
   cleanupNodes(nodes);
 
   for (let i = 0; i < nodes.length; i++) {
-    const el = nodes[i];
-    if (el?.isConnected && el.parentNode) {
-      el.parentNode.removeChild(el);
+    const element = nodes[i];
+    if (element?.isConnected && element.parentNode) {
+      element.parentNode.removeChild(element);
     }
   }
-  ctx.removingKeys.delete(k);
+  listContext.removingKeys.delete(itemKey);
 }
 
 /**
@@ -129,23 +137,23 @@ export function commitRemoval<T>(ctx: ListContext<T>, k: ListKey, nodes: Node[])
  * from a starting element, searching up to the container limit.
  */
 export function resolveEventTarget<T>(
-  ctx: ListContext<T>,
-  start: Element,
+  listContext: ListContext<T>,
+  startingElement: Element,
   container: Element
 ): { target: Element; index: number; item: T } | null {
-  let current: Element | null = start;
-  while (current && current !== container) {
-    const rawKey = current.getAttribute('data-atom-key');
+  let currentElement: Element | null = startingElement;
+  while (currentElement && currentElement !== container) {
+    const rawKey = currentElement.getAttribute('data-atom-key');
     if (rawKey !== null) {
-      const index = getIndex(ctx, rawKey);
+      const index = getIndex(listContext, rawKey);
       if (index !== undefined) {
-        const snapshot = ctx.snapshots[index];
+        const snapshot = listContext.snapshots[index];
         if (snapshot) {
-          return { target: current, index, item: snapshot.item };
+          return { target: currentElement, index, item: snapshot.item };
         }
       }
     }
-    current = current.parentElement;
+    currentElement = currentElement.parentElement;
   }
   return null;
 }
@@ -153,11 +161,11 @@ export function resolveEventTarget<T>(
 /**
  * Full cleanup of state and DOM references.
  */
-export function disposeContext<T>(ctx: ListContext<T>): void {
-  ctx.removingKeys.clear();
-  ctx.snapshots = [];
-  ctx.keyToIndex.clear();
-  ctx.$emptyEl?.remove();
-  ctx.$emptyEl = null;
-  ctx.$container.off('.atomList');
+export function disposeContext<T>(listContext: ListContext<T>): void {
+  listContext.removingKeys.clear();
+  listContext.snapshots = [];
+  listContext.keyToIndex.clear();
+  listContext.$emptyElement?.remove();
+  listContext.$emptyElement = null;
+  listContext.$container.off('.atomList');
 }

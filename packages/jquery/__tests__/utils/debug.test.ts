@@ -35,14 +35,14 @@ describe('Debug Module (Black-box)', () => {
   describe('Visibility & Gating', () => {
     it('should suppress instrumentation logs when disabled', () => {
       $.debug.enabled = false;
-      const el = document.createElement('div');
-      document.body.appendChild(el);
+      const element = document.createElement('div');
+      document.body.appendChild(element);
 
-      $.debug.domUpdated('[TEST]', el, 'text', 'new value');
+      $.debug.domUpdated('[TEST]', element, 'text', 'new value');
 
       expect(logSpy).not.toHaveBeenCalled();
-      expect(el.hasAttribute('data-atom-debug')).toBe(false);
-      el.remove();
+      expect(element.hasAttribute('data-atom-debug')).toBe(false);
+      element.remove();
     });
 
     it('should always log critical messages (warn/error) regardless of enabled state', () => {
@@ -89,8 +89,8 @@ describe('Debug Module (Black-box)', () => {
       // Note: We don't check duration (implementation detail), just that an animation started.
       expect(htmlEl.getAnimations().length).toBeGreaterThan(0);
 
-      for (const el of [htmlEl, svgEl, jqElement]) {
-        el.remove();
+      for (const element of [htmlEl, svgEl, jqElement]) {
+        element.remove();
       }
     });
 
@@ -109,12 +109,12 @@ describe('Debug Module (Black-box)', () => {
 
     it('should ensure idempotent style injection occurs', () => {
       $.debug.enabled = true;
-      const el = document.createElement('div');
-      document.body.appendChild(el);
+      const element = document.createElement('div');
+      document.body.appendChild(element);
 
       // Trigger multiple times; should not cause multiple redundant injections
-      $.debug.domUpdated('[UI]', el, 'a', '1');
-      $.debug.domUpdated('[UI]', el, 'b', '2');
+      $.debug.domUpdated('[UI]', element, 'a', '1');
+      $.debug.domUpdated('[UI]', element, 'b', '2');
 
       const styleTags = document.querySelectorAll('style[data-atom-debug]');
       const adoptedSheetsCount = (document.adoptedStyleSheets as unknown[])?.length || 0;
@@ -122,7 +122,7 @@ describe('Debug Module (Black-box)', () => {
       // Black-box check: some mechanism is providing the styles
       expect(styleTags.length + adoptedSheetsCount).toBeGreaterThan(0);
 
-      el.remove();
+      element.remove();
     });
   });
 
@@ -131,8 +131,10 @@ describe('Debug Module (Black-box)', () => {
       $.debug.enabled = true;
 
       // Passing invalid types should not throw ReferenceErrors or crash the system
-      expect(() => $.debug.domUpdated('[UI]', castTo<Element>(null), 'test', 'val')).not.toThrow();
-      expect(() => $.debug.domUpdated('[UI]', castTo<Element>({}), 'test', 'val')).not.toThrow();
+      expect(() =>
+        $.debug.domUpdated('[UI]', castTo<Element>(null), 'test', 'value')
+      ).not.toThrow();
+      expect(() => $.debug.domUpdated('[UI]', castTo<Element>({}), 'test', 'value')).not.toThrow();
       expect(logSpy).not.toHaveBeenCalled();
     });
   });

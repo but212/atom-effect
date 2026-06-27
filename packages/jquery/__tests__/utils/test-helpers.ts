@@ -1,3 +1,6 @@
+import $ from 'jquery';
+import { afterEach, vi } from 'vitest';
+
 /**
  * Safely wraps a Promise as a JQuery.jqXHR object for testing.
  * This encapsulates the JQuery.jqXHR type casting.
@@ -20,4 +23,40 @@ export function createMockJqXHR<T>(
  */
 export function castTo<T>(value: unknown): T {
   return value as T;
+}
+
+/**
+ * Set up automatic DOM node cleanup and mock restoration for tests.
+ * Returns an `appendToBody` function to register elements.
+ */
+export function setupDOMCleanup(): {
+  appendToBody: (htmlOrEl: string | JQuery | Element) => JQuery;
+} {
+  const activeElements: JQuery[] = [];
+
+  function appendToBody(htmlOrEl: string | JQuery | Element): JQuery {
+    if (htmlOrEl instanceof $) {
+      const $element = htmlOrEl as JQuery;
+      $element.appendTo(document.body);
+      activeElements.push($element);
+      return $element;
+    }
+    const $element = (
+      typeof htmlOrEl === 'string' ? $(htmlOrEl) : $(htmlOrEl as Element)
+    ) as JQuery;
+    $element.appendTo(document.body);
+    activeElements.push($element);
+    return $element;
+  }
+
+  afterEach(() => {
+    for (const $element of activeElements) {
+      $element.remove();
+    }
+    activeElements.length = 0;
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  return { appendToBody };
 }

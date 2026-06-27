@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
 import type { AtomNav } from '@/types';
-import { createMockJqXHR } from '../../utils/test-helpers';
+import { createMockJqXHR, setupDOMCleanup } from '../../utils/test-helpers';
 
 /**
  * Utility to setup AJAX mocks for PJAX/Navigation tests
@@ -44,10 +44,11 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
     return manager;
   };
 
+  const { appendToBody } = setupDOMCleanup();
   beforeEach(() => {
     document.body.innerHTML = '';
     activeManagers = [];
-    $app = $('<div id="app"></div>').appendTo(document.body);
+    $app = appendToBody('<div id="app"></div>');
     $.initAEJ({ autoCleanup: true });
     window.location.hash = '';
     window.history.replaceState(null, '', '/');
@@ -59,9 +60,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
         m.destroy();
       } catch {}
     }
-    $(document.body).empty();
     $.initAEJ({ autoCleanup: false });
-    vi.restoreAllMocks();
   });
 
   describe('Regression: Form Tag Preservation & atomForm Binding', () => {
@@ -423,8 +422,8 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       await vi.waitFor(() => expect($app.find('#comp').length).toBe(1));
 
       const fetchAtom = $.atomFetch('/api', { eager: true, defaultValue: null });
-      $app.find('#comp').atomMount(($el) => {
-        $el.atomText(fetchAtom);
+      $app.find('#comp').atomMount(($element) => {
+        $element.atomText(fetchAtom);
         return () => {
           fetchAtom.dispose(); // User cleans up fetch atom on unmount
         };
@@ -464,8 +463,8 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       $list.atomList(itemsAtom, {
         key: 'id',
         render: (item) => `<li class="list-item">${item.name}</li>`,
-        bind: ($el, item) => {
-          $el.atomText($.computed(() => item.name));
+        bind: ($element, item) => {
+          $element.atomText($.computed(() => item.name));
         },
       });
 
@@ -531,7 +530,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
   describe('Web Components & Navigation Synergy', () => {
     class SynergyComponent extends HTMLElement {
       private aej = $.useAtomComponent(this);
-      public textAtom = $.atom('initial-val');
+      public textAtom = $.atom('initial-value');
 
       connectedCallback() {
         this.innerHTML = '<span data-aej-bind="text"></span>';
@@ -572,21 +571,21 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       const compEl = $comp[0] as SynergyComponent;
       if (!compEl) throw new Error('Expected custom element to be defined');
 
-      expect($comp.find('span').text()).toBe('initial-val');
+      expect($comp.find('span').text()).toBe('initial-value');
 
       // Verify updating text while mounted works
-      compEl.textAtom.value = 'updated-val';
+      compEl.textAtom.value = 'updated-value';
       await $.nextTick();
-      expect($comp.find('span').text()).toBe('updated-val');
+      expect($comp.find('span').text()).toBe('updated-value');
 
       // Navigate away
       await nav.navigate('/otherPage');
       await vi.waitFor(() => expect($app.text()).toContain('Other Page'));
 
       // Verify component was torn down and updates to atom no longer propagate
-      compEl.textAtom.value = 'stale-val';
+      compEl.textAtom.value = 'stale-value';
       await $.nextTick();
-      expect($comp.find('span').text()).toBe('updated-val');
+      expect($comp.find('span').text()).toBe('updated-value');
     });
   });
 
@@ -595,7 +594,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       setupMockAjax({
         mountPage: `
           <div id="mount-wrapper">
-            <div id="mount-el">Initial</div>
+            <div id="mount-element">Initial</div>
           </div>
         `,
         otherPage: '<div>Other Page</div>',
@@ -609,9 +608,9 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
           target: $app,
           onMount: ($container, url) => {
             if (url.includes('mountPage')) {
-              $container.find('#mount-el').atomMount(($el) => {
+              $container.find('#mount-element').atomMount(($element) => {
                 mountCalled++;
-                $el.text('Mounted');
+                $element.text('Mounted');
                 return () => {
                   cleanupCalled++;
                 };
@@ -623,7 +622,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
 
       // Navigate to mount page
       await nav.navigate('/mountPage');
-      await vi.waitFor(() => expect($app.find('#mount-el').text()).toBe('Mounted'));
+      await vi.waitFor(() => expect($app.find('#mount-element').text()).toBe('Mounted'));
       expect(mountCalled).toBe(1);
       expect(cleanupCalled).toBe(0);
 

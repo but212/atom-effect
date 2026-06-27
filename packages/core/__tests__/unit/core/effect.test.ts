@@ -56,9 +56,9 @@ describe('Effect', () => {
 
     describe('reactivity & dependency tracking', () => {
       it('tracks deep dependencies (atoms/computeds) and re-executes on actual changes', async () => {
-        const src = atom(0);
+        const source = atom(0);
         const untracked = atom(0);
-        const doubled = computed(() => src.value * 2);
+        const doubled = computed(() => source.value * 2);
 
         const log: number[] = [];
         const e = effect(() => {
@@ -73,11 +73,11 @@ describe('Effect', () => {
         await vi.runAllTimersAsync();
         expect(log).toEqual([0]);
 
-        src.value = 0;
+        source.value = 0;
         await vi.runAllTimersAsync();
         expect(e.executionCount).toBe(1);
 
-        src.value = 5;
+        source.value = 5;
         await vi.runAllTimersAsync();
         expect(log).toEqual([0, 10]);
         expect(e.executionCount).toBe(2);
@@ -284,19 +284,19 @@ describe('Effect', () => {
 
     describe('dispose() & cleanups', () => {
       it('orchestrates cleanup properly on re-runs and final disposal idempotently', async () => {
-        const src = atom(0, { sync: true });
+        const source = atom(0, { sync: true });
         const order: string[] = [];
 
         const e = effect(
           () => {
-            src.value;
+            source.value;
             order.push('run');
             return () => order.push('cleanup');
           },
           { sync: true }
         );
 
-        src.value = 1;
+        source.value = 1;
         await vi.runAllTimersAsync();
 
         e.dispose();
@@ -313,16 +313,16 @@ describe('Effect', () => {
       });
 
       it('severs reactivity after disposal', async () => {
-        const src = atom(0);
+        const source = atom(0);
         let runs = 0;
         const e = effect(() => {
-          src.value;
+          source.value;
           runs++;
         });
         await vi.runAllTimersAsync();
 
         e.dispose();
-        src.value = 1;
+        source.value = 1;
         await vi.runAllTimersAsync();
         expect(runs).toBe(1);
       });
@@ -496,7 +496,7 @@ describe('Effect', () => {
 
         const depSlots = Reflect.get(e, '_depSlots');
         depSlots.lock();
-        depSlots.push({ node: atom(0), version: 0, unsub: () => {} });
+        depSlots.push({ node: atom(0), version: 0, unsubscribeCallback: () => {} });
         depSlots.setAt(0, null);
         depSlots.unlock();
 
@@ -535,9 +535,9 @@ describe('Effect', () => {
         const freshCleanup = vi.fn();
 
         const e = effect(async () => {
-          const val = source.value;
+          const value = source.value;
           await sleep(10);
-          return val === 0 ? staleCleanup : freshCleanup;
+          return value === 0 ? staleCleanup : freshCleanup;
         });
 
         await sleep(2);
@@ -550,7 +550,7 @@ describe('Effect', () => {
       });
 
       it('ensures async consistency by resolving results in the first microtask cycle', async () => {
-        let resolvePromise!: (v: () => void) => void;
+        let resolvePromise!: (value: () => void) => void;
         const promise = new Promise<() => void>((r) => {
           resolvePromise = r;
         });
@@ -571,8 +571,8 @@ describe('Effect', () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const a = atom(0);
 
-        let firstReject!: (err: Error) => void;
-        let secondResolve!: (val: undefined) => void;
+        let firstReject!: (error: Error) => void;
+        let secondResolve!: (value: undefined) => void;
         let runIdx = 0;
 
         const e = effect(() => {
@@ -606,7 +606,7 @@ describe('Effect', () => {
       it('safely handles errors from async execution', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-        let rejectAsync!: (val: unknown) => void;
+        let rejectAsync!: (value: unknown) => void;
         effect(() => new Promise((_, r) => (rejectAsync = r)));
         rejectAsync(new Error('async reject'));
 
@@ -618,7 +618,7 @@ describe('Effect', () => {
       it('safely handles errors from async cleanups', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-        let resolveAsync!: (val: () => void) => void;
+        let resolveAsync!: (value: () => void) => void;
         const e = effect(() => new Promise<() => void>((r) => (resolveAsync = r)));
         e.dispose();
         resolveAsync(() => {

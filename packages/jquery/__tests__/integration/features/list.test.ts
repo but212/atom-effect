@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
+import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Atom List Edge Cases', () => {
+  const { appendToBody } = setupDOMCleanup();
   it('should visually collapse items with duplicate keys', async () => {
     // Current behavior: Duplicate keys result in only one DOM element being reused/moved
     // distinct failure mode to document.
@@ -15,7 +17,7 @@ describe('Atom List Edge Cases', () => {
         { id: 1, text: 'First' },
         { id: 1, text: 'Second' }, // Duplicate ID
       ]);
-      const $container = $('<div>').appendTo(document.body);
+      const $container = appendToBody('<div>');
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       $container.atomList(items, {
@@ -47,7 +49,7 @@ describe('Atom List Edge Cases', () => {
   it('should result in two elements during async removal race', async () => {
     // "Ghost" element persists while new element with same key is added
     const items = $.atom([{ id: 1, text: 'A' }]);
-    const $container = $('<div>').appendTo(document.body);
+    const $container = appendToBody('<div>');
 
     let resolveRemove: (() => void) | undefined;
     const removePromise = new Promise<void>((r) => {
@@ -57,10 +59,10 @@ describe('Atom List Edge Cases', () => {
     $container.atomList(items, {
       key: 'id',
       render: (item: { id: number; text: string }) => `<div class="item">${item.text}</div>`,
-      onRemove: async ($el: JQuery<HTMLElement>) => {
-        $el.addClass('removing');
+      onRemove: async ($element: JQuery<HTMLElement>) => {
+        $element.addClass('removing');
         await removePromise;
-        $el.remove();
+        $element.remove();
       },
     });
 
@@ -99,7 +101,7 @@ describe('Atom List Edge Cases', () => {
     // Note: JSDOM focus handling with detach/attach is tricky.
     // jQuery .insertBefore moves the element.
     const items = $.atom([{ id: 1 }, { id: 2 }, { id: 3 }]);
-    const $container = $('<div>').appendTo(document.body);
+    const $container = appendToBody('<div>');
 
     $container.atomList(items, {
       key: 'id',
@@ -135,7 +137,7 @@ describe('Atom List Edge Cases', () => {
     // This triggers the internal batchSanitize logic in renderItems
     const count = 20;
     const items = $.atom(Array.from({ length: count }, (_, i) => ({ id: i, text: `Item ${i}` })));
-    const $container = $('<div>').appendTo(document.body);
+    const $container = appendToBody('<div>');
 
     $container.atomList(items, {
       key: 'id',

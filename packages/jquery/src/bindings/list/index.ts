@@ -25,7 +25,10 @@ import type { EventBinding, PlaceCallbacks } from './types';
  * Why: Enables external tools and the core registry to access reactive context
  * without polluting DOM nodes with internal properties.
  */
-const instances = new WeakMap<Element, { fx: EffectObject; ctx: ListContext<unknown> }>();
+const instances = new WeakMap<
+  Element,
+  { reactiveEffect: EffectObject; ctx: ListContext<unknown> }
+>();
 
 /**
  * Role: List Reconciliation Engine
@@ -41,21 +44,21 @@ export function applyListBinding<T>(
   element: HTMLElement,
   source: ReadonlyAtom<T[]>,
   options: ListOptions<T>
-): { fx: EffectObject; ctx: ListContext<T> } {
+): { reactiveEffect: EffectObject; ctx: ListContext<T> } {
   const { key, update, isEqual, empty, events, onRemove, bind, onAdd } = options;
-  const $c = $(element);
+  const containerElement = $(element);
 
   // 1. Lifecycle: Enforce single-binding per element by disposing old instances.
-  const prev = instances.get(element);
-  if (prev) {
-    prev.fx.dispose();
-    disposeContext(prev.ctx);
+  const previousInstance = instances.get(element);
+  if (previousInstance) {
+    previousInstance.reactiveEffect.dispose();
+    disposeContext(previousInstance.ctx);
   } else {
     // Register once per element lifecycle to avoid zombie cleanup accumulation
     registry.onCleanup(element, () => {
       const active = instances.get(element);
       if (active) {
-        active.fx.dispose();
+        active.reactiveEffect.dispose();
         disposeContext(active.ctx);
         instances.delete(element);
       }
@@ -67,17 +70,19 @@ export function applyListBinding<T>(
     typeof key === 'function'
       ? key
       : (item: T) => {
-          const rawVal = item == null ? item : item[key];
-          return typeof rawVal === 'string' || typeof rawVal === 'number' ? rawVal : String(rawVal);
+          const rawValue = item == null ? item : item[key];
+          return typeof rawValue === 'string' || typeof rawValue === 'number'
+            ? rawValue
+            : String(rawValue);
         };
   const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 
-  const ctx = createListContext<T>($c, onRemove);
+  const ctx = createListContext<T>(containerElement, onRemove);
 
   let prevItems: T[] | undefined;
 
-  const fx = effect(() => {
+  const reactiveEffect = effect(() => {
     // Accessing .value establishes the reactive dependency.
     const items = source.value;
     const count = items.length;
@@ -86,7 +91,7 @@ export function applyListBinding<T>(
       if (items === prevItems) return;
       prevItems = items;
 
-      handleEmpty(ctx, count, $c, empty);
+      handleEmpty(ctx, count, containerElement, empty);
       if (count === 0) return;
 
       const isInitial = ctx.snapshots.length === 0 && ctx.removingKeys.size === 0;
@@ -112,21 +117,21 @@ export function applyListBinding<T>(
       ctx.snapshots = [];
       for (const slot of diff.slots) {
         if (slot) {
-          ctx.snapshots.push({ key: slot.key, item: slot.item, node: slot.node });
+          ctx.snapshots.push({ key: slot.key, item: slot.item, node: slot.nodes });
         }
       }
     });
   });
 
-  ctx.fx = fx;
+  ctx.reactiveEffect = reactiveEffect;
 
   if (eventBindings.length > 0) {
-    setupEvents(ctx, $c, eventBindings);
+    setupEvents(ctx, containerElement, eventBindings);
   }
 
-  instances.set(element, { fx, ctx });
+  instances.set(element, { reactiveEffect: reactiveEffect, ctx });
 
-  return { fx, ctx };
+  return { reactiveEffect: reactiveEffect, ctx };
 }
 
 /**
@@ -152,10 +157,10 @@ export function applyListBinding<T>(
  * ```
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
-  for (let i = 0, len = this.length; i < len; i++) {
-    const el = this[i];
-    if (el) {
-      applyListBinding(el, source, options);
+  for (let i = 0, length = this.length; i < length; i++) {
+    const element = this[i];
+    if (element) {
+      applyListBinding(element, source, options);
     }
   }
   return this;
@@ -174,9 +179,9 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
 function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding<T>[] {
   return Object.entries(events || {}).map(([key, callback]) => {
     const trimmed = key.trim();
-    const spaceIdx = trimmed.indexOf(' ');
-    const type = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
-    const selector = spaceIdx === -1 ? '> *' : trimmed.slice(spaceIdx + 1).trim() || '> *';
+    const spaceIndex = trimmed.indexOf(' ');
+    const type = spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
+    const selector = spaceIndex === -1 ? '> *' : trimmed.slice(spaceIndex + 1).trim() || '> *';
     return {
       type,
       selector,

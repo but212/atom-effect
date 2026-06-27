@@ -10,13 +10,13 @@ import { AsyncState, atom, computed, effect } from '@/index';
 
 describe('Async Drift Constraint & Recovery', () => {
   it('resolves reliably without retries (maxAsyncRetries = 0) when dependencies remain stable', async () => {
-    const src = atom(42);
+    const source = atom(42);
 
     const c = computed(
       async () => {
-        const v = src.value;
+        const value = source.value;
         await sleep(30);
-        return v;
+        return value;
       },
       { defaultValue: -1 }
     );
@@ -29,14 +29,14 @@ describe('Async Drift Constraint & Recovery', () => {
   });
 
   it('retries when dependencies mutate mid-flight maintaining fallback', async () => {
-    const src = atom(0);
+    const source = atom(0);
     const onError = vi.fn();
 
     const c = computed(
       async () => {
-        const v = src.value;
+        const value = source.value;
         await sleep(40);
-        return v;
+        return value;
       },
       { defaultValue: -99, onError }
     );
@@ -45,7 +45,7 @@ describe('Async Drift Constraint & Recovery', () => {
 
     // Change dependency at an arbitrary mid-flight point (25ms out of 40ms)
     await sleep(25);
-    src.value = 1;
+    source.value = 1;
 
     // Await computation original finish + scheduler delay
     await sleep(30);
@@ -58,13 +58,13 @@ describe('Async Drift Constraint & Recovery', () => {
   });
 
   it('isolates retry counting effectively within normal reactive bounds naturally', async () => {
-    const src = atom(0);
+    const source = atom(0);
 
     const c = computed(
       async () => {
-        const v = src.value;
+        const value = source.value;
         await sleep(50);
-        return v;
+        return value;
       },
       { defaultValue: -1 }
     );
@@ -77,14 +77,14 @@ describe('Async Drift Constraint & Recovery', () => {
     await sleep(70); // Resolve initial stable pull
 
     // Round 1: Trigger a drift just before resolution
-    src.value = 1;
+    source.value = 1;
     await sleep(10);
-    src.value = 2; // Drift 1 -> uses its 1 allowed retry -> begins next compute safely
+    source.value = 2; // Drift 1 -> uses its 1 allowed retry -> begins next compute safely
 
     await sleep(70);
 
     // Round 2: A totally new drift cycle
-    src.value = 3;
+    source.value = 3;
     await sleep(70); // Resolves normally without drift, no accumulated timeouts
 
     // If the counter was global, round 2 drift would have exhausted the limit and rejected completely

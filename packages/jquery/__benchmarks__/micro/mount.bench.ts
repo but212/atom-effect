@@ -11,10 +11,10 @@ interface CounterProps {
   label: string;
 }
 
-const CounterComponent = ($el: JQuery, props: CounterProps) => {
+const CounterComponent = ($element: JQuery, props: CounterProps) => {
   const count = $.atom(props.initialCount);
   const fx = $.effect(() => {
-    $el.text(`${props.label}: ${count.value}`);
+    $element.text(`${props.label}: ${count.value}`);
   });
   return () => {
     fx.dispose();
@@ -33,17 +33,17 @@ describe('Mounting: Component Lifecycle', () => {
   });
 
   run('atomMount replacement (10 elements x 10 re-mounts)', ($c) => {
-    const $el = $('<div></div>').appendTo($c);
+    const $element = $('<div></div>').appendTo($c);
     for (let i = 0; i < 100; i++) {
-      $el.atomMount(CounterComponent, { initialCount: i, label: `Remount-${i}` });
+      $element.atomMount(CounterComponent, { initialCount: i, label: `Remount-${i}` });
     }
   });
 
   run('atomUnmount (100 elements)', ($c) => {
     const elements = Array.from({ length: 100 }, (_, i) => {
-      const $el = $('<div></div>').appendTo($c);
-      $el.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
-      return $el;
+      const $element = $('<div></div>').appendTo($c);
+      $element.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
+      return $element;
     });
     for (let i = 0; i < 100; i++) {
       elements[i]?.atomUnmount();

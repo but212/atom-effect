@@ -47,18 +47,18 @@ let originals: OriginalMethods | null = null;
  * Removed Option utility to minimize overhead in event hot-paths.
  * @internal
  */
-const wrapHandler = (fn: EventHandler): EventHandler => {
-  if ((fn as InternalHandler)[INTERNAL_HANDLER]) return fn;
+const wrapHandler = (eventHandler: EventHandler): EventHandler => {
+  if ((eventHandler as InternalHandler)[INTERNAL_HANDLER]) return eventHandler;
 
-  const cached = handlerMap.get(fn);
+  const cached = handlerMap.get(eventHandler);
   if (cached) return cached;
 
   const wrapped = function (this: unknown, ...args: unknown[]) {
-    return batch(() => fn.apply(this, args as Parameters<EventHandler>));
+    return batch(() => eventHandler.apply(this, args as Parameters<EventHandler>));
   } as InternalHandler;
 
   wrapped[INTERNAL_HANDLER] = true;
-  handlerMap.set(fn, wrapped);
+  handlerMap.set(eventHandler, wrapped);
   return wrapped;
 };
 
@@ -66,8 +66,8 @@ const wrapHandler = (fn: EventHandler): EventHandler => {
  * Retrieves the original handler function from a wrapped version.
  * @internal
  */
-const unwrapHandler = (fn: EventHandler): EventHandler => {
-  return handlerMap.get(fn) ?? fn;
+const unwrapHandler = (eventHandler: EventHandler): EventHandler => {
+  return handlerMap.get(eventHandler) ?? eventHandler;
 };
 
 /**
@@ -77,16 +77,16 @@ const unwrapHandler = (fn: EventHandler): EventHandler => {
  */
 function processEventMap(
   map: Record<string, JQueryEventHandler | undefined>,
-  processor: (fn: EventHandler) => EventHandler
+  processor: (eventHandler: EventHandler) => EventHandler
 ): Record<string, JQueryEventHandler | undefined> {
-  const result: Record<string, JQueryEventHandler | undefined> = {};
+  const resultMap: Record<string, JQueryEventHandler | undefined> = {};
   for (const key in map) {
     if (Object.hasOwn(map, key)) {
-      const fn = map[key];
-      result[key] = typeof fn === 'function' ? processor(fn) : fn;
+      const eventHandler = map[key];
+      resultMap[key] = typeof eventHandler === 'function' ? processor(eventHandler) : eventHandler;
     }
   }
-  return result;
+  return resultMap;
 }
 
 /** @internal */
@@ -108,11 +108,11 @@ function patchArguments(
   mapProcessor: (
     map: Record<string, JQueryEventHandler | undefined>
   ) => Record<string, JQueryEventHandler | undefined>,
-  handlerProcessor: (fn: EventHandler) => EventHandler
+  handlerProcessor: (eventHandler: EventHandler) => EventHandler
 ) {
-  const first = args[0];
-  if (first && typeof first === 'object') {
-    args[0] = mapProcessor(first as Record<string, JQueryEventHandler | undefined>);
+  const firstArgument = args[0];
+  if (firstArgument && typeof firstArgument === 'object') {
+    args[0] = mapProcessor(firstArgument as Record<string, JQueryEventHandler | undefined>);
   } else {
     // Standard jQuery signature: .on( types [, selector ] [, data ], handler )
     // We scan for function arguments to wrap/unwrap them.
@@ -147,54 +147,54 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
     empty: $.fn.empty,
     detach: $.fn.detach,
   };
-  const prev = originals;
+  const originalMethods = originals;
 
   if (lifecycle) {
     $.fn.remove = function (this: JQuery, selector?: string) {
       const targets = selector ? this.filter(selector) : this;
-      for (const el of targets) {
-        if (el) {
-          registry.markIgnored(el);
-          registry.cleanupTree(el);
+      for (const element of targets) {
+        if (element) {
+          registry.markIgnored(element);
+          registry.cleanupTree(element);
         }
       }
-      return prev.remove.call(this, selector);
+      return originalMethods.remove.call(this, selector);
     };
 
     $.fn.empty = function (this: JQuery) {
-      for (const el of this) {
-        if (el?.hasChildNodes()) {
-          registry.cleanupDescendants(el);
+      for (const element of this) {
+        if (element?.hasChildNodes()) {
+          registry.cleanupDescendants(element);
         }
       }
-      return prev.empty.call(this);
+      return originalMethods.empty.call(this);
     };
 
     $.fn.detach = function (this: JQuery, selector?: string) {
       const targets = selector ? this.filter(selector) : this;
-      for (const el of targets) {
-        if (el) {
-          registry.keep(el);
+      for (const element of targets) {
+        if (element) {
+          registry.keep(element);
         }
       }
-      return prev.detach.call(this, selector);
+      return originalMethods.detach.call(this, selector);
     };
   }
 
   if (events) {
     $.fn.on = function (this: JQuery, ...args: unknown[]) {
       patchArguments(args, wrapEventMap, wrapHandler);
-      return prev.on.apply(this, args as Parameters<typeof $.fn.on>);
+      return originalMethods.on.apply(this, args as Parameters<typeof $.fn.on>);
     };
 
     $.fn.one = function (this: JQuery, ...args: unknown[]) {
       patchArguments(args, wrapEventMap, wrapHandler);
-      return prev.one.apply(this, args as Parameters<typeof $.fn.one>);
+      return originalMethods.one.apply(this, args as Parameters<typeof $.fn.one>);
     };
 
     $.fn.off = function (this: JQuery, ...args: unknown[]) {
       patchArguments(args, unwrapEventMap, unwrapHandler);
-      return prev.off.apply(this, args as Parameters<typeof $.fn.off>);
+      return originalMethods.off.apply(this, args as Parameters<typeof $.fn.off>);
     };
   }
 }

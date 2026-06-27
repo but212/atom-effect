@@ -67,16 +67,16 @@
     "@but212/atom-effect-configs": "workspace:*",
     "@but212/atom-effect-utils": "workspace:*",
     "rimraf": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:",
-    "typescript": "catalog:",
-    "cross-env": "catalog:",
-    "tinybench": "catalog:",
+    "vite": "catalog:build",
+    "vitest": "catalog:test",
+    "typescript": "catalog:build",
+    "cross-env": "catalog:build",
+    "tinybench": "catalog:test",
     "@types/node": "catalog:",
-    "@vitest/browser": "catalog:",
-    "@vitest/browser-playwright": "catalog:",
-    "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:",
-    "playwright": "catalog:"
+    "@vitest/browser": "catalog:test",
+    "@vitest/browser-playwright": "catalog:test",
+    "@vitest/coverage-v8": "catalog:test",
+    "@vitest/ui": "catalog:test",
+    "playwright": "catalog:test"
   }
 }

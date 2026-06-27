@@ -83,12 +83,12 @@ export class RootObserver {
       this.#observer = new MutationObserver((mutations) => {
         // 1. Process removed nodes
         if (this.#removalCallbacks.size > 0) {
-          for (const m of mutations) {
-            if (m.type === 'childList') {
-              for (const node of m.removedNodes) {
-                for (const cb of this.#removalCallbacks) {
+          for (const mutation of mutations) {
+            if (mutation.type === 'childList') {
+              for (const node of mutation.removedNodes) {
+                for (const callback of this.#removalCallbacks) {
                   try {
-                    cb(node);
+                    callback(node);
                   } catch (error) {
                     console.error('Error in onNodeRemoved callback:', error);
                   }
@@ -102,9 +102,9 @@ export class RootObserver {
         if (this.#additionCallbacks.size > 0) {
           // Collect all element nodes added in this batch
           const addedElements: Element[] = [];
-          for (const m of mutations) {
-            if (m.type === 'childList') {
-              for (const node of m.addedNodes) {
+          for (const mutation of mutations) {
+            if (mutation.type === 'childList') {
+              for (const node of mutation.addedNodes) {
                 if (node.nodeType === 1) {
                   // Node.ELEMENT_NODE
                   addedElements.push(node as Element);
@@ -117,12 +117,12 @@ export class RootObserver {
             for (const record of this.#additionCallbacks) {
               const matchedElements = new Set<Element>();
 
-              for (const el of addedElements) {
+              for (const element of addedElements) {
                 try {
-                  if (el.matches(record.selector)) {
-                    matchedElements.add(el);
+                  if (element.matches(record.selector)) {
+                    matchedElements.add(element);
                   }
-                  const children = el.querySelectorAll(record.selector);
+                  const children = element.querySelectorAll(record.selector);
                   for (let i = 0; i < children.length; i++) {
                     const child = children[i];
                     if (child) matchedElements.add(child);
@@ -132,9 +132,9 @@ export class RootObserver {
                 }
               }
 
-              for (const el of matchedElements) {
+              for (const element of matchedElements) {
                 try {
-                  record.callback(el);
+                  record.callback(element);
                 } catch (error) {
                   console.error('Error in onNodeAdded callback:', error);
                 }
@@ -145,12 +145,12 @@ export class RootObserver {
 
         // 3. Process attribute mutations
         if (this.#attributeCallbacks.size > 0) {
-          for (const m of mutations) {
-            if (m.type === 'attributes' && m.attributeName) {
+          for (const mutation of mutations) {
+            if (mutation.type === 'attributes' && mutation.attributeName) {
               for (const record of this.#attributeCallbacks) {
-                if (record.attributeName === m.attributeName) {
+                if (record.attributeName === mutation.attributeName) {
                   try {
-                    record.callback(m.target as Element);
+                    record.callback(mutation.target as Element);
                   } catch (error) {
                     console.error('Error in onAttributeChanged callback:', error);
                   }

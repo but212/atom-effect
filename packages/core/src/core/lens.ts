@@ -16,7 +16,12 @@
 
 import { Result, shallowEqual } from '@but212/atom-effect-utils';
 import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG, STATE_FLAGS } from '@/constants';
-import { BaseNode, nodeNotifySubscribers, nodeSubscribe, nodeSubscriberCount } from '@/core/base';
+import {
+  BaseNode,
+  nodeGetSubscriberCount,
+  nodeNotifySubscribers,
+  nodeSubscribe,
+} from '@/core/base';
 import { batch } from '@/index';
 import type {
   Equal,
@@ -139,37 +144,50 @@ const isForbiddenKey = (key: string) => FORBIDDEN_KEYS.has(key);
  */
 function cloneAndSet(container: object, key: string, value: unknown): object {
   if (Array.isArray(container)) {
-    const next = [...container];
-    Reflect.set(next, key, value);
-    return next;
+    const clonedArray = [...container];
+    Reflect.set(clonedArray, key, value);
+    return clonedArray;
   }
   if (container instanceof Map) {
     return new Map(container).set(key, value);
   }
-  const proto = Object.getPrototypeOf(container);
-  if (proto === Object.prototype || proto === null) {
+  const objectPrototype = Object.getPrototypeOf(container);
+  if (objectPrototype === Object.prototype || objectPrototype === null) {
     return { ...container, [key]: value };
   }
-  const next = Object.assign(Object.create(proto), container);
-  next[key] = value;
-  return next;
+  const clonedObject = Object.assign(Object.create(objectPrototype), container);
+  clonedObject[key] = value;
+  return clonedObject;
 }
 
 /**
  * Logic: Immutable Deep Update
  * @internal
  */
-// biome-ignore lint/suspicious/noExplicitAny: returns type-erased dynamic value
-export function setDeepValue(obj: unknown, keys: string[], index: number, value: unknown): any {
+export function setDeepValue(
+  targetObject: unknown,
+  keys: string[],
+  index: number,
+  value: unknown
+  // biome-ignore lint/suspicious/noExplicitAny: returns type-erased dynamic value
+): any {
   if (index === keys.length) return value;
   const key = keys[index];
-  if (key === undefined || obj == null || typeof obj !== 'object' || isForbiddenKey(key))
-    return obj;
+  if (
+    key === undefined ||
+    targetObject == null ||
+    typeof targetObject !== 'object' ||
+    isForbiddenKey(key)
+  )
+    return targetObject;
 
-  const oldVal = obj instanceof Map ? obj.get(key) : Reflect.get(obj, key);
-  const newVal = setDeepValue(oldVal, keys, index + 1, value);
+  const previousValue =
+    targetObject instanceof Map ? targetObject.get(key) : Reflect.get(targetObject, key);
+  const newValue = setDeepValue(previousValue, keys, index + 1, value);
 
-  return DEFAULT_EQUAL(oldVal, newVal) ? obj : cloneAndSet(obj, key, newVal);
+  return DEFAULT_EQUAL(previousValue, newValue)
+    ? targetObject
+    : cloneAndSet(targetObject, key, newValue);
 }
 
 /**
@@ -177,24 +195,22 @@ export function setDeepValue(obj: unknown, keys: string[], index: number, value:
  * @internal
  */
 // biome-ignore lint/suspicious/noExplicitAny: returns type-erased dynamic path value
-export function getPathValue(source: unknown, parts: string[]): any {
-  let res = source;
+export function getPathValue(sourceObject: unknown, parts: string[]): any {
+  let resolvedValue = sourceObject;
   for (const part of parts) {
-    if (res == null || isForbiddenKey(part)) return undefined;
-    res =
-      res instanceof Map
-        ? res.get(part)
+    if (resolvedValue == null || isForbiddenKey(part)) return undefined;
+    resolvedValue =
+      resolvedValue instanceof Map
+        ? resolvedValue.get(part)
         : Reflect.get(
-            typeof res === 'object' || typeof res === 'function' ? res : Object(res),
+            typeof resolvedValue === 'object' || typeof resolvedValue === 'function'
+              ? resolvedValue
+              : Object(resolvedValue),
             part
           );
   }
-  return res;
+  return resolvedValue;
 }
-
-// ============================================================================
-// Core Engine
-// ============================================================================
 
 /**
  * Role: Orchestrator for a Single-Property Reactive Lens.
@@ -229,8 +245,8 @@ class LensImpl<T extends object, P extends string>
   #root: WritableAtom<T>;
   #path: P;
   #parts: string[];
-  #sharedUnsub: (() => void) | null = null;
-  #prevValue: PathValue<T, P> | undefined;
+  #sharedUnsubscribeCallback: (() => void) | null = null;
+  #previousValue: PathValue<T, P> | undefined;
 
   constructor(root: WritableAtom<T>, path: P) {
     super();
@@ -244,10 +260,10 @@ class LensImpl<T extends object, P extends string>
     return this.#getValue(this.#root.value);
   }
 
-  set value(newVal: PathValue<T, P>) {
-    const cur = this.#root.peek();
-    const next = setDeepValue(cur, this.#parts, 0, newVal);
-    if (next !== cur) this.#root.value = next;
+  set value(newValue: PathValue<T, P>) {
+    const currentValue = this.#root.peek();
+    const updatedValue = setDeepValue(currentValue, this.#parts, 0, newValue);
+    if (updatedValue !== currentValue) this.#root.value = updatedValue;
   }
 
   peek(): PathValue<T, P> {
@@ -255,33 +271,33 @@ class LensImpl<T extends object, P extends string>
   }
 
   subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
-    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
+    const innerUnsubscribeCallback = Result.unwrap(nodeSubscribe(this, listener));
     if (this.isDisposed) {
-      return innerUnsub;
+      return innerUnsubscribeCallback;
     }
-    if (nodeSubscriberCount(this) === 1) {
-      this.#prevValue = this.peek();
-      this.#sharedUnsub = this.#root.subscribe(() => this.#notify());
+    if (nodeGetSubscriberCount(this) === 1) {
+      this.#previousValue = this.peek();
+      this.#sharedUnsubscribeCallback = this.#root.subscribe(() => this.#notify());
     }
     return () => {
-      innerUnsub();
-      if (nodeSubscriberCount(this) === 0 && this.#sharedUnsub) {
-        const unsub = this.#sharedUnsub;
-        this.#sharedUnsub = null;
-        unsub();
+      innerUnsubscribeCallback();
+      if (nodeGetSubscriberCount(this) === 0 && this.#sharedUnsubscribeCallback) {
+        const unsubscribeCallback = this.#sharedUnsubscribeCallback;
+        this.#sharedUnsubscribeCallback = null;
+        unsubscribeCallback();
       }
     };
   }
 
   subscriberCount(): number {
-    return nodeSubscriberCount(this);
+    return nodeGetSubscriberCount(this);
   }
 
   dispose(): void {
     this.flags |= STATE_FLAGS.DISPOSED;
-    this.#sharedUnsub?.();
-    this.#sharedUnsub = null;
-    this._slots?.clear();
+    this.#sharedUnsubscribeCallback?.();
+    this.#sharedUnsubscribeCallback = null;
+    this._subscriberSlots?.clear();
   }
 
   #getValue(source: T): PathValue<T, P> {
@@ -289,11 +305,11 @@ class LensImpl<T extends object, P extends string>
   }
 
   #notify(): void {
-    const nv = this.peek();
-    if (!DEFAULT_EQUAL(nv, this.#prevValue)) {
-      const ov = this.#prevValue;
-      this.#prevValue = nv;
-      nodeNotifySubscribers(this, nv, ov);
+    const nextValue = this.peek();
+    if (!DEFAULT_EQUAL(nextValue, this.#previousValue)) {
+      const oldValue = this.#previousValue;
+      this.#previousValue = nextValue;
+      nodeNotifySubscribers(this, nextValue, oldValue);
     }
   }
 
@@ -374,8 +390,8 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   implements WritableAtom<MergedDependencyValue<L>>, ReactiveNode<MergedDependencyValue<L>>
 {
   #lenses: L;
-  #unsubs: (() => void)[] = [];
-  #prevValue: MergedDependencyValue<L> | undefined;
+  #unsubscribeCallbacks: (() => void)[] = [];
+  #previousValue: MergedDependencyValue<L> | undefined;
 
   constructor(lenses: L) {
     super();
@@ -387,9 +403,9 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     return mergeAtomValues(this.#lenses);
   }
 
-  set value(newVal: MergedDependencyValue<L>) {
+  set value(newValue: MergedDependencyValue<L>) {
     batch(() => {
-      for (const lens of this.#lenses) lens.value = newVal;
+      for (const lens of this.#lenses) lens.value = newValue;
     });
   }
 
@@ -402,40 +418,40 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     if (this.isDisposed) {
       return innerUnsub;
     }
-    if (nodeSubscriberCount(this) === 1) {
-      this.#prevValue = this.peek();
-      const notify = () => this.#notify();
+    if (nodeGetSubscriberCount(this) === 1) {
+      this.#previousValue = this.peek();
+      const notifyCallback = () => this.#notify();
       for (const lens of this.#lenses) {
-        this.#unsubs.push(lens.subscribe(notify));
+        this.#unsubscribeCallbacks.push(lens.subscribe(notifyCallback));
       }
     }
     return () => {
       innerUnsub();
-      if (nodeSubscriberCount(this) === 0) {
-        const unsubs = this.#unsubs;
-        this.#unsubs = [];
-        for (const unsub of unsubs) unsub();
+      if (nodeGetSubscriberCount(this) === 0) {
+        const unsubscribeCallbacks = this.#unsubscribeCallbacks;
+        this.#unsubscribeCallbacks = [];
+        for (const unsubscribeCallback of unsubscribeCallbacks) unsubscribeCallback();
       }
     };
   }
 
   subscriberCount(): number {
-    return nodeSubscriberCount(this);
+    return nodeGetSubscriberCount(this);
   }
 
   dispose(): void {
     this.flags |= STATE_FLAGS.DISPOSED;
-    for (const unsub of this.#unsubs) unsub();
-    this.#unsubs.length = 0;
-    this._slots?.clear();
+    for (const unsubscribeCallback of this.#unsubscribeCallbacks) unsubscribeCallback();
+    this.#unsubscribeCallbacks.length = 0;
+    this._subscriberSlots?.clear();
   }
 
   #notify(): void {
-    const nv = this.peek();
-    if (!shallowEqual(nv, this.#prevValue)) {
-      const ov = this.#prevValue;
-      this.#prevValue = nv;
-      nodeNotifySubscribers(this, nv, ov);
+    const nextValue = this.peek();
+    if (!shallowEqual(nextValue, this.#previousValue)) {
+      const oldValue = this.#previousValue;
+      this.#previousValue = nextValue;
+      nodeNotifySubscribers(this, nextValue, oldValue);
     }
   }
 

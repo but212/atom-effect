@@ -25,13 +25,13 @@ function setupReentrantSubscription<T, U>(source: WritableAtom<T>, subscribeTo: 
   let reentered = false;
 
   source.subscribe = (listener) => {
-    const unsub = originalSubscribe(listener);
+    const unsubscribeCallback = originalSubscribe(listener);
     return () => {
       if (!reentered) {
         reentered = true;
         nestedUnsub = subscribeTo.subscribe(() => {});
       }
-      unsub();
+      unsubscribeCallback();
     };
   };
 
@@ -261,8 +261,8 @@ describe('Lens System', () => {
     });
 
     it('should handle NaN correctly in noise filtering', async () => {
-      const store = atom({ val: NaN });
-      const lens = atomLens(store, 'val');
+      const store = atom({ value: NaN });
+      const lens = atomLens(store, 'value');
 
       let callCount = 0;
       lens.subscribe(() => {
@@ -278,12 +278,12 @@ describe('Lens System', () => {
       const store = atom({ x: 1, y: 2 });
       const lens = atomLens(store, 'x');
       const spy = vi.fn();
-      const unsub = lens.subscribe(spy);
+      const unsubscribeCallback = lens.subscribe(spy);
 
       expect(lens.subscriberCount()).toBe(1);
-      unsub();
+      unsubscribeCallback();
       expect(lens.subscriberCount()).toBe(0);
-      expect(() => unsub()).not.toThrow();
+      expect(() => unsubscribeCallback()).not.toThrow();
 
       const l1 = atomLens(store, 'x');
       const l2 = atomLens(store, 'y');
@@ -352,28 +352,28 @@ describe('Lens System', () => {
       expect(store.value.user.greet()).toBe('Hi Bob');
     });
 
-    it('should not throw or leak memory due to redundant _slots declarations on subclass', () => {
+    it('should not throw or leak memory due to redundant _subscriberSlots declarations on subclass', () => {
       const store = atom({ x: 1, y: 2 });
       const myLens = atomLens(store, 'x');
 
-      const unsub = myLens.subscribe(() => {});
+      const unsubscribeCallback = myLens.subscribe(() => {});
       expect(myLens.subscriberCount()).toBe(1);
 
       myLens.value = 2;
 
-      unsub();
+      unsubscribeCallback();
       expect(myLens.subscriberCount()).toBe(0);
 
       const l1 = atomLens(store, 'x');
       const l2 = atomLens(store, 'y');
       const merged = mergeLenses(l1, l2);
 
-      const mergedUnsub = merged.subscribe(() => {});
+      const mergedunsubscribeCallback = merged.subscribe(() => {});
       expect(merged.subscriberCount()).toBe(1);
 
       Reflect.set(merged, 'value', { x: 3, y: 4 });
 
-      mergedUnsub();
+      mergedunsubscribeCallback();
       expect(merged.subscriberCount()).toBe(0);
     });
   });
@@ -400,11 +400,11 @@ describe('Lens System', () => {
 
       lens.dispose();
 
-      const unsub = lens.subscribe(() => {});
+      const unsubscribeCallback = lens.subscribe(() => {});
       expect(store.subscriberCount()).toBe(0);
       expect(lens.subscriberCount()).toBe(0);
 
-      expect(() => unsub()).not.toThrow();
+      expect(() => unsubscribeCallback()).not.toThrow();
     });
 
     it('should immediately return no-op unsubscribe when subscribing to a disposed MergedLensImpl', () => {
@@ -415,12 +415,12 @@ describe('Lens System', () => {
 
       merged.dispose();
 
-      const unsub = merged.subscribe(() => {});
+      const unsubscribeCallback = merged.subscribe(() => {});
       expect(l1.subscriberCount()).toBe(0);
       expect(l2.subscriberCount()).toBe(0);
       expect(merged.subscriberCount()).toBe(0);
 
-      expect(() => unsub()).not.toThrow();
+      expect(() => unsubscribeCallback()).not.toThrow();
     });
   });
 

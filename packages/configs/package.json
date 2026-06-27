@@ -24,16 +24,15 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "tsup": "^8.5.1",
     "unplugin-dts": "^1.0.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
   },
   "devDependencies": {
     "rimraf": "catalog:",
-    "tsup": "catalog:",
-    "unplugin-dts": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "tsup": "catalog:build",
+    "unplugin-dts": "catalog:build",
+    "vite": "catalog:build",
+    "vitest": "catalog:test"
   }
 }

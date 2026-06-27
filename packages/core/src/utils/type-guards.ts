@@ -23,9 +23,9 @@ import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/t
  *
  * @internal
  */
-function isBranded<T>(obj: unknown, flag: number): obj is T {
-  if (obj && (typeof obj === 'object' || typeof obj === 'function')) {
-    const brand = BRAND in obj ? Reflect.get(obj, BRAND) : undefined;
+function isBranded<T>(targetValue: unknown, flag: number): targetValue is T {
+  if (targetValue && (typeof targetValue === 'object' || typeof targetValue === 'function')) {
+    const brand = BRAND in targetValue ? Reflect.get(targetValue, BRAND) : undefined;
     return typeof brand === 'number' && (brand & flag) !== 0;
   }
   return false;
@@ -47,8 +47,8 @@ function isBranded<T>(obj: unknown, flag: number): obj is T {
  * }
  * ```
  */
-export function isAtom(obj: unknown): obj is ReadonlyAtom {
-  return isBranded(obj, BrandFlags.Atom);
+export function isAtom(targetValue: unknown): targetValue is ReadonlyAtom {
+  return isBranded(targetValue, BrandFlags.Atom);
 }
 
 /**
@@ -66,8 +66,8 @@ export function isAtom(obj: unknown): obj is ReadonlyAtom {
  * }
  * ```
  */
-export function isWritable(obj: unknown): obj is WritableAtom {
-  return isBranded(obj, BrandFlags.Writable);
+export function isWritable(targetValue: unknown): targetValue is WritableAtom {
+  return isBranded(targetValue, BrandFlags.Writable);
 }
 
 /**
@@ -85,8 +85,8 @@ export function isWritable(obj: unknown): obj is WritableAtom {
  * }
  * ```
  */
-export function isComputed(obj: unknown): obj is ComputedAtom {
-  return isBranded(obj, BrandFlags.Computed);
+export function isComputed(targetValue: unknown): targetValue is ComputedAtom {
+  return isBranded(targetValue, BrandFlags.Computed);
 }
 
 /**
@@ -104,17 +104,19 @@ export function isComputed(obj: unknown): obj is ComputedAtom {
  * }
  * ```
  */
-export function isEffect(obj: unknown): obj is EffectObject {
-  return isBranded(obj, BrandFlags.Effect);
+export function isEffect(targetValue: unknown): targetValue is EffectObject {
+  return isBranded(targetValue, BrandFlags.Effect);
 }
 
 /**
  * Determines whether a value is a standard Error object, including cross-realm instances.
  */
-export function isError(e: unknown): e is Error {
+export function isError(error: unknown): error is Error {
   return (
-    e instanceof Error ||
-    (typeof e === 'object' && e !== null && Object.prototype.toString.call(e) === '[object Error]')
+    error instanceof Error ||
+    (typeof error === 'object' &&
+      error !== null &&
+      Object.prototype.toString.call(error) === '[object Error]')
   );
 }
 

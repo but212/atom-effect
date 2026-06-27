@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getOrCreateRootObserver, RootObserver, rootObserversMap } from '@/core/observer';
+import { setupDOMCleanup } from '../utils/test-helpers';
 
 describe('RootObserver Engine', () => {
+  const { appendToBody } = setupDOMCleanup();
   let root: HTMLElement;
 
   beforeEach(() => {
     document.body.innerHTML = '';
     root = document.createElement('div');
-    document.body.appendChild(root);
+    appendToBody(root);
   });
 
   describe('Initialization & Retrieval', () => {
@@ -30,8 +32,8 @@ describe('RootObserver Engine', () => {
       const observer = getOrCreateRootObserver(root);
       const addedNodes: Element[] = [];
 
-      const unsub = observer.onNodeAdded('[data-test="active"]', (el) => {
-        addedNodes.push(el);
+      const unsubscribeCallback = observer.onNodeAdded('[data-test="active"]', (element) => {
+        addedNodes.push(element);
       });
 
       // 1. Adding non-matching element
@@ -58,7 +60,7 @@ describe('RootObserver Engine', () => {
       expect(addedNodes).toContain(span3);
       expect(addedNodes).not.toContain(span1);
 
-      unsub();
+      unsubscribeCallback();
     });
 
     it('should trigger onNodeRemoved when elements are detached', async () => {
@@ -68,7 +70,7 @@ describe('RootObserver Engine', () => {
       const child = document.createElement('div');
       root.appendChild(child);
 
-      const unsub = observer.onNodeRemoved((node) => {
+      const unsubscribeCallback = observer.onNodeRemoved((node) => {
         removedNodes.push(node);
       });
 
@@ -79,7 +81,7 @@ describe('RootObserver Engine', () => {
       });
 
       expect(removedNodes).toContain(child);
-      unsub();
+      unsubscribeCallback();
     });
   });
 
@@ -176,7 +178,7 @@ describe('RootObserver Engine', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const observer = getOrCreateRootObserver(root);
 
-      const unsub = observer.onNodeAdded('.child-node', () => {
+      const unsubscribeCallback = observer.onNodeAdded('.child-node', () => {
         throw new Error('child callback crash');
       });
 
@@ -195,14 +197,14 @@ describe('RootObserver Engine', () => {
         expect.any(Error)
       );
 
-      unsub();
+      unsubscribeCallback();
       consoleSpy.mockRestore();
     });
 
     it('should isolate error when querySelector or matches throws on invalid selector', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const observer = getOrCreateRootObserver(root);
-      const unsub = observer.onNodeAdded('::invalid', () => {});
+      const unsubscribeCallback = observer.onNodeAdded('::invalid', () => {});
 
       const child = document.createElement('div');
       root.appendChild(child);
@@ -216,7 +218,7 @@ describe('RootObserver Engine', () => {
         expect.any(Error)
       );
 
-      unsub();
+      unsubscribeCallback();
       consoleSpy.mockRestore();
     });
   });

@@ -34,7 +34,7 @@ export type EffectResult = undefined | EffectCleanup | ComponentLifecycle;
  * Used to optimize reactivity by preventing updates when values are
  * logically equivalent, even if object references have changed.
  */
-export type EqualFn<T> = (a: T, b: T) => boolean;
+export type EqualFn<T> = (first: T, second: T) => boolean;
 
 /**
  * Configuration options for creating reactive atoms.
@@ -157,7 +157,7 @@ export interface BindingOptions<T = unknown, TText = unknown> {
         options?: FormOptions<T extends object ? T : unknown> | null | undefined,
       ];
   /** Registers event listeners with automatic lifecycle management. */
-  on?: Record<string, (e: JQuery.Event) => void>;
+  on?: Record<string, (event: JQuery.Event) => void>;
 }
 
 /** A writable atom that includes an explicit disposal mechanism. @internal */
@@ -189,7 +189,7 @@ export type ListKeyFn<T> = (item: T, index: number) => ListKey;
  * $('#list').list(items, {
  *   key: 'id',
  *   render: (item) => `<li>${item.text}</li>`,
- *   onAdd: ($el) => $el.fadeIn()
+ *   onAdd: ($element) => $element.fadeIn()
  * });
  */
 export interface ListOptions<T> {
@@ -198,19 +198,19 @@ export interface ListOptions<T> {
   /** Function to generate the DOM representation for an item. */
   render: (item: T, index: number) => ListRenderResult;
   /** Optional callback to apply bindings to the rendered element. */
-  bind?: ($el: JQuery, item: T, index: number) => void;
+  bind?: ($element: JQuery, item: T, index: number) => void;
   /** Optional callback triggered when an item's data is updated. */
-  update?: ($el: JQuery, item: T, index: number) => void;
+  update?: ($element: JQuery, item: T, index: number) => void;
   /** Callback triggered when a new element is added to the list. */
-  onAdd?: ($el: JQuery) => void;
+  onAdd?: ($element: JQuery) => void;
   /** Callback triggered when an element is removed (can be used for transitions). */
-  onRemove?: ($el: JQuery) => Promise<void> | void;
+  onRemove?: ($element: JQuery) => Promise<void> | void;
   /** Content to display when the list is empty. */
   empty?: ListRenderResult;
   /** Event handlers bound to individual list items. */
   events?: Record<string, (item: T, index: number, e: JQuery.TriggeredEvent) => void>;
   /** Optional function for custom item equality checks. */
-  isEqual?: (a: T, b: T) => boolean;
+  isEqual?: (first: T, second: T) => boolean;
 }
 
 /** Options for customizing two-way value bindings. */
@@ -220,7 +220,7 @@ export interface ValOptions<T> {
   /** The DOM event used to trigger synchronization (e.g., 'change'). */
   event?: string;
   /** Function to parse the DOM string value into the atom's type. */
-  parse?: (v: string) => T;
+  parse?: (rawValue: string) => T;
   /** Function to format the atom's value for DOM display. */
   format?: (v: T) => string;
   /** Function for custom value equality checks. */
@@ -234,7 +234,7 @@ export interface FormOptions<T> extends ValOptions<T> {
   /** Callback triggered whenever any field in the form changes. */
   onChange?: (path: string, value: unknown) => void;
   /** Reactive validation schema mapping paths to validators. */
-  validation?: Record<string, (val: unknown) => string | boolean>;
+  validation?: Record<string, (fieldValue: unknown) => string | boolean>;
 }
 
 /**
@@ -258,11 +258,11 @@ export interface FetchOptions<T> {
   /** Custom HTTP headers to include in the request. */
   headers?: Record<string, string>;
   /** Function to transform the raw response before it is stored in the atom. */
-  transform?: (raw: unknown, xhr: JQuery.jqXHR) => T | Promise<T>;
+  transform?: (raw: unknown, jqXHR: JQuery.jqXHR) => T | Promise<T>;
   /** Direct overrides for the underlying jQuery AJAX settings. */
   ajaxOptions?: JQuery.AjaxSettings | (() => JQuery.AjaxSettings);
   /** Callback triggered when the request fails. */
-  onError?: (err: unknown) => void;
+  onError?: (error: unknown) => void;
   /** Whether to trigger the initial request immediately upon creation. */
   eager?: boolean;
 }
@@ -274,7 +274,7 @@ export interface FetchError extends Error {
 }
 
 /** Definition for a mountable component that manages its own reactive lifecycle. */
-export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) => EffectResult;
+export type ComponentFn<P = Record<string, unknown>> = ($element: JQuery, props: P) => EffectResult;
 
 /** Lifecycle hooks for navigating between application routes. */
 export interface RouteLifecycle {
@@ -389,7 +389,7 @@ export interface AtomNavOptions {
   /** Callback triggered before content is replaced. */
   onUnmount?: ($container: JQuery, oldUrl: string) => void;
   /** Callback for handling navigation errors. */
-  onError?: (err: unknown, url: string) => boolean | undefined;
+  onError?: (error: unknown, url: string) => boolean | undefined;
   /** Whether to reset scroll position to the top after navigation. */
   scrollToTop?: boolean;
   /** Whether to synchronize the document title with the loaded page. */
@@ -502,7 +502,7 @@ export interface AtomComponentController {
   readonly internals?: ElementInternals | undefined;
 
   /** Registers a reactive provider on this element for dependency injection. */
-  provideAtom<T = unknown>(key: string | symbol, val: T): void;
+  provideAtom<T = unknown>(key: string | symbol, value: T): void;
   /** Injects a reactive value provided by an ancestor element. */
   injectAtom<T = unknown>(key: string | symbol): WritableAtom<T | null> | null;
 
@@ -544,16 +544,19 @@ export interface AtomComponentController {
            * Reactive value for Form-Associated Custom Elements (FACE).
            * Automatically synchronized with the native <form> via internals.setFormValue().
            */
+          val?:
+            | ReadonlyAtom<unknown>
+            | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
           value?:
             | ReadonlyAtom<unknown>
-            | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+            | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
           /**
            * Reactive validation logic for Form-Associated Custom Elements (FACE).
            * Can be a validation message string, a ValidityStateFlags object, or an atom/function returning either.
            */
           validation?:
             | ReadonlyAtom<ValidityStateFlags | string>
-            | ((val: unknown) => ValidityStateFlags | string);
+            | ((value: unknown) => ValidityStateFlags | string);
         }
   ): void;
 
@@ -587,10 +590,13 @@ export interface AtomComponentStatic {
   aejAria?: Record<string, ReadonlyAtom<unknown>>;
   aejParts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean> | null>>;
   aejDispatch?: Record<string, ReactiveValue<unknown>>;
-  aejValue?: ReadonlyAtom<unknown> | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+  aejVal?: ReadonlyAtom<unknown> | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+  aejValue?:
+    | ReadonlyAtom<unknown>
+    | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
   aejValidation?:
     | ReadonlyAtom<ValidityStateFlags | string>
-    | ((val: unknown) => ValidityStateFlags | string);
+    | ((value: unknown) => ValidityStateFlags | string);
 }
 
 export type { EffectCleanup, ReadonlyAtom, WritableAtom };

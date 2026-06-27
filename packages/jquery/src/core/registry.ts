@@ -134,11 +134,11 @@ class BindingRegistry {
    * Registers a ShadowRoot to a host element for AEJ lifecycle tracking.
    *
    * @param host - The host element.
-   * @param sr - The ShadowRoot (can be 'open' or 'closed').
+   * @param shadowRoot - The ShadowRoot (can be 'open' or 'closed').
    * @internal
    */
-  registerShadow(host: Element, sr: ShadowRoot): void {
-    this.#getState(host).shadowRoot = sr;
+  registerShadow(host: Element, shadowRoot: ShadowRoot): void {
+    this.#getState(host).shadowRoot = shadowRoot;
   }
 
   /**
@@ -331,9 +331,9 @@ class BindingRegistry {
   cleanupDescendants(root: Element | DocumentFragment | ShadowRoot): void {
     // Fast-path: Exit early if no bound elements or shadow hosts exist in the subtree.
     if (root.nodeType === 1) {
-      const el = root as Element;
-      const hasBound = el.getElementsByClassName(MARK_BOUND).length > 0;
-      const hasShadow = el.getElementsByClassName(MARK_SHADOW).length > 0;
+      const element = root as Element;
+      const hasBound = element.getElementsByClassName(MARK_BOUND).length > 0;
+      const hasShadow = element.getElementsByClassName(MARK_SHADOW).length > 0;
       if (!hasBound && !hasShadow) {
         return;
       }
@@ -343,9 +343,9 @@ class BindingRegistry {
 
     const nodes = root.querySelectorAll(`.${MARK_BOUND}`);
 
-    for (const node of nodes) {
-      if (node) {
-        this.cleanup(node);
+    for (const hostElement of nodes) {
+      if (hostElement) {
+        this.cleanup(hostElement);
       }
     }
 
@@ -353,11 +353,11 @@ class BindingRegistry {
     // Instead of a full-tree walk, we jump directly to hosts known to possess
     // managed ShadowRoots to perform recursive cleanup.
     const shadowHosts = root.querySelectorAll(`.${MARK_SHADOW}`);
-    for (const node of shadowHosts) {
-      const el = node as Element;
-      const sr = this.getShadow(el);
-      if (sr) {
-        this.cleanupTree(sr);
+    for (const hostElement of shadowHosts) {
+      const element = hostElement as Element;
+      const shadowRoot = this.getShadow(element);
+      if (shadowRoot) {
+        this.cleanupTree(shadowRoot);
       }
     }
   }
@@ -374,9 +374,9 @@ class BindingRegistry {
       // Constraint: Shadow DOM trees must be cleaned recursively as they are
       // isolated from standard query selectors.
       if (node.nodeType === 1) {
-        const sr = this.getShadow(node as Element);
-        if (sr) {
-          this.cleanupTree(sr);
+        const shadowRoot = this.getShadow(node as Element);
+        if (shadowRoot) {
+          this.cleanupTree(shadowRoot);
         }
       }
     }
@@ -399,7 +399,7 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
   if (cleanupUnsubsMap.has(root)) return;
 
   const observer = getOrCreateRootObserver(root);
-  const unsub = observer.onNodeRemoved((node) => {
+  const unsubscribeCallback = observer.onNodeRemoved((node) => {
     // Condition: Clean up only elements that are genuinely disconnected
     // from the document and are not marked for preservation.
     if (node.nodeType !== 1 || (node as Element).isConnected) {
@@ -414,7 +414,7 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
     registry.cleanupTree(element);
   });
 
-  cleanupUnsubsMap.set(root, unsub);
+  cleanupUnsubsMap.set(root, unsubscribeCallback);
 }
 
 /**
@@ -422,8 +422,8 @@ export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment)
  * @internal
  */
 export function disableAutoCleanup(): void {
-  for (const unsub of cleanupUnsubsMap.values()) {
-    unsub();
+  for (const unsubscribeCallback of cleanupUnsubsMap.values()) {
+    unsubscribeCallback();
   }
   cleanupUnsubsMap.clear();
   registry.setAutoCleanupScheduled(false);
@@ -435,9 +435,9 @@ export function disableAutoCleanup(): void {
  * prevent memory leaks when components are permanently removed.
  */
 export function disableAutoCleanupFor(root: Node): void {
-  const unsub = cleanupUnsubsMap.get(root);
-  if (unsub) {
-    unsub();
+  const unsubscribeCallback = cleanupUnsubsMap.get(root);
+  if (unsubscribeCallback) {
+    unsubscribeCallback();
     cleanupUnsubsMap.delete(root);
   }
 }
