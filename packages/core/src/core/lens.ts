@@ -16,7 +16,12 @@
 
 import { Result, shallowEqual } from '@but212/atom-effect-utils';
 import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG, STATE_FLAGS } from '@/constants';
-import { BaseNode, nodeNotifySubscribers, nodeSubscribe, nodeSubscriberCount } from '@/core/base';
+import {
+  BaseNode,
+  nodeGetSubscriberCount,
+  nodeNotifySubscribers,
+  nodeSubscribe,
+} from '@/core/base';
 import { batch } from '@/index';
 import type {
   Equal,
@@ -270,13 +275,13 @@ class LensImpl<T extends object, P extends string>
     if (this.isDisposed) {
       return innerUnsubscribeCallback;
     }
-    if (nodeSubscriberCount(this) === 1) {
+    if (nodeGetSubscriberCount(this) === 1) {
       this.#previousValue = this.peek();
       this.#sharedUnsubscribeCallback = this.#root.subscribe(() => this.#notify());
     }
     return () => {
       innerUnsubscribeCallback();
-      if (nodeSubscriberCount(this) === 0 && this.#sharedUnsubscribeCallback) {
+      if (nodeGetSubscriberCount(this) === 0 && this.#sharedUnsubscribeCallback) {
         const unsubscribeCallback = this.#sharedUnsubscribeCallback;
         this.#sharedUnsubscribeCallback = null;
         unsubscribeCallback();
@@ -285,7 +290,7 @@ class LensImpl<T extends object, P extends string>
   }
 
   subscriberCount(): number {
-    return nodeSubscriberCount(this);
+    return nodeGetSubscriberCount(this);
   }
 
   dispose(): void {
@@ -413,7 +418,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     if (this.isDisposed) {
       return innerUnsub;
     }
-    if (nodeSubscriberCount(this) === 1) {
+    if (nodeGetSubscriberCount(this) === 1) {
       this.#previousValue = this.peek();
       const notifyCallback = () => this.#notify();
       for (const lens of this.#lenses) {
@@ -422,7 +427,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     }
     return () => {
       innerUnsub();
-      if (nodeSubscriberCount(this) === 0) {
+      if (nodeGetSubscriberCount(this) === 0) {
         const unsubscribeCallbacks = this.#unsubscribeCallbacks;
         this.#unsubscribeCallbacks = [];
         for (const unsubscribeCallback of unsubscribeCallbacks) unsubscribeCallback();
@@ -431,7 +436,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   subscriberCount(): number {
-    return nodeSubscriberCount(this);
+    return nodeGetSubscriberCount(this);
   }
 
   dispose(): void {

@@ -316,7 +316,7 @@ export interface SchedulerState {
   state: (typeof SCHEDULER_STATE)[keyof typeof SCHEDULER_STATE];
   batchDepth: number;
   maxFlushIterations: number;
-  sessionActive: boolean;
+  isSessionActive: boolean;
   sessionEpoch: number;
   sessionExecutionCount: number;
   queueSize: number;
@@ -360,10 +360,10 @@ export interface NodeMetadata {
  * @internal
  */
 export interface DebugConfig {
-  enabled: boolean;
-  warnInfiniteLoop: boolean;
-  trackGraph: boolean;
-  warn(condition: boolean, message: string): void;
+  isEnabled: boolean;
+  shouldWarnInfiniteLoop: boolean;
+  shouldTrackGraph: boolean;
+  isWarningCondition(condition: boolean, message: string): void;
   attachDebugInfo(obj: IdentifiableNode, type: string, id: DependencyId, customName?: string): void;
   getDebugName(obj: object | null | undefined): string | undefined;
   getDebugType(obj: object | null | undefined): string | undefined;

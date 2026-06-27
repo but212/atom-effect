@@ -421,12 +421,12 @@ describe('Dynamic Dependency Patterns', () => {
 });
 
 describe('Large Grid with Lenses (50x50)', () => {
-  type Cell = { v: number; color: string };
+  type Cell = { value: number; color: string };
   const ROWS = 50;
   const COLS = 50;
 
   const initialGrid: Cell[][] = Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => ({ v: 0, color: 'white' }))
+    Array.from({ length: COLS }, () => ({ value: 0, color: 'white' }))
   );
   const gridAtom = atom(initialGrid);
   const cellLenses = initialGrid.map((row, r) =>
@@ -436,7 +436,7 @@ describe('Large Grid with Lenses (50x50)', () => {
   const randomUpdates = Array.from({ length: 10 }, () => ({
     r: Math.floor(Math.random() * ROWS),
     c: Math.floor(Math.random() * COLS),
-    v: Math.random(),
+    value: Math.random(),
   }));
 
   bench(
@@ -445,7 +445,7 @@ describe('Large Grid with Lenses (50x50)', () => {
       for (const update of randomUpdates) {
         const cell = cellLenses[update.r]?.[update.c];
         if (cell) {
-          cell.value = { v: Math.random(), color: 'blue' };
+          cell.value = { value: Math.random(), color: 'blue' };
         }
       }
     },
@@ -457,7 +457,7 @@ describe('Large Grid with Lenses (50x50)', () => {
     () => {
       gridAtom.value = gridAtom
         .peek()
-        .map((row: Cell[]) => row.map((cell: Cell) => ({ v: cell.v + 1, color: 'red' })));
+        .map((row: Cell[]) => row.map((cell: Cell) => ({ value: cell.value + 1, color: 'red' })));
     },
     macroBenchOptions
   );

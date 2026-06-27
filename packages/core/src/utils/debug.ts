@@ -61,9 +61,9 @@ class DevDebugEngine implements DebugConfig {
    */
   #finalizer = new FinalizationRegistry((id: DependencyId) => this.#pruneNode(id));
 
-  enabled = true;
-  warnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
-  trackGraph = false;
+  isEnabled = true;
+  shouldWarnInfiniteLoop = DEBUG_CONFIG.WARN_INFINITE_LOOP;
+  shouldTrackGraph = false;
 
   /**
    * Logic: Structural Identity Resolution
@@ -103,14 +103,14 @@ class DevDebugEngine implements DebugConfig {
     this.#isFailureCleanupScheduled = false;
   };
 
-  warn(isWarningCondition: boolean, warningMessage: string): void {
-    if (this.enabled && isWarningCondition) {
+  isWarningCondition(isWarningCondition: boolean, warningMessage: string): void {
+    if (this.isEnabled && isWarningCondition) {
       console.warn(`${DEBUG_PREFIX} ${warningMessage}`);
     }
   }
 
   registerNode(node: IdentifiableNode): void {
-    if (!this.enabled || node === null || typeof node !== 'object' || node.id === undefined) {
+    if (!this.isEnabled || node === null || typeof node !== 'object' || node.id === undefined) {
       return;
     }
     const id = node.id;
@@ -126,9 +126,9 @@ class DevDebugEngine implements DebugConfig {
     id: DependencyId,
     customName?: string
   ): void {
-    if (!this.enabled) return;
+    if (!this.isEnabled) return;
     const hasEntry = this.#registry.has(id);
-    if (!hasEntry && customName === undefined && !this.trackGraph) return;
+    if (!hasEntry && customName === undefined && !this.shouldTrackGraph) return;
     if (targetObject === null || typeof targetObject !== 'object' || id === undefined) return;
 
     let nodeMetadata = this.#registry.get(id);
@@ -162,7 +162,7 @@ class DevDebugEngine implements DebugConfig {
    * single reactive flush cycle, avoiding false positives across user interactions.
    */
   trackUpdate(id: DependencyId, name?: string): void {
-    if (!this.enabled || !this.warnInfiniteLoop) return;
+    if (!this.isEnabled || !this.shouldWarnInfiniteLoop) return;
 
     const updateCount = (this.#updateCounts.get(id) || 0) + 1;
     this.#updateCounts.set(id, updateCount);
@@ -184,7 +184,7 @@ class DevDebugEngine implements DebugConfig {
   }
 
   trackEvaluationFailure(id: DependencyId): void {
-    if (!this.enabled || this.#failedEvaluations.has(id)) return;
+    if (!this.isEnabled || this.#failedEvaluations.has(id)) return;
 
     this.#failedEvaluations.add(id);
     console.warn(`${DEBUG_PREFIX} Dependency #${id} evaluation failed during dirty check.`);
@@ -196,17 +196,17 @@ class DevDebugEngine implements DebugConfig {
   }
 
   getDebugName(targetObject: object | null | undefined): string | undefined {
-    if (!this.enabled || !targetObject) return undefined;
+    if (!this.isEnabled || !targetObject) return undefined;
     return this.#resolveIdentity(targetObject)?.name;
   }
 
   getDebugType(targetObject: object | null | undefined): string | undefined {
-    if (!this.enabled || !targetObject) return undefined;
+    if (!this.isEnabled || !targetObject) return undefined;
     return this.#resolveIdentity(targetObject)?.type;
   }
 
   dumpGraph(): Record<string, unknown>[] {
-    if (!this.enabled || this.#registry.size === 0) return [];
+    if (!this.isEnabled || this.#registry.size === 0) return [];
 
     const graphMetadataList: Record<string, unknown>[] = [];
     for (const [id, meta] of this.#registry) {
@@ -232,10 +232,10 @@ class DevDebugEngine implements DebugConfig {
  * @internal
  */
 const ProdDebugController: DebugConfig = {
-  enabled: false,
-  warnInfiniteLoop: false,
-  trackGraph: false,
-  warn: noopCallback,
+  isEnabled: false,
+  shouldWarnInfiniteLoop: false,
+  shouldTrackGraph: false,
+  isWarningCondition: noopCallback,
   registerNode: noopCallback,
   attachDebugInfo: noopCallback,
   trackUpdate: noopCallback,
@@ -255,7 +255,8 @@ export const debug: DebugConfig = IS_DEV ? new DevDebugEngine() : ProdDebugContr
 /**
  * Individual exports for direct usage (proxied to the debug singleton).
  */
-export const warn = (cond: boolean, msg: string) => debug.warn(cond, msg);
+export const isWarningCondition = (condition: boolean, message: string) =>
+  debug.isWarningCondition(condition, message);
 export const registerNode = (node: IdentifiableNode) => debug.registerNode(node);
 export const attachDebugInfo = (
   targetObject: IdentifiableNode,

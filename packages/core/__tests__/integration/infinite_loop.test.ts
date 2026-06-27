@@ -9,8 +9,8 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
 
     const e = effect(() => {
       executions++;
-      const val = count.value;
-      if (val < 200) count.value = val + 1;
+      const value = count.value;
+      if (value < 200) count.value = value + 1;
     });
 
     batch(() => {
@@ -35,8 +35,8 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     const other = atom(0);
 
     effect(() => {
-      const val = trigger.value;
-      if (val < 200) trigger.value = val + 1;
+      const value = trigger.value;
+      if (value < 200) trigger.value = value + 1;
     });
 
     const sibling = effect(() => {
@@ -62,8 +62,8 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
       effect(
         () => {
           executions++;
-          const val = count.value;
-          if (val < 200) count.value = val + 1;
+          const value = count.value;
+          if (value < 200) count.value = value + 1;
         },
         { maxExecutionsPerFlush: CUSTOM_LIMIT }
       );
@@ -90,8 +90,8 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     batch(() => {
       effect(() => {
         executions++;
-        const val = count.value;
-        if (val < LIMIT) count.value = val + 1;
+        const value = count.value;
+        if (value < LIMIT) count.value = value + 1;
       });
       count.value = 1;
     });
@@ -139,8 +139,8 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     const cleanAtom = atom(0);
 
     const looper = effect(() => {
-      const val = loopAtom.value;
-      if (val < 200) loopAtom.value = val + 1;
+      const value = loopAtom.value;
+      if (value < 200) loopAtom.value = value + 1;
     });
     const clean = effect(() => {
       cleanAtom.value;

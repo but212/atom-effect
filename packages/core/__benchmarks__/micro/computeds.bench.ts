@@ -183,7 +183,7 @@ describe('Computeds: Asynchronous Flows', () => {
   bench(
     'resolution: promise resolving lifecycle',
     async () => {
-      let resolve!: (v: number) => void;
+      let resolve!: (value: number) => void;
       const promise = new Promise<number>((r) => {
         resolve = r;
       });

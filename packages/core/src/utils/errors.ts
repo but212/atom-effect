@@ -231,7 +231,7 @@ function isRecord(value: unknown): value is Record<string | symbol, unknown> {
  * Optimization: Converts a value to its string representation safely.
  * Gracefully catches exceptions thrown by null-prototype or custom toString methods.
  */
-const safeString = (value: unknown, fallback: string | undefined): string | undefined => {
+const toSafeString = (value: unknown, fallback: string | undefined): string | undefined => {
   if (value == null) return fallback;
   try {
     return String(value);
@@ -261,7 +261,7 @@ export function getErrorMetadata(error: unknown): ErrorMetadata {
   if (!isRecord(error)) {
     return {
       name: 'Unexpected error',
-      message: safeString(error, '') ?? '',
+      message: toSafeString(error, '') ?? '',
       recoverable: true,
       code: undefined,
     };
@@ -288,10 +288,10 @@ export function getErrorMetadata(error: unknown): ErrorMetadata {
       const isRecoverable = Reflect.get(error, 'recoverable');
       const errorCode = Reflect.get(error, 'code');
       return {
-        name: safeString(errorName, '') ?? '',
-        message: safeString(errorMessage, '') ?? '',
+        name: toSafeString(errorName, '') ?? '',
+        message: toSafeString(errorMessage, '') ?? '',
         recoverable: isRecoverable !== false,
-        code: safeString(errorCode, undefined),
+        code: toSafeString(errorCode, undefined),
       };
     }
   } catch {
@@ -301,7 +301,7 @@ export function getErrorMetadata(error: unknown): ErrorMetadata {
   // Case C: Plain object / unexpected fallback
   return {
     name: 'Unexpected error',
-    message: safeString(error, '') ?? '',
+    message: toSafeString(error, '') ?? '',
     recoverable: true,
     code: undefined,
   };

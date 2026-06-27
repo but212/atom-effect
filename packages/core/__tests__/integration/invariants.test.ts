@@ -20,19 +20,19 @@ describe('Version Semantics', () => {
   });
 
   it('computed version bumps only on resolution with changed value', () => {
-    const src = atom(0);
-    const c = computed(() => Math.floor(src.value / 10));
+    const source = atom(0);
+    const c = computed(() => Math.floor(source.value / 10));
     c.value;
     const v0 = getNodeVersion(c);
 
     c.invalidate();
     expect(getNodeVersion(c)).toBe(v0);
 
-    src.value = 5;
+    source.value = 5;
     c.value;
     expect(getNodeVersion(c)).toBe(v0);
 
-    src.value = 99;
+    source.value = 99;
     c.invalidate();
     c.value;
     expect(getNodeVersion(c)).toBeGreaterThan(v0);
@@ -61,7 +61,7 @@ describe('Push-Pull Propagation', () => {
   it('atom notifies async by default, sync when opted in', async () => {
     const asyncAtom = atom(0);
     const asyncCalls: number[] = [];
-    asyncAtom.subscribe((val) => asyncCalls.push(val ?? 0));
+    asyncAtom.subscribe((value) => asyncCalls.push(value ?? 0));
 
     asyncAtom.value = 1;
     expect(asyncCalls).toEqual([]);
@@ -71,18 +71,18 @@ describe('Push-Pull Propagation', () => {
 
     const syncAtom = atom(0, { sync: true });
     const syncCalls: number[] = [];
-    syncAtom.subscribe((val) => syncCalls.push(val ?? 0));
+    syncAtom.subscribe((value) => syncCalls.push(value ?? 0));
 
     syncAtom.value = 1;
     expect(syncCalls).toEqual([1]);
   });
 
   it('effect pulls computed value during dirty check', async () => {
-    const src = atom(0);
+    const source = atom(0);
     let computeCount = 0;
     const c = computed(() => {
       computeCount++;
-      return src.value * 2;
+      return source.value * 2;
     });
 
     const results: number[] = [];
@@ -92,7 +92,7 @@ describe('Push-Pull Propagation', () => {
     expect(computeCount).toBe(1);
     expect(results).toEqual([0]);
 
-    src.value = 5;
+    source.value = 5;
     await aeNextTick();
     expect(results).toContain(10);
     expect(computeCount).toBeGreaterThanOrEqual(2);
@@ -310,15 +310,15 @@ describe('Equality Contract', () => {
   });
 
   it('computed supports custom equality to suppress version bumps', () => {
-    const src = atom({ id: 1, data: 'a' });
-    const c = computed(() => src.value, {
+    const source = atom({ id: 1, data: 'a' });
+    const c = computed(() => source.value, {
       equal: (a, b) => a.id === b.id,
     });
 
     c.value;
     const v0 = getNodeVersion(c);
 
-    src.value = { id: 1, data: 'b' };
+    source.value = { id: 1, data: 'b' };
     c.value;
     expect(getNodeVersion(c)).toBe(v0);
   });
@@ -370,7 +370,7 @@ describe('Subscription Protocol', () => {
     const fnCalls: number[] = [];
     const objCalls: number[] = [];
 
-    a.subscribe((val) => fnCalls.push(val ?? 0));
+    a.subscribe((value) => fnCalls.push(value ?? 0));
     a.subscribe({ execute: () => objCalls.push(a.peek()) });
 
     a.value = 5;
@@ -398,14 +398,14 @@ describe('Subscription Protocol', () => {
 
 describe('Async Computed Safety', () => {
   it('eventually resolves to latest value after dependency drift', async () => {
-    const src = atom(1);
+    const source = atom(1);
     const results: number[] = [];
 
     const c = computed(
       async () => {
-        const val = src.value;
+        const value = source.value;
         await new Promise((r) => setTimeout(r, 20));
-        return val;
+        return value;
       },
       { defaultValue: 0 }
     );
@@ -417,7 +417,7 @@ describe('Async Computed Safety', () => {
     await new Promise((r) => setTimeout(r, 40));
     expect(c.value).toBe(1);
 
-    src.value = 2;
+    source.value = 2;
     await new Promise((r) => setTimeout(r, 60));
 
     expect(c.value).toBe(2);

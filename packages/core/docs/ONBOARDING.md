@@ -44,7 +44,7 @@ console.log(count.peek());
 count.dispose();
 ```
 
-### 2. `computed(fn, options?)`
+### 2. `computed(computationCallback, options?)`
 
 Computeds are read-only nodes that derive their state from other reactive nodes.
 
@@ -64,7 +64,7 @@ console.log(total.value); // 110 (Evaluated lazily upon access)
 - **Caching**: Results are cached. Re-evaluation occurs only if upstream dependencies have changed.
 - **Async Support**: Computeds can return a `Promise`. An explicit `defaultValue` is required to provide a synchronous state while the Promise is pending.
 
-### 3. `effect(fn, options?)`
+### 3. `effect(effectCallback, options?)`
 
 Effects execute side-effects in response to state changes.
 

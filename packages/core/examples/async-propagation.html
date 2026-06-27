@@ -220,18 +220,18 @@
         {
           computed: user,
           id: "1",
-          format: (v) => (v ? `${v.name} (@${v.login})` : "—"),
+          format: (value) => (value ? `${value.name} (@${value.login})` : "—"),
         },
         {
           computed: repos,
           id: "2",
-          format: (v) => (v ? `${v.length} REPOSITORY DATA` : "—"),
+          format: (value) => (value ? `${value.length} REPOSITORY DATA` : "—"),
         },
         {
           computed: stats,
           id: "3",
-          format: (v) =>
-            v ? `⭐ ${v.totalStars.toLocaleString()} STARS` : "—",
+          format: (value) =>
+            value ? `⭐ ${value.totalStars.toLocaleString()} STARS` : "—",
         },
       ];
 

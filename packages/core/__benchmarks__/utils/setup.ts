@@ -15,7 +15,7 @@ import { runtimeDebug } from '../../dist/';
  * infinite loop protection threshold (default: 100).
  */
 if (runtimeDebug) {
-  runtimeDebug.warnInfiniteLoop = false;
+  runtimeDebug.shouldWarnInfiniteLoop = false;
 }
 
 export const REPEATS = 10;

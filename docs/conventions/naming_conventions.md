@@ -9,9 +9,14 @@ This document outlines the conventions for naming variables, functions, classes,
 1. **Intention Clarification**:
    - **Variables/Properties**: Must use nouns or noun phrases representing what the data is and why it exists.
    - **Functions/Methods**: Must use verbs or verb phrases representing the action or operation being performed.
-2. **Appropriate Length**:
-   - Avoid unclear abbreviations (e.g., `usr`, `cfg`, `msg`, `arr`, `fn`).
-   - Remove redundant terms that can be inferred from the surrounding context (e.g., `user.name` instead of `user.userDataName`).
+2. **Appropriate & Balanced Length**:
+   - **Avoid Over-Abbreviation**: Do not use non-standard or cryptic abbreviations (e.g., `usr`, `cfg`, `msg`, `arr`, `fn`). However, widely accepted industry-standard acronyms/short names are encouraged to keep code clean (e.g., `id`, `url`, `uri`, `env`, `cli`, `err` in catch blocks, `ref` for references).
+   - **Avoid Over-Verbosity**: Do not chain redundant nouns or excessively long qualifiers. Keep names concise if the context already makes the meaning clear.
+     - *Bad (Overly Verbose)*: `baseCoverageExclusionPatterns`, `defineVitestBenchmarkConfiguration`, `newTargetBuildEnvironment`
+     - *Good*: `baseCoverageExclude` (or `coverageExclude`), `defineVitestBenchConfig`, `newBuildTarget`
+   - **Scope-Based Precision**:
+     - *Global/Exported API*: Should be descriptive and precise (e.g., `defineVitestBenchConfig` is preferred over `defineConfig` to avoid name collisions).
+     - *Local/Internal Scope*: Within short functions or loop blocks, simple, standard names are preferred (e.g., `value`, `item`, `index`, `i` are perfectly fine instead of `activeIterationValue`).
 3. **Reflect Types & Roles**:
    - Use plural names for collections and singular names for single values.
    - Append structural suffixes (e.g., `Buffer`, `Set`, `Map`, `Count`, `Index`, `Limit`) when the underlying collection type or numeric role is critical to correctness.
@@ -59,6 +64,19 @@ When data passes through stages of mapping, filtration, or normalization, includ
 - **Processed / Sanitized**: `sanitizedHtml`, `normalizedPath`
 - **Computed / Derived**: `filteredItems`, `sortedJobs`
 
+### 5. Functions & Methods
+
+Functions and methods must use verbs or verb phrases that clearly describe their action, side-effects, and return value expectations.
+
+| Pattern / Prefix | Context | Examples |
+| :--- | :--- | :--- |
+| **Verb/Verb Phrase** | Standard operations, actions, or transformations. | `computed()`, `batch()`, `peek()`, `dispose()`, `execute()` |
+| `is[State]`/`has[State]` | Type guards, capability checks, or status probes returning a boolean. | `isAtom()`, `isWritable()`, `nodeIsDirty()` |
+| `node[Action]` | Internal engine functions operating directly on `ReactiveNode` instances. | `nodeSubscribe()`, `nodeNotifySubscribers()`, `nodeTrackDependency()` |
+| `depBuffer[Action]` | Internal engine functions operating directly on dependency buffers. | `depBufferTruncateFrom()`, `depBufferPush()` |
+| `[Action]Callback` | Suffix for variables or parameters holding executable callbacks. | `effectCallback`, `onErrorCallback`, `onOverflowCallback` |
+| `#` Private Methods | Class-private helper methods. | `#drainQueue()`, `#execCleanup()`, `#recompute()` |
+
 ---
 
 ## Prohibited Patterns
@@ -99,6 +117,9 @@ Here is a summary of the improvements applied to the reactive scheduler to serve
 - [ ] Are numeric units explicitly documented in the variable name (e.g. `timeoutMs`)?
 - [ ] Do private class fields use the `#` prefix with camelCase naming?
 - [ ] Are list variables named using plural nouns?
+- [ ] Do function/method names start with a verb (except for factories like `atom()`, type guards like `isAtom()`, or boolean properties)?
+- [ ] Are internal engine functions operating on nodes/buffers appropriately prefixed (e.g., `node[Action]`, `depBuffer[Action]`)?
+- [ ] Are variables/parameters representing callbacks suffixed with `Callback` (e.g., `onErrorCallback`)?
 
 ### For Reviewers (During PR)
 

@@ -261,8 +261,8 @@ describe('Lens System', () => {
     });
 
     it('should handle NaN correctly in noise filtering', async () => {
-      const store = atom({ val: NaN });
-      const lens = atomLens(store, 'val');
+      const store = atom({ value: NaN });
+      const lens = atomLens(store, 'value');
 
       let callCount = 0;
       lens.subscribe(() => {

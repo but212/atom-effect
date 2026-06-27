@@ -83,7 +83,7 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
   }
 
   subscriberCount(): number {
-    return nodeSubscriberCount(this);
+    return nodeGetSubscriberCount(this);
   }
 }
 
@@ -439,7 +439,7 @@ export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
 }
 
 /** @internal - Returns active listener count. */
-export function nodeSubscriberCount<T>(node: ReactiveNode<T>): number {
+export function nodeGetSubscriberCount<T>(node: ReactiveNode<T>): number {
   return node._subscriberSlots?.size ?? 0;
 }
 
