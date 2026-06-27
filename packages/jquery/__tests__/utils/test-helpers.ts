@@ -36,20 +36,22 @@ export function setupDOMCleanup(): {
 
   function appendToBody(htmlOrEl: string | JQuery | Element): JQuery {
     if (htmlOrEl instanceof $) {
-      const $el = htmlOrEl as JQuery;
-      $el.appendTo(document.body);
-      activeElements.push($el);
-      return $el;
+      const $element = htmlOrEl as JQuery;
+      $element.appendTo(document.body);
+      activeElements.push($element);
+      return $element;
     }
-    const $el = (typeof htmlOrEl === 'string' ? $(htmlOrEl) : $(htmlOrEl as Element)) as JQuery;
-    $el.appendTo(document.body);
-    activeElements.push($el);
-    return $el;
+    const $element = (
+      typeof htmlOrEl === 'string' ? $(htmlOrEl) : $(htmlOrEl as Element)
+    ) as JQuery;
+    $element.appendTo(document.body);
+    activeElements.push($element);
+    return $element;
   }
 
   afterEach(() => {
-    for (const $el of activeElements) {
-      $el.remove();
+    for (const $element of activeElements) {
+      $element.remove();
     }
     activeElements.length = 0;
     vi.restoreAllMocks();

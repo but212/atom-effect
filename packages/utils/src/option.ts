@@ -160,7 +160,7 @@ export const Option = {
    * @throws {Error} If the Option is None.
    *
    * @example
-   * const val = Option.expect(opt, "Value must be present");
+   * const value = Option.expect(opt, "Value must be present");
    */
   expect: <T>(targetOption: Option<T>, message: string): T => {
     if (targetOption.ok) return targetOption.value;
@@ -178,7 +178,7 @@ export const Option = {
    * @throws {Error} If the Option is None.
    *
    * @example
-   * const val = Option.unwrap(opt);
+   * const value = Option.unwrap(opt);
    */
   unwrap: <T>(targetOption: Option<T>): T => Option.expect(targetOption, 'Option.unwrap() on None'),
 
@@ -193,7 +193,7 @@ export const Option = {
    * @returns The inner value of Some, or the fallback.
    *
    * @example
-   * const val = Option.unwrapOr(opt, 0);
+   * const value = Option.unwrapOr(opt, 0);
    */
   unwrapOr: <T, U>(targetOption: Option<T>, fallback: U): T | U =>
     targetOption.ok ? targetOption.value : fallback,
@@ -212,7 +212,7 @@ export const Option = {
    * @returns The inner value of Some, or the computed fallback.
    *
    * @example
-   * const val = Option.unwrapOrElse(opt, () => computeDefault());
+   * const value = Option.unwrapOrElse(opt, () => computeDefault());
    */
   unwrapOrElse: <T, U>(targetOption: Option<T>, fallbackProviderCallback: () => U): T | U =>
     targetOption.ok ? targetOption.value : fallbackProviderCallback(),
@@ -357,7 +357,7 @@ export const Option = {
    * @returns The inner value of Some, or null.
    *
    * @example
-   * const val = Option.toNullable(opt);
+   * const value = Option.toNullable(opt);
    */
   toNullable: <T>(targetOption: Option<T>): T | null =>
     targetOption.ok ? targetOption.value : null,
@@ -372,7 +372,7 @@ export const Option = {
    * @returns The inner value of Some, or undefined.
    *
    * @example
-   * const val = Option.toUndefined(opt);
+   * const value = Option.toUndefined(opt);
    */
   toUndefined: <T>(targetOption: Option<T>): T | undefined =>
     targetOption.ok ? targetOption.value : undefined,

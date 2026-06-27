@@ -32,8 +32,8 @@ describe('SlotBuffer', () => {
 
   bench(`forEach (x${REPEATS})`, () => {
     let sum = 0;
-    const add = (val: number) => {
-      sum += val;
+    const add = (value: number) => {
+      sum += value;
     };
     for (let i = 0; i < REPEATS; i++) {
       filledBuffer.forEach(add);
@@ -52,14 +52,14 @@ describe('SlotBuffer', () => {
     }
   });
 
-  const isFive = (val: number) => val === 5;
+  const isFive = (value: number) => value === 5;
   bench(`some (early exit, x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
       keep(filledBuffer.some(isFive));
     }
   });
 
-  const isNinetyNine = (val: number) => val === 99;
+  const isNinetyNine = (value: number) => value === 99;
   bench(`some (full scan, x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
       keep(filledBuffer.some(isNinetyNine));

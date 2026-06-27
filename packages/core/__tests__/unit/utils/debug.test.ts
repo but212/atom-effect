@@ -11,9 +11,9 @@ const createMockNode = (id: number): DebugNode => ({
 
 describe('Debug System', () => {
   const originalState = {
-    enabled: debug.enabled,
-    warnInfiniteLoop: debug.warnInfiniteLoop,
-    trackGraph: debug.trackGraph,
+    isEnabled: debug.isEnabled,
+    shouldWarnInfiniteLoop: debug.shouldWarnInfiniteLoop,
+    shouldTrackGraph: debug.shouldTrackGraph,
   };
 
   const activeNodes: { dispose?: () => void }[] = [];
@@ -26,9 +26,9 @@ describe('Debug System', () => {
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    debug.enabled = true;
-    debug.warnInfiniteLoop = true;
-    debug.trackGraph = false;
+    debug.isEnabled = true;
+    debug.shouldWarnInfiniteLoop = true;
+    debug.shouldTrackGraph = false;
   });
 
   afterEach(() => {
@@ -63,11 +63,11 @@ describe('Debug System', () => {
     });
 
     it('should remain inert when debugging is disabled or input is invalid', () => {
-      debug.enabled = false;
+      debug.isEnabled = false;
       const node = track(atom(100));
       expect(debug.getDebugName(node)).toBeUndefined();
 
-      debug.enabled = true;
+      debug.isEnabled = true;
       expect(debug.getDebugName(null)).toBeUndefined();
       expect(debug.getDebugName({})).toBeUndefined();
     });
@@ -96,20 +96,20 @@ describe('Debug System', () => {
       a.value = 1;
       expect(spy).toHaveBeenCalled();
 
-      const src = track(atom(0));
-      const c = track(computed(() => src.value * 2));
+      const source = track(atom(0));
+      const c = track(computed(() => source.value * 2));
       void c.value;
       spy.mockClear();
-      src.value = 2;
+      source.value = 2;
       expect(spy).toHaveBeenCalled();
 
       track(
         effect(() => {
-          void src.value;
+          void source.value;
         })
       );
       spy.mockClear();
-      src.value = 3;
+      source.value = 3;
       expect(spy).toHaveBeenCalled();
     });
   });
@@ -130,18 +130,18 @@ describe('Debug System', () => {
     });
 
     it('should maintain consistent dumpGraph results when toggling trackGraph', () => {
-      debug.trackGraph = false;
+      debug.shouldTrackGraph = false;
       track(atom(0, { name: 'persistent-node' }));
 
       expect(debug.dumpGraph().some((n) => n.name === 'persistent-node')).toBe(true);
 
-      debug.trackGraph = true;
+      debug.shouldTrackGraph = true;
       expect(debug.dumpGraph().some((n) => n.name === 'persistent-node')).toBe(true);
     });
 
     it('should register named nodes for finalization even if trackGraph is false', () => {
       const spy = vi.spyOn(debug, 'registerNode');
-      debug.trackGraph = false;
+      debug.shouldTrackGraph = false;
 
       track(atom(0, { name: 'named-atom' }));
 
@@ -149,7 +149,7 @@ describe('Debug System', () => {
     });
 
     it('should not include garbage-collected nodes in dumpGraph even when trackGraph is false', () => {
-      debug.trackGraph = false;
+      debug.shouldTrackGraph = false;
       const node = track(atom(1, { name: 'GCed_Node' }));
       debug.registerNode(node);
 
@@ -168,29 +168,29 @@ describe('Debug System', () => {
       const node = track(atom(1, { name: 'Active_Node' }));
       debug.registerNode(node);
 
-      debug.enabled = false;
+      debug.isEnabled = false;
       expect(debug.dumpGraph()).toEqual([]);
     });
 
     it('should not register nodes when debug is disabled', () => {
-      debug.enabled = false;
+      debug.isEnabled = false;
       const node = track(atom(1, { name: 'Ignored_Node' }));
       const id = node.id;
       debug.registerNode(node);
 
-      debug.enabled = true;
+      debug.isEnabled = true;
       expect(debug.dumpGraph().some((e) => e.id === id)).toBe(false);
     });
   });
 
-  describe('warn()', () => {
+  describe('isWarningCondition()', () => {
     it('should output prefixed logs only when enabled', () => {
-      debug.enabled = true;
-      debug.warn(true, 'Hello');
+      debug.isEnabled = true;
+      debug.isWarningCondition(true, 'Hello');
       expect(console.warn).toHaveBeenCalledWith('[Atom Effect] Hello');
 
       vi.mocked(console.warn).mockClear();
-      debug.enabled = false;
+      debug.isEnabled = false;
       expect(console.warn).not.toHaveBeenCalled();
     });
   });
@@ -198,11 +198,11 @@ describe('Debug System', () => {
   describe('diagnostic controller modes', () => {
     it('registerNode and attachDebugInfo edge cases', () => {
       // Disabled mode
-      debug.enabled = false;
+      debug.isEnabled = false;
       expect(debug.registerNode(createMockNode(1))).toBeUndefined();
       expect(debug.attachDebugInfo(createMockNode(1), 'atom', 1)).toBeUndefined();
 
-      debug.enabled = true;
+      debug.isEnabled = true;
       // Null / non-objects / undefined id
       expect(debug.registerNode(null as unknown as DebugNode)).toBeUndefined();
       expect(debug.registerNode({} as unknown as DebugNode)).toBeUndefined();
@@ -214,7 +214,7 @@ describe('Debug System', () => {
       expect(debug.attachDebugInfo(123 as unknown as DebugNode, 'atom', 1)).toBeUndefined();
 
       // customName === undefined && !this.trackGraph
-      debug.trackGraph = false;
+      debug.shouldTrackGraph = false;
       const node = createMockNode(1001);
       expect(debug.attachDebugInfo(node, 'atom', 1001, undefined)).toBeUndefined();
 
@@ -249,15 +249,15 @@ describe('Debug System', () => {
         const mod = await import('@/utils/debug?prod=2');
         const prodDebug = mod.debug;
 
-        expect(prodDebug.enabled).toBe(false);
-        expect(prodDebug.warnInfiniteLoop).toBe(false);
-        expect(prodDebug.trackGraph).toBe(false);
+        expect(prodDebug.isEnabled).toBe(false);
+        expect(prodDebug.shouldWarnInfiniteLoop).toBe(false);
+        expect(prodDebug.shouldTrackGraph).toBe(false);
         expect(prodDebug.dumpGraph()).toEqual([]);
         expect(prodDebug.getDebugName(null)).toBeUndefined();
         expect(prodDebug.getDebugType(null)).toBeUndefined();
 
         // No-ops
-        expect(prodDebug.warn(true, 'msg')).toBeUndefined();
+        expect(prodDebug.isWarningCondition(true, 'msg')).toBeUndefined();
         expect(prodDebug.registerNode(null as unknown as DebugNode)).toBeUndefined();
         expect(prodDebug.attachDebugInfo(null as unknown as DebugNode, 'atom', 1)).toBeUndefined();
         expect(prodDebug.trackUpdate(1)).toBeUndefined();

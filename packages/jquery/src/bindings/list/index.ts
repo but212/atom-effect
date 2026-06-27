@@ -179,9 +179,9 @@ function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptio
 function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding<T>[] {
   return Object.entries(events || {}).map(([key, callback]) => {
     const trimmed = key.trim();
-    const spaceIdx = trimmed.indexOf(' ');
-    const type = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
-    const selector = spaceIdx === -1 ? '> *' : trimmed.slice(spaceIdx + 1).trim() || '> *';
+    const spaceIndex = trimmed.indexOf(' ');
+    const type = spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
+    const selector = spaceIndex === -1 ? '> *' : trimmed.slice(spaceIndex + 1).trim() || '> *';
     return {
       type,
       selector,

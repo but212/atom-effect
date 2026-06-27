@@ -9,24 +9,24 @@ describe('Core DOM Lifecycle', () => {
     const count = $.atom(0);
     const $parent1 = appendToBody('<div id="parent1">');
     const $parent2 = appendToBody('<div id="parent2">');
-    const $el = $('<div id="reactive-el">').appendTo($parent1);
+    const $element = $('<div id="reactive-element">').appendTo($parent1);
 
-    $el.atomText(count);
+    $element.atomText(count);
 
     await $.nextTick();
-    expect($el.text()).toBe('0');
-    expect($parent1.find('#reactive-el').length).toBe(1);
+    expect($element.text()).toBe('0');
+    expect($parent1.find('#reactive-element').length).toBe(1);
 
     // Reparent to parent2
-    $el.appendTo($parent2);
+    $element.appendTo($parent2);
     await $.nextTick();
-    expect($parent1.find('#reactive-el').length).toBe(0);
-    expect($parent2.find('#reactive-el').length).toBe(1);
+    expect($parent1.find('#reactive-element').length).toBe(0);
+    expect($parent2.find('#reactive-element').length).toBe(1);
 
     // Update atom
     count.value = 1;
     await $.nextTick();
-    expect($el.text()).toBe('1');
+    expect($element.text()).toBe('1');
   });
 
   describe('jQuery Batching Documentation Verification', () => {

@@ -7,25 +7,25 @@ describe('Effect Factory', () => {
    * 1. Basic Synchronization & Reactive Path
    */
   it('Consistency: handles immediate sync and reactive updates for both single and map effects', async () => {
-    const el = document.createElement('div');
+    const element = document.createElement('div');
     const atomValue = $.atom('initial');
     const atomMap = $.atom(10);
 
     // Single source via public API
-    $(el).atomText(atomValue);
-    expect(el.textContent).toBe('initial');
+    $(element).atomText(atomValue);
+    expect(element.textContent).toBe('initial');
     atomValue.value = 'updated';
     await $.nextTick();
-    expect(el.textContent).toBe('updated');
+    expect(element.textContent).toBe('updated');
 
     // Map source via public API
-    $(el).atomBind({
-      text: $.computed(() => `Count: ${atomMap.value}, Static: val`),
+    $(element).atomBind({
+      text: $.computed(() => `Count: ${atomMap.value}, Static: value`),
     });
-    expect(el.textContent).toBe('Count: 10, Static: val');
+    expect(element.textContent).toBe('Count: 10, Static: value');
     atomMap.value = 20;
     await $.nextTick();
-    expect(el.textContent).toBe('Count: 20, Static: val');
+    expect(element.textContent).toBe('Count: 20, Static: value');
   });
 
   /**
@@ -33,38 +33,38 @@ describe('Effect Factory', () => {
    */
   describe('Asynchronous Operations', () => {
     it('verifies Promise resolution and prevents stale instance updates', async () => {
-      const el = document.createElement('div');
+      const element = document.createElement('div');
       const p1 = Promise.resolve('old');
       const atom = $.atom<Promise<string> | string>(p1);
 
-      $(el).atomText(atom);
+      $(element).atomText(atom);
 
       // Initial resolution
-      await vi.waitFor(() => expect(el.textContent).toBe('old'));
+      await vi.waitFor(() => expect(element.textContent).toBe('old'));
 
       // New Promise instance
       const p2 = Promise.resolve('new');
       atom.value = p2;
-      await vi.waitFor(() => expect(el.textContent).toBe('new'));
+      await vi.waitFor(() => expect(element.textContent).toBe('new'));
     });
 
     it('handles map effects with Promise values', async () => {
-      const el = document.createElement('div');
-      const p1 = Promise.resolve('async-val');
-      const val = $.atom('sync-val');
+      const element = document.createElement('div');
+      const p1 = Promise.resolve('async-value');
+      const value = $.atom('sync-value');
       const updater = vi.fn();
 
-      registerMapEffect(el, { p: p1, s: val }, updater, 'test');
+      registerMapEffect(element, { p: p1, s: value }, updater, 'test');
 
       await vi.waitFor(() => {
-        expect(updater).toHaveBeenCalledWith({ p: 'async-val', s: 'sync-val' });
+        expect(updater).toHaveBeenCalledWith({ p: 'async-value', s: 'sync-value' });
       });
     });
 
     it('Race Conditions: discards values from outdated promises when a newer update starts', async () => {
-      const el = document.createElement('div');
-      let resolve1: (v: string) => void = () => {};
-      let resolve2: (v: string) => void = () => {};
+      const element = document.createElement('div');
+      let resolve1: (value: string) => void = () => {};
+      let resolve2: (value: string) => void = () => {};
 
       const p1 = new Promise<string>((r) => {
         resolve1 = r;
@@ -74,22 +74,22 @@ describe('Effect Factory', () => {
       });
 
       const atom = $.atom<Promise<string> | string>(p1);
-      $(el).atomText(atom);
+      $(element).atomText(atom);
 
       // Trigger newer p2 update
       atom.value = p2;
       await $.nextTick();
 
       // Newer resolves first
-      resolve2('newest-val');
-      await vi.waitFor(() => expect(el.textContent).toBe('newest-val'));
+      resolve2('newest-value');
+      await vi.waitFor(() => expect(element.textContent).toBe('newest-value'));
 
       // Older resolves later
-      resolve1('stale-val');
+      resolve1('stale-value');
       await $.nextTick();
 
-      // Outdated value must be discarded, newest-val preserved
-      expect(el.textContent).toBe('newest-val');
+      // Outdated value must be discarded, newest-value preserved
+      expect(element.textContent).toBe('newest-value');
     });
   });
 
@@ -98,23 +98,23 @@ describe('Effect Factory', () => {
    */
   describe('Diagnostics & Lifecycle Safety', () => {
     it('Memory Safety: prevents zombie updates for both reactive and static async sources', async () => {
-      const el = document.createElement('div');
-      document.body.appendChild(el);
+      const element = document.createElement('div');
+      document.body.appendChild(element);
 
       // Case A: Reactive Source
       const atom = $.atom('initial');
-      $(el).atomText(atom);
+      $(element).atomText(atom);
 
-      document.body.removeChild(el); // Immediate disconnect
+      document.body.removeChild(element); // Immediate disconnect
       await $.nextTick();
 
       atom.value = 'discarded';
       await $.nextTick();
-      expect(el.textContent).not.toBe('discarded');
+      expect(element.textContent).not.toBe('discarded');
 
       // Case B: Static Promise Source
       const { promise, resolve } = (() => {
-        let r: (v: string) => void = () => {};
+        let r: (value: string) => void = () => {};
         const p = new Promise<string>((res) => {
           r = res;
         });
@@ -146,9 +146,9 @@ describe('Effect Factory', () => {
     it('handles updater error gracefully by logging error', () => {
       const errorSpy = vi.spyOn($.debug, 'error').mockImplementation(() => {});
       $.debug.enabled = true;
-      const el = document.createElement('div');
+      const element = document.createElement('div');
       registerReactiveEffect(
-        el,
+        element,
         'test',
         () => {
           throw new Error('sync-fail');
@@ -161,14 +161,14 @@ describe('Effect Factory', () => {
 
     it('handles falsy static values correctly in batched effects', async () => {
       const registry = await import('@/core/registry');
-      const el = document.createElement('div');
+      const element = document.createElement('div');
       const el2 = document.createElement('div');
 
       try {
-        $(el).atomBind({
+        $(element).atomBind({
           show: false,
         });
-        expect(el.style.display).toBe('none');
+        expect(element.style.display).toBe('none');
 
         $(el2).atomBind({
           class: {
@@ -177,7 +177,7 @@ describe('Effect Factory', () => {
         });
         expect($(el2).hasClass('active')).toBe(false);
       } finally {
-        registry.registry.cleanup(el);
+        registry.registry.cleanup(element);
         registry.registry.cleanup(el2);
       }
     });

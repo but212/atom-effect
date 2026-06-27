@@ -67,8 +67,8 @@ describe('Option<T>', () => {
     it('Option.isSome() and Option.isNone() should narrow compiler types', () => {
       const opt: Option<number> = Option.some(42);
       if (Option.isSome(opt)) {
-        const val: number = opt.value;
-        expect(val).toBe(42);
+        const value: number = opt.value;
+        expect(value).toBe(42);
       }
     });
   });

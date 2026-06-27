@@ -9,8 +9,8 @@ import {
   runInFlushScope,
   scheduler,
   schedulerEndBatch,
+  schedulerGetQueueSize,
   schedulerIsBatching,
-  schedulerQueueSize,
   schedulerSchedule,
   schedulerSetMaxFlushIterations,
 } from '@/core/scheduler';
@@ -26,14 +26,14 @@ describe('Scheduler Engine', () => {
       schedulerSchedule(scheduler, job1);
       schedulerSchedule(scheduler, job2);
 
-      expect(schedulerQueueSize(scheduler)).toBe(2);
+      expect(schedulerGetQueueSize(scheduler)).toBe(2);
       expect(job1).not.toHaveBeenCalled();
 
       await sleep(10);
 
       expect(job1).toHaveBeenCalledTimes(1);
       expect(job2).toHaveBeenCalledTimes(1);
-      expect(schedulerQueueSize(scheduler)).toBe(0);
+      expect(schedulerGetQueueSize(scheduler)).toBe(0);
     });
 
     it('ensures nested schedules are deferred to the next iteration (double buffering)', async () => {
@@ -42,7 +42,7 @@ describe('Scheduler Engine', () => {
       const initialJob = vi.fn(() => {
         log.push('initial');
         schedulerSchedule(scheduler, nestedJob);
-        expect(schedulerQueueSize(scheduler)).toBe(1);
+        expect(schedulerGetQueueSize(scheduler)).toBe(1);
       });
 
       schedulerSchedule(scheduler, initialJob);
@@ -195,7 +195,7 @@ describe('Scheduler Engine', () => {
 
       expect(onOverflow).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
-      expect(schedulerQueueSize(scheduler)).toBe(0);
+      expect(schedulerGetQueueSize(scheduler)).toBe(0);
 
       scheduler.onOverflow = null;
       expect(scheduler.onOverflow).toBeNull();

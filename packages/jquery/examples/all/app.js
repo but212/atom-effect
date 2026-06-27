@@ -138,9 +138,9 @@ $(() => {
             </div>
           `;
         },
-        bind: ($el, user) => {
+        bind: ($element, user) => {
           const initial = user.login ? user.login[0].toUpperCase() : "";
-          $el.find("img").on("error", function () {
+          $element.find("img").on("error", function () {
             $(this).hide();
             $(this).parent().text(initial);
           });

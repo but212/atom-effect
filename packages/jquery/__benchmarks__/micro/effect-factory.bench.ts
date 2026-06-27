@@ -11,9 +11,9 @@ describe('Effect Factory: Binding Initialization', () => {
     bench(name, withContainer(fn), opts);
 
   run('Single reactive binding setup (atomText x 100)', ($c) => {
-    const val = $.atom('text');
+    const value = $.atom('text');
     for (let i = 0; i < 100; i++) {
-      $('<span></span>').appendTo($c).atomText(val);
+      $('<span></span>').appendTo($c).atomText(value);
     }
   });
 
@@ -31,24 +31,24 @@ describe('Effect Factory: Binding Initialization', () => {
   });
 
   run('Synchronous path updates (10 elements x 50 updates)', ($c) => {
-    const val = $.atom('sync-value');
+    const value = $.atom('sync-value');
     for (let i = 0; i < 10; i++) {
-      $('<span></span>').appendTo($c).atomText(val);
+      $('<span></span>').appendTo($c).atomText(value);
     }
     for (let i = 0; i < 50; i++) {
-      val.value = `sync-${i}`;
+      value.value = `sync-${i}`;
     }
   });
 
   run(
     'Asynchronous path updates (10 elements x 50 updates)',
     async ($c) => {
-      const val = $.atom<string | Promise<string>>('async-value');
+      const value = $.atom<string | Promise<string>>('async-value');
       for (let i = 0; i < 10; i++) {
-        $('<span></span>').appendTo($c).atomText(val);
+        $('<span></span>').appendTo($c).atomText(value);
       }
       for (let i = 0; i < 50; i++) {
-        val.value = Promise.resolve(`async-${i}`);
+        value.value = Promise.resolve(`async-${i}`);
       }
       await $.nextTick();
     },

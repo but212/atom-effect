@@ -78,11 +78,11 @@ describe('Lenses: Structural Access', () => {
   const composed = composeLens(parentLens, 'y');
   let manyLensesUnsub: (() => void)[] = [];
 
-  let val = 0;
+  let value = 0;
   bench(
     `composition & scaling (100 active lenses)`,
     () => {
-      sharedSource.value = { x: { y: ++val } };
+      sharedSource.value = { x: { y: ++value } };
       keep(composed.value);
     },
     {

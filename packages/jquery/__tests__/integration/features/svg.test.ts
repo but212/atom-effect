@@ -87,11 +87,11 @@ describe('SVG Support', () => {
     $g.atomList(items, {
       key: (i: number) => i,
       render: (i) => {
-        const el = document.createElementNS(SVG_NS, 'circle');
-        el.setAttribute('cx', String(i * 10));
-        el.setAttribute('cy', '10');
-        el.setAttribute('r', '5');
-        return el;
+        const element = document.createElementNS(SVG_NS, 'circle');
+        element.setAttribute('cx', String(i * 10));
+        element.setAttribute('cy', '10');
+        element.setAttribute('r', '5');
+        return element;
       },
     });
 

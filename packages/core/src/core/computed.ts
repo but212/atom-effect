@@ -29,13 +29,13 @@ import {
 import {
   nextVersion,
   nodeCommitDeps,
+  nodeGetSubscriberCount,
   nodeHandleError,
   nodeIsDirty,
   nodeIsShallowDirty,
   nodeNotifySubscribers,
   nodeStartTracking,
   nodeSubscribe,
-  nodeSubscriberCount,
   nodeTrackDependency,
   runInTrackingContext,
   trackingContext,
@@ -356,7 +356,7 @@ class ComputedAtomImpl<T>
   }
 
   subscriberCount(): number {
-    return nodeSubscriberCount(this);
+    return nodeGetSubscriberCount(this);
   }
 
   /**

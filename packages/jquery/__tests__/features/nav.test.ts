@@ -69,10 +69,10 @@ class NavTestHarness {
     });
   }
 
-  simulateClick(el: HTMLElement | undefined, options: MouseEventInit = {}) {
-    if (!el) return;
+  simulateClick(element: HTMLElement | undefined, options: MouseEventInit = {}) {
+    if (!element) return;
     const event = new MouseEvent('click', { bubbles: true, cancelable: true, ...options });
-    el.dispatchEvent(event);
+    element.dispatchEvent(event);
     return event;
   }
 }
@@ -187,7 +187,7 @@ describe('$.atomNav', () => {
 
   describe('Lifecycle & Concurrency', () => {
     it('should handle pending state and mounting lifecycle', async () => {
-      let resolveFetch!: (v: string) => void;
+      let resolveFetch!: (value: string) => void;
       vi.spyOn($, 'ajax').mockImplementation(() => {
         const p = new Promise<string>((res) => {
           resolveFetch = res;
@@ -213,7 +213,7 @@ describe('$.atomNav', () => {
     });
 
     it('should resolve race conditions (last navigation wins)', async () => {
-      let resolveFirst!: (v: boolean) => void;
+      let resolveFirst!: (value: boolean) => void;
       const firstHook = new Promise<boolean>((res) => {
         resolveFirst = res;
       });
@@ -236,7 +236,7 @@ describe('$.atomNav', () => {
     });
 
     it('should cancel pending navigation if hash change occurs', async () => {
-      let resolveFirst!: (v: boolean) => void;
+      let resolveFirst!: (value: boolean) => void;
       const hook = new Promise<boolean>((res) => {
         resolveFirst = res;
       });

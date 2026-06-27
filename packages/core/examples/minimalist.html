@@ -112,13 +112,13 @@
     <aside class="controls" aria-label="Simulation Controls">
       <div class="control-group">
         <label class="control-label" for="particle-count">
-          System Load: <span id="count-val">0</span> atoms
+          System Load: <span id="count-value">0</span> atoms
         </label>
         <input type="range" id="particle-count" min="10" max="200" value="80" />
       </div>
       <div class="control-group">
         <label class="control-label" for="link-radius">
-          Propagation: <span id="radius-val">0</span>px
+          Propagation: <span id="radius-value">0</span>px
         </label>
         <input type="range" id="link-radius" min="50" max="300" value="160" />
       </div>
@@ -133,8 +133,8 @@
       // Elements
       const elParticleCount = document.getElementById("particle-count");
       const elLinkRadius = document.getElementById("link-radius");
-      const elCountText = document.getElementById("count-val");
-      const elRadiusText = document.getElementById("radius-val");
+      const elCountText = document.getElementById("count-value");
+      const elRadiusText = document.getElementById("radius-value");
 
       // State atoms
       const atomCount = atom(80);

@@ -77,8 +77,8 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
       location.hash = url;
       return { path: normalizePath(route), query: parseQuery(query || ''), url };
     },
-    revert: (prev) => {
-      if (location.hash !== prev) location.hash = prev;
+    revert: (previousUrl) => {
+      if (location.hash !== previousUrl) location.hash = previousUrl;
     },
     resolveAnchor: (element) => resolveAnchorPath(element, base),
     setupListener: (eventListener) => {

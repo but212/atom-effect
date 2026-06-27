@@ -104,11 +104,11 @@ export interface BaseViteConfigOptions {
  */
 export let activeBuildTarget = process.env.BUILD_TARGET;
 
-const updateBuildTarget = (val: string | undefined) => {
-  activeBuildTarget = val;
-  isTypesBuild = val === 'types';
-  isBundleBuild = val === 'bundle';
-  isLibraryBuild = val === 'lib';
+const updateBuildTarget = (newBuildTarget: string | undefined) => {
+  activeBuildTarget = newBuildTarget;
+  isTypesBuild = newBuildTarget === 'types';
+  isBundleBuild = newBuildTarget === 'bundle';
+  isLibraryBuild = newBuildTarget === 'lib';
 };
 
 if (typeof process === 'object' && process !== null) {
@@ -246,7 +246,7 @@ export const defineViteConfig = (
 /**
  * Base coverage exclusion patterns for Vitest.
  */
-export const baseCoverageExclude = [
+export const baseCoverageExclusionPatterns = [
   'node_modules/**',
   'dist/**',
   '**/*.config.ts',
@@ -277,7 +277,7 @@ export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => ({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: baseCoverageExclude,
+      exclude: baseCoverageExclusionPatterns,
     },
   },
 });
@@ -310,9 +310,9 @@ export const defineVitestConfig = (packageDir: string, overrides: ViteUserConfig
  * @returns A Vitest benchmark configuration object.
  *
  * @example
- * const config = getBaseVitestBenchConfig(import.meta.dirname);
+ * const config = getBaseVitestBenchmarkConfig(import.meta.dirname);
  */
-export const getBaseVitestBenchConfig = (packageDir: string): ViteUserConfig => ({
+export const getBaseVitestBenchmarkConfig = (packageDir: string): ViteUserConfig => ({
   resolve: getResolveConfig(packageDir),
   test: {
     benchmark: {
@@ -339,7 +339,7 @@ export const getBaseVitestBenchConfig = (packageDir: string): ViteUserConfig => 
  */
 export const defineVitestBenchConfig = (packageDir: string, overrides: ViteUserConfig = {}) =>
   defineVitest(() => {
-    const mergedConfig = mergeConfig(getBaseVitestBenchConfig(packageDir), overrides);
+    const mergedConfig = mergeConfig(getBaseVitestBenchmarkConfig(packageDir), overrides);
 
     // Vite's mergeConfig concatenates arrays. We explicitly override the benchmark include array
     // if the user provided it in their custom overrides configuration.

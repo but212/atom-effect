@@ -102,9 +102,9 @@ export class RootObserver {
         if (this.#additionCallbacks.size > 0) {
           // Collect all element nodes added in this batch
           const addedElements: Element[] = [];
-          for (const m of mutations) {
-            if (m.type === 'childList') {
-              for (const node of m.addedNodes) {
+          for (const mutation of mutations) {
+            if (mutation.type === 'childList') {
+              for (const node of mutation.addedNodes) {
                 if (node.nodeType === 1) {
                   // Node.ELEMENT_NODE
                   addedElements.push(node as Element);
@@ -145,12 +145,12 @@ export class RootObserver {
 
         // 3. Process attribute mutations
         if (this.#attributeCallbacks.size > 0) {
-          for (const m of mutations) {
-            if (m.type === 'attributes' && m.attributeName) {
+          for (const mutation of mutations) {
+            if (mutation.type === 'attributes' && mutation.attributeName) {
               for (const record of this.#attributeCallbacks) {
-                if (record.attributeName === m.attributeName) {
+                if (record.attributeName === mutation.attributeName) {
                   try {
-                    record.callback(m.target as Element);
+                    record.callback(mutation.target as Element);
                   } catch (error) {
                     console.error('Error in onAttributeChanged callback:', error);
                   }

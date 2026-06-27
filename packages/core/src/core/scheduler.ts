@@ -60,7 +60,7 @@ class ReactiveScheduler implements SchedulerState {
   get maxFlushIterations() {
     return this.#maxFlushIterations;
   }
-  get sessionActive() {
+  get isSessionActive() {
     return this.#isSessionActive;
   }
   get sessionEpoch() {
@@ -130,7 +130,7 @@ class ReactiveScheduler implements SchedulerState {
     this.#activeJobBuffer.size = 0;
 
     this.nextEpoch();
-    const fnKind = KIND.Fn;
+    const functionKind = KIND.Fn;
 
     for (let i = 0; i < activeJobsCount; i++) {
       const job = activeJobs[i];
@@ -138,7 +138,7 @@ class ReactiveScheduler implements SchedulerState {
       activeJobs[i] = undefined;
 
       try {
-        if (job._kind === fnKind) {
+        if (job._kind === functionKind) {
           job();
         } else {
           const executionResult = (job as SchedulerJobObject).execute() as Result<
@@ -329,11 +329,11 @@ export const schedulerSetMaxFlushIterations = (
 export const schedulerIsBatching = (state: SchedulerState) =>
   (state.state & SCHEDULER_STATE.BATCHING) !== 0;
 /** @internal */
-export const schedulerQueueSize = (state: SchedulerState) => state.queueSize;
+export const schedulerGetQueueSize = (state: SchedulerState) => state.queueSize;
 
 /** Returns the next reactive epoch identifier. */
 export const nextEpoch = (): number => scheduler.nextEpoch();
-export const currentFlushEpoch = (): number => scheduler.sessionEpoch;
+export const getCurrentFlushEpoch = (): number => scheduler.sessionEpoch;
 
 /**
  * Logic: Atomic Update Batching

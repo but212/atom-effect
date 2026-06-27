@@ -388,9 +388,9 @@ function syncRadios(radioElement: HTMLInputElement): void {
     if (root instanceof Document || root instanceof DocumentFragment || root instanceof Element) {
       const group = root.querySelectorAll(`input[type="radio"][name="${safeName}"]`);
       for (let i = 0; i < group.length; i++) {
-        const el = group[i];
-        if (el && el !== radioElement) {
-          $(el).trigger('change.atomRadioSync');
+        const element = group[i];
+        if (element && element !== radioElement) {
+          $(element).trigger('change.atomRadioSync');
         }
       }
     }

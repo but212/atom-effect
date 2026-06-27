@@ -38,10 +38,10 @@ function supportsSelection(
 
 /** Represents a specialized synchronization strategy for different form element types. @internal */
 interface BindingStrategy<T, E extends FormElement = FormElement> {
-  readonly read: (element: E, parse?: (v: string) => T) => T;
+  readonly read: (element: E, parse?: (value: string) => T) => T;
   readonly write: (element: E, value: T, formatted: string) => void;
   readonly equal: (first: T, second: T, baseEqual: (first: T, second: T) => boolean) => boolean;
-  readonly format: (value: T, customFormat?: (v: T) => string) => string;
+  readonly format: (value: T, customFormat?: (value: T) => string) => string;
 }
 
 /**
@@ -89,7 +89,7 @@ const STRATEGIES = {
       element.value = formatted;
     },
     equal: (first, second, baseEqual) => baseEqual(first, second),
-    format: (v, custom) => (custom ? custom(v) : String(v ?? '')),
+    format: (value, custom) => (custom ? custom(value) : String(value ?? '')),
   } as BindingStrategy<unknown, FormElement>,
 } as const;
 
@@ -112,7 +112,7 @@ let instanceCounter = 0;
  * const name = $.atom('Jane Doe');
  * const binding = applyInputBinding($('#name-input'), name, {
  *   debounce: 100,
- *   format: (val) => val.toUpperCase(),
+ *   format: (value) => value.toUpperCase(),
  * });
  * // To tear down bindings:
  * binding.cleanup();
@@ -230,7 +230,7 @@ export function applyInputBinding<T>(
   const eventNames = rawEventNames
     .trim()
     .split(/\s+/)
-    .map((n) => n + eventNamespace)
+    .map((name) => name + eventNamespace)
     .join(' ');
 
   $(element).on(`blur${eventNamespace}`, handleBlur).on(eventNames, handleInput);

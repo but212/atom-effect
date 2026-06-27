@@ -43,6 +43,6 @@ export interface InternalHandler {
  * Why: Performance
  * Prevents redundant update cycles by skipping the `$.fn.on` batching wrapper.
  */
-export const markInternal = (fn: (...args: never[]) => unknown): void => {
-  Object.assign(fn, { [INTERNAL_HANDLER]: true });
+export const markInternal = (callback: (...args: never[]) => unknown): void => {
+  Object.assign(callback, { [INTERNAL_HANDLER]: true });
 };

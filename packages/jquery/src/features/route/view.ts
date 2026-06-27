@@ -202,7 +202,7 @@ export function setupRouteScanner(
   // Logic: Centralized Active Link Sync
   // Instead of creating O(N) effects per link, we use a single effect that iterates
   // over the centralized set of tracked links.
-  const syncSubscription = effect(() => {
+  const activeLinkSubscription = effect(() => {
     const current = currentRouteAtom.value;
     const pattern = currentPatternAtom.value;
     for (const element of trackedLinks) {
@@ -240,7 +240,7 @@ export function setupRouteScanner(
     scan,
     resolvePath,
     disconnect: () => {
-      syncSubscription.dispose();
+      activeLinkSubscription.dispose();
       linkObserver.disconnect();
     },
   };

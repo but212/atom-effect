@@ -31,8 +31,8 @@ describe('Computed', () => {
   describe('value (getter)', () => {
     describe('lazy evaluation & caching', () => {
       it('should evaluate lazily and cache results', async () => {
-        const src = atom(1);
-        const computationCallback = vi.fn(() => src.value * 2);
+        const source = atom(1);
+        const computationCallback = vi.fn(() => source.value * 2);
         const c = computed(computationCallback);
 
         expect(computationCallback).not.toHaveBeenCalled();
@@ -44,7 +44,7 @@ describe('Computed', () => {
         c.value;
         expect(computationCallback).toHaveBeenCalledTimes(1);
 
-        src.value = 5;
+        source.value = 5;
         await aeNextTick();
         expect(computationCallback).toHaveBeenCalledTimes(1);
         expect(c.value).toBe(10);
@@ -52,8 +52,8 @@ describe('Computed', () => {
       });
 
       it('should respect equality checks to prune recomputations', async () => {
-        const src = atom({ x: 1 });
-        const computationCallback = vi.fn(() => ({ x: src.value.x }));
+        const source = atom({ x: 1 });
+        const computationCallback = vi.fn(() => ({ x: source.value.x }));
         const c = computed(computationCallback, {
           equal: (a, b) => a.x === b.x,
         });
@@ -66,7 +66,7 @@ describe('Computed', () => {
         });
         spy.mockClear();
 
-        src.value = { x: 1 };
+        source.value = { x: 1 };
         await aeNextTick();
 
         expect(c.value).toEqual({ x: 1 });
@@ -89,14 +89,14 @@ describe('Computed', () => {
       });
 
       it('should not pass the previous value to the computation function', async () => {
-        const src = atom(1);
+        const source = atom(1);
         const computationCallback = vi.fn((...args: unknown[]) => {
           expect(args.length).toBe(0);
-          return src.value * 2;
+          return source.value * 2;
         });
         const c = computed(computationCallback);
         expect(c.value).toBe(2);
-        src.value = 2;
+        source.value = 2;
         await aeNextTick();
         expect(c.value).toBe(4);
         expect(computationCallback).toHaveBeenCalledTimes(2);
@@ -165,16 +165,16 @@ describe('Computed', () => {
 
   describe('version', () => {
     it('should not bump version when value is equal after re-computation', async () => {
-      const src = atom(1);
-      const computationCallback = vi.fn(() => ({ v: Math.floor(src.value / 10) }));
+      const source = atom(1);
+      const computationCallback = vi.fn(() => ({ value: Math.floor(source.value / 10) }));
       const c = computed(computationCallback, {
-        equal: (a, b) => a.v === b.v,
+        equal: (a, b) => a.value === b.value,
       });
 
       c.value;
       const v1 = c.version;
 
-      src.value = 2;
+      source.value = 2;
       await aeNextTick();
       c.value;
       const v2 = c.version;
@@ -186,14 +186,14 @@ describe('Computed', () => {
 
   describe('peek()', () => {
     it('should return stale cached value without recomputation', async () => {
-      const src = atom(1);
-      const computationCallback = vi.fn(() => src.value * 10);
+      const source = atom(1);
+      const computationCallback = vi.fn(() => source.value * 10);
       const c = computed(computationCallback);
 
       expect(c.value).toBe(10);
       expect(computationCallback).toHaveBeenCalledTimes(1);
 
-      src.value = 5;
+      source.value = 5;
       await aeNextTick();
 
       expect(c.peek()).toBe(10);
@@ -221,8 +221,8 @@ describe('Computed', () => {
     });
 
     it('should clear internal references in unsubscribe returned closure to prevent memory leaks', () => {
-      const src = atom(1);
-      const c = computed(() => src.value * 2);
+      const source = atom(1);
+      const c = computed(() => source.value * 2);
       const spy = vi.fn();
       const unsubscribeCallback = c.subscribe(spy);
 
@@ -357,8 +357,8 @@ describe('Computed', () => {
 
       expect(() => c1.value).toThrow(ReferenceError);
 
-      const src = atom(0);
-      const c2 = computed(() => src.value * 2);
+      const source = atom(0);
+      const c2 = computed(() => source.value * 2);
       expect(c2.value).toBe(0);
 
       const spy = vi.fn();
@@ -369,7 +369,7 @@ describe('Computed', () => {
 
       expect(spy).toHaveBeenCalledTimes(1);
 
-      src.value = 1;
+      source.value = 1;
       await aeNextTick();
       expect(spy).toHaveBeenCalledTimes(2);
 
@@ -422,11 +422,11 @@ describe('Computed', () => {
     it('should clear error state when computation recovers from error', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       let shouldFail = true;
-      const src = atom(0);
+      const source = atom(0);
       const c = computed(() => {
-        const v = src.value;
+        const value = source.value;
         if (shouldFail) throw new Error('transient_error');
-        return v;
+        return value;
       });
 
       expect(() => c.value).toThrow();
@@ -435,8 +435,8 @@ describe('Computed', () => {
       shouldFail = false;
       c.invalidate();
 
-      const val = c.value;
-      expect(val).toBe(0);
+      const value = c.value;
+      expect(value).toBe(0);
       expect(c.hasError).toBe(false);
       expect(c.lastError).toBeNull();
       expect(c.isRejected).toBe(false);
@@ -487,9 +487,9 @@ describe('Computed', () => {
       const trigger = atom(0);
       const c = computed(
         async () => {
-          const v = trigger.value;
-          await sleep(v === 0 ? 50 : 10);
-          return v;
+          const value = trigger.value;
+          await sleep(value === 0 ? 50 : 10);
+          return value;
         },
         { defaultValue: -1 }
       );
@@ -504,7 +504,7 @@ describe('Computed', () => {
     });
 
     it('should enforce single-microtask resolution consistency', async () => {
-      let resolvePromise!: (v: string) => void;
+      let resolvePromise!: (value: string) => void;
       const promise = new Promise<string>((r) => {
         resolvePromise = r;
       });
@@ -532,9 +532,9 @@ describe('Computed', () => {
       const trigger = atom(1);
       const c = computed(
         async () => {
-          const v = trigger.value;
+          const value = trigger.value;
           await sleep(30);
-          return `result-${v}`;
+          return `result-${value}`;
         },
         { defaultValue: 'loading' }
       );
@@ -594,7 +594,7 @@ describe('Computed', () => {
     });
 
     it('should transition through correct async state lifecycle', async () => {
-      let resolvePromise!: (v: number) => void;
+      let resolvePromise!: (value: number) => void;
       const c = computed(
         () =>
           new Promise<number>((r) => {
@@ -681,15 +681,15 @@ describe('Computed', () => {
 
     it('should support mixed source types (Atoms and Computed)', async () => {
       const base = atom(100);
-      const a = computed(() => ({ val: base.value }));
+      const a = computed(() => ({ value: base.value }));
       const b = atom({ active: true });
       const merged = mergeAtoms(a, b);
 
-      expect(merged.value).toEqual({ val: 100, active: true });
+      expect(merged.value).toEqual({ value: 100, active: true });
 
       base.value = 200;
       await aeNextTick();
-      expect(merged.value).toEqual({ val: 200, active: true });
+      expect(merged.value).toEqual({ value: 200, active: true });
     });
 
     it('mergeAtoms should handle or reject atoms with primitive values', () => {

@@ -50,7 +50,7 @@ import type {
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
-import { currentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
+import { getCurrentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
 
 class EffectImpl
   implements
@@ -282,7 +282,7 @@ class EffectImpl
   }
 
   #validateBudget(): Result<void, Error> {
-    const epoch = currentFlushEpoch();
+    const epoch = getCurrentFlushEpoch();
     if (this.#lastFlushEpoch !== epoch) {
       this.#lastFlushEpoch = epoch;
       this.#flushIterationCount = 0;
@@ -347,7 +347,7 @@ class EffectImpl
  * @param options - Configuration for execution limits, custom error handlers, and sync delivery.
  * @returns An `EffectObject` used to manually trigger or stop the effect.
  *
- * @throws {EffectError} If the provided `fn` is not a function.
+ * @throws {EffectError} If the provided `effectCallback` is not a function.
  *
  * @example
  * ```typescript

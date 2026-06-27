@@ -171,9 +171,9 @@ describe('Macro: Dashboard & Reactive Topology', () => {
         for (let i = 0; i < 100; i++) {
           $('<div class="slot"></div>')
             .appendTo($c)
-            .atomMount(($el) => {
+            .atomMount(($element) => {
               const count = $.atom(cycle * 100 + i);
-              $el.html('<span class="count"></span>').find('.count').atomText(count);
+              $element.html('<span class="count"></span>').find('.count').atomText(count);
               return () => {};
             });
         }

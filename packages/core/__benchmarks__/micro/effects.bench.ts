@@ -41,8 +41,8 @@ describe('Effects: Life-cycle & Propagation', () => {
     get value() {
       return this._value;
     },
-    set value(v) {
-      this._value = v;
+    set value(value) {
+      this._value = value;
       for (const listener of rawListeners) listener();
     },
   };

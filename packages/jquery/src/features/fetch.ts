@@ -49,12 +49,16 @@ function toSettings<T>(url: string, options: FetchOptions<T>): JQuery.AjaxSettin
  */
 function toError(rawError: unknown): Error {
   if (rawError && typeof rawError === 'object' && 'readyState' in rawError) {
-    const xhr = rawError as JQuery.jqXHR;
+    const xmlHttpRequest = rawError as JQuery.jqXHR;
     // Reason: A status of 0 typically indicates a network timeout or DNS
     // failure where statusText might be empty.
-    const message = xhr.statusText || (xhr.status === 0 ? 'Network Error' : 'Request Failed');
-    const error = new Error(`Network Error: ${message} (${xhr.status})`, { cause: rawError });
-    (error as FetchError).jqXHR = xhr;
+    const message =
+      xmlHttpRequest.statusText ||
+      (xmlHttpRequest.status === 0 ? 'Network Error' : 'Request Failed');
+    const error = new Error(`Network Error: ${message} (${xmlHttpRequest.status})`, {
+      cause: rawError,
+    });
+    (error as FetchError).jqXHR = xmlHttpRequest;
     return error;
   }
   return rawError instanceof Error
@@ -63,8 +67,8 @@ function toError(rawError: unknown): Error {
 }
 
 interface FetchSession {
-  xhr: JQuery.jqXHR | null;
-  aborted: boolean;
+  xmlHttpRequest: JQuery.jqXHR | null;
+  isAborted: boolean;
 }
 
 /**
@@ -93,9 +97,9 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
 
   const abortSession = (session: FetchSession | null) => {
     if (session) {
-      session.aborted = true;
-      if (session.xhr && typeof session.xhr.abort === 'function') {
-        session.xhr.abort();
+      session.isAborted = true;
+      if (session.xmlHttpRequest && typeof session.xmlHttpRequest.abort === 'function') {
+        session.xmlHttpRequest.abort();
       }
     }
   };
@@ -103,29 +107,29 @@ function atomFetch<T>(source: string | (() => string), options: FetchOptions<T>)
   const execute = async (): Promise<T> => {
     // Why: Abort the previous request if a new execution cycle starts to prevent race conditions.
     abortSession(activeSession);
-    const session: FetchSession = { xhr: null, aborted: false };
+    const session: FetchSession = { xmlHttpRequest: null, isAborted: false };
     activeSession = session;
 
     try {
       // Constraint: Dependency tracking must occur synchronously before the first 'await'.
       const url = getUrl();
       const settings = toSettings(url, options);
-      const xhr = $.ajax(settings);
-      session.xhr = xhr;
+      const xmlHttpRequest = $.ajax(settings);
+      session.xmlHttpRequest = xmlHttpRequest;
 
-      if (session.aborted) {
+      if (session.isAborted) {
         abortSession(session);
       }
 
-      const responseData = await xhr;
+      const responseData = await xmlHttpRequest;
 
       const transformedResult = options.transform
-        ? options.transform(responseData as unknown, xhr)
+        ? options.transform(responseData as unknown, xmlHttpRequest)
         : (responseData as T);
 
       return transformedResult instanceof Promise ? await transformedResult : transformedResult;
     } catch (ajaxError) {
-      if (session.aborted) {
+      if (session.isAborted) {
         const abortError = new Error('AbortError');
         abortError.name = 'AbortError';
         throw abortError;

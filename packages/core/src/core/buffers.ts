@@ -117,7 +117,7 @@ export function depBufferPush(
  * @internal
  */
 export function isBufferDirty(state: ReactiveDependencyTracker): boolean {
-  return checkDirty(state, true);
+  return isDirtyInternal(state, true);
 }
 
 /**
@@ -126,10 +126,10 @@ export function isBufferDirty(state: ReactiveDependencyTracker): boolean {
  * @internal
  */
 export function isBufferShallowDirty(state: ReactiveDependencyTracker): boolean {
-  return checkDirty(state, false);
+  return isDirtyInternal(state, false);
 }
 
-function checkDirty(state: ReactiveDependencyTracker, deep: boolean): boolean {
+function isDirtyInternal(state: ReactiveDependencyTracker, deep: boolean): boolean {
   const slots = state._depSlots;
   const slotsLength = slots.length;
   if (slotsLength === 0) return false;

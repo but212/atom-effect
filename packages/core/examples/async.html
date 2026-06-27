@@ -199,18 +199,18 @@
       // Effects
       effect(() => {
         const status = statusMessage.value;
-        const el = elements.statusIndicator;
+        const element = elements.statusIndicator;
 
-        el.className = `status ${status.class}`;
-        el.textContent = "";
+        element.className = `status ${status.class}`;
+        element.textContent = "";
 
         if (status.showSpinner) {
           const spinner = document.createElement("div");
           spinner.className = "spinner";
-          el.appendChild(spinner);
+          element.appendChild(spinner);
         }
 
-        el.appendChild(document.createTextNode(status.text));
+        element.appendChild(document.createTextNode(status.text));
       });
 
       effect(() => {

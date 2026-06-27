@@ -71,10 +71,10 @@ describe('DOM Integration', () => {
     // 3. Select
     const selection = atom('B');
     const select = document.createElement('select');
-    for (const v of ['A', 'B']) {
+    for (const value of ['A', 'B']) {
       const opt = document.createElement('option');
-      opt.value = v;
-      opt.text = v;
+      opt.value = value;
+      opt.text = value;
       select.appendChild(opt);
     }
     select.addEventListener('change', (e) => {
@@ -143,9 +143,9 @@ describe('DOM Integration', () => {
 
   it('should stop updating DOM after dispose and run cleanup', async () => {
     const label = atom('on');
-    const el = document.createElement('span');
+    const element = document.createElement('span');
     const button = document.createElement('button');
-    container.appendChild(el);
+    container.appendChild(element);
     container.appendChild(button);
 
     let clickCount = 0;
@@ -154,13 +154,13 @@ describe('DOM Integration', () => {
     };
 
     const e = effect(() => {
-      el.textContent = label.value;
+      element.textContent = label.value;
       button.addEventListener('click', handler);
       return () => button.removeEventListener('click', handler);
     });
 
     await aeNextTick();
-    expect(el.textContent).toBe('on');
+    expect(element.textContent).toBe('on');
     button.click();
     expect(clickCount).toBe(1);
 
@@ -173,7 +173,7 @@ describe('DOM Integration', () => {
     // DOM no longer updates
     label.value = 'off';
     await aeNextTick();
-    expect(el.textContent).toBe('on');
+    expect(element.textContent).toBe('on');
   });
 
   it('should allow multiple independent effects on the same atom', async () => {

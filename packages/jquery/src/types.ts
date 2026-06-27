@@ -189,7 +189,7 @@ export type ListKeyFn<T> = (item: T, index: number) => ListKey;
  * $('#list').list(items, {
  *   key: 'id',
  *   render: (item) => `<li>${item.text}</li>`,
- *   onAdd: ($el) => $el.fadeIn()
+ *   onAdd: ($element) => $element.fadeIn()
  * });
  */
 export interface ListOptions<T> {
@@ -198,13 +198,13 @@ export interface ListOptions<T> {
   /** Function to generate the DOM representation for an item. */
   render: (item: T, index: number) => ListRenderResult;
   /** Optional callback to apply bindings to the rendered element. */
-  bind?: ($el: JQuery, item: T, index: number) => void;
+  bind?: ($element: JQuery, item: T, index: number) => void;
   /** Optional callback triggered when an item's data is updated. */
-  update?: ($el: JQuery, item: T, index: number) => void;
+  update?: ($element: JQuery, item: T, index: number) => void;
   /** Callback triggered when a new element is added to the list. */
-  onAdd?: ($el: JQuery) => void;
+  onAdd?: ($element: JQuery) => void;
   /** Callback triggered when an element is removed (can be used for transitions). */
-  onRemove?: ($el: JQuery) => Promise<void> | void;
+  onRemove?: ($element: JQuery) => Promise<void> | void;
   /** Content to display when the list is empty. */
   empty?: ListRenderResult;
   /** Event handlers bound to individual list items. */
@@ -274,7 +274,7 @@ export interface FetchError extends Error {
 }
 
 /** Definition for a mountable component that manages its own reactive lifecycle. */
-export type ComponentFn<P = Record<string, unknown>> = ($el: JQuery, props: P) => EffectResult;
+export type ComponentFn<P = Record<string, unknown>> = ($element: JQuery, props: P) => EffectResult;
 
 /** Lifecycle hooks for navigating between application routes. */
 export interface RouteLifecycle {
@@ -502,7 +502,7 @@ export interface AtomComponentController {
   readonly internals?: ElementInternals | undefined;
 
   /** Registers a reactive provider on this element for dependency injection. */
-  provideAtom<T = unknown>(key: string | symbol, val: T): void;
+  provideAtom<T = unknown>(key: string | symbol, value: T): void;
   /** Injects a reactive value provided by an ancestor element. */
   injectAtom<T = unknown>(key: string | symbol): WritableAtom<T | null> | null;
 
@@ -544,16 +544,19 @@ export interface AtomComponentController {
            * Reactive value for Form-Associated Custom Elements (FACE).
            * Automatically synchronized with the native <form> via internals.setFormValue().
            */
+          val?:
+            | ReadonlyAtom<unknown>
+            | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
           value?:
             | ReadonlyAtom<unknown>
-            | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+            | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
           /**
            * Reactive validation logic for Form-Associated Custom Elements (FACE).
            * Can be a validation message string, a ValidityStateFlags object, or an atom/function returning either.
            */
           validation?:
             | ReadonlyAtom<ValidityStateFlags | string>
-            | ((val: unknown) => ValidityStateFlags | string);
+            | ((value: unknown) => ValidityStateFlags | string);
         }
   ): void;
 
@@ -587,10 +590,13 @@ export interface AtomComponentStatic {
   aejAria?: Record<string, ReadonlyAtom<unknown>>;
   aejParts?: Record<string, ReadonlyAtom<string | string[] | Record<string, boolean> | null>>;
   aejDispatch?: Record<string, ReactiveValue<unknown>>;
-  aejValue?: ReadonlyAtom<unknown> | { val: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+  aejVal?: ReadonlyAtom<unknown> | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
+  aejValue?:
+    | ReadonlyAtom<unknown>
+    | { value: ReadonlyAtom<unknown>; state?: ReadonlyAtom<unknown> };
   aejValidation?:
     | ReadonlyAtom<ValidityStateFlags | string>
-    | ((val: unknown) => ValidityStateFlags | string);
+    | ((value: unknown) => ValidityStateFlags | string);
 }
 
 export type { EffectCleanup, ReadonlyAtom, WritableAtom };

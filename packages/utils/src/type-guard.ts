@@ -39,8 +39,8 @@ export { isOption } from './option';
  *   or generic objects from being misidentified as Results.
  *
  * @example
- * if (isResult(val)) {
- *   if (val.ok) console.log(val.value);
+ * if (isResult(value)) {
+ *   if (value.ok) console.log(value.value);
  * }
  */
 export { isResult } from './result';

@@ -16,9 +16,9 @@ describe('$.atomList (Integration)', () => {
     $container = appendToBody('<div>');
   });
 
-  /** Simulate a click on `el`, bubbling up through jQuery's event system. */
-  function click(el: HTMLElement): void {
-    $(el).trigger('click');
+  /** Simulate a click on `element`, bubbling up through jQuery's event system. */
+  function click(element: HTMLElement): void {
+    $(element).trigger('click');
   }
 
   describe('Core Rendering & Reconciliation', () => {
@@ -85,7 +85,7 @@ describe('$.atomList (Integration)', () => {
       $ul.atomList(items, {
         key: 'id',
         render: (item) => `<li id="item-${item.id}">${item.text}</li>`,
-        update: ($el, item) => $el.text(item.text),
+        update: ($element, item) => $element.text(item.text),
       });
 
       await $.nextTick();
@@ -136,7 +136,7 @@ describe('$.atomList (Integration)', () => {
       await $.nextTick();
       const reversed = $ul
         .children()
-        .map((_, el) => $(el).text())
+        .map((_, element) => $(element).text())
         .get();
       expect(reversed).toEqual(['5', '4', '3', '2', '1']);
 
@@ -179,12 +179,12 @@ describe('$.atomList (Integration)', () => {
     });
 
     it('should re-render when an item is shallow-copied after deep mutation (isEqual: false)', async () => {
-      const items = $.atom([{ id: 1, nested: { val: 1 } }]);
+      const items = $.atom([{ id: 1, nested: { value: 1 } }]);
       const $ul = appendToBody('<ul>');
 
       $ul.atomList(items, {
         key: 'id',
-        render: (item) => `<li id="item-${item.id}">${item.nested.val}</li>`,
+        render: (item) => `<li id="item-${item.id}">${item.nested.value}</li>`,
         isEqual: () => false,
       });
 
@@ -193,7 +193,7 @@ describe('$.atomList (Integration)', () => {
 
       const item = items.value[0];
       if (!item) throw new Error('Expected item to be defined');
-      item.nested.val = 2;
+      item.nested.value = 2;
       items.value = [{ ...item }];
       await $.nextTick();
 
@@ -244,11 +244,11 @@ describe('$.atomList (Integration)', () => {
     });
 
     it('should escape key attribute to prevent XSS breakout', async () => {
-      const items = $.atom([{ name: '" onmouseover="alert(1)', val: 'x' }]);
+      const items = $.atom([{ name: '" onmouseover="alert(1)', value: 'x' }]);
 
       $container.atomList(items, {
         key: 'name',
-        render: (i) => `<span>${i.val}</span>`,
+        render: (i) => `<span>${i.value}</span>`,
       });
 
       await $.nextTick();
@@ -260,14 +260,14 @@ describe('$.atomList (Integration)', () => {
   describe('Lifecycle & Cleanup', () => {
     it('should dispose effect on re-render without relying on internal classes', async () => {
       let runCount = 0;
-      const items = $.atom([{ id: 1, val: 'a' }]);
+      const items = $.atom([{ id: 1, value: 'a' }]);
       const trigger = $.atom(0);
 
       $container.atomList(items, {
         key: 'id',
         render: () => `<span></span>`,
-        bind: ($el) => {
-          $el.atomText(
+        bind: ($element) => {
+          $element.atomText(
             $.computed(() => {
               trigger.value; // Dependency
               runCount++;
@@ -281,7 +281,7 @@ describe('$.atomList (Integration)', () => {
       expect(runCount).toBe(1);
 
       // Force re-render of item 1 (new object, same key)
-      items.value = [{ id: 1, val: 'b' }];
+      items.value = [{ id: 1, value: 'b' }];
       await $.nextTick();
 
       // Trigger change should only run the NEW effect once
@@ -331,9 +331,9 @@ describe('$.atomList (Integration)', () => {
       $container.atomList(list, {
         key: 'id',
         render: (i) => `<span class="item-${i.id}"></span>`,
-        onRemove: ($el) => {
+        onRemove: ($element) => {
           // Manually add the key back to trigger re-bound check in commitRemoval
-          $el.attr('data-atom-key', '1');
+          $element.attr('data-atom-key', '1');
           return Promise.resolve();
         },
       });
@@ -371,12 +371,12 @@ describe('$.atomList (Integration)', () => {
     });
 
     it('should invoke onAdd callback when ForceReplace occurs', async () => {
-      const list = $.atom([{ id: 1, val: 'A' }]);
+      const list = $.atom([{ id: 1, value: 'A' }]);
       const onAdd = vi.fn();
 
       $container.atomList(list, {
         key: (item) => item.id,
-        render: (item) => `<span>${item.val}</span>`,
+        render: (item) => `<span>${item.value}</span>`,
         onAdd,
       });
       await $.nextTick();
@@ -384,7 +384,7 @@ describe('$.atomList (Integration)', () => {
 
       onAdd.mockClear();
 
-      list.value = [{ id: 1, val: 'B' }];
+      list.value = [{ id: 1, value: 'B' }];
       await $.nextTick();
 
       expect(onAdd).toHaveBeenCalledTimes(1);
@@ -576,7 +576,7 @@ describe('$.atomList (Integration)', () => {
 
       const order = $container
         .find('span')
-        .map((_, el) => $(el).attr('data-id'))
+        .map((_, element) => $(element).attr('data-id'))
         .get();
 
       expect(order).toEqual(['3', '2', '1']);
@@ -692,7 +692,7 @@ describe('$.atomList (Integration)', () => {
     });
 
     it('atomList delegation and text node container checking', () => {
-      // Call atomList on a mock JQuery-like object that has a null/undefined element to cover el falsy branch in index.ts:138
+      // Call atomList on a mock JQuery-like object that has a null/undefined element to cover element falsy branch in index.ts:138
       const list = $.atom(['A']);
       const mockJq = castTo<JQuery>({
         length: 1,
@@ -747,7 +747,7 @@ describe('$.atomList (Integration)', () => {
 
       const text = $container
         .find('span')
-        .map((_, el) => $(el).text())
+        .map((_, element) => $(element).text())
         .get();
       expect(text).toEqual(['1', '3', '4', '2']);
     });
@@ -760,10 +760,10 @@ describe('$.atomList (Integration)', () => {
       // snapshots is empty, keyToIndex has key '1' pointing to index 0
       ctx.keyToIndex.set('1', 0);
 
-      const el = document.createElement('div');
-      el.setAttribute('data-atom-key', '1');
+      const element = document.createElement('div');
+      element.setAttribute('data-atom-key', '1');
 
-      const result = resolveEventTarget(ctx, el, $container[0] as HTMLElement);
+      const result = resolveEventTarget(ctx, element, $container[0] as HTMLElement);
       // Should be null because snapshots[0] is undefined
       expect(result).toBeNull();
     });
@@ -776,10 +776,10 @@ describe('$.atomList (Integration)', () => {
       ctx.keyToIndex.set('key1', 0);
       ctx.snapshots = [{ key: 'key1', item: 'item1', node: [] }];
 
-      const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      el.setAttribute('data-atom-key', 'key1');
+      const element = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      element.setAttribute('data-atom-key', 'key1');
 
-      const result = resolveEventTarget(ctx, el, $container[0] as Element);
+      const result = resolveEventTarget(ctx, element, $container[0] as Element);
       expect(result).not.toBeNull();
       expect(result?.item).toBe('item1');
     });
@@ -844,18 +844,18 @@ describe('$.atomList (Integration)', () => {
     });
 
     it('should correctly replace element on ForceReplace state using native DOM', async () => {
-      const list = $.atom([{ id: 1, val: 'A' }]);
+      const list = $.atom([{ id: 1, value: 'A' }]);
 
       $container.atomList(list, {
         key: (item) => item.id,
-        render: (item) => `<span>${item.val}</span>`,
+        render: (item) => `<span>${item.value}</span>`,
       });
       await $.nextTick();
       const firstEl = $container.find('span')[0];
       expect(firstEl?.textContent).toBe('A');
 
-      // Change the val to trigger ForceReplace
-      list.value = [{ id: 1, val: 'B' }];
+      // Change the value to trigger ForceReplace
+      list.value = [{ id: 1, value: 'B' }];
       await $.nextTick();
 
       const secondEl = $container.find('span')[0];

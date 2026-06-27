@@ -124,9 +124,9 @@ describe('Core Symbols & Branding', () => {
       });
 
       it('should use peek when peek parameter is true', () => {
-        const a = atom({ val: 1 });
+        const a = atom({ value: 1 });
         const res = mergeAtomValues([a], true);
-        expect(res).toEqual({ val: 1 });
+        expect(res).toEqual({ value: 1 });
       });
     });
   });

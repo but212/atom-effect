@@ -10,44 +10,44 @@ describe('Input Bindings (Two-way)', () => {
   describe('Core Synchronization', () => {
     it('should sync values between Atom and DOM with parse/format/debounce', async () => {
       const val = $.atom(10);
-      const $el = appendToBody('<input>');
+      const $element = appendToBody('<input>');
 
-      $el.atomVal(val, {
+      $element.atomVal(val, {
         debounce: 20,
-        parse: (v) => parseInt(v, 10),
-        format: (v) => `V:${v}`,
+        parse: (value) => parseInt(value, 10),
+        format: (value) => `V:${value}`,
       });
 
       // Initial sync (awaiting initial effect + potential debounce tick)
       await new Promise((r) => setTimeout(r, 40));
-      expect($el.val()).toBe('V:10');
+      expect($element.val()).toBe('V:10');
 
       // DOM -> Atom with debounce
-      $el.val('25').trigger('input');
+      $element.val('25').trigger('input');
       expect(val.value).toBe(10); // Not yet
       await new Promise((r) => setTimeout(r, 30));
       expect(val.value).toBe(25);
 
       // Focus stability: don't overwrite user typing if functionally equivalent
-      $el.trigger('focus');
-      $el.val('25.0'); // parse("25.0") is 25, which matches atom
+      $element.trigger('focus');
+      $element.val('25.0'); // parse("25.0") is 25, which matches atom
       val.value = 25; // Re-trigger effect with same value
       await $.nextTick();
-      expect($el.val()).toBe('25.0'); // Should NOT be formatted back to "V:25" while focused
+      expect($element.val()).toBe('25.0'); // Should NOT be formatted back to "V:25" while focused
     });
 
     it('should clear debounce timer on blur', async () => {
       vi.useFakeTimers();
       const val = $.atom('init');
-      const $el = appendToBody('<input>');
+      const $element = appendToBody('<input>');
 
-      $el.atomVal(val, { debounce: 100 });
+      $element.atomVal(val, { debounce: 100 });
       await $.nextTick();
 
-      $el.trigger('focus');
-      $el.val('typed').trigger('input');
+      $element.trigger('focus');
+      $element.val('typed').trigger('input');
       // Blur immediately
-      $el.trigger('blur');
+      $element.trigger('blur');
 
       // Debounce timer should be cleared
       vi.advanceTimersByTime(200);
@@ -73,7 +73,7 @@ describe('Input Bindings (Two-way)', () => {
 
       // Should not throw when accessing selection properties on type="number"
       $num.trigger('focus');
-      await $.nextTick(); // Validation: accessing el.selectionStart on number should be safely handled
+      await $.nextTick(); // Validation: accessing element.selectionStart on number should be safely handled
     });
 
     it('should handle boolean and collection bindings (checkbox, select-multiple)', async () => {
@@ -122,22 +122,22 @@ describe('Input Bindings (Two-way)', () => {
 
     it('should dispose all effects and remove event listeners on unbind', async () => {
       const val = $.atom('initial');
-      const $el = appendToBody('<input>');
+      const $element = appendToBody('<input>');
 
       // Multiple namespaced events test
-      $el.atomVal(val, { event: 'custom-a custom-b' });
+      $element.atomVal(val, { event: 'custom-a custom-b' });
       await $.nextTick();
 
-      $el.atomUnbind();
+      $element.atomUnbind();
 
       // DOM -> Atom stopped
-      $el.val('changed').trigger('custom-a');
+      $element.val('changed').trigger('custom-a');
       expect(val.value).toBe('initial');
 
       // Atom -> DOM stopped
       val.value = 'external';
       await $.nextTick();
-      expect($el.val()).toBe('changed');
+      expect($element.val()).toBe('changed');
     });
   });
 
@@ -146,45 +146,45 @@ describe('Input Bindings (Two-way)', () => {
       const val = $.atom('initial');
       let syncCount = 0;
 
-      const $el = appendToBody('<input>');
-      const el = $el[0] as HTMLInputElement;
+      const $element = appendToBody('<input>');
+      const element = $element[0] as HTMLInputElement;
 
       // Track atom setter calls to detect redundant syncs
       const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(val), 'value');
       if (!descriptor) throw new Error('Expected descriptor to exist');
       Object.defineProperty(val, 'value', {
         get: () => val.peek(),
-        set: (v) => {
+        set: (value) => {
           syncCount++;
-          descriptor.set?.call(val, v);
+          descriptor.set?.call(val, value);
         },
         configurable: true,
       });
 
-      $el.atomVal(val);
+      $element.atomVal(val);
       await $.nextTick();
       syncCount = 0; // Reset after initial sync
 
       // Start IME composition
-      $el.trigger('focus').trigger('compositionstart');
-      el.value = '가';
+      $element.trigger('focus').trigger('compositionstart');
+      element.value = '가';
 
       // IME Stability: Atom update from outside should not overwrite DOM
       val.value = 'external';
       await $.nextTick();
-      expect(el.value).toBe('가'); // DOM preserved
+      expect(element.value).toBe('가'); // DOM preserved
 
       syncCount = 0; // Reset count before blur sync
       // Blur during composition: Should sync once and avoid duplicate calls
-      $el.trigger('blur');
+      $element.trigger('blur');
       expect(val.value).toBe('가');
       expect(syncCount).toBe(1); // Must be exactly 1
     });
 
     it('should ignore input event when isComposing is true', async () => {
       const val = $.atom('initial');
-      const $el = appendToBody('<input>');
-      $el.atomVal(val);
+      const $element = appendToBody('<input>');
+      $element.atomVal(val);
       await $.nextTick();
 
       const jqEvent = $.Event('input', {
@@ -193,8 +193,8 @@ describe('Input Bindings (Two-way)', () => {
         },
       });
 
-      $el.val('new-val');
-      $el.trigger(jqEvent);
+      $element.val('new-val');
+      $element.trigger(jqEvent);
       await $.nextTick();
 
       // Since it's composing, atom should NOT be updated.
@@ -205,37 +205,37 @@ describe('Input Bindings (Two-way)', () => {
   describe('Edge Cases & Error Resilience', () => {
     it('should normalize DOM value on blur even if parsed value matches atom', async () => {
       const val = $.atom(10);
-      const $el = appendToBody('<input>');
+      const $element = appendToBody('<input>');
 
-      $el.atomVal(val, {
-        parse: (v) => parseInt(v, 10),
-        format: (v) => `V:${v}`,
+      $element.atomVal(val, {
+        parse: (value) => parseInt(value, 10),
+        format: (value) => `V:${value}`,
       });
 
       await $.nextTick();
-      expect($el.val()).toBe('V:10');
+      expect($element.val()).toBe('V:10');
 
       // 1. Focus and type something functionally equivalent but string-different
-      $el.trigger('focus');
-      $el.val('10.0'); // parse("10.0") is 10, which matches atom.peek()
-      $el.trigger('input');
+      $element.trigger('focus');
+      $element.val('10.0'); // parse("10.0") is 10, which matches atom.peek()
+      $element.trigger('input');
 
       expect(val.value).toBe(10);
-      expect($el.val()).toBe('10.0'); // DOM preserved while focused (Focus Stability)
+      expect($element.val()).toBe('10.0'); // DOM preserved while focused (Focus Stability)
 
       // 2. Blur the element
-      $el.trigger('blur');
+      $element.trigger('blur');
 
       // DOM SHOULD be normalized back to "V:10" now that focus is lost
-      expect($el.val()).toBe('V:10');
+      expect($element.val()).toBe('V:10');
     });
 
     it('should not perform redundant DOM writes if value is up-to-date', async () => {
       const val = $.atom('initial');
-      const $el = appendToBody('<input>');
-      const el = $el[0] as HTMLInputElement;
+      const $element = appendToBody('<input>');
+      const element = $element[0] as HTMLInputElement;
 
-      $el.atomVal(val);
+      $element.atomVal(val);
       await $.nextTick();
 
       let writeCount = 0;
@@ -245,13 +245,13 @@ describe('Input Bindings (Two-way)', () => {
       );
 
       // Spy on the element.value setter
-      Object.defineProperty(el, 'value', {
+      Object.defineProperty(element, 'value', {
         get: function () {
           return originalDescriptor?.get?.call(this);
         },
-        set: function (v) {
+        set: function (value) {
           writeCount++;
-          originalDescriptor?.set?.call(this, v);
+          originalDescriptor?.set?.call(this, value);
         },
         configurable: true,
       });
@@ -264,9 +264,9 @@ describe('Input Bindings (Two-way)', () => {
 
       // Case: User types something, Atom updates, Effect triggers.
       // In this case, DOM is ALREADY 'third'. The effect should see this and NOT write again.
-      $el.val('third');
+      $element.val('third');
       writeCount = 0;
-      $el.trigger('input');
+      $element.trigger('input');
       expect(val.value).toBe('third');
       await $.nextTick();
 
@@ -279,16 +279,16 @@ describe('Input Bindings (Two-way)', () => {
       $.debug.enabled = true;
 
       const val = $.atom(1);
-      const $el = appendToBody('<input>');
+      const $element = appendToBody('<input>');
 
       // 1. DOM -> Atom failure (parse error)
-      $el.atomVal(val, {
+      $element.atomVal(val, {
         parse: () => {
           throw new Error('Parse error');
         },
       });
 
-      $el.val('2').trigger('input');
+      $element.val('2').trigger('input');
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('atom-binding'),
@@ -320,9 +320,9 @@ describe('Input Bindings (Two-way)', () => {
       let formatShouldThrow = false;
 
       $el3.atomVal(val3, {
-        format: (v) => {
+        format: (value) => {
           if (formatShouldThrow) throw new Error('Blur format error');
-          return String(v);
+          return String(value);
         },
       });
 
@@ -347,9 +347,9 @@ describe('Input Bindings (Two-way)', () => {
 
       let formattedValue: unknown;
       $sel.atomVal(list, {
-        format: (v) => {
-          formattedValue = v;
-          return v as string;
+        format: (value) => {
+          formattedValue = value;
+          return value as string;
         },
       });
       await $.nextTick();
@@ -366,21 +366,21 @@ describe('Input Bindings (Two-way)', () => {
 
     it('should not throw or fail synchronization when focused on input[type="number"] which does not support selection API', async () => {
       const val = $.atom(10);
-      const $el = appendToBody('<input type="number">');
+      const $element = appendToBody('<input type="number">');
 
-      $el.atomVal(val);
+      $element.atomVal(val);
       await $.nextTick();
-      expect($el.val()).toBe('10');
+      expect($element.val()).toBe('10');
 
       // Focus the element to enter the selection preservation code path
-      $el.trigger('focus');
+      $element.trigger('focus');
 
       // Update value which triggers syncToDom
       val.value = 20;
       await $.nextTick();
 
       // Value should be successfully updated and no errors should be thrown
-      expect($el.val()).toBe('20');
+      expect($element.val()).toBe('20');
     });
 
     it('should respect custom options.equal comparator for array elements in select-multiple', async () => {
@@ -406,8 +406,8 @@ describe('Input Bindings (Two-way)', () => {
 
       $sel.atomVal(list, {
         equal: equalSpy,
-        parse: (v) => [{ id: parseInt(v, 10) }],
-        format: (v) => v.map((item) => String(item.id)).join(','),
+        parse: (value) => [{ id: parseInt(value, 10) }],
+        format: (value) => value.map((item) => String(item.id)).join(','),
       });
       await $.nextTick();
 

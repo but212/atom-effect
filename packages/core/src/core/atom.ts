@@ -25,9 +25,9 @@ import {
 } from '@/constants';
 import {
   nextVersion,
+  nodeGetSubscriberCount,
   nodeNotifySubscribers,
   nodeSubscribe,
-  nodeSubscriberCount,
   trackingContext,
 } from '@/core/base';
 import type {
@@ -151,7 +151,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * @returns The number of active subscribers currently tracking this atom.
    */
   subscriberCount(): number {
-    return nodeSubscriberCount(this);
+    return nodeGetSubscriberCount(this);
   }
 
   /**

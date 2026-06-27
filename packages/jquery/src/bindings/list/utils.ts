@@ -16,18 +16,18 @@ import { registry } from '@/core/registry';
  * Role: DOM Identity Tracking
  * Assigns or removes a stable reactive identifier on a DOM node.
  *
- * @param $el - The target jQuery collection.
+ * @param nodes - The target DOM nodes.
  * @param key - Unique string key for identification, or null to remove.
  * @internal
  */
 export function setAtomKey(nodes: Node[], key: string | null): void {
   for (let i = 0; i < nodes.length; i++) {
-    const el = nodes[i];
-    if (el instanceof Element) {
+    const element = nodes[i];
+    if (element instanceof Element) {
       if (key === null) {
-        el.removeAttribute('data-atom-key');
+        element.removeAttribute('data-atom-key');
       } else {
-        el.setAttribute('data-atom-key', key);
+        element.setAttribute('data-atom-key', key);
       }
     }
   }
@@ -48,8 +48,8 @@ export function setAtomKey(nodes: Node[], key: string | null): void {
  */
 export function cleanupNodes(nodes: Node[]): void {
   for (let i = 0; i < nodes.length; i++) {
-    const el = nodes[i];
-    if (el) registry.cleanupTree(el);
+    const element = nodes[i];
+    if (element) registry.cleanupTree(element);
   }
 }
 
@@ -88,13 +88,13 @@ export function replaceDomNodes(oldNodes: Node[], newNodes: Node[]): void {
   if (firstPreviousNode?.parentNode) {
     const parent = firstPreviousNode.parentNode;
     for (let i = 0; i < newNodes.length; i++) {
-      const el = newNodes[i];
-      if (el) parent.insertBefore(el, firstPreviousNode);
+      const element = newNodes[i];
+      if (element) parent.insertBefore(element, firstPreviousNode);
     }
     for (let i = 0; i < oldNodes.length; i++) {
-      const el = oldNodes[i];
-      if (el?.parentNode) {
-        el.parentNode.removeChild(el);
+      const element = oldNodes[i];
+      if (element?.parentNode) {
+        element.parentNode.removeChild(element);
       }
     }
   }

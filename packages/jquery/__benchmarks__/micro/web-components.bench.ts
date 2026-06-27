@@ -29,11 +29,11 @@ describe('Web Components: Lifecycle & Context', () => {
     const container = $c[0];
     if (!container) return;
     for (let i = 0; i < 100; i++) {
-      const el = document.createElement('benchmark-comp') as BenchmarkComp;
-      container.appendChild(el);
-      el.setup();
-      el.teardown();
-      container.removeChild(el);
+      const element = document.createElement('benchmark-comp') as BenchmarkComp;
+      container.appendChild(element);
+      element.setup();
+      element.teardown();
+      container.removeChild(element);
     }
   });
 
