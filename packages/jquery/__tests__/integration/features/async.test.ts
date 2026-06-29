@@ -19,16 +19,16 @@ describe('Async Binding Integration', () => {
 
   it('atomText: should resolve Promise wrapped in an Atom', async () => {
     const $element = $('<div>');
-    const atom = $.atom(Promise.resolve('Initial Async'));
+    const asyncAtom = $.atom(Promise.resolve('Initial Async'));
 
-    $element.atomText(atom);
+    $element.atomText(asyncAtom);
 
-    await atom.value;
+    await asyncAtom.value;
     await $.nextTick();
     expect($element.text()).toBe('Initial Async');
 
     const nextPromise = Promise.resolve('Updated Async');
-    atom.value = nextPromise;
+    asyncAtom.value = nextPromise;
 
     await nextPromise;
     await $.nextTick();
@@ -37,20 +37,20 @@ describe('Async Binding Integration', () => {
 
   it('Race Condition: should only apply the latest Promise result', async () => {
     const $element = $('<div>');
-    const atom = $.atom<Promise<string> | string>('Static');
+    const asyncAtom = $.atom<Promise<string> | string>('Static');
 
-    $element.atomText(atom);
+    $element.atomText(asyncAtom);
 
     // P1 resolves late, P2 resolves early.
     // P2 should win because it was the LATEST promise assigned to the atom.
     let resolve1: ((value: string) => void) | undefined;
-    const p1 = new Promise<string>((r) => (resolve1 = r));
+    const p1 = new Promise<string>((resolve) => (resolve1 = resolve));
 
     let resolve2: ((value: string) => void) | undefined;
-    const p2 = new Promise<string>((r) => (resolve2 = r));
+    const p2 = new Promise<string>((resolve) => (resolve2 = resolve));
 
-    atom.value = p1; // Assigned first
-    atom.value = p2; // Assigned second (Latest)
+    asyncAtom.value = p1; // Assigned first
+    asyncAtom.value = p2; // Assigned second (Latest)
 
     resolve2?.('P2 (Fast)');
     await p2;

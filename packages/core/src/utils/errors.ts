@@ -122,7 +122,7 @@ export class SchedulerError extends AtomError {
  * Uses a `Set` to track visited errors and prevent infinite loops during
  * chain traversal.
  *
- * @param error - The root error to trace.
+ * @param error The root error to trace.
  * @returns Sequential array of errors, starting from the input.
  */
 export function getErrorChain(error: unknown): Array<unknown> {
@@ -150,8 +150,8 @@ export function getErrorChain(error: unknown): Array<unknown> {
  * Replaces circular references with a sentinel message (`[Circular Reference]`)
  * to prevent serialization crashes in logging or storage pipelines.
  *
- * @param error - The error or object to serialize.
- * @param seen - @internal Internal set for circular tracking.
+ * @param error The error or object to serialize.
+ * @param seen @internal Internal set for circular tracking.
  */
 export function serializeError(error: Error, seen?: Set<unknown>): AtomErrorJSON;
 export function serializeError(error: null | undefined, seen?: Set<unknown>): null | undefined;
@@ -199,9 +199,9 @@ export function serializeError(
  * - To catch and re-throw external exceptions (DOM, Fetch) with system metadata.
  * - To unify error reporting formats across different engine modules.
  *
- * @param error - The raw error to wrap.
- * @param errorConstructor - The system error class to instantiate.
- * @param context - Human-readable context (e.g., 'Computed: userId').
+ * @param error The raw error to wrap.
+ * @param errorConstructor The system error class to instantiate.
+ * @param context Human-readable context (e.g., 'Computed: userId').
  * @returns A structured `AtomError` instance.
  */
 export function wrapError(

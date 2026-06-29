@@ -17,24 +17,24 @@ import {
 describe('Dependency Graph Safety', () => {
   describe('Cycle Detection', () => {
     it('throws ComputedError with circular dependency message on direct cycle', () => {
-      let c1: ReturnType<typeof computed<number>>;
-      let c2: ReturnType<typeof computed<number>>;
+      let computed1: ReturnType<typeof computed<number>>;
+      let computed2: ReturnType<typeof computed<number>>;
 
-      c1 = computed(() => (c2 ? c2.value : 0) + 1);
-      c2 = computed(() => c1.value + 1);
+      computed1 = computed(() => (computed2 ? computed2.value : 0) + 1);
+      computed2 = computed(() => computed1.value + 1);
 
-      expect(() => c1.value).toThrow(ComputedError);
-      expect(() => c1.value).toThrow('Circular');
+      expect(() => computed1.value).toThrow(ComputedError);
+      expect(() => computed1.value).toThrow('Circular');
     });
 
     it('should successfully detect and throw on circular dependencies', () => {
-      let c1: ComputedAtom<number>;
-      let c2: ComputedAtom<number>;
-      c1 = computed(() => c2.value + 1);
-      c2 = computed(() => c1.value + 1);
+      let computed1: ComputedAtom<number>;
+      let computed2: ComputedAtom<number>;
+      computed1 = computed(() => computed2.value + 1);
+      computed2 = computed(() => computed1.value + 1);
 
       // Best Practice: Assert that evaluating a circular dependency throws a circular dependency error
-      expect(() => c1.value).toThrow('Circular dependency detected');
+      expect(() => computed1.value).toThrow('Circular dependency detected');
     });
 
     it('does not throw when a cyclic node has defaultValue — uses it as recursive base case', () => {
@@ -43,11 +43,11 @@ describe('Dependency Graph Safety', () => {
       // This means the cycle resolves to a finite value rather than a stack overflow.
       const box = { c2: null as ReturnType<typeof computed<number>> | null };
 
-      const c1 = computed(() => (box.c2?.value ?? 0) + 1, { defaultValue: 0 });
-      box.c2 = computed(() => c1.value + 1);
+      const computed1 = computed(() => (box.c2?.value ?? 0) + 1, { defaultValue: 0 });
+      box.c2 = computed(() => computed1.value + 1);
 
       // No throw — cycle terminates via defaultValue base case
-      expect(() => c1.value).not.toThrow();
+      expect(() => computed1.value).not.toThrow();
     });
 
     it('handles deep dependency chains without stack overflow', async () => {
@@ -58,9 +58,9 @@ describe('Dependency Graph Safety', () => {
       ];
 
       for (let i = 1; i <= depth; i++) {
-        const prev = atoms[i - 1];
-        if (!prev) throw new Error('Setup failed');
-        atoms.push(computed(() => prev.value + 1));
+        const previousNode = atoms[i - 1];
+        if (!previousNode) throw new Error('Setup failed');
+        atoms.push(computed(() => previousNode.value + 1));
       }
 
       const last = atoms[depth];
@@ -79,7 +79,7 @@ describe('Dependency Graph Safety', () => {
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const counter = atom(0);
 
-      const fx = effect(() => {
+      const effectInstance = effect(() => {
         const value = counter.value;
         if (value < 200) counter.value = value + 1;
       });
@@ -87,7 +87,7 @@ describe('Dependency Graph Safety', () => {
       await aeNextTick();
 
       expect(spy).toHaveBeenCalledWith(expect.any(SchedulerError));
-      expect(fx.isDisposed).toBe(true);
+      expect(effectInstance.isDisposed).toBe(true);
 
       spy.mockRestore();
     });
@@ -100,58 +100,58 @@ describe('Dependency Graph Safety', () => {
       //   B(2)  C(3)
       //     \   /
       //      D(5)
-      const a = atom(1);
-      const b = computed(() => a.value * 2);
-      const c = computed(() => a.value * 3);
-      const d = computed(() => b.value + c.value);
+      const someAtom = atom(1);
+      const computedB = computed(() => someAtom.value * 2);
+      const computedC = computed(() => someAtom.value * 3);
+      const computedD = computed(() => computedB.value + computedC.value);
 
-      expect(d.value).toBe(5);
+      expect(computedD.value).toBe(5);
 
-      a.value = 2;
+      someAtom.value = 2;
       await aeNextTick();
 
       // Glitch would be D=7 (4+3) or D=8 (2+6) — must be 10
-      expect(d.value).toBe(10);
+      expect(computedD.value).toBe(10);
     });
 
     it('propagates errors through diamond and recovers cleanly', async () => {
-      const a = atom(true);
-      const b = computed(
+      const someAtom = atom(true);
+      const computedB = computed(
         () => {
-          if (a.value) throw new Error('B fail');
+          if (someAtom.value) throw new Error('B fail');
           return 1;
         },
         { defaultValue: 0 }
       );
-      const c = computed(
+      const computedC = computed(
         () => {
-          if (a.value) throw new Error('C fail');
+          if (someAtom.value) throw new Error('C fail');
           return 1;
         },
         { defaultValue: 0 }
       );
-      const d = computed(() => b.value + c.value, { defaultValue: -1 });
+      const computedD = computed(() => computedB.value + computedC.value, { defaultValue: -1 });
 
       try {
-        b.value;
+        computedB.value;
       } catch {
         /* expected */
       }
       try {
-        c.value;
+        computedC.value;
       } catch {
         /* expected */
       }
 
-      expect(d.value).toBe(0);
-      expect(d.hasError).toBe(true);
-      expect(d.errors.some((e) => e.message.includes('B fail'))).toBe(true);
-      expect(d.errors.some((e) => e.message.includes('C fail'))).toBe(true);
+      expect(computedD.value).toBe(0);
+      expect(computedD.hasError).toBe(true);
+      expect(computedD.errors.some((err) => err.message.includes('B fail'))).toBe(true);
+      expect(computedD.errors.some((err) => err.message.includes('C fail'))).toBe(true);
 
-      a.value = false;
+      someAtom.value = false;
       await aeNextTick();
-      expect(d.value).toBe(2);
-      expect(d.hasError).toBe(false);
+      expect(computedD.value).toBe(2);
+      expect(computedD.hasError).toBe(false);
     });
   });
 });

@@ -19,13 +19,13 @@ describe('Input Bindings (Two-way)', () => {
       });
 
       // Initial sync (awaiting initial effect + potential debounce tick)
-      await new Promise((r) => setTimeout(r, 40));
+      await new Promise((resolve) => setTimeout(resolve, 40));
       expect($element.val()).toBe('V:10');
 
       // DOM -> Atom with debounce
       $element.val('25').trigger('input');
       expect(val.value).toBe(10); // Not yet
-      await new Promise((r) => setTimeout(r, 30));
+      await new Promise((resolve) => setTimeout(resolve, 30));
       expect(val.value).toBe(25);
 
       // Focus stability: don't overwrite user typing if functionally equivalent
@@ -90,10 +90,10 @@ describe('Input Bindings (Two-way)', () => {
       // Simulate potential infinite loop via manual trigger in prop setter
       const originalProp = $.fn.prop;
       $.fn.prop = function (this: HTMLElement, ...args: unknown[]) {
-        const res = (originalProp as (...a: unknown[]) => unknown).apply($(this), args);
+        const result = (originalProp as (...argsList: unknown[]) => unknown).apply($(this), args);
         const [name, val] = args;
         if (name === 'checked' && val !== undefined) $(this).trigger('change');
-        return res;
+        return result;
       } as typeof $.fn.prop;
 
       isChecked.value = false;

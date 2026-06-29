@@ -22,11 +22,11 @@ if (!customElements.get('benchmark-comp')) {
 }
 
 describe('Web Components: Lifecycle & Context', () => {
-  const run = (name: string, fn: ($c: JQuery) => void) =>
-    bench(name, withContainer(fn), microBenchOptions);
+  const run = (name: string, benchmarkFunction: ($container: JQuery) => void) =>
+    bench(name, withContainer(benchmarkFunction), microBenchOptions);
 
-  run('setup and teardown 100 components', ($c) => {
-    const container = $c[0];
+  run('setup and teardown 100 components', ($container) => {
+    const container = $container[0];
     if (!container) return;
     for (let i = 0; i < 100; i++) {
       const element = document.createElement('benchmark-comp') as BenchmarkComp;
@@ -37,8 +37,8 @@ describe('Web Components: Lifecycle & Context', () => {
     }
   });
 
-  const runDepthLookup = (depth: number) => ($c: JQuery) => {
-    const root = $c[0];
+  const runDepthLookup = (depth: number) => ($container: JQuery) => {
+    const root = $container[0];
     if (!root) return;
     $.provideAtom(root, 'context-key', 'context-value');
     let current = root;
@@ -53,8 +53,8 @@ describe('Web Components: Lifecycle & Context', () => {
   run('context injection (depth 5, lookup 100x)', runDepthLookup(5));
   run('context injection (depth 20, lookup 100x)', runDepthLookup(20));
 
-  run('context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)', ($c) => {
-    const container = $c[0];
+  run('context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)', ($container) => {
+    const container = $container[0];
     if (!container) return;
     $.provideAtom(container, 'theme-context', 'dark-theme');
 

@@ -7,7 +7,7 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     const count = atom(0);
     let executions = 0;
 
-    const e = effect(() => {
+    const effectInstance = effect(() => {
       executions++;
       const value = count.value;
       if (value < 200) count.value = value + 1;
@@ -24,7 +24,7 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     );
     expect(executions).toBeGreaterThan(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT);
     expect(executions).toBeLessThan(200);
-    expect(e.isDisposed).toBe(true);
+    expect(effectInstance.isDisposed).toBe(true);
 
     consoleSpy.mockRestore();
   });
@@ -111,7 +111,7 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     const HALF = Math.floor(SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_EFFECT / 2);
     const count = atom(0);
 
-    const e = effect(() => {
+    const effectInstance = effect(() => {
       count.value;
     });
 
@@ -122,14 +122,14 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
       for (let i = 0; i < HALF; i++) count.value = i + 100;
     });
 
-    expect(e.isDisposed).toBe(false);
+    expect(effectInstance.isDisposed).toBe(false);
     expect(consoleSpy).not.toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringMatching(/Infinite loop detected/),
       })
     );
 
-    e.dispose();
+    effectInstance.dispose();
     consoleSpy.mockRestore();
   });
 

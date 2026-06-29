@@ -52,8 +52,8 @@ describe('Atom List Edge Cases', () => {
     const $container = appendToBody('<div>');
 
     let resolveRemove: (() => void) | undefined;
-    const removePromise = new Promise<void>((r) => {
-      resolveRemove = r;
+    const removePromise = new Promise<void>((resolve) => {
+      resolveRemove = resolve;
     });
 
     $container.atomList(items, {
@@ -136,7 +136,9 @@ describe('Atom List Edge Cases', () => {
   it('should correctly render many items without losing sentinels during batchSanitize', async () => {
     // This triggers the internal batchSanitize logic in renderItems
     const count = 20;
-    const items = $.atom(Array.from({ length: count }, (_, i) => ({ id: i, text: `Item ${i}` })));
+    const items = $.atom(
+      Array.from({ length: count }, (_, index) => ({ id: index, text: `Item ${index}` }))
+    );
     const $container = appendToBody('<div>');
 
     $container.atomList(items, {

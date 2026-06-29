@@ -17,30 +17,30 @@ describe('Type Utilities', () => {
 
   describe('Structural Utilities', () => {
     it('UnionToIntersection should convert unions to intersections', () => {
-      type U = { a: string } | { b: number };
-      type I = { a: string } & { b: number };
-      assertType<Equal<UnionToIntersection<U>, I>>(true);
+      type UnionType = { a: string } | { b: number };
+      type IntersectionType = { a: string } & { b: number };
+      assertType<Equal<UnionToIntersection<UnionType>, IntersectionType>>(true);
     });
 
     it('Prettify should resolve intersections into a single flat object', () => {
-      type T = { a: string } & { b: number };
-      type P = Prettify<T>;
-      // Even though T and P are structurally the same,
+      type IntersectedType = { a: string } & { b: number };
+      type PrettifiedType = Prettify<IntersectedType>;
+      // Even though IntersectedType and PrettifiedType are structurally the same,
       // Prettify makes them a single object type.
-      assertType<Equal<P, { a: string; b: number }>>(true);
+      assertType<Equal<PrettifiedType, { a: string; b: number }>>(true);
     });
 
     it('Merge should flatten unions into a single intersected object type', () => {
-      type U = { a: string } | { b: number };
-      type M = Merge<U>;
-      assertType<Equal<M, { a: string; b: number }>>(true);
+      type UnionType = { a: string } | { b: number };
+      type MergedType = Merge<UnionType>;
+      assertType<Equal<MergedType, { a: string; b: number }>>(true);
     });
   });
 
   describe('Option and Result Type Narrowing', () => {
     it('should narrow types correctly', () => {
-      type O = Option<string | number>;
-      assertType<Equal<Extract<O, { ok: true }>['value'], string | number>>(true);
+      type OptionType = Option<string | number>;
+      assertType<Equal<Extract<OptionType, { ok: true }>['value'], string | number>>(true);
 
       type Mapped = ReturnType<typeof Result.mapErr<number, string | Error, number>>;
       assertType<Equal<Mapped, Result<number, number>>>(true);

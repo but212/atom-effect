@@ -343,7 +343,7 @@ export const getCurrentFlushEpoch = (): number => scheduler.sessionEpoch;
  * - When performing multiple related updates to different atoms.
  * - To prevent intermediate re-computations or redundant effect executions.
  *
- * @param fn - The function containing multiple state updates.
+ * @param fn The function containing multiple state updates.
  * @returns The value returned by the provided function.
  *
  * @example
@@ -362,29 +362,29 @@ export const getCurrentFlushEpoch = (): number => scheduler.sessionEpoch;
  * }); // Effect runs once here.
  * ```
  */
-function validateBatchFunction(fn: unknown): Result<void, Error> {
-  if (IS_DEV && typeof fn !== 'function') {
+function validateBatchFunction(callback: unknown): Result<void, Error> {
+  if (IS_DEV && typeof callback !== 'function') {
     return Result.err(new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION));
   }
   return Result.ok(undefined);
 }
 
-export function batch<T>(fn: () => T): T {
-  Result.unwrap(validateBatchFunction(fn));
+export function batch<T>(callback: () => T): T {
+  Result.unwrap(validateBatchFunction(callback));
 
   scheduler.startBatch();
   try {
-    return fn();
+    return callback();
   } finally {
     scheduler.endBatch();
   }
 }
 
 /** @internal */
-export function runInFlushScope<T>(fn: () => T): T | undefined {
+export function runInFlushScope<T>(callback: () => T): T | undefined {
   const started = scheduler.startFlush();
   try {
-    return fn();
+    return callback();
   } finally {
     if (started) scheduler.endFlush();
   }
@@ -400,7 +400,7 @@ let sharedNextTickPromise: Promise<void> | null = null;
  * - In tests to wait for effects to finish propagating before making assertions.
  * - When manual synchronization with the reactive cycle is required.
  *
- * @param nextTickCallback - Optional callback to execute after the next tick.
+ * @param nextTickCallback Optional callback to execute after the next tick.
  * @returns A promise that resolves when the flush is complete.
  */
 export function aeNextTick(nextTickCallback?: () => void): Promise<void> {

@@ -161,7 +161,7 @@ describe('Web Components Synergy (useAtomComponent)', () => {
 
     // Verify Cleanup
     $element.remove();
-    await new Promise((r) => setTimeout(r, 50)); // Wait for registry cleanup
+    await new Promise((resolve) => setTimeout(resolve, 50)); // Wait for registry cleanup
 
     listData.value = [...listData.value, { id: 3, text: 'Item 3' }];
     await $.nextTick();

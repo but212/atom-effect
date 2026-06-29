@@ -23,12 +23,12 @@ describe('Type Guards', () => {
       });
 
       it('should return true for functions with a then method', () => {
-        const thenableFn = Object.assign(() => {}, {
+        const thenableFunction = Object.assign(() => {}, {
           then(resolve: () => void) {
             resolve();
           },
         });
-        expect(isPromise(thenableFn)).toBe(true);
+        expect(isPromise(thenableFunction)).toBe(true);
       });
 
       it('should return true for custom classes with a then method', () => {
@@ -41,12 +41,12 @@ describe('Type Guards', () => {
       });
 
       it('should return true for arrays with a then method', () => {
-        const arr = Object.assign([], {
+        const thenableArray = Object.assign([], {
           then(resolve: () => void) {
             resolve();
           },
         });
-        expect(isPromise(arr)).toBe(true);
+        expect(isPromise(thenableArray)).toBe(true);
       });
     });
 
@@ -110,8 +110,8 @@ describe('Type Guards', () => {
         });
 
         it('should return false for arrays where then is not a function', () => {
-          const arr = Object.assign([], { then: 42 });
-          expect(isPromise(arr)).toBe(false);
+          const nonThenableArray = Object.assign([], { then: 42 });
+          expect(isPromise(nonThenableArray)).toBe(false);
         });
       });
 
@@ -121,8 +121,8 @@ describe('Type Guards', () => {
         });
 
         it('should return false for functions where then is not a function', () => {
-          const fn = Object.assign(() => {}, { then: 42 });
-          expect(isPromise(fn)).toBe(false);
+          const nonThenableFunction = Object.assign(() => {}, { then: 42 });
+          expect(isPromise(nonThenableFunction)).toBe(false);
         });
       });
 

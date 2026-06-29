@@ -12,6 +12,7 @@
  */
 
 import {
+  BRAND,
   effect,
   lensFor,
   mergeLenses,
@@ -91,51 +92,83 @@ function isToggleChecked(currentValue: unknown, targetValue: string, isCheck: bo
 }
 
 /**
- * Role: Interception Proxy
+ * Role: Interception Wrapper Class
  *
  * Design Intent:
- * Creates a lens that intercepts write operations to apply transformations
- * and trigger change callbacks without mutating the underlying base lens directly.
+ * Direct WritableAtom implementation delegating to baseLens, avoiding Proxy overhead
+ * and repeated .bind() dynamic allocations on hot path.
  *
  * @internal
  */
-function createInterceptedLens<T extends object, U>(
-  name: string,
-  baseLens: WritableAtom<PathValue<T, Paths<T>>>,
-  options: FormOptions<U>
-): WritableAtom<unknown> {
-  const { transform, onChange } = options;
-  return new Proxy(baseLens, {
-    get(target, propertyKey) {
-      if (propertyKey === 'value') return target.value;
-      const propertyValue = Reflect.get(target, propertyKey, target);
-      return typeof propertyValue === 'function' ? propertyValue.bind(target) : propertyValue;
-    },
-    set(target, propertyKey, targetValue) {
-      if (propertyKey === 'value') {
-        let transformed = targetValue;
-        if (transform) {
-          const transformResult = Result.tryCatch(() => transform(name, targetValue));
-          if (Result.isErr(transformResult)) {
-            console.error(`[bindForm] Transform error in field "${name}":`, transformResult.error);
-          } else {
-            transformed = transformResult.value;
-          }
-        }
-        target.value = transformed;
-        if (onChange) {
-          const onChangeResult = Result.tryCatch(() =>
-            untracked(() => onChange(name, transformed))
-          );
-          if (Result.isErr(onChangeResult)) {
-            console.error(`[bindForm] onChange error in field "${name}":`, onChangeResult.error);
-          }
-        }
-        return true;
+class InterceptedLens<T extends object, U> implements WritableAtom<unknown> {
+  readonly #base: WritableAtom<PathValue<T, Paths<T>>>;
+  readonly #name: string;
+  readonly #transform: FormOptions<U>['transform'];
+  readonly #onChange: FormOptions<U>['onChange'];
+
+  constructor(
+    name: string,
+    baseLens: WritableAtom<PathValue<T, Paths<T>>>,
+    options: FormOptions<U>
+  ) {
+    this.#base = baseLens;
+    this.#name = name;
+    this.#transform = options.transform;
+    this.#onChange = options.onChange;
+  }
+
+  get value(): unknown {
+    return this.#base.value;
+  }
+
+  set value(targetValue: unknown) {
+    let transformed = targetValue;
+    const transform = this.#transform;
+    if (transform) {
+      const transformResult = Result.tryCatch(() => transform(this.#name, targetValue));
+      if (Result.isErr(transformResult)) {
+        console.error(
+          `[bindForm] Transform error in field "${this.#name}":`,
+          transformResult.error
+        );
+      } else {
+        transformed = transformResult.value;
       }
-      return Reflect.set(target, propertyKey, targetValue, target);
-    },
-  });
+    }
+    this.#base.value = transformed as PathValue<T, Paths<T>>;
+    const onChange = this.#onChange;
+    if (onChange) {
+      const onChangeResult = Result.tryCatch(() =>
+        untracked(() => onChange(this.#name, transformed))
+      );
+      if (Result.isErr(onChangeResult)) {
+        console.error(`[bindForm] onChange error in field "${this.#name}":`, onChangeResult.error);
+      }
+    }
+  }
+
+  peek(): unknown {
+    return this.#base.peek();
+  }
+
+  subscribe(listener: unknown): () => void {
+    // Cast to WritableAtom<unknown> to call subscribe
+    return (this.#base as WritableAtom<unknown>).subscribe(
+      listener as (newValue?: unknown, oldValue?: unknown) => void
+    );
+  }
+
+  subscriberCount(): number {
+    return this.#base.subscriberCount();
+  }
+
+  dispose(): void {
+    this.#base.dispose();
+  }
+
+  get [BRAND](): number {
+    return Reflect.get(this.#base, BRAND) as number;
+  }
 }
 
 /**
@@ -187,6 +220,14 @@ function syncToggleEffect(
   });
 }
 
+function getElementNameProperty(element: HTMLElement): string | undefined {
+  if ('name' in element) {
+    const nameValue = (element as Record<string, unknown>).name;
+    return nameValue == null ? undefined : String(nameValue);
+  }
+  return undefined;
+}
+
 /**
  * Synchronizes an HTML `<form>` with a reactive state object.
  *
@@ -200,9 +241,9 @@ function syncToggleEffect(
  * If an array of atoms is provided, they are merged via `mergeLenses`.
  * Later atoms in the array override properties with the same path from earlier atoms.
  *
- * @param form - The target form element to bind.
- * @param atom - A writable atom or an array of atoms providing the state.
- * @param options - Configuration for transformations, change callbacks, and validation.
+ * @param form The target form element to bind.
+ * @param atom A writable atom or an array of atoms providing the state.
+ * @param options Configuration for transformations, change callbacks, and validation.
  *
  * @example
  * ```typescript
@@ -216,14 +257,6 @@ function syncToggleEffect(
  * });
  * ```
  */
-function getElementNameProperty(element: HTMLElement): string | undefined {
-  if ('name' in element) {
-    const nameValue = (element as Record<string, unknown>).name;
-    return nameValue == null ? undefined : String(nameValue);
-  }
-  return undefined;
-}
-
 export function bindForm<T extends object, U = unknown>(
   form: HTMLFormElement,
   atom: WritableAtom<T> | WritableAtom<unknown>[],
@@ -256,7 +289,7 @@ export function bindForm<T extends object, U = unknown>(
 
     const dotPath = normalizePath(name);
     const baseLens = lensFor(targetAtom)(dotPath as Paths<T>);
-    const atom = createInterceptedLens(name, baseLens, options);
+    const atom = new InterceptedLens(name, baseLens, options);
 
     entry = { atom, name, refCount: 1 };
     entries.set(name, entry);
@@ -296,7 +329,11 @@ export function bindForm<T extends object, U = unknown>(
     const name = element.getAttribute('name') || getElementNameProperty(element);
     if (!name) return;
 
-    const control = element as HTMLElement & { name?: string; value?: string; type?: string };
+    const control = element as HTMLElement & {
+      name?: string;
+      value?: string;
+      type?: string;
+    };
 
     const oldName = names.get(control);
     if (oldName === name) return;

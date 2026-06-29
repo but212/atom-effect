@@ -176,8 +176,8 @@ describe('Lens System', () => {
   describe('lensFor()', () => {
     it('should provide a lens factory', () => {
       const store = atom({ profile: { name: 'Alice' } });
-      const l = lensFor(store);
-      const nameLens = l('profile.name');
+      const lensFactory = lensFor(store);
+      const nameLens = lensFactory('profile.name');
 
       expect(nameLens.value).toBe('Alice');
       nameLens.value = 'Bob';
@@ -430,16 +430,16 @@ describe('Lens System', () => {
       const malicious = ['__proto__.polluted', 'constructor.prototype.polluted'];
 
       for (const path of malicious) {
-        const l = unsafeAtomLens(store, path);
-        l.value = 'evil';
+        const pollutedLens = unsafeAtomLens(store, path);
+        pollutedLens.value = 'evil';
         expect(Reflect.get({}, 'polluted')).toBeUndefined();
       }
     });
 
     it('should prevent reading dangerous internal properties', () => {
       const store = atom({ data: 'initial' });
-      const l = unsafeAtomLens(store, '__proto__');
-      expect(l.value).toBeUndefined();
+      const protoLens = unsafeAtomLens(store, '__proto__');
+      expect(protoLens.value).toBeUndefined();
     });
   });
 
@@ -487,9 +487,9 @@ describe('Lens System', () => {
 
   describe('MergedWritableLensImpl mechanics', () => {
     it('should expose the correct BRAND value', () => {
-      const a = atom({ x: 1 });
-      const b = atom({ y: 2 });
-      const merged = mergeLenses(a, b);
+      const firstAtom = atom({ x: 1 });
+      const secondAtom = atom({ y: 2 });
+      const merged = mergeLenses(firstAtom, secondAtom);
       expect(merged[BRAND]).toBe(BrandFlags.Atom | BrandFlags.Writable);
     });
   });

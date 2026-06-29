@@ -31,25 +31,25 @@ describe('Option<T>', () => {
     });
 
     it('Option.fromNullable() should treat NaN as Some(NaN)', () => {
-      const opt = Option.fromNullable(NaN);
-      expect(Option.isSome(opt)).toBe(true);
-      expect(Number.isNaN(Option.unwrap(opt))).toBe(true);
+      const someOption = Option.fromNullable(NaN);
+      expect(Option.isSome(someOption)).toBe(true);
+      expect(Number.isNaN(Option.unwrap(someOption))).toBe(true);
     });
 
     it('Option.fromPredicate() should return Some of value when predicate evaluates to true', () => {
-      const result = Option.fromPredicate(42, (x) => x > 0);
-      expect(Option.unwrap(result)).toBe(42);
+      const predicateOption = Option.fromPredicate(42, (x) => x > 0);
+      expect(Option.unwrap(predicateOption)).toBe(42);
     });
 
     it('Option.fromPredicate() should narrow type when predicate is a type guard', () => {
       const isString = (x: unknown): x is string => typeof x === 'string';
-      const result = Option.fromPredicate<unknown, string>('hello', isString);
-      expect(Option.unwrap(result)).toBe('hello');
+      const predicateOption = Option.fromPredicate<unknown, string>('hello', isString);
+      expect(Option.unwrap(predicateOption)).toBe('hello');
     });
 
     it('Option.fromPredicate() should return None when predicate evaluates to false', () => {
-      const result = Option.fromPredicate(-42, (x) => x > 0);
-      expect(Option.isNone(result)).toBe(true);
+      const predicateOption = Option.fromPredicate(-42, (x) => x > 0);
+      expect(Option.isNone(predicateOption)).toBe(true);
     });
   });
 
@@ -65,9 +65,9 @@ describe('Option<T>', () => {
     });
 
     it('Option.isSome() and Option.isNone() should narrow compiler types', () => {
-      const opt: Option<number> = Option.some(42);
-      if (Option.isSome(opt)) {
-        const value: number = opt.value;
+      const someOption: Option<number> = Option.some(42);
+      if (Option.isSome(someOption)) {
+        const value: number = someOption.value;
         expect(value).toBe(42);
       }
     });
@@ -109,41 +109,41 @@ describe('Option<T>', () => {
       });
 
       it('should preserve the same instance when mapping NaN to NaN', () => {
-        const opt = Option.some(NaN);
-        const mapped = Option.map(opt, (x) => x);
-        expect(mapped).toBe(opt);
+        const nanOption = Option.some(NaN);
+        const mappedOption = Option.map(nanOption, (x) => x);
+        expect(mappedOption).toBe(nanOption);
       });
 
       it('should reuse the Option instance when mapping an object if the returned reference is identical', () => {
         const frozenObj = Object.freeze({ count: 1 });
-        const opt = Option.some(frozenObj);
+        const frozenOption = Option.some(frozenObj);
 
-        const mapped = Option.map(opt, (obj) => obj);
-        expect(mapped).toBe(opt);
+        const mappedOption = Option.map(frozenOption, (obj) => obj);
+        expect(mappedOption).toBe(frozenOption);
       });
 
       it('should NOT reuse the Option instance when mapping a mutable object if the returned reference is identical', () => {
         const mutableObj = { count: 1 };
-        const opt = Option.some(mutableObj);
+        const mutableOption = Option.some(mutableObj);
 
-        const mapped = Option.map(opt, (obj) => {
+        const mappedOption = Option.map(mutableOption, (obj) => {
           obj.count = 2;
           return obj;
         });
-        expect(mapped).not.toBe(opt);
+        expect(mappedOption).not.toBe(mutableOption);
       });
     });
 
     describe('andThen()', () => {
       it('should chain computations returning Options', () => {
-        const getLength = (s: string) => Option.some(s.length);
+        const getLength = (str: string) => Option.some(str.length);
         expect(Option.unwrap(Option.andThen(Option.some('hello'), getLength))).toBe(5);
-        expect(Option.andThen(Option.none, (s: string) => Option.some(s))).toBe(Option.none);
+        expect(Option.andThen(Option.none, (str: string) => Option.some(str))).toBe(Option.none);
       });
 
       it('should throw an error if the mapper returns an invalid Option', () => {
-        const opt = Option.some(42);
-        expect(() => Option.andThen(opt, () => invalidOptionShape)).toThrow();
+        const someOption = Option.some(42);
+        expect(() => Option.andThen(someOption, () => invalidOptionShape)).toThrow();
       });
     });
 
@@ -165,18 +165,18 @@ describe('Option<T>', () => {
 
   describe('Array Operations (all)', () => {
     it('Option.all() should combine an array of Some into a Some of array', () => {
-      const result = Option.all([Option.some(1), Option.some(2), Option.some(3)]);
-      expect(Option.unwrap(result)).toEqual([1, 2, 3]);
+      const combinedOption = Option.all([Option.some(1), Option.some(2), Option.some(3)]);
+      expect(Option.unwrap(combinedOption)).toEqual([1, 2, 3]);
     });
 
     it('Option.all() should return None if any Option is None', () => {
-      const result = Option.all([Option.some(1), Option.none, Option.some(3)]);
-      expect(Option.isNone(result)).toBe(true);
+      const combinedOption = Option.all([Option.some(1), Option.none, Option.some(3)]);
+      expect(Option.isNone(combinedOption)).toBe(true);
     });
 
     it('Option.all() should return Some of empty array for empty input array', () => {
-      const result = Option.all([]);
-      expect(Option.unwrap(result)).toEqual([]);
+      const emptyOption = Option.all([]);
+      expect(Option.unwrap(emptyOption)).toEqual([]);
     });
   });
 
@@ -197,12 +197,17 @@ describe('Option<T>', () => {
     });
 
     it('Option.equals() should return false if either argument is not a valid Option', () => {
-      const opt = Option.some(42);
-      const nonOpt = { ok: true, value: 42 };
+      const someOption = Option.some(42);
+      const invalidOptionObject = { ok: true, value: 42 };
 
-      expect(Option.equals(opt, invalidOptionShape)).toBe(false);
-      expect(Option.equals(invalidOptionShape, opt)).toBe(false);
-      expect(Option.equals(nonOpt as Option<unknown>, nonOpt as Option<unknown>)).toBe(false);
+      expect(Option.equals(someOption, invalidOptionShape)).toBe(false);
+      expect(Option.equals(invalidOptionShape, someOption)).toBe(false);
+      expect(
+        Option.equals(
+          invalidOptionObject as Option<unknown>,
+          invalidOptionObject as Option<unknown>
+        )
+      ).toBe(false);
     });
   });
 
@@ -216,8 +221,8 @@ describe('Option<T>', () => {
   });
 
   describe('Algebraic Laws', () => {
-    const f = (x: number) => x * 2;
-    const g = (x: number) => x.toString();
+    const doubleValue = (x: number) => x * 2;
+    const convertToString = (x: number) => x.toString();
 
     it('Functor Identity', () => {
       expect(
@@ -236,9 +241,9 @@ describe('Option<T>', () => {
 
     it('Functor Composition', () => {
       const some = Option.some(10);
-      const res1 = Option.map(Option.map(some, f), g);
-      const res2 = Option.map(some, (x: number) => g(f(x)));
-      expect(Option.equals(res1, res2)).toBe(true);
+      const firstMappedOption = Option.map(Option.map(some, doubleValue), convertToString);
+      const secondMappedOption = Option.map(some, (x: number) => convertToString(doubleValue(x)));
+      expect(Option.equals(firstMappedOption, secondMappedOption)).toBe(true);
     });
   });
 });

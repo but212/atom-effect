@@ -18,10 +18,10 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
   // Scenario 1: Form Reset (20 fields)
   const formFields = Array.from({ length: 20 }, () => atom('initial'));
   const isFormValid = computed(() => formFields.every((f) => f.value.length > 0));
-  let _formRuns = 0;
+  let formRuns = 0;
   effect(() => {
     keep(isFormValid.value);
-    _formRuns++;
+    formRuns++;
   }, benchEffectOptions);
 
   bench(
@@ -31,7 +31,7 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
       batch(() => {
         for (const f of formFields) f.value = nextVal;
       });
-      keep(_formRuns);
+      keep(formRuns);
     },
     macroBenchOptions
   );
@@ -41,17 +41,19 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
     () => {
       const nextVal = formFields[0]?.value === '' ? 'initial' : '';
       for (const f of formFields) f.value = nextVal;
-      keep(_formRuns);
+      keep(formRuns);
     },
     macroBenchOptions
   );
 
   // Scenario 2: Large State Sync (100 atoms)
   const syncAtoms = Array.from({ length: 100 }, () => atom(0));
-  const syncHeavy = computed(() => syncAtoms.reduce((s, a) => s + a.value, 0));
-  let _syncSink = 0;
+  const syncHeavy = computed(() =>
+    syncAtoms.reduce((sum, sourceAtom) => sum + sourceAtom.value, 0)
+  );
+  let syncSink = 0;
   effect(() => {
-    _syncSink = syncHeavy.value;
+    syncSink = syncHeavy.value;
   }, benchEffectOptions);
 
   bench(
@@ -60,7 +62,7 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
       batch(() => {
         for (const a of syncAtoms) a.value++;
       });
-      keep(_syncSink);
+      keep(syncSink);
     },
     macroBenchOptions
   );
@@ -69,7 +71,7 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
     '[Manual] state sync (100 atoms)',
     () => {
       for (const a of syncAtoms) a.value++;
-      keep(_syncSink);
+      keep(syncSink);
     },
     macroBenchOptions
   );
@@ -113,7 +115,7 @@ describe('Search-as-you-type (1000 items)', () => {
     '[Vanilla] filter 1000 items on query change',
     () => {
       vanillaQuery = vanillaQuery === '' ? 'item 5' : '';
-      keep(corpus.filter((s) => s.includes(vanillaQuery)).length);
+      keep(corpus.filter((item) => item.includes(vanillaQuery)).length);
     },
     macroBenchOptions
   );
@@ -124,13 +126,15 @@ describe('Search-as-you-type (1000 items)', () => {
     '[Atom] filter 1000 items (Fresh Computed each time)',
     () => {
       queryAtom.value = queryAtom.value === '' ? 'item 5' : '';
-      const searchResults = computed(() => corpus.filter((s) => s.includes(queryAtom.value)));
+      const searchResults = computed(() => corpus.filter((item) => item.includes(queryAtom.value)));
       keep(searchResults.value.length);
     },
     macroBenchOptions
   );
 
-  const sharedSearchResults = computed(() => corpus.filter((s) => s.includes(queryAtom.value)));
+  const sharedSearchResults = computed(() =>
+    corpus.filter((item) => item.includes(queryAtom.value))
+  );
   effect(() => keep(sharedSearchResults.value.length), benchEffectOptions);
 
   bench(
@@ -145,10 +149,10 @@ describe('Search-as-you-type (1000 items)', () => {
 
 describe('Shopping Cart Workflow', () => {
   type CartItem = { id: number; name: string; price: number; qty: number };
-  const PRODUCTS: CartItem[] = Array.from({ length: 20 }, (_, i) => ({
-    id: i,
-    name: `Product ${i}`,
-    price: 10 + i * 5,
+  const PRODUCTS: CartItem[] = Array.from({ length: 20 }, (_, index) => ({
+    id: index,
+    name: `Product ${index}`,
+    price: 10 + index * 5,
     qty: 0,
   }));
 
@@ -161,7 +165,7 @@ describe('Shopping Cart Workflow', () => {
   bench(
     '[Vanilla] add items → apply coupon → total',
     () => {
-      vanillaCart = PRODUCTS.slice(0, 10).map((p) => ({ ...p, qty: 2 }));
+      vanillaCart = PRODUCTS.slice(0, 10).map((product) => ({ ...product, qty: 2 }));
       vanillaCoupon = vanillaCoupon === 0 ? 0.1 : 0;
       keep(calculateSubtotal(vanillaCart) * (1 - vanillaCoupon));
     },
@@ -180,7 +184,7 @@ describe('Shopping Cart Workflow', () => {
   bench(
     '[Atom] add items → apply coupon → total',
     () => {
-      cartAtom.value = PRODUCTS.slice(0, 10).map((p) => ({ ...p, qty: 2 }));
+      cartAtom.value = PRODUCTS.slice(0, 10).map((product) => ({ ...product, qty: 2 }));
       couponAtom.value = couponAtom.value === 0 ? 0.1 : 0;
       keep(totalComputed.value);
     },

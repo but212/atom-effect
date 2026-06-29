@@ -26,7 +26,7 @@ import { defineConfig as defineVitest, type ViteUserConfig } from 'vitest/config
  * When to use:
  * - Recommended for mapping library package names to standardized minified bundle filenames.
  *
- * @param targetString - The target string to convert.
+ * @param targetString The target string to convert.
  * @returns The converted kebab-case string.
  *
  * @example
@@ -45,7 +45,7 @@ export const toKebabCase = (targetString: string): string =>
  * When to use:
  * - Recommended for aligning absolute path aliases (`@/`) to the target package's source directory.
  *
- * @param packageDir - The absolute path of the package directory.
+ * @param packageDir The absolute path of the package directory.
  * @returns The resolver alias configuration object.
  *
  * @example
@@ -156,7 +156,7 @@ export let isLibraryBuild = activeBuildTarget === 'lib';
  * When to use:
  * - Recommended for initializing standard library building settings for ES, CJS, and UMD formats.
  *
- * @param options - Configuration options containing packageDir, name, and target overrides.
+ * @param options Configuration options containing packageDir, name, and target overrides.
  * @returns A Vite UserConfig object configured for library builds.
  *
  * @example
@@ -228,8 +228,8 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
  * When to use:
  * - Recommended for creating customized package-level `vite.config.ts` files in the monorepo.
  *
- * @param baseOptions - Options for creating the base Vite configuration.
- * @param overrides - Partial Vite configuration overrides to apply.
+ * @param baseOptions Options for creating the base Vite configuration.
+ * @param overrides Partial Vite configuration overrides to apply.
  * @returns A Vite UserConfig configuration function/object.
  *
  * @example
@@ -264,7 +264,7 @@ export const baseCoverageExclusionPatterns = [
  * When to use:
  * - Recommended for establishing basic test environments and coverage settings in a package.
  *
- * @param packageDir - The absolute path of the package directory.
+ * @param packageDir The absolute path of the package directory.
  * @returns A Vitest config configuration object.
  *
  * @example
@@ -288,8 +288,8 @@ export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => ({
  * When to use:
  * - Recommended for package-level `vitest.config.ts` files in the monorepo.
  *
- * @param packageDir - The absolute path of the package directory.
- * @param overrides - Partial Vitest configuration overrides to apply.
+ * @param packageDir The absolute path of the package directory.
+ * @param overrides Partial Vitest configuration overrides to apply.
  * @returns A Vitest config configuration function/object.
  *
  * @example
@@ -306,7 +306,7 @@ export const defineVitestConfig = (packageDir: string, overrides: ViteUserConfig
  * When to use:
  * - Recommended for setting up standard benchmarking targets in a package.
  *
- * @param packageDir - The absolute path of the package directory.
+ * @param packageDir The absolute path of the package directory.
  * @returns A Vitest benchmark configuration object.
  *
  * @example
@@ -328,8 +328,8 @@ export const getBaseVitestBenchmarkConfig = (packageDir: string): ViteUserConfig
  * When to use:
  * - Recommended for package-level `vitest.bench.config.ts` files in the monorepo.
  *
- * @param packageDir - The absolute path of the package directory.
- * @param overrides - Partial Vitest benchmark configuration overrides to apply.
+ * @param packageDir The absolute path of the package directory.
+ * @param overrides Partial Vitest benchmark configuration overrides to apply.
  * @returns A Vitest benchmark config configuration function/object.
  *
  * @example
@@ -341,8 +341,8 @@ export const defineVitestBenchConfig = (packageDir: string, overrides: ViteUserC
   defineVitest(() => {
     const mergedConfig = mergeConfig(getBaseVitestBenchmarkConfig(packageDir), overrides);
 
-    // Vite's mergeConfig concatenates arrays. We explicitly override the benchmark include array
-    // if the user provided it in their custom overrides configuration.
+    // Reason: Vite's mergeConfig automatically concatenates arrays. We must explicitly override
+    // the benchmark include array if the user provided customized patterns to avoid array union duplicates.
     const customIncludePatterns = overrides.test?.benchmark?.include;
     if (customIncludePatterns && mergedConfig.test?.benchmark) {
       mergedConfig.test.benchmark.include = customIncludePatterns;

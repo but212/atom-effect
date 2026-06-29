@@ -12,7 +12,7 @@ describe('Async Drift Constraint & Recovery', () => {
   it('resolves reliably without retries (maxAsyncRetries = 0) when dependencies remain stable', async () => {
     const source = atom(42);
 
-    const c = computed(
+    const computedInstance = computed(
       async () => {
         const value = source.value;
         await sleep(30);
@@ -21,18 +21,18 @@ describe('Async Drift Constraint & Recovery', () => {
       { defaultValue: -1 }
     );
 
-    c.value; // init
+    computedInstance.value; // init
     await sleep(50);
 
-    expect(c.state).toBe(AsyncState.RESOLVED);
-    expect(c.value).toBe(42);
+    expect(computedInstance.state).toBe(AsyncState.RESOLVED);
+    expect(computedInstance.value).toBe(42);
   });
 
   it('retries when dependencies mutate mid-flight maintaining fallback', async () => {
     const source = atom(0);
     const onError = vi.fn();
 
-    const c = computed(
+    const computedInstance = computed(
       async () => {
         const value = source.value;
         await sleep(40);
@@ -41,7 +41,7 @@ describe('Async Drift Constraint & Recovery', () => {
       { defaultValue: -99, onError }
     );
 
-    c.value; // start computation
+    computedInstance.value; // start computation
 
     // Change dependency at an arbitrary mid-flight point (25ms out of 40ms)
     await sleep(25);
@@ -50,8 +50,8 @@ describe('Async Drift Constraint & Recovery', () => {
     // Await computation original finish + scheduler delay
     await sleep(30);
 
-    expect(c.state).toBe(AsyncState.PENDING);
-    expect(c.value).toBe(-99);
+    expect(computedInstance.state).toBe(AsyncState.PENDING);
+    expect(computedInstance.value).toBe(-99);
 
     // Verify error is NOT dispatched because it naturally retries
     expect(onError).not.toHaveBeenCalled();
@@ -60,7 +60,7 @@ describe('Async Drift Constraint & Recovery', () => {
   it('isolates retry counting effectively within normal reactive bounds naturally', async () => {
     const source = atom(0);
 
-    const c = computed(
+    const computedInstance = computed(
       async () => {
         const value = source.value;
         await sleep(50);
@@ -71,7 +71,7 @@ describe('Async Drift Constraint & Recovery', () => {
 
     // Mount an effect to trigger continuous dependency pulls
     const runner = effect(() => {
-      void c.value;
+      void computedInstance.value;
     });
 
     await sleep(70); // Resolve initial stable pull
@@ -88,8 +88,8 @@ describe('Async Drift Constraint & Recovery', () => {
     await sleep(70); // Resolves normally without drift, no accumulated timeouts
 
     // If the counter was global, round 2 drift would have exhausted the limit and rejected completely
-    expect(c.state).toBe(AsyncState.RESOLVED);
-    expect(c.value).toBe(3);
+    expect(computedInstance.state).toBe(AsyncState.RESOLVED);
+    expect(computedInstance.value).toBe(3);
 
     runner.dispose();
   });

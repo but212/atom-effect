@@ -141,8 +141,8 @@ export function applyListBinding<T>(
  * - Recommended for rendering dynamic collections with high-performance O(N) updates.
  * - Suitable for lists requiring complex item templates or delegated event handling.
  *
- * @param source - The reactive atom containing the array of items.
- * @param options - Configuration for rendering, identification, and lifecycle hooks.
+ * @param source The reactive atom containing the array of items.
+ * @param options Configuration for rendering, identification, and lifecycle hooks.
  * @returns The original jQuery collection for chaining.
  *
  * @example

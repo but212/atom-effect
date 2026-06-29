@@ -378,7 +378,7 @@ export function bindVal<T>(
 /**
  * Synchronizes the visual state of a radio button group.
  *
- * @param radioElement - The radio input element that was recently selected.
+ * @param radioElement The radio input element that was recently selected.
  * @internal
  */
 function syncRadios(radioElement: HTMLInputElement): void {
@@ -440,8 +440,8 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
 /**
  * Binds a mapping of event listeners to an element.
  *
- * @param element - The target HTMLElement.
- * @param eventMap - A record mapping event names to handler functions.
+ * @param element The target HTMLElement.
+ * @param eventMap A record mapping event names to handler functions.
  * @internal
  */
 export function bindEvents(
@@ -456,9 +456,9 @@ export function bindEvents(
 /**
  * Binds a single event listener to an element.
  *
- * @param element - The target HTMLElement.
- * @param event - The name of the event.
- * @param handler - The handler function to execute.
+ * @param element The target HTMLElement.
+ * @param event The name of the event.
+ * @param handler The handler function to execute.
  * @internal
  */
 export function bindOn(

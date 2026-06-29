@@ -21,11 +21,11 @@ import {
 
 // --- Domain Helpers ---
 const filterTodos = (todos: TodoItem[], filter: 'all' | 'active' | 'completed') =>
-  filter === 'all' ? todos : todos.filter((t) => t.completed === (filter === 'completed'));
+  filter === 'all' ? todos : todos.filter((todo) => todo.completed === (filter === 'completed'));
 
 const sortGridData = (rows: DataGridRow[], direction: 'asc' | 'desc') =>
-  [...rows].sort((a, b) => {
-    const comp = a.name.localeCompare(b.name);
+  [...rows].sort((firstRow, secondRow) => {
+    const comp = firstRow.name.localeCompare(secondRow.name);
     return direction === 'asc' ? comp : -comp;
   });
 
@@ -47,21 +47,23 @@ describe('Todo App: Comprehensive Workflow', () => {
   bench(
     '[Vanilla] full workflow: add → toggle → filter → delete → stats',
     () => {
-      let vanillaTodos = Array.from({ length: 100 }, (_, i) => ({
-        id: i,
+      let vanillaTodos = Array.from({ length: 100 }, (_, index) => ({
+        id: index,
         text: 'New',
         completed: false,
       }));
       let vanillaFilter: 'all' | 'active' | 'completed' = 'all';
 
-      vanillaTodos = vanillaTodos.map((t, i) => (i < 50 ? { ...t, completed: true } : t));
+      vanillaTodos = vanillaTodos.map((todo, index) =>
+        index < 50 ? { ...todo, completed: true } : todo
+      );
       vanillaFilter = 'active';
       vanillaTodos = vanillaTodos.slice(20);
       vanillaFilter = 'all';
 
       const filtered = filterTodos(vanillaTodos, vanillaFilter);
       const total = vanillaTodos.length;
-      const completed = vanillaTodos.filter((t) => t.completed).length;
+      const completed = vanillaTodos.filter((todo) => todo.completed).length;
       const rate = total === 0 ? 0 : (completed / total) * 100;
 
       keep([filtered.length, rate]);
@@ -84,18 +86,18 @@ describe('Todo App: Comprehensive Workflow', () => {
     };
   });
 
-  let _displayCount = 0;
-  let _rate = 0;
+  let displayCount = 0;
+  let rate = 0;
   effect(() => {
-    _displayCount = todoStats.value.filteredLength;
-    _rate = todoStats.value.rate;
+    displayCount = todoStats.value.filteredLength;
+    rate = todoStats.value.rate;
   }, benchEffectOptions);
 
   bench(
     '[Atom] full workflow: add → toggle → filter → delete → stats',
     () => {
-      todosWorkflow.value = Array.from({ length: 100 }, (_, i) => ({
-        id: i,
+      todosWorkflow.value = Array.from({ length: 100 }, (_, index) => ({
+        id: index,
         text: 'New',
         completed: false,
       }));
@@ -105,7 +107,7 @@ describe('Todo App: Comprehensive Workflow', () => {
       filterWorkflow.value = 'active';
       todosWorkflow.value = todosWorkflow.value.slice(20);
       filterWorkflow.value = 'all';
-      keep([_displayCount, _rate]);
+      keep([displayCount, rate]);
     },
     macroBenchOptions
   );
@@ -117,16 +119,16 @@ describe('Todo App: Input Size Tiers', () => {
     const todosAtom = atom<TodoItem[]>(data);
     const filterAtom = atom<'all' | 'active' | 'completed'>('all');
     const filtered = computed(() => filterTodos(todosAtom.value, filterAtom.value));
-    let _count = 0;
+    let count = 0;
     effect(() => {
-      _count = filtered.value.length;
+      count = filtered.value.length;
     }, benchEffectOptions);
 
     bench(
       `[Atom] toggle filter (${size}: ${data.length} items)`,
       () => {
         filterAtom.value = filterAtom.value === 'all' ? 'active' : 'all';
-        keep(_count);
+        keep(count);
       },
       macroBenchOptions
     );
@@ -136,8 +138,8 @@ describe('Todo App: Input Size Tiers', () => {
       `[Vanilla] toggle filter (${size}: ${data.length} items)`,
       () => {
         vanillaFilter = vanillaFilter === 'all' ? 'active' : 'all';
-        const r = filterTodos(data, vanillaFilter);
-        keep(r.length);
+        const filteredResult = filterTodos(data, vanillaFilter);
+        keep(filteredResult.length);
       },
       macroBenchOptions
     );
@@ -170,12 +172,12 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
     macroBenchOptions
   );
 
-  let dept = 'Engineering';
+  let selectedDepartment = 'Engineering';
   bench(
     '[Vanilla] switch filter',
     () => {
-      dept = dept === 'Engineering' ? 'Sales' : 'Engineering';
-      keep(data.filter((row) => row.department === dept)[0]);
+      selectedDepartment = selectedDepartment === 'Engineering' ? 'Sales' : 'Engineering';
+      keep(data.filter((row) => row.department === selectedDepartment)[0]);
     },
     macroBenchOptions
   );
@@ -282,19 +284,23 @@ describe('Dependency Graph Patterns', () => {
   const chainSource = atom(0);
   let chainSink = computed(() => chainSource.value);
   for (let i = 1; i < 100; i++) {
-    const prev = chainSink;
-    chainSink = computed(() => prev.value + 1);
+    const previousComputed = chainSink;
+    chainSink = computed(() => previousComputed.value + 1);
   }
 
   const diamondSource = atom(1);
-  const diamondLevel1 = Array.from({ length: 10 }, (_, i) =>
-    computed(() => diamondSource.value * (i + 1))
+  const diamondLevel1 = Array.from({ length: 10 }, (_, index) =>
+    computed(() => diamondSource.value * (index + 1))
   );
-  const diamondLevel2 = diamondLevel1.map((prev) => computed(() => prev.value * 2));
-  const diamondSink = computed(() => diamondLevel2.reduce((sum, c) => sum + c.value, 0));
+  const diamondLevel2 = diamondLevel1.map((previousComputed) =>
+    computed(() => previousComputed.value * 2)
+  );
+  const diamondSink = computed(() =>
+    diamondLevel2.reduce((sum, computedNode) => sum + computedNode.value, 0)
+  );
 
-  const pyramidBase = Array.from({ length: 50 }, (_, i) => atom(i));
-  let currentLevel = pyramidBase.map((a) => computed(() => a.value));
+  const pyramidBase = Array.from({ length: 50 }, (_, index) => atom(index));
+  let currentLevel = pyramidBase.map((someAtom) => computed(() => someAtom.value));
   while (currentLevel.length > 1) {
     const nextLevel: typeof currentLevel = [];
     for (let i = 0; i < currentLevel.length - 1; i++) {
@@ -345,11 +351,13 @@ describe('Complex Graph Architecture', () => {
     return computed(() => (left?.value ?? 0) + (right?.value ?? 0));
   });
 
-  const [circA, circB, circC] = [atom(1), atom(2), atom(3)];
-  const circAb = computed(() => circA.value + circB.value);
-  const circBc = computed(() => circB.value + circC.value);
-  const circCa = computed(() => circC.value + circA.value);
-  const circAll = computed(() => circAb.value + circBc.value + circCa.value);
+  const [circularAtomA, circularAtomB, circularAtomC] = [atom(1), atom(2), atom(3)];
+  const circularComputedAB = computed(() => circularAtomA.value + circularAtomB.value);
+  const circularComputedBC = computed(() => circularAtomB.value + circularAtomC.value);
+  const circularComputedCA = computed(() => circularAtomC.value + circularAtomA.value);
+  const circularComputedAll = computed(
+    () => circularComputedAB.value + circularComputedBC.value + circularComputedCA.value
+  );
 
   bench(
     'mixed dependencies (100 atoms → 200 computeds)',
@@ -357,8 +365,8 @@ describe('Complex Graph Architecture', () => {
       const first = mixedAtoms[0];
       if (first) first.value += 1;
       let last: any;
-      for (const c of mixedComputeds) {
-        last = c.value;
+      for (const computedInstance of mixedComputeds) {
+        last = computedInstance.value;
       }
       keep(last);
     },
@@ -370,8 +378,8 @@ describe('Complex Graph Architecture', () => {
     () => {
       let result: any;
       for (let i = 0; i < REPEATS; i++) {
-        circA.value += 1;
-        result = circAll.value;
+        circularAtomA.value += 1;
+        result = circularComputedAll.value;
       }
       keep(result);
     },
@@ -517,21 +525,21 @@ describe('Memory & GC pressure', () => {
   bench(
     'create and dispose 1000 units (atom/comp/effect)',
     () => {
-      const a = atom(0);
+      const someAtom = atom(0);
       const units: { dispose(): void }[] = [];
       for (let i = 0; i < 1000; i++) {
         if (i < 333) {
           units.push(atom(0));
         } else if (i < 666) {
-          units.push(computed(() => a.value + i));
+          units.push(computed(() => someAtom.value + i));
         } else {
-          units.push(effect(() => keep(a.value), benchEffectOptions));
+          units.push(effect(() => keep(someAtom.value), benchEffectOptions));
         }
       }
-      for (const u of units) {
-        u.dispose();
+      for (const unit of units) {
+        unit.dispose();
       }
-      a.dispose();
+      someAtom.dispose();
     },
     memoryBenchOptions
   );
@@ -539,12 +547,12 @@ describe('Memory & GC pressure', () => {
   bench(
     'subscription churn (1K cycles)',
     () => {
-      const a = atom(0);
+      const someAtom = atom(0);
       for (let i = 0; i < 1000; i++) {
-        const unsubscribeCallback = a.subscribe(() => {});
+        const unsubscribeCallback = someAtom.subscribe(() => {});
         unsubscribeCallback();
       }
-      a.dispose();
+      someAtom.dispose();
     },
     memoryBenchOptions
   );
@@ -553,11 +561,11 @@ describe('Memory & GC pressure', () => {
     'circular reference cleanup (100 cycles)',
     () => {
       for (let i = 0; i < 100; i++) {
-        const a = atom<any>({ ref: null });
-        const b = atom<any>({ ref: a });
-        a.value = { ref: b };
-        a.dispose();
-        b.dispose();
+        const firstAtom = atom<any>({ ref: null });
+        const secondAtom = atom<any>({ ref: firstAtom });
+        firstAtom.value = { ref: secondAtom };
+        firstAtom.dispose();
+        secondAtom.dispose();
       }
       forceGC();
     },
@@ -572,9 +580,9 @@ describe('Large State Analysis', () => {
       const state = atom(initialLargeState);
 
       const counts = computed(() => ({
-        u: state.value.users.length,
-        p: state.value.posts.length,
-        c: state.value.comments.length,
+        usersCount: state.value.users.length,
+        postsCount: state.value.posts.length,
+        commentsCount: state.value.comments.length,
       }));
 
       keep(counts.value);
@@ -591,8 +599,8 @@ describe('Large State Analysis', () => {
       const before = getMemoryUsage();
       const atoms = Array.from({ length: 1000 }, (_, i) => atom(new Array<number>(100).fill(i)));
       const during = getMemoryUsage();
-      for (const a of atoms) {
-        a.dispose();
+      for (const someAtom of atoms) {
+        someAtom.dispose();
       }
       forceGC();
       const after = getMemoryUsage();

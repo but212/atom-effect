@@ -3,16 +3,18 @@ import { Option } from '../dist';
 import { keep, REPEATS } from './setup';
 
 describe('Option', () => {
-  const someVal = Option.some(1);
-  const noneVal = Option.none;
+  const someValue = Option.some(1);
+  const noneValue = Option.none;
 
   // Pre-generate data structures to minimize runtime overhead inside benchmark loops.
-  const mixedOptions = Array.from({ length: REPEATS }, (_, i) => (i % 2 === 0 ? someVal : noneVal));
-  const nullableVals = Array.from({ length: REPEATS }, (_, i) => (i % 2 === 0 ? i : null));
+  const mixedOptions = Array.from({ length: REPEATS }, (_, i) =>
+    i % 2 === 0 ? someValue : noneValue
+  );
+  const nullableValues = Array.from({ length: REPEATS }, (_, i) => (i % 2 === 0 ? i : null));
 
-  const mapFn = (x: number) => x + 1;
+  const mapCallback = (value: number) => value + 1;
   const matchBranches = {
-    some: (x: number) => x,
+    some: (value: number) => value,
     none: () => 0,
   };
 
@@ -24,7 +26,7 @@ describe('Option', () => {
 
   bench(`isSome (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(Option.isSome(someVal));
+      keep(Option.isSome(someValue));
     }
   });
 
@@ -36,7 +38,7 @@ describe('Option', () => {
 
   bench(`map (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(Option.map(someVal, mapFn));
+      keep(Option.map(someValue, mapCallback));
     }
   });
 
@@ -48,15 +50,15 @@ describe('Option', () => {
 
   bench(`fromNullable (mixed, x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(Option.fromNullable(nullableVals[i]));
+      keep(Option.fromNullable(nullableValues[i]));
     }
   });
 
   describe('Native Comparison (null/undefined)', () => {
-    const rawVal = 1;
+    const rawValue = 1;
     const rawNull = null;
-    const mixedRawVals = Array.from({ length: REPEATS }, (_, i) =>
-      i % 2 === 0 ? rawVal : rawNull
+    const mixedRawValues = Array.from({ length: REPEATS }, (_, i) =>
+      i % 2 === 0 ? rawValue : rawNull
     );
 
     bench(`Literal assignment (x${REPEATS})`, () => {
@@ -67,25 +69,25 @@ describe('Option', () => {
 
     bench(`Null check (x${REPEATS})`, () => {
       for (let i = 0; i < REPEATS; i++) {
-        keep(rawVal != null);
+        keep(rawValue != null);
       }
     });
 
     bench(`Nullish coalescing (mixed, x${REPEATS})`, () => {
       for (let i = 0; i < REPEATS; i++) {
-        keep(mixedRawVals[i] ?? 0);
+        keep(mixedRawValues[i] ?? 0);
       }
     });
 
     bench(`Inline ternary map (x${REPEATS})`, () => {
       for (let i = 0; i < REPEATS; i++) {
-        keep(rawVal == null ? null : rawVal + 1);
+        keep(rawValue == null ? null : rawValue + 1);
       }
     });
 
     bench(`If-Else branch (mixed, x${REPEATS})`, () => {
       for (let i = 0; i < REPEATS; i++) {
-        const value = mixedRawVals[i];
+        const value = mixedRawValues[i];
         if (value == null) {
           keep(0);
         } else {

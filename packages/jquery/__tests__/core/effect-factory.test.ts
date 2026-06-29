@@ -114,11 +114,11 @@ describe('Effect Factory', () => {
 
       // Case B: Static Promise Source
       const { promise, resolve } = (() => {
-        let r: (value: string) => void = () => {};
-        const p = new Promise<string>((res) => {
-          r = res;
+        let resolveCallback: (value: string) => void = () => {};
+        const promiseInstance = new Promise<string>((resolve) => {
+          resolveCallback = resolve;
         });
-        return { promise: p, resolve: r };
+        return { promise: promiseInstance, resolve: resolveCallback };
       })();
 
       const el2 = document.createElement('div');

@@ -27,10 +27,10 @@ import { type DiffSlot, ItemState, type PreparedDiff } from './types';
  * Uses head/tail fast-forward passes to achieve O(1) performance for common
  * append/prepend operations.
  *
- * @param snapshots - Sequential snapshot of the previous render state.
- * @param removingKeys - Keys currently undergoing asynchronous exit animations.
- * @param oldIndexMap - Inverse lookup for O(1) index retrieval from a key.
- * @param items - The new data array from the source atom.
+ * @param snapshots Sequential snapshot of the previous render state.
+ * @param removingKeys Keys currently undergoing asynchronous exit animations.
+ * @param oldIndexMap Inverse lookup for O(1) index retrieval from a key.
+ * @param items The new data array from the source atom.
  *
  * @internal
  */

@@ -94,14 +94,14 @@ describe('Web Component Features', () => {
     });
 
     it('should cleanup provider effects and injection proxies on teardown', async () => {
-      const p = document.createElement('div');
-      const c = document.createElement('div');
-      p.appendChild(c);
+      const parentElement = document.createElement('div');
+      const childElement = document.createElement('div');
+      parentElement.appendChild(childElement);
 
-      const ctrl = $.useAtomComponent(p);
+      const ctrl = $.useAtomComponent(parentElement);
       ctrl.provideAtom('k', 'v1');
 
-      const injected = $.injectAtom(c, 'k');
+      const injected = $.injectAtom(childElement, 'k');
       expect(injected?.value).toBe('v1');
 
       ctrl.teardown();
@@ -195,14 +195,14 @@ describe('Web Component Features', () => {
     it('should handle slot access safely after teardown when slotsAtom is disposed', () => {
       const element = document.createElement('div');
       const ctrl = $.useAtomComponent(element);
-      const s = ctrl.slots('default');
+      const slotAtom = ctrl.slots('default');
 
-      expect(s.value).toEqual([]);
+      expect(slotAtom.value).toEqual([]);
 
       ctrl.teardown();
 
-      expect(() => s.value).not.toThrow();
-      expect(s.value).toEqual([]);
+      expect(() => slotAtom.value).not.toThrow();
+      expect(slotAtom.value).toEqual([]);
     });
   });
 

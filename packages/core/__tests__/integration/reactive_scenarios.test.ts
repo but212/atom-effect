@@ -13,13 +13,13 @@ describe('Reactive Scenarios - Todo App', () => {
     const filter = atom('all');
 
     const filtered = computed(() => {
-      if (filter.value === 'active') return todos.value.filter((t) => !t.done);
+      if (filter.value === 'active') return todos.value.filter((todo) => !todo.done);
       return todos.value;
     });
 
     const stats = computed(() => ({
       total: todos.value.length,
-      active: todos.value.filter((t) => !t.done).length,
+      active: todos.value.filter((todo) => !todo.done).length,
     }));
 
     batch(() => {

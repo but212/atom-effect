@@ -11,13 +11,13 @@ describe('Lenses: Structural Access', () => {
   const plainSource = { a: { b: { c: 1 } } };
   const source = atom({ a: { b: { c: 1 } } });
   const lens = atomLens(source, 'a.b.c');
-  const comp = computed(() => source.value.a.b.c);
-  let compUnsub: () => void;
+  const computedInstance = computed(() => source.value.a.b.c);
+  let computedUnsubscribe: () => void;
 
   const readCases = [
     { name: 'baseline: raw nested object read', read: () => plainSource.a.b.c },
     { name: 'read: lens', read: () => lens.value },
-    { name: 'read: computed active', read: () => comp.value },
+    { name: 'read: computed active', read: () => computedInstance.value },
     { name: 'read: direct object access', read: () => source.value.a.b.c },
   ];
 
@@ -30,10 +30,10 @@ describe('Lenses: Structural Access', () => {
       {
         ...microBenchOptions,
         setup: () => {
-          compUnsub = comp.subscribe(() => {});
+          computedUnsubscribe = computedInstance.subscribe(() => {});
         },
         teardown: () => {
-          compUnsub();
+          computedUnsubscribe();
         },
       }
     );
@@ -89,8 +89,8 @@ describe('Lenses: Structural Access', () => {
       ...microBenchOptions,
       setup: () => {
         manyLensesUnsub = Array.from({ length: 100 }, () => {
-          const l = atomLens(sharedSource, 'x.y');
-          return l.subscribe(() => {});
+          const lensInstance = atomLens(sharedSource, 'x.y');
+          return lensInstance.subscribe(() => {});
         });
       },
       teardown: () => {

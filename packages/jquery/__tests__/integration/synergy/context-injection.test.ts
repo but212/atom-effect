@@ -25,12 +25,12 @@ describe('Context Injection Synergy (provide/inject)', () => {
       aej = $.useAtomComponent(this);
 
       connectedCallback() {
-        const r = this.aej.injectAtom<Router>('global-router');
+        const routerAtom = this.aej.injectAtom<Router>('global-router');
 
         this.aej.setup({
           bind: {
-            path: $.computed(() => r?.value?.currentRoute.value || ''),
-            id: $.computed(() => r?.value?.params.value.id || 'none'),
+            path: $.computed(() => routerAtom?.value?.currentRoute.value || ''),
+            id: $.computed(() => routerAtom?.value?.params.value.id || 'none'),
           },
         });
 

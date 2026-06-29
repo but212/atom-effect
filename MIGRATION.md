@@ -6,15 +6,15 @@ This guide provides instructions for migrating your codebase to the latest versi
 
 ## 1. ES2022 Migration (v0.33.0)
 
-### What Changed?
+### Changes
 
 Starting with version **v0.33.0**, the library targets **ES2022**. The internal engine has been refactored to utilize modern JavaScript features, most notably **private class fields (`#`)**.
 
-### Why?
+### Motivation
 
 ES2022 private fields provide native encapsulation, preventing accidental access to internal reactive state. This shift also stabilizes V8 hidden classes, leading to better runtime performance.
 
-### How to Migrate?
+### Migration Steps
 
 Ensure your environment (Node.js or Browser) supports ES2022. Most modern environments (Node 16.11+, Chrome 91+, Safari 15+) already support these features. If you are using a transpiler (like Babel or SWC), ensure your target is set to ES2022 or higher to avoid unnecessary polyfills.
 
@@ -26,7 +26,7 @@ Ensure your environment (Node.js or Browser) supports ES2022. Most modern enviro
 
 The `AtomError` class and its subclasses no longer prioritize instance methods for diagnostic tasks. Methods `getChain()` and `toJSON()` are **deprecated in v0.33.0** and will be **removed in v0.34.0**.
 
-#### How to Migrate?
+#### Migration Steps
 
 Replace instance method calls with standalone functions imported from the core package.
 
@@ -50,7 +50,7 @@ const json = serializeError(error);
 
 `AtomErrorConstructor` and `AtomErrorJSON` types have been relocated to the core types module.
 
-#### How to Migrate?
+#### Migration Steps
 
 Update your imports if you were referencing these types from internal paths or specific error modules.
 
@@ -67,7 +67,7 @@ import type { AtomErrorConstructor, AtomErrorJSON } from '@but212/atom-effect';
 
 The build process is now partitioned into specialized targets: `types`, `lib` (ESM/CJS), and `bundle` (UMD).
 
-#### How to Migrate?
+#### Migration Steps
 
 Always use the documented entry points. Avoid importing from internal paths like `@but212/atom-effect/dist/core/base`.
 
@@ -81,7 +81,7 @@ import { atom, computed } from '@but212/atom-effect';
 
 In the jQuery package (`@but212/atom-effect-jquery`), the core `@but212/atom-effect` package is now externalized in ESM and CJS builds.
 
-#### How to Migrate?
+#### Migration Steps
 
 You must ensure `@but212/atom-effect` is installed as a peer dependency in your project.
 
@@ -89,7 +89,7 @@ You must ensure `@but212/atom-effect` is installed as a peer dependency in your 
 
 The default entry point for CDNs has changed to favor explicit bundle paths.
 
-#### How to Migrate?
+#### Migration Steps
 
 Update your `<script>` tags to use the explicit UMD bundle:
 
@@ -105,11 +105,11 @@ Update your `<script>` tags to use the explicit UMD bundle:
 
 ## 4. Debug System (v0.33.0)
 
-### What Changed?
+### Changes
 
-The `debug` utility has been refactored into an encapsulated class-based structure for both core and jQuery packages.
+The debug system has been decoupled from the core reactive graph. The main bundle no longer contains tracing wrappers, formatting helpers, or logging hooks. Instead, debug utilities reside in a dedicated export `@but212/atom-effect/debug`.
 
-### How to Migrate?
+### Migration Steps
 
 In jQuery, access the debug controller via the jQuery namespace.
 
@@ -124,9 +124,15 @@ $.debug.enabled = true;
 
 ## 5. Web Component Architecture & DI (v0.34.0)
 
-### What Changed?
+### Changes
 
-In `@but212/atom-effect-jquery`, the Web Component architecture has been completely overhauled to follow a minimalist, stateless design. We removed global `MutationObserver` magic, event-bubbling-based Dependency Injection (DI), and implicit property setup.
+The Web Component integration package (`@but212/atom-effect-jquery`) has shifted to a stateless, explicit lifecycle approach for DOM elements.
+
+### Motivation
+
+Automatic tracking via nested mutation observers created significant performance degradation and memory overhead in deep DOM structures. Explicit dependency registration reduces overhead and simplifies tracking across shadow roots.
+
+### Migration Steps
 
 1. **Explicit Setup Required:** The engine no longer secretly watches the DOM to automatically trigger `setup()` for components with static properties (`aejStyles`, `aejBind`, etc.).
 2. **Stateless DI (DOM Traversal):** Dependency Injection (`injectAtom`, `provideAtom`) no longer relies on custom event bubbling (`aej:context-request`). It now uses synchronous DOM traversal (`parentNode` and `ShadowRoot.host`).
@@ -194,6 +200,6 @@ If you were manually dispatching or intercepting the `aej:context-request` custo
 
 ---
 
-## Need Help?
+## Support
 
 If you encounter any issues during migration, please open an issue on our [GitHub Issues](https://github.com/but212/atom-effect/issues) page.

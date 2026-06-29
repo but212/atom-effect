@@ -7,12 +7,14 @@ import $ from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
 describe('Input Bindings: Event Propagation', () => {
-  const run = (name: string, fn: ($c: JQuery) => void) =>
-    bench(name, withContainer(fn), microBenchOptions);
+  const run = (name: string, benchmarkFunction: ($container: JQuery) => void) =>
+    bench(name, withContainer(benchmarkFunction), microBenchOptions);
 
-  run('Standard input event propagation (100 events)', ($c) => {
+  run('Standard input event propagation (100 events)', ($container) => {
     const state = $.atom('initial');
-    const inputEl = $('<input type="text">').appendTo($c).atomVal(state)[0] as HTMLInputElement;
+    const inputEl = $('<input type="text">')
+      .appendTo($container)
+      .atomVal(state)[0] as HTMLInputElement;
 
     for (let i = 0; i < 100; i++) {
       inputEl.value = `char-${i}`;
@@ -20,9 +22,11 @@ describe('Input Bindings: Event Propagation', () => {
     }
   });
 
-  run('IME Composition input overhead (50 composition cycles)', ($c) => {
+  run('IME Composition input overhead (50 composition cycles)', ($container) => {
     const state = $.atom('initial');
-    const inputEl = $('<input type="text">').appendTo($c).atomVal(state)[0] as HTMLInputElement;
+    const inputEl = $('<input type="text">')
+      .appendTo($container)
+      .atomVal(state)[0] as HTMLInputElement;
 
     for (let i = 0; i < 50; i++) {
       inputEl.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
@@ -35,10 +39,10 @@ describe('Input Bindings: Event Propagation', () => {
     }
   });
 
-  run('Checkbox change event propagation (100 changes)', ($c) => {
+  run('Checkbox change event propagation (100 changes)', ($container) => {
     const state = $.atom(false);
     const checkboxEl = $('<input type="checkbox">')
-      .appendTo($c)
+      .appendTo($container)
       .atomChecked(state)[0] as HTMLInputElement;
 
     for (let i = 0; i < 100; i++) {

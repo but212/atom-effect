@@ -332,7 +332,8 @@ $('#root').atomUnmount().remove();
 
 Integrates the reactive engine into standard Custom Elements, returning an `AtomComponentController` for lifecycle and state synchronization.
 
-> **Diagnostic**: In debug mode, the utility warns if the host element contains a hyphen but is not registered via `customElements.define()`.
+> [!NOTE]
+> In debug mode, the utility warns if the host element contains a hyphen but is not registered via `customElements.define()`.
 
 #### Declarative Configuration
 

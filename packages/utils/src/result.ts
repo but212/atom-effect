@@ -53,7 +53,7 @@ export type Result<T, E = Error> = Ok<T> | Err<E>;
  * When to use:
  * - To verify at runtime whether an unknown input conforms to the Result protocol.
  *
- * @param targetValue - The value to check.
+ * @param targetValue The value to check.
  * @returns True if the value is a Result, false otherwise.
  *
  * @example

@@ -35,10 +35,12 @@ describe('Atoms: Core Operations', () => {
   const cleanupOptions = {
     ...microBenchOptions,
     setup: () => {
-      activeEffects = atoms.map((a) => effect(() => keep(a.value), benchEffectOptions));
+      activeEffects = atoms.map((someAtom) =>
+        effect(() => keep(someAtom.value), benchEffectOptions)
+      );
     },
     teardown: () => {
-      for (const e of activeEffects) e.dispose();
+      for (const effectInstance of activeEffects) effectInstance.dispose();
       activeEffects = [];
     },
   };
@@ -60,9 +62,9 @@ describe('Atoms: Core Operations', () => {
     `read/write performance: active (x${REPEATS})`,
     () => {
       let sum = 0;
-      for (const a of atoms) {
-        a.value++;
-        sum += a.value;
+      for (const someAtom of atoms) {
+        someAtom.value++;
+        sum += someAtom.value;
       }
       keep(sum);
     },
@@ -74,7 +76,7 @@ describe('Atoms: Core Operations', () => {
     () => {
       untracked(() => {
         let sum = 0;
-        for (const a of atoms) sum += a.value;
+        for (const someAtom of atoms) sum += someAtom.value;
         keep(sum);
       });
     },
@@ -84,12 +86,12 @@ describe('Atoms: Core Operations', () => {
 
 describe('Atoms: Read Methods (.value vs .peek())', () => {
   const plainObj = { value: 42 };
-  const a = atom(42);
+  const someAtom = atom(42);
 
   const readCases = [
     { name: 'baseline: plain object property read', read: () => plainObj.value },
-    { name: 'atom.value read', read: () => a.value },
-    { name: 'atom.peek() read', read: () => a.peek() },
+    { name: 'atom.value read', read: () => someAtom.value },
+    { name: 'atom.peek() read', read: () => someAtom.peek() },
   ];
 
   for (const { name, read } of readCases) {

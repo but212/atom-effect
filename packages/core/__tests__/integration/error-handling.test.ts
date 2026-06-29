@@ -12,14 +12,14 @@ describe('Core - Error Handling and Propagation', () => {
       const cause1 = atom(true, { sync: true });
       const cause2 = atom(true, { sync: true });
 
-      const x = computed(
+      const computedX = computed(
         () => {
           if (cause1.value) throw new Error('X fail');
           return 1;
         },
         { defaultValue: 0 }
       );
-      const y = computed(
+      const computedY = computed(
         () => {
           if (cause2.value) throw new Error('Y fail');
           return 2;
@@ -27,41 +27,41 @@ describe('Core - Error Handling and Propagation', () => {
         { defaultValue: 0 }
       );
 
-      const z = computed(() => x.value + y.value, { defaultValue: -1 });
+      const computedZ = computed(() => computedX.value + computedY.value, { defaultValue: -1 });
 
-      expect(z.hasError).toBe(false);
-      expect(z.errors).toEqual([]);
+      expect(computedZ.hasError).toBe(false);
+      expect(computedZ.errors).toEqual([]);
 
       try {
-        x.value;
+        computedX.value;
       } catch {
         /* expected */
       }
       try {
-        y.value;
+        computedY.value;
       } catch {
         /* expected */
       }
 
-      expect(z.value).toBe(0); // 0 + 0
-      expect(z.hasError).toBe(true);
-      expect(z.errors.length).toBeGreaterThanOrEqual(2);
-      expect(z.errors.some((e) => e.message.includes('X fail'))).toBe(true);
-      expect(z.errors.some((e) => e.message.includes('Y fail'))).toBe(true);
-      expect(Object.isFrozen(z.errors)).toBe(true);
+      expect(computedZ.value).toBe(0); // 0 + 0
+      expect(computedZ.hasError).toBe(true);
+      expect(computedZ.errors.length).toBeGreaterThanOrEqual(2);
+      expect(computedZ.errors.some((error) => error.message.includes('X fail'))).toBe(true);
+      expect(computedZ.errors.some((error) => error.message.includes('Y fail'))).toBe(true);
+      expect(Object.isFrozen(computedZ.errors)).toBe(true);
 
       // Partial recovery: x clears, y still fails
       cause1.value = false;
-      expect(z.value).toBe(1); // 1 + 0
-      expect(z.hasError).toBe(true);
-      expect(z.errors.length).toBe(1);
+      expect(computedZ.value).toBe(1); // 1 + 0
+      expect(computedZ.hasError).toBe(true);
+      expect(computedZ.errors.length).toBe(1);
 
       // Full recovery
       cause2.value = false;
-      expect(z.value).toBe(3); // 1 + 2
-      expect(z.hasError).toBe(false);
-      expect(z.lastError).toBeNull();
-      expect(z.errors).toEqual([]);
+      expect(computedZ.value).toBe(3); // 1 + 2
+      expect(computedZ.hasError).toBe(false);
+      expect(computedZ.lastError).toBeNull();
+      expect(computedZ.errors).toEqual([]);
     });
   });
 
@@ -104,25 +104,25 @@ describe('Core - Error Handling and Propagation', () => {
   describe('Effect & Subscriber Isolation', () => {
     it('isolates crashing side-effects and wraps errors via onError safely', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const a = atom(0);
+      const someAtom = atom(0);
       const goodWorker = vi.fn();
       const errHandler = vi.fn();
 
-      a.subscribe(() => {
+      someAtom.subscribe(() => {
         throw new Error('Subscriber crash');
       });
-      a.subscribe(goodWorker);
+      someAtom.subscribe(goodWorker);
 
-      const e = effect(
+      const effectInstance = effect(
         () => {
-          if (a.value > 0) throw new Error('Effect crash');
+          if (someAtom.value > 0) throw new Error('Effect crash');
         },
         { onError: errHandler }
       );
 
       await aeNextTick();
 
-      a.value = 1;
+      someAtom.value = 1;
       await aeNextTick();
 
       expect(goodWorker).toHaveBeenCalledTimes(1);
@@ -130,9 +130,9 @@ describe('Core - Error Handling and Propagation', () => {
       expect(errHandler.mock.calls[0]?.[0]).toBeInstanceOf(Error);
       expect(consoleSpy).toHaveBeenCalled();
 
-      expect(e.isDisposed).toBe(false);
-      e.dispose();
-      expect(e.isDisposed).toBe(true);
+      expect(effectInstance.isDisposed).toBe(false);
+      effectInstance.dispose();
+      expect(effectInstance.isDisposed).toBe(true);
 
       consoleSpy.mockRestore();
     });

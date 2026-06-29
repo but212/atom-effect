@@ -140,7 +140,7 @@ export function renderRoute(
  * Disposes of all resources and effects bound to the current route view.
  */
 export function runRendererCleanups(renderer: RouteRenderer) {
-  renderer.cleanups.forEach((fn) => Result.tryCatch(fn));
+  renderer.cleanups.forEach((cleanupCallback) => Result.tryCatch(cleanupCallback));
   renderer.cleanups.clear();
 }
 

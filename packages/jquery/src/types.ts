@@ -513,7 +513,7 @@ export interface AtomComponentController {
    * Accepts a raw ShadowRoot for traditional usage or a configuration object
    * for declarative hydration and automatic event dispatching.
    *
-   * @param options - ShadowRoot or configuration object for hydration and event dispatching.
+   * @param options ShadowRoot or configuration object for hydration and event dispatching.
    */
   setup(
     options?:

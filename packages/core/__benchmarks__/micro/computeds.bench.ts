@@ -12,10 +12,10 @@ describe('Computeds: Reactive Logic', () => {
     `baseline: raw function creation (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const a = { value: 0 };
-        const b = { value: 1 };
-        const c = { value: 2 };
-        keep(() => a.value + b.value + c.value);
+        const aPlain = { value: 0 };
+        const bPlain = { value: 1 };
+        const cPlain = { value: 2 };
+        keep(() => aPlain.value + bPlain.value + cPlain.value);
       }
     },
     microBenchOptions
@@ -25,10 +25,10 @@ describe('Computeds: Reactive Logic', () => {
     `creation: flat computed (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const a = atom(0);
-        const b = atom(1);
-        const c = atom(2);
-        keep(computed(() => a.value + b.value + c.value));
+        const firstAtom = atom(0);
+        const secondAtom = atom(1);
+        const thirdAtom = atom(2);
+        keep(computed(() => firstAtom.value + secondAtom.value + thirdAtom.value));
       }
     },
     microBenchOptions
@@ -37,11 +37,11 @@ describe('Computeds: Reactive Logic', () => {
   bench(
     'creation: chained computed (10 levels)',
     () => {
-      const a = atom(0);
-      let current = computed(() => a.value);
+      const someAtom = atom(0);
+      let current = computed(() => someAtom.value);
       for (let i = 0; i < 9; i++) {
-        const prev = current;
-        current = computed(() => prev.value + 1);
+        const previousComputed = current;
+        current = computed(() => previousComputed.value + 1);
       }
       keep(current.value);
     },
@@ -52,31 +52,31 @@ describe('Computeds: Reactive Logic', () => {
   const chain10 = (() => {
     let curr = computed(() => source.value);
     for (let i = 0; i < 9; i++) {
-      const prev = curr;
-      curr = computed(() => prev.value + 1);
+      const previousComputed = curr;
+      curr = computed(() => previousComputed.value + 1);
     }
     return curr;
   })();
 
   const rawSource = { value: 0 };
-  const c1 = () => rawSource.value;
-  const c2 = () => c1() + 1;
-  const c3 = () => c2() + 1;
-  const c4 = () => c3() + 1;
-  const c5 = () => c4() + 1;
-  const c6 = () => c5() + 1;
-  const c7 = () => c6() + 1;
-  const c8 = () => c7() + 1;
-  const c9 = () => c8() + 1;
-  const chain10Raw = () => c9() + 1;
+  const rawComp1 = () => rawSource.value;
+  const rawComp2 = () => rawComp1() + 1;
+  const rawComp3 = () => rawComp2() + 1;
+  const rawComp4 = () => rawComp3() + 1;
+  const rawComp5 = () => rawComp4() + 1;
+  const rawComp6 = () => rawComp5() + 1;
+  const rawComp7 = () => rawComp6() + 1;
+  const rawComp8 = () => rawComp7() + 1;
+  const rawComp9 = () => rawComp8() + 1;
+  const chain10RawComp = () => rawComp9() + 1;
 
   bench(
     `baseline: raw chained function evaluation (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
         rawSource.value++;
-        keep(chain10Raw());
-        keep(chain10Raw());
+        keep(chain10RawComp());
+        keep(chain10RawComp());
       }
     },
     microBenchOptions
@@ -98,9 +98,9 @@ describe('Computeds: Reactive Logic', () => {
     `lazy evaluation overhead (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const a = atom(i);
-        const c = computed(() => a.value * 2);
-        keep(c.value);
+        const someAtom = atom(i);
+        const computedInstance = computed(() => someAtom.value * 2);
+        keep(computedInstance.value);
       }
     },
     microBenchOptions
@@ -108,16 +108,16 @@ describe('Computeds: Reactive Logic', () => {
 });
 
 describe('Computeds: Read Methods (.value vs .peek())', () => {
-  const a = atom(42);
-  const c = computed(() => a.value + 1);
+  const someAtom = atom(42);
+  const computedInstance = computed(() => someAtom.value + 1);
   let unsubscribeCallback: () => void;
 
   const rawFn = () => 43;
 
   const readCases = [
     { name: 'baseline: plain function call', read: () => rawFn() },
-    { name: 'computed.value read (active)', read: () => c.value },
-    { name: 'computed.peek() read (active)', read: () => c.peek() },
+    { name: 'computed.value read (active)', read: () => computedInstance.value },
+    { name: 'computed.peek() read (active)', read: () => computedInstance.peek() },
   ];
 
   for (const { name, read } of readCases) {
@@ -131,7 +131,7 @@ describe('Computeds: Read Methods (.value vs .peek())', () => {
       {
         ...microBenchOptions,
         setup: () => {
-          unsubscribeCallback = c.subscribe(() => {});
+          unsubscribeCallback = computedInstance.subscribe(() => {});
         },
         teardown: () => {
           unsubscribeCallback();
@@ -149,9 +149,9 @@ describe('Computeds: Asynchronous Flows', () => {
     `creation: async computed (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const c = computed(async () => 42, { defaultValue: 0 });
-        keep(c);
-        c.dispose();
+        const computedInstance = computed(async () => 42, { defaultValue: 0 });
+        keep(computedInstance);
+        computedInstance.dispose();
       }
     },
     microBenchOptions
@@ -187,19 +187,19 @@ describe('Computeds: Asynchronous Flows', () => {
       const promise = new Promise<number>((r) => {
         resolve = r;
       });
-      const c = computed(() => promise, { defaultValue: 0 });
-      asyncUnsub = c.subscribe(() => {});
+      const computedInstance = computed(() => promise, { defaultValue: 0 });
+      asyncUnsub = computedInstance.subscribe(() => {});
 
       try {
-        keep(c.value); // trigger calculation, transitions to pending
+        keep(computedInstance.value); // trigger calculation, transitions to pending
         resolve(42);
 
         await promise; // wait for promise to settle
         await Promise.resolve(); // wait for computed microtask to resolve
-        keep(c.value); // read resolved value
+        keep(computedInstance.value); // read resolved value
       } finally {
         asyncUnsub();
-        c.dispose();
+        computedInstance.dispose();
       }
     },
     microBenchOptions

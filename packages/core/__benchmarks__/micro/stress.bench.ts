@@ -12,8 +12,8 @@ describe('Stress Tests: Extreme Scale (1000)', () => {
   const depthSource = atom(0);
   let depthTarget = computed(() => depthSource.value);
   for (let i = 0; i < 1000; i++) {
-    const prev = depthTarget;
-    depthTarget = computed(() => prev.value + 1);
+    const previousComputed = depthTarget;
+    depthTarget = computed(() => previousComputed.value + 1);
   }
   keep(depthTarget.value); // Initial computation
 
@@ -45,8 +45,10 @@ describe('Stress Tests: Extreme Scale (1000)', () => {
   );
 
   // N to 1 (Fan In 1000)
-  const fanIn1000Sources = Array.from({ length: 1000 }, (_, i) => atom(i));
-  const fanIn1000Target = computed(() => fanIn1000Sources.reduce((sum, s) => sum + s.value, 0));
+  const fanIn1000Sources = Array.from({ length: 1000 }, (_, index) => atom(index));
+  const fanIn1000Target = computed(() =>
+    fanIn1000Sources.reduce((sum, sourceAtom) => sum + sourceAtom.value, 0)
+  );
   keep(fanIn1000Target.value); // Initial computation
   const firstSource = fanIn1000Sources[0] ?? atom(0);
 

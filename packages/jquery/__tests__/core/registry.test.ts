@@ -20,8 +20,8 @@ describe('Binding Registry', () => {
       expect($element.hasClass('_aes-bound')).toBe(false);
 
       // 2. Active binding should be disposed and class removed
-      const atom = $.atom('initial');
-      $element.atomText(atom);
+      const stateAtom = $.atom('initial');
+      $element.atomText(stateAtom);
       await $.nextTick();
       expect($element.hasClass('_aes-bound')).toBe(true);
 
@@ -29,7 +29,7 @@ describe('Binding Registry', () => {
       expect($element.hasClass('_aes-bound')).toBe(false);
 
       // Verify reactivity is terminated
-      atom.value = 'updated';
+      stateAtom.value = 'updated';
       expect($element.text()).not.toBe('updated');
     });
 
@@ -52,14 +52,14 @@ describe('Binding Registry', () => {
 
     it('should support manual cleanup with raw HTMLElement', async () => {
       const element = document.createElement('div');
-      const atom = $.atom('initial');
-      $(element).atomText(atom);
+      const stateAtom = $.atom('initial');
+      $(element).atomText(stateAtom);
       await $.nextTick();
       expect(element.textContent).toBe('initial');
 
       // Call cleanup with raw HTMLElement
       cleanup(element);
-      atom.value = 'updated';
+      stateAtom.value = 'updated';
       await $.nextTick();
       expect(element.textContent).not.toBe('updated');
     });
@@ -116,9 +116,9 @@ describe('Binding Registry', () => {
       const bodySpy = vi.spyOn(document, 'body', 'get').mockReturnValue(castTo<HTMLElement>(null));
 
       // Simulate early binding (e.g. in <head>)
-      const atom = $.atom('v1');
+      const stateAtom = $.atom('v1');
       const earlyEl = document.createElement('div');
-      $(earlyEl).atomText(atom);
+      $(earlyEl).atomText(stateAtom);
 
       // Restore body and re-init
       bodySpy.mockReturnValue(originalBody);
@@ -126,12 +126,12 @@ describe('Binding Registry', () => {
 
       const $element = $('<span>').appendTo(document.body);
       await $.nextTick();
-      $element.atomText(atom);
+      $element.atomText(stateAtom);
 
       // Remove and verify cleanup
       $element[0]?.remove();
       await vi.waitFor(() => {
-        atom.value = 'v2';
+        stateAtom.value = 'v2';
         return $element.text() !== 'v2';
       });
     });

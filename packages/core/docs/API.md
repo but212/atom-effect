@@ -310,6 +310,9 @@ Merges multiple writable lenses into a single unified writable atom.
 
 > [!IMPORTANT]
 > **Object-based Nodes Only**: This utility is designed specifically for object-based nodes. Merging primitive-valued nodes (e.g., strings or numbers) will cause a type-mismatch discrepancy: the static TypeScript type resolves to the primitive type (e.g., `string`), but the runtime value returned is an index-keyed object (e.g., `{ '0': val1, '1': val2 }`).
+
+Please review the write propagation behavior outlined below to ensure correct state updates.
+
 > [!WARNING]
 > **Write Propagation Behavior**: When writing a new value to the merged lens (`merged.value = newVal`), the value is written in its entirety to each underlying lens (`lens.value = newVal`) within a single `batch`. The merged value is *not* partitioned or split by paths. Ensure that each underlying lens can accept the entire merged object structure or that target properties can handle the full value.
 

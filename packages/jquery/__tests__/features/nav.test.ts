@@ -115,9 +115,9 @@ describe('$.atomNav', () => {
       const $link = appendToBody($('<a class="nav-link"></a>').attr({ href, ...attrs }));
 
       let intercepted = false;
-      const checkIntercept = (e: Event) => {
-        intercepted = e.defaultPrevented;
-        e.preventDefault();
+      const checkIntercept = (event: Event) => {
+        intercepted = event.defaultPrevented;
+        event.preventDefault();
       };
       document.addEventListener('click', checkIntercept, { once: true });
 
@@ -189,10 +189,10 @@ describe('$.atomNav', () => {
     it('should handle pending state and mounting lifecycle', async () => {
       let resolveFetch!: (value: string) => void;
       vi.spyOn($, 'ajax').mockImplementation(() => {
-        const p = new Promise<string>((res) => {
-          resolveFetch = res;
+        const fetchPromise = new Promise<string>((resolve) => {
+          resolveFetch = resolve;
         });
-        return createMockJqXHR(p, { abort: vi.fn() });
+        return createMockJqXHR(fetchPromise, { abort: vi.fn() });
       });
 
       const hooks = { onMount: vi.fn(), onUnmount: vi.fn() };
@@ -201,11 +201,11 @@ describe('$.atomNav', () => {
       expect(hooks.onMount).toHaveBeenCalledTimes(1);
       hooks.onMount.mockClear();
 
-      const p = nav.navigate('/next');
+      const navPromise = nav.navigate('/next');
       await vi.waitFor(() => expect(nav.isPending.value).toBe(true));
 
       resolveFetch('<div>Done</div>');
-      await p;
+      await navPromise;
 
       await vi.waitFor(() => expect(nav.isPending.value).toBe(false));
       expect(hooks.onUnmount).toHaveBeenCalled();
@@ -405,8 +405,8 @@ describe('$.atomNav', () => {
     it('should clean up resources on destruction', async () => {
       const abortSpy = vi.fn();
       vi.spyOn($, 'ajax').mockImplementation(() => {
-        const p = new Promise<string>(() => {});
-        return createMockJqXHR(p, { abort: abortSpy });
+        const pendingPromise = new Promise<string>(() => {});
+        return createMockJqXHR(pendingPromise, { abort: abortSpy });
       });
 
       const nav = await harness.create();

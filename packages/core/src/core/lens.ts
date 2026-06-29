@@ -336,8 +336,8 @@ class LensImpl<T extends object, P extends string>
  * If the source atom is already a lens, this factory flattens the path
  * (e.g., lens(lens(a, 'b'), 'c') -> lens(a, 'b.c')) to reduce proxy overhead.
  *
- * @param atom - The source atom or lens to derive from.
- * @param path - A dot-separated string representing the path to the property.
+ * @param atom The source atom or lens to derive from.
+ * @param path A dot-separated string representing the path to the property.
  * @returns A writable atom representing the value at the specified path.
  *
  * @example
@@ -467,7 +467,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
  * - To synchronize multiple fields across different state trees.
  * - To create a single "form" atom from multiple disparate source atoms.
  *
- * @param lenses - A list of writable atoms/lenses to merge.
+ * @param lenses A list of writable atoms/lenses to merge.
  * @returns A unified writable atom that synchronizes all input lenses.
  *
  * @example
@@ -495,8 +495,8 @@ export function mergeLenses<L extends WritableAtom<unknown>[]>(
  * starting from the value of the provided lens and navigating down the
  * specified path.
  *
- * @param lens - The base lens to compose from.
- * @param path - The sub-path relative to the base lens.
+ * @param lens The base lens to compose from.
+ * @param path The sub-path relative to the base lens.
  * @returns A new lens targeting the nested property.
  */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
@@ -509,7 +509,7 @@ export const composeLens = <T extends object, P extends Paths<T>>(lens: Writable
  * - To create multiple lenses from the same root atom without repeating the root.
  * - To enhance readability when defining many field bindings for a single state object.
  *
- * @param atom - The root atom to create lenses for.
+ * @param atom The root atom to create lenses for.
  * @returns A function that accepts a path and returns a lens for that path.
  *
  * @example

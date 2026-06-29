@@ -54,12 +54,12 @@ describe('Debug System', () => {
     });
 
     it('should fall back to "type_id" pattern for unnamed nodes', () => {
-      const a = track(atom(0));
-      expect(debug.getDebugName(a)).toMatch(/^atom_\d+$/);
+      const someAtom = track(atom(0));
+      expect(debug.getDebugName(someAtom)).toMatch(/^atom_\d+$/);
 
-      const c = track(computed(() => 0));
-      expect(debug.getDebugName(c)).toMatch(/^calc_\d+$/);
-      expect(debug.getDebugType(c)).toBe('computed');
+      const computedInstance = track(computed(() => 0));
+      expect(debug.getDebugName(computedInstance)).toMatch(/^calc_\d+$/);
+      expect(debug.getDebugType(computedInstance)).toBe('computed');
     });
 
     it('should remain inert when debugging is disabled or input is invalid', () => {
@@ -92,13 +92,13 @@ describe('Debug System', () => {
     it('should track updates automatically for Atom, Computed, and Effect', () => {
       const spy = vi.spyOn(debug, 'trackUpdate');
 
-      const a = track(atom(0));
-      a.value = 1;
+      const someAtom = track(atom(0));
+      someAtom.value = 1;
       expect(spy).toHaveBeenCalled();
 
       const source = track(atom(0));
-      const c = track(computed(() => source.value * 2));
-      void c.value;
+      const computedInstance = track(computed(() => source.value * 2));
+      void computedInstance.value;
       spy.mockClear();
       source.value = 2;
       expect(spy).toHaveBeenCalled();
@@ -116,12 +116,12 @@ describe('Debug System', () => {
 
   describe('registerNode() / dumpGraph()', () => {
     it('should capture the graph state and handle disposed nodes gracefully', () => {
-      const a = track(atom(1, { name: 'Active_Node' }));
-      const b = track(atom(2, { name: 'Disposed_Node' }));
+      const activeAtom = track(atom(1, { name: 'Active_Node' }));
+      const disposedAtom = track(atom(2, { name: 'Disposed_Node' }));
 
-      debug.registerNode(a);
-      debug.registerNode(b);
-      b.dispose();
+      debug.registerNode(activeAtom);
+      debug.registerNode(disposedAtom);
+      disposedAtom.dispose();
 
       const graph = debug.dumpGraph();
       expect(graph.some((e) => e.name === 'Active_Node')).toBe(true);
@@ -246,8 +246,8 @@ describe('Debug System', () => {
 
       try {
         // @ts-expect-error
-        const mod = await import('@/utils/debug?prod=2');
-        const prodDebug = mod.debug;
+        const debugModule = await import('@/utils/debug?prod=2');
+        const prodDebug = debugModule.debug;
 
         expect(prodDebug.isEnabled).toBe(false);
         expect(prodDebug.shouldWarnInfiniteLoop).toBe(false);

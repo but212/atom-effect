@@ -16,8 +16,8 @@ import { registry } from '@/core/registry';
  * Role: DOM Identity Tracking
  * Assigns or removes a stable reactive identifier on a DOM node.
  *
- * @param nodes - The target DOM nodes.
- * @param key - Unique string key for identification, or null to remove.
+ * @param nodes The target DOM nodes.
+ * @param key Unique string key for identification, or null to remove.
  * @internal
  */
 export function setAtomKey(nodes: Node[], key: string | null): void {
@@ -43,7 +43,7 @@ export function setAtomKey(nodes: Node[], key: string | null): void {
  * Failure to call this results in "zombie" reactive effects remaining in the
  * global registry, leading to significant memory growth over time.
  *
- * @param nodes - The root nodes to purge from the registry.
+ * @param nodes The root nodes to purge from the registry.
  * @internal
  */
 export function cleanupNodes(nodes: Node[]): void {

@@ -55,9 +55,9 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
   });
 
   afterEach(() => {
-    for (const m of activeManagers) {
+    for (const manager of activeManagers) {
       try {
-        m.destroy();
+        manager.destroy();
       } catch {}
     }
     $.initAEJ({ autoCleanup: false });

@@ -1,6 +1,6 @@
 // setup.ts
 import $ from 'jquery';
 
-const g = globalThis as typeof globalThis & { $: JQueryStatic; jQuery: JQueryStatic };
-g.$ = $;
-g.jQuery = $;
+const globalObject = globalThis as typeof globalThis & { $: JQueryStatic; jQuery: JQueryStatic };
+globalObject.$ = $;
+globalObject.jQuery = $;

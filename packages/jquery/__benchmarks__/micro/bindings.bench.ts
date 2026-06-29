@@ -7,39 +7,39 @@ import $ from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
 describe('Bindings: One-way & Baselines', () => {
-  const run = (name: string, fn: ($c: JQuery) => void | Promise<void>) =>
-    bench(name, withContainer(fn), microBenchOptions);
+  const run = (name: string, benchmarkFunction: ($container: JQuery) => void | Promise<void>) =>
+    bench(name, withContainer(benchmarkFunction), microBenchOptions);
 
-  run('Native: create 100 text nodes', ($c) => {
-    const container = $c[0];
+  run('Native: create 100 text nodes', ($container) => {
+    const container = $container[0];
     if (!container) return;
     for (let i = 0; i < 100; i++) {
       container.appendChild(document.createElement('span')).textContent = 'hello';
     }
   });
 
-  run('jQuery: create 100 text elements', ($c) => {
+  run('jQuery: create 100 text elements', ($container) => {
     for (let i = 0; i < 100; i++) {
-      $('<span></span>').appendTo($c).text('hello');
+      $('<span></span>').appendTo($container).text('hello');
     }
   });
 
-  run('atom-effect: create 100 text bindings (atomText)', ($c) => {
+  run('atom-effect: create 100 text bindings (atomText)', ($container) => {
     const source = $.atom('hello');
     for (let i = 0; i < 100; i++) {
-      $('<span></span>').appendTo($c).atomText(source);
+      $('<span></span>').appendTo($container).atomText(source);
     }
   });
 
-  run('atom-effect: create 100 HTML bindings (atomHtml)', ($c) => {
+  run('atom-effect: create 100 HTML bindings (atomHtml)', ($container) => {
     const source = $.atom('<em>hello</em>');
     for (let i = 0; i < 100; i++) {
-      $('<div></div>').appendTo($c).atomHtml(source);
+      $('<div></div>').appendTo($container).atomHtml(source);
     }
   });
 
-  run('Native: update text (100 elements x 50 updates)', ($c) => {
-    const container = $c[0];
+  run('Native: update text (100 elements x 50 updates)', ($container) => {
+    const container = $container[0];
     if (!container) return;
     const elements = Array.from({ length: 100 }, () =>
       container.appendChild(document.createElement('span'))
@@ -50,58 +50,58 @@ describe('Bindings: One-way & Baselines', () => {
     }
   });
 
-  run('jQuery: update text (100 elements x 50 updates)', ($c) => {
-    const elements = Array.from({ length: 100 }, () => $('<span></span>').appendTo($c));
+  run('jQuery: update text (100 elements x 50 updates)', ($container) => {
+    const elements = Array.from({ length: 100 }, () => $('<span></span>').appendTo($container));
     for (let i = 0; i < 50; i++) {
       const value = `update-${i}`;
       for (const element of elements) element.text(value);
     }
   });
 
-  run('atom-effect: update text (100 elements x 50 updates)', ($c) => {
+  run('atom-effect: update text (100 elements x 50 updates)', ($container) => {
     const source = $.atom('initial');
     for (let i = 0; i < 100; i++) {
-      $('<span></span>').appendTo($c).atomText(source);
+      $('<span></span>').appendTo($container).atomText(source);
     }
     for (let i = 0; i < 50; i++) {
       source.value = `update-${i}`;
     }
   });
 
-  run('atom-effect: update html (100 elements x 20 updates)', ($c) => {
+  run('atom-effect: update html (100 elements x 20 updates)', ($container) => {
     const source = $.atom('<em>initial</em>');
     for (let i = 0; i < 100; i++) {
-      $('<div></div>').appendTo($c).atomHtml(source);
+      $('<div></div>').appendTo($container).atomHtml(source);
     }
     for (let i = 0; i < 20; i++) {
       source.value = `<strong>update-${i}</strong>`;
     }
   });
 
-  run('atom-effect: toggle class (100 elements x 100 toggles)', ($c) => {
+  run('atom-effect: toggle class (100 elements x 100 toggles)', ($container) => {
     const condition = $.atom(false);
     for (let i = 0; i < 100; i++) {
-      $('<div></div>').appendTo($c).atomClass('active', condition);
+      $('<div></div>').appendTo($container).atomClass('active', condition);
     }
     for (let i = 0; i < 100; i++) {
       condition.value = !condition.value;
     }
   });
 
-  run('atom-effect: update CSS (100 elements x 50 updates)', ($c) => {
+  run('atom-effect: update CSS (100 elements x 50 updates)', ($container) => {
     const width = $.atom(100);
     for (let i = 0; i < 100; i++) {
-      $('<div></div>').appendTo($c).atomCss('width', width, 'px');
+      $('<div></div>').appendTo($container).atomCss('width', width, 'px');
     }
     for (let i = 0; i < 50; i++) {
       width.value = 100 + i;
     }
   });
 
-  run('atom-effect: toggle visibility (100 elements x 50 toggles)', ($c) => {
+  run('atom-effect: toggle visibility (100 elements x 50 toggles)', ($container) => {
     const visible = $.atom(true);
     for (let i = 0; i < 100; i++) {
-      $('<div></div>').appendTo($c).atomShow(visible);
+      $('<div></div>').appendTo($container).atomShow(visible);
     }
     for (let i = 0; i < 50; i++) {
       visible.value = !visible.value;
@@ -110,54 +110,54 @@ describe('Bindings: One-way & Baselines', () => {
 });
 
 describe('Bindings: Two-way & Unified', () => {
-  const run = (name: string, fn: ($c: JQuery) => void | Promise<void>) =>
-    bench(name, withContainer(fn), microBenchOptions);
+  const run = (name: string, benchmarkFunction: ($container: JQuery) => void | Promise<void>) =>
+    bench(name, withContainer(benchmarkFunction), microBenchOptions);
 
   const valueUpdates100 = Array.from({ length: 100 }, (_, i) => `value-${i}`);
 
-  run('atom → DOM: input value (100 inputs x 100 updates)', ($c) => {
+  run('atom → DOM: input value (100 inputs x 100 updates)', ($container) => {
     const source = $.atom('initial');
     for (let i = 0; i < 100; i++) {
-      $('<input type="text">').appendTo($c).atomVal(source);
+      $('<input type="text">').appendTo($container).atomVal(source);
     }
     for (const value of valueUpdates100) {
       source.value = value;
     }
   });
 
-  run('DOM → atom: input value (trigger 100 events)', ($c) => {
+  run('DOM → atom: input value (trigger 100 events)', ($container) => {
     const source = $.atom('initial');
-    const $input = $('<input type="text">').appendTo($c).atomVal(source);
+    const $input = $('<input type="text">').appendTo($container).atomVal(source);
     for (let i = 0; i < 100; i++) {
       $input.val(`typed-${i}`).trigger('input');
     }
   });
 
-  run('checkbox toggle (100 elements x 100 toggles)', ($c) => {
+  run('checkbox toggle (100 elements x 100 toggles)', ($container) => {
     const checked = $.atom(false);
     for (let i = 0; i < 100; i++) {
-      $('<input type="checkbox">').appendTo($c).atomChecked(checked);
+      $('<input type="checkbox">').appendTo($container).atomChecked(checked);
     }
     for (let i = 0; i < 100; i++) {
       checked.value = !checked.value;
     }
   });
 
-  run('textarea value (100 textareas x 100 updates)', ($c) => {
+  run('textarea value (100 textareas x 100 updates)', ($container) => {
     const source = $.atom('initial');
     for (let i = 0; i < 100; i++) {
-      $('<textarea></textarea>').appendTo($c).atomVal(source);
+      $('<textarea></textarea>').appendTo($container).atomVal(source);
     }
     for (const value of valueUpdates100) {
       source.value = value;
     }
   });
 
-  run('select single option (100 selects x 100 updates)', ($c) => {
+  run('select single option (100 selects x 100 updates)', ($container) => {
     const source = $.atom('opt-1');
     for (let i = 0; i < 100; i++) {
       $('<select><option value="opt-1">O1</option><option value="opt-2">O2</option></select>')
-        .appendTo($c)
+        .appendTo($container)
         .atomVal(source);
     }
     for (let i = 0; i < 100; i++) {
@@ -165,13 +165,13 @@ describe('Bindings: Two-way & Unified', () => {
     }
   });
 
-  run('select multiple options (100 selects x 50 updates)', ($c) => {
+  run('select multiple options (100 selects x 50 updates)', ($container) => {
     const source = $.atom<string[]>(['opt-1']);
     for (let i = 0; i < 100; i++) {
       $(
         '<select multiple><option value="opt-1">O1</option><option value="opt-2">O2</option><option value="opt-3">O3</option></select>'
       )
-        .appendTo($c)
+        .appendTo($container)
         .atomVal(source);
     }
     for (let i = 0; i < 50; i++) {
@@ -179,10 +179,10 @@ describe('Bindings: Two-way & Unified', () => {
     }
   });
 
-  run('radio check toggle (100 radio groups x 100 updates)', ($c) => {
+  run('radio check toggle (100 radio groups x 100 updates)', ($container) => {
     const source = $.atom('r1');
     for (let i = 0; i < 100; i++) {
-      const $group = $('<div></div>').appendTo($c);
+      const $group = $('<div></div>').appendTo($container);
       $(`<input type="radio" name="group-${i}" value="r1">`).appendTo($group).atomVal(source);
       $(`<input type="radio" name="group-${i}" value="r2">`).appendTo($group).atomVal(source);
     }
@@ -191,13 +191,13 @@ describe('Bindings: Two-way & Unified', () => {
     }
   });
 
-  run('sequential chain calls (text+class+css+show) x 100 elements', ($c) => {
+  run('sequential chain calls (text+class+css+show) x 100 elements', ($container) => {
     const text = $.atom('hello');
     const isActive = $.atom(true);
     const width = $.atom(100);
     for (let i = 0; i < 100; i++) {
       $('<div></div>')
-        .appendTo($c)
+        .appendTo($container)
         .atomText(text)
         .atomClass('active', isActive)
         .atomCss('width', width, 'px')
@@ -205,13 +205,13 @@ describe('Bindings: Two-way & Unified', () => {
     }
   });
 
-  run('unified atomBind (text+class+css+show) x 100 elements', ($c) => {
+  run('unified atomBind (text+class+css+show) x 100 elements', ($container) => {
     const text = $.atom('hello');
     const isActive = $.atom(true);
     const width = $.atom(100);
     for (let i = 0; i < 100; i++) {
       $('<div></div>')
-        .appendTo($c)
+        .appendTo($container)
         .atomBind({
           text,
           class: { active: isActive },
@@ -233,8 +233,8 @@ interface ProfileData {
 }
 
 describe('Bindings: Form (atomForm)', () => {
-  const run = (name: string, fn: ($c: JQuery) => void | Promise<void>) =>
-    bench(name, withContainer(fn), microBenchOptions);
+  const run = (name: string, benchmarkFunction: ($container: JQuery) => void | Promise<void>) =>
+    bench(name, withContainer(benchmarkFunction), microBenchOptions);
 
   const getInitialProfile = (): ProfileData => ({
     name: 'Alice',
@@ -263,28 +263,30 @@ describe('Bindings: Form (atomForm)', () => {
     </form>
   `;
 
-  run('atomForm initial setup x 10 forms', ($c) => {
+  run('atomForm initial setup x 10 forms', ($container) => {
     const profile = $.atom<ProfileData>(getInitialProfile());
     for (let i = 0; i < 10; i++) {
-      $(createFormHtml()).appendTo($c).atomForm(profile);
+      $(createFormHtml()).appendTo($container).atomForm(profile);
     }
   });
 
-  run('atomForm update via state (10 forms x 50 updates)', ($c) => {
+  run('atomForm update via state (10 forms x 50 updates)', ($container) => {
     const profile = $.atom<ProfileData>(getInitialProfile());
     for (let i = 0; i < 10; i++) {
-      $(createFormHtml()).appendTo($c).atomForm(profile);
+      $(createFormHtml()).appendTo($container).atomForm(profile);
     }
     for (const value of profileUpdates) {
       profile.value = value;
     }
   });
 
-  run('atomForm update via DOM trigger (10 forms x 50 events)', ($c) => {
+  run('atomForm update via DOM trigger (10 forms x 50 events)', ($container) => {
     const profile = $.atom<ProfileData>(getInitialProfile());
     const inputs: JQuery[] = [];
     for (let i = 0; i < 10; i++) {
-      inputs.push($(createFormHtml()).appendTo($c).atomForm(profile).find('input[name="name"]'));
+      inputs.push(
+        $(createFormHtml()).appendTo($container).atomForm(profile).find('input[name="name"]')
+      );
     }
     for (let i = 0; i < 50; i++) {
       const nextVal = `Typed-${i}`;
@@ -294,14 +296,14 @@ describe('Bindings: Form (atomForm)', () => {
     }
   });
 
-  run('atomForm setup with validation hooks x 10 forms', ($c) => {
+  run('atomForm setup with validation hooks x 10 forms', ($container) => {
     const profile = $.atom<ProfileData>(getInitialProfile());
     const validationRules = {
       name: (value: unknown) => (value ? true : 'Name is required'),
       email: (value: unknown) => (String(value).includes('@') ? true : 'Invalid email'),
     };
     for (let i = 0; i < 10; i++) {
-      $(createFormHtml()).appendTo($c).atomForm(profile, { validation: validationRules });
+      $(createFormHtml()).appendTo($container).atomForm(profile, { validation: validationRules });
     }
   });
 });

@@ -175,8 +175,8 @@ describe('Atom-Effect: Security Specification', () => {
         '<img id="tagName">',
         '<iframe name="nodeName"></iframe>',
       ];
-      for (const p of payloads) {
-        const result = (await TestKit.sanitize(p)).toLowerCase();
+      for (const payload of payloads) {
+        const result = (await TestKit.sanitize(payload)).toLowerCase();
         expect(result).not.toContain('id="attributes"');
       }
     });
@@ -205,18 +205,20 @@ describe('Atom-Effect: Security Specification', () => {
 
     it('should handle srcset attribute sanitization', async () => {
       // Safe srcset
-      const safe = await TestKit.sanitize('<img srcset="safe.png 1x, safe2.png 2x">');
-      expect(safe).toContain('srcset="safe.png 1x, safe2.png 2x"');
+      const safeSrcset = await TestKit.sanitize('<img srcset="safe.png 1x, safe2.png 2x">');
+      expect(safeSrcset).toContain('srcset="safe.png 1x, safe2.png 2x"');
 
       // Dangerous srcset
-      const dangerous = await TestKit.sanitize(
+      const dangerousSrcset = await TestKit.sanitize(
         '<img srcset="javascript:alert(1) 1x, safe.png 2x">'
       );
-      expect(dangerous).toContain('srcset="data-unsafe-protocol: 1x, safe.png 2x"');
+      expect(dangerousSrcset).toContain('srcset="data-unsafe-protocol: 1x, safe.png 2x"');
 
       // Empty and multiple spaces
-      const spacey = await TestKit.sanitize('<img srcset="  safe.png   1x , , safe2.png 2x ">');
-      expect(spacey).toContain('srcset="safe.png 1x,  , safe2.png 2x"');
+      const spaceySrcset = await TestKit.sanitize(
+        '<img srcset="  safe.png   1x , , safe2.png 2x ">'
+      );
+      expect(spaceySrcset).toContain('srcset="safe.png 1x,  , safe2.png 2x"');
     });
   });
 
