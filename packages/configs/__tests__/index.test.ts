@@ -26,11 +26,11 @@ import {
   toKebabCase,
 } from '../src/index';
 
-type ConfigFn<T> = () => T | Promise<T>;
+type ConfigFactory<T> = () => T | Promise<T>;
 
-const TEST_DIR = '/test/dir';
-const TEST_PKG = 'TestPackage';
-const TEST_KEBAB = 'test-package';
+const TEST_DIRECTORY_PATH = '/test/dir';
+const TEST_PACKAGE_NAME = 'TestPackage';
+const TEST_KEBAB_NAME = 'test-package';
 
 describe('packages/configs', () => {
   describe('utility helpers', () => {
@@ -49,17 +49,17 @@ describe('packages/configs', () => {
 
     describe('getResolveConfig', () => {
       it('should generate resolve alias config pointing to package src', () => {
-        expect(getResolveConfig(TEST_DIR)).toEqual({
+        expect(getResolveConfig(TEST_DIRECTORY_PATH)).toEqual({
           alias: {
-            '@': `${TEST_DIR}/src`,
+            '@': `${TEST_DIRECTORY_PATH}/src`,
           },
         });
       });
 
       it('should normalize path separators to forward slashes on Windows', () => {
-        const winPath = 'C:\\Users\\redog\\project\\atom-effect';
-        const config = getResolveConfig(winPath);
-        expect(config.alias['@']).toBe('C:/Users/redog/project/atom-effect/src');
+        const windowsPath = 'C:\\Users\\redog\\project\\atom-effect';
+        const resolveConfig = getResolveConfig(windowsPath);
+        expect(resolveConfig.alias['@']).toBe('C:/Users/redog/project/atom-effect/src');
       });
     });
   });
@@ -67,127 +67,127 @@ describe('packages/configs', () => {
   describe('vite config helpers', () => {
     describe('getBaseViteConfig', () => {
       it('should generate configuration with default parameters', () => {
-        const config = getBaseViteConfig({
-          packageDir: TEST_DIR,
-          name: TEST_PKG,
+        const viteConfig = getBaseViteConfig({
+          packageDir: TEST_DIRECTORY_PATH,
+          name: TEST_PACKAGE_NAME,
         });
 
-        expect(config.resolve?.alias).toEqual({ '@': `${TEST_DIR}/src` });
-        expect(config.build?.target).toBe('ES2022');
-        expect(config.build?.sourcemap).toBe(true);
-        expect(config.build?.outDir).toBe('dist');
+        expect(viteConfig.resolve?.alias).toEqual({ '@': `${TEST_DIRECTORY_PATH}/src` });
+        expect(viteConfig.build?.target).toBe('ES2022');
+        expect(viteConfig.build?.sourcemap).toBe(true);
+        expect(viteConfig.build?.outDir).toBe('dist');
 
-        const lib = config.build?.lib;
-        expect(lib).toBeTypeOf('object');
-        if (lib && typeof lib === 'object') {
-          expect(lib.entry).toBe(`${TEST_DIR}/src/index.ts`);
-          expect(lib.name).toBe(TEST_PKG);
-          expect(lib.formats).toEqual(['es']);
+        const libraryOptions = viteConfig.build?.lib;
+        expect(libraryOptions).toBeTypeOf('object');
+        if (libraryOptions && typeof libraryOptions === 'object') {
+          expect(libraryOptions.entry).toBe(`${TEST_DIRECTORY_PATH}/src/index.ts`);
+          expect(libraryOptions.name).toBe(TEST_PACKAGE_NAME);
+          expect(libraryOptions.formats).toEqual(['es']);
         }
       });
 
       it('should format filename using kebab-case for UMD builds', () => {
-        const config = getBaseViteConfig({
-          packageDir: TEST_DIR,
-          name: TEST_PKG,
+        const viteConfig = getBaseViteConfig({
+          packageDir: TEST_DIRECTORY_PATH,
+          name: TEST_PACKAGE_NAME,
           formats: ['umd'],
         });
 
-        const lib = config.build?.lib;
-        expect(lib).toBeTypeOf('object');
-        const fileNameFn = (lib as LibraryOptions)?.fileName as (
+        const libraryOptions = viteConfig.build?.lib;
+        expect(libraryOptions).toBeTypeOf('object');
+        const getFileName = (libraryOptions as LibraryOptions)?.fileName as (
           format: string,
           entryName: string
         ) => string;
-        expect(fileNameFn).toBeTypeOf('function');
-        expect(fileNameFn('umd', 'index')).toBe(`${TEST_KEBAB}.min.js`);
-        expect(fileNameFn?.('es', 'index')).toBe('index.mjs');
-        expect(fileNameFn?.('cjs', 'index')).toBe('index.cjs');
+        expect(getFileName).toBeTypeOf('function');
+        expect(getFileName('umd', 'index')).toBe(`${TEST_KEBAB_NAME}.min.js`);
+        expect(getFileName?.('es', 'index')).toBe('index.mjs');
+        expect(getFileName?.('cjs', 'index')).toBe('index.cjs');
       });
 
       it('should apply custom filename overrides if specified', () => {
-        const config = getBaseViteConfig({
-          packageDir: TEST_DIR,
-          name: TEST_PKG,
+        const viteConfig = getBaseViteConfig({
+          packageDir: TEST_DIRECTORY_PATH,
+          name: TEST_PACKAGE_NAME,
           libFileNames: {
             es: 'custom.js',
           },
         });
 
-        const lib = config.build?.lib;
-        expect(lib).toBeTypeOf('object');
-        const fileNameFn = (lib as LibraryOptions)?.fileName as (
+        const libraryOptions = viteConfig.build?.lib;
+        expect(libraryOptions).toBeTypeOf('object');
+        const getFileName = (libraryOptions as LibraryOptions)?.fileName as (
           format: string,
           entryName: string
         ) => string;
-        expect(fileNameFn).toBeTypeOf('function');
-        expect(fileNameFn('es', 'index')).toBe('custom.js');
-        expect(fileNameFn?.('umd', 'index')).toBe(`${TEST_KEBAB}.min.js`);
+        expect(getFileName).toBeTypeOf('function');
+        expect(getFileName('es', 'index')).toBe('custom.js');
+        expect(getFileName?.('umd', 'index')).toBe(`${TEST_KEBAB_NAME}.min.js`);
       });
 
       describe('buildTarget options', () => {
         it('should structure formats for bundle target', () => {
-          const config = getBaseViteConfig({
-            packageDir: TEST_DIR,
-            name: TEST_PKG,
+          const viteConfig = getBaseViteConfig({
+            packageDir: TEST_DIRECTORY_PATH,
+            name: TEST_PACKAGE_NAME,
             buildTarget: 'bundle',
           });
 
-          const lib = config.build?.lib;
-          expect(lib).toBeTypeOf('object');
-          expect((lib as LibraryOptions)?.formats).toEqual(['umd']);
+          const libraryOptions = viteConfig.build?.lib;
+          expect(libraryOptions).toBeTypeOf('object');
+          expect((libraryOptions as LibraryOptions)?.formats).toEqual(['umd']);
         });
 
         it('should structure formats for lib target', () => {
-          const config = getBaseViteConfig({
-            packageDir: TEST_DIR,
-            name: TEST_PKG,
+          const viteConfig = getBaseViteConfig({
+            packageDir: TEST_DIRECTORY_PATH,
+            name: TEST_PACKAGE_NAME,
             buildTarget: 'lib',
           });
 
-          const lib = config.build?.lib;
-          expect(lib).toBeTypeOf('object');
-          expect((lib as LibraryOptions)?.formats).toEqual(['es', 'cjs']);
+          const libraryOptions = viteConfig.build?.lib;
+          expect(libraryOptions).toBeTypeOf('object');
+          expect((libraryOptions as LibraryOptions)?.formats).toEqual(['es', 'cjs']);
         });
 
         it('should configure settings for types target', () => {
-          const config = getBaseViteConfig({
-            packageDir: TEST_DIR,
-            name: TEST_PKG,
+          const viteConfig = getBaseViteConfig({
+            packageDir: TEST_DIRECTORY_PATH,
+            name: TEST_PACKAGE_NAME,
             buildTarget: 'types',
           });
-          expect(config.build?.emptyOutDir).toBe(true);
-          expect(config.plugins).toHaveLength(1);
+          expect(viteConfig.build?.emptyOutDir).toBe(true);
+          expect(viteConfig.plugins).toHaveLength(1);
         });
 
         it('should resolve tsconfigPath relative to packageDir instead of hardcoding ./tsconfig.build.json', () => {
           mockDts.mockClear();
           getBaseViteConfig({
-            packageDir: TEST_DIR,
-            name: TEST_PKG,
+            packageDir: TEST_DIRECTORY_PATH,
+            name: TEST_PACKAGE_NAME,
             buildTarget: 'types',
           });
           expect(mockDts).toHaveBeenCalled();
           const callArgs = mockDts.mock.calls[0]?.[0];
           expect(callArgs).toBeDefined();
-          expect(callArgs?.tsconfigPath).toBe(`${TEST_DIR}/tsconfig.build.json`);
+          expect(callArgs?.tsconfigPath).toBe(`${TEST_DIRECTORY_PATH}/tsconfig.build.json`);
         });
       });
     });
 
     describe('defineViteConfig', () => {
       it('should merge user overrides into the base configuration', async () => {
-        const configFn = defineViteConfig(
-          { packageDir: TEST_DIR, name: TEST_PKG },
+        const configFactory = defineViteConfig(
+          { packageDir: TEST_DIRECTORY_PATH, name: TEST_PACKAGE_NAME },
           { build: { target: 'ES2020', minify: false } }
         );
 
-        expect(typeof configFn).toBe('function');
-        const config = await (configFn as ConfigFn<UserConfig>)();
+        expect(typeof configFactory).toBe('function');
+        const viteConfig = await (configFactory as ConfigFactory<UserConfig>)();
 
-        expect(config.build?.target).toBe('ES2020');
-        expect(config.build?.minify).toBe(false);
-        expect(config.resolve?.alias).toEqual({ '@': `${TEST_DIR}/src` });
+        expect(viteConfig.build?.target).toBe('ES2020');
+        expect(viteConfig.build?.minify).toBe(false);
+        expect(viteConfig.resolve?.alias).toEqual({ '@': `${TEST_DIRECTORY_PATH}/src` });
       });
     });
   });
@@ -195,29 +195,29 @@ describe('packages/configs', () => {
   describe('vitest config helpers', () => {
     describe('getBaseVitestConfig', () => {
       it('should generate base vitest config with default coverage options', () => {
-        const config = getBaseVitestConfig(TEST_DIR);
-        expect(config.resolve?.alias).toEqual({ '@': `${TEST_DIR}/src` });
-        expect(config.test?.globals).toBe(true);
-        expect(config.test?.coverage?.provider).toBe('v8');
-        expect(config.test?.coverage?.exclude).toBe(baseCoverageExclusionPatterns);
+        const vitestConfig = getBaseVitestConfig(TEST_DIRECTORY_PATH);
+        expect(vitestConfig.resolve?.alias).toEqual({ '@': `${TEST_DIRECTORY_PATH}/src` });
+        expect(vitestConfig.test?.globals).toBe(true);
+        expect(vitestConfig.test?.coverage?.provider).toBe('v8');
+        expect(vitestConfig.test?.coverage?.exclude).toBe(baseCoverageExclusionPatterns);
       });
     });
 
     describe('defineVitestConfig', () => {
       it('should merge Vitest overrides successfully', async () => {
-        const configFn = defineVitestConfig(TEST_DIR, {
+        const configFactory = defineVitestConfig(TEST_DIRECTORY_PATH, {
           test: {
             environment: 'jsdom',
             globals: false,
           },
         });
 
-        expect(typeof configFn).toBe('function');
-        const config = await (configFn as ConfigFn<ViteUserConfig>)();
+        expect(typeof configFactory).toBe('function');
+        const vitestConfig = await (configFactory as ConfigFactory<ViteUserConfig>)();
 
-        expect(config.test?.environment).toBe('jsdom');
-        expect(config.test?.globals).toBe(false);
-        expect(config.resolve?.alias).toEqual({ '@': `${TEST_DIR}/src` });
+        expect(vitestConfig.test?.environment).toBe('jsdom');
+        expect(vitestConfig.test?.globals).toBe(false);
+        expect(vitestConfig.resolve?.alias).toEqual({ '@': `${TEST_DIRECTORY_PATH}/src` });
       });
     });
   });
@@ -225,15 +225,15 @@ describe('packages/configs', () => {
   describe('benchmark config helpers', () => {
     describe('getBaseVitestBenchConfig', () => {
       it('should generate base benchmarking configurations', () => {
-        const config = getBaseVitestBenchmarkConfig(TEST_DIR);
-        expect(config.resolve?.alias).toEqual({ '@': `${TEST_DIR}/src` });
-        expect(config.test?.benchmark?.include).toEqual(['__benchmarks__/**/*.bench.ts']);
+        const vitestConfig = getBaseVitestBenchmarkConfig(TEST_DIRECTORY_PATH);
+        expect(vitestConfig.resolve?.alias).toEqual({ '@': `${TEST_DIRECTORY_PATH}/src` });
+        expect(vitestConfig.test?.benchmark?.include).toEqual(['__benchmarks__/**/*.bench.ts']);
       });
     });
 
     describe('defineVitestBenchConfig', () => {
       it('should completely override the benchmark include array instead of concatenating it', async () => {
-        const configFn = defineVitestBenchConfig(TEST_DIR, {
+        const configFactory = defineVitestBenchConfig(TEST_DIRECTORY_PATH, {
           test: {
             benchmark: {
               include: ['my-bench.ts'],
@@ -241,13 +241,13 @@ describe('packages/configs', () => {
           },
         });
 
-        expect(typeof configFn).toBe('function');
-        const config = await (configFn as ConfigFn<ViteUserConfig>)();
-        expect(config.test?.benchmark?.include).toEqual(['my-bench.ts']);
+        expect(typeof configFactory).toBe('function');
+        const vitestConfig = await (configFactory as ConfigFactory<ViteUserConfig>)();
+        expect(vitestConfig.test?.benchmark?.include).toEqual(['my-bench.ts']);
       });
 
       it('should merge other Vitest benchmark configuration properties successfully', async () => {
-        const configFn = defineVitestBenchConfig(TEST_DIR, {
+        const configFactory = defineVitestBenchConfig(TEST_DIRECTORY_PATH, {
           test: {
             benchmark: {
               exclude: ['**/custom-exclude/**'],
@@ -255,9 +255,9 @@ describe('packages/configs', () => {
           },
         });
 
-        const config = await (configFn as ConfigFn<ViteUserConfig>)();
-        expect(config.test?.benchmark?.include).toEqual(['__benchmarks__/**/*.bench.ts']);
-        expect(config.test?.benchmark?.exclude).toContain('**/custom-exclude/**');
+        const vitestConfig = await (configFactory as ConfigFactory<ViteUserConfig>)();
+        expect(vitestConfig.test?.benchmark?.include).toEqual(['__benchmarks__/**/*.bench.ts']);
+        expect(vitestConfig.test?.benchmark?.exclude).toContain('**/custom-exclude/**');
       });
     });
   });

@@ -15,7 +15,7 @@ const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-O
 
 /**
  * Strips ANSI escape sequences from terminal logs/output.
- * @param {string} str - The raw string containing ANSI codes.
+ * @param {string} str The raw string containing ANSI codes.
  * @returns {string} The cleaned plain-text string.
  */
 const stripAnsi = (str) => str.replace(ansiRegex, '');
@@ -38,7 +38,7 @@ const benchmarkDb = {};
 /**
  * Normalizes test case names to enable resilient dictionary mapping.
  * Strips loop factors like `(x10)`, `(x80)`, etc., punctuation, and standardizes whitespace.
- * @param {string} name - The original benchmark case name.
+ * @param {string} name The original benchmark case name.
  * @returns {string} The normalized lowercase, space-delimited string.
  */
 function normalizeName(name) {
@@ -100,7 +100,7 @@ for (const file of txtFiles) {
 
 /**
  * Formats raw Hz values into human-readable throughput notations.
- * @param {number} hz - The raw operations per second count.
+ * @param {number} hz The raw operations per second count.
  * @returns {string} Formatted throughput string (e.g., "5.20M ops/sec", "376.2K ops/sec").
  */
 function formatOpsSec(hz) {
@@ -111,8 +111,8 @@ function formatOpsSec(hz) {
 
 /**
  * Resolves column positions for required headers, throwing if structure constraints are violated.
- * @param {string} headerLine - The raw markdown table header line.
- * @param {string[]} expected - Array of expected column header names.
+ * @param {string} headerLine The raw markdown table header line.
+ * @param {string[]} expected Array of expected column header names.
  * @returns {Record<string, number>} Object mapping expected header names to 0-based column index.
  * @throws {Error} If any of the expected headers are missing.
  */

@@ -30,8 +30,8 @@ describe('shallowEqual', () => {
     it('should return true for equal objects', () => {
       expect(shallowEqual({ a: 1, b: 2 }, { a: 1, b: 2 })).toBe(true);
       expect(shallowEqual({}, {})).toBe(true);
-      const obj = { a: 1 };
-      expect(shallowEqual(obj, obj)).toBe(true);
+      const testObject = { a: 1 };
+      expect(shallowEqual(testObject, testObject)).toBe(true);
     });
 
     it('should return false for objects with different keys', () => {

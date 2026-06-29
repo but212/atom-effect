@@ -79,8 +79,8 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
   });
 
   afterEach(() => {
-    for (const m of activeManagers) {
-      m.destroy();
+    for (const manager of activeManagers) {
+      manager.destroy();
     }
     $.initAEJ({ autoCleanup: false });
     window.location.hash = '';
@@ -508,8 +508,8 @@ describe('Routing Synergy: atomNav & $.route Integration', () => {
       const { $target: $app, track } = setup();
       const routeChanges: Array<{ from: string; to: string }> = [];
 
-      window.addEventListener('route-change', ((e: CustomEvent) => {
-        routeChanges.push(e.detail);
+      window.addEventListener('route-change', ((event: CustomEvent) => {
+        routeChanges.push(event.detail);
       }) as EventListener);
 
       setupMockAjax({

@@ -112,8 +112,8 @@ declare global {
      * - As the primary source of truth for local or shared application state.
      * - When data needs to be manually updated via the `.value` property.
      *
-     * @param initialValue - The starting value of the atom.
-     * @param options - Configuration for custom equality logic or delivery strategy.
+     * @param initialValue The starting value of the atom.
+     * @param options Configuration for custom equality logic or delivery strategy.
      *
      * @example
      * ```typescript
@@ -135,8 +135,8 @@ declare global {
      * - To optimize performance through caching of expensive calculations.
      * - To transform or aggregate raw state for UI presentation.
      *
-     * @param computationCallback - The computation function.
-     * @param options - Configuration for custom equality checks or error handlers.
+     * @param computationCallback The computation function.
+     * @param options Configuration for custom equality checks or error handlers.
      *
      * @example
      * ```typescript
@@ -171,8 +171,8 @@ declare global {
      * - To perform logging, monitoring, or diagnostic tasks.
      * - To manage timers, network requests, or global subscriptions.
      *
-     * @param effectCallback - The function to execute. Can return a synchronous or asynchronous cleanup handle.
-     * @param options - Configuration for execution limits, custom error handlers, and sync delivery.
+     * @param effectCallback The function to execute. Can return a synchronous or asynchronous cleanup handle.
+     * @param options Configuration for execution limits, custom error handlers, and sync delivery.
      * @returns An `EffectObject` used to manually trigger or stop the effect.
      *
      * @throws {EffectError} If the provided `effectCallback` is not a function.
@@ -182,7 +182,7 @@ declare global {
      * const count = $.atom(0);
      *
      * // Automatically logs whenever 'count' changes
-     * const sub = $.effect(() => {
+     * const subscribe = $.effect(() => {
      *   console.log('Value:', count.value);
      *
      *   // Optional teardown called before the next run or on disposal
@@ -190,7 +190,7 @@ declare global {
      * });
      *
      * count.value++; // Logs: "Value: 1"
-     * sub.dispose(); // Stops the effect
+     * subscribe.dispose(); // Stops the effect
      * ```
      */
     effect(effectCallback: () => EffectResult, options?: EffectOptions): EffectObject;
@@ -202,7 +202,7 @@ declare global {
      * - When performing multiple related updates to different atoms.
      * - To prevent intermediate re-computations or redundant effect executions.
      *
-     * @param fn - The function containing multiple state updates.
+     * @param fn The function containing multiple state updates.
      * @returns The value returned by the provided function.
      *
      * @example
@@ -228,7 +228,7 @@ declare global {
      * - Performing side-effects (e.g., logging, DOM analytics) that must not trigger re-runs.
      * - Breaking circular dependencies by performing silent reads.
      *
-     * @param fn - The non-reactive scope to execute.
+     * @param fn The non-reactive scope to execute.
      * @returns The value returned by the provided function.
      *
      * @example
@@ -319,7 +319,7 @@ declare global {
      * Logic: Snapshot Aggregation
      * Merges the value types of all input atoms into a single unified object.
      *
-     * @param atoms - A variadic list of atoms or computed nodes to merge.
+     * @param atoms A variadic list of atoms or computed nodes to merge.
      *
      * @example
      * ```typescript
@@ -347,7 +347,7 @@ declare global {
      * will result in a mismatch where the static TypeScript type resolves to the primitive type
      * (e.g., `string`), but the runtime value returned is an index-keyed object (e.g., `{ '0': val1, '1': val2 }`).
      *
-     * @param lenses - A list of writable atoms/lenses to merge.
+     * @param lenses A list of writable atoms/lenses to merge.
      * @returns A unified writable atom that synchronizes all input lenses.
      *
      * @example
@@ -409,8 +409,8 @@ declare global {
      * If the source atom is already a lens, this factory flattens the path
      * (e.g., lens(lens(a, 'b'), 'c') -> lens(a, 'b.c')) to reduce proxy overhead.
      *
-     * @param atom - The source atom or lens to derive from.
-     * @param path - A dot-separated string representing the path to the property.
+     * @param atom The source atom or lens to derive from.
+     * @param path A dot-separated string representing the path to the property.
      * @returns A writable atom representing the value at the specified path.
      *
      * @example
@@ -437,8 +437,8 @@ declare global {
      * starting from the value of the provided lens and navigating down the
      * specified path.
      *
-     * @param lens - The base lens to compose from.
-     * @param path - The sub-path relative to the base lens.
+     * @param lens The base lens to compose from.
+     * @param path The sub-path relative to the base lens.
      * @returns A new lens targeting the nested property.
      */
     composeLens<T extends object, P extends Paths<T>>(
@@ -453,7 +453,7 @@ declare global {
      * - To create multiple lenses from the same root atom without repeating the root.
      * - To enhance readability when defining many field bindings for a single state object.
      *
-     * @param atom - The root atom to create lenses for.
+     * @param atom The root atom to create lenses for.
      * @returns A function that accepts a path and returns a lens for that path.
      *
      * @example
@@ -510,8 +510,8 @@ declare global {
      * from overwriting newer updates.
      */
     atomFetch<T>(
-      url: string | (() => string),
-      opts: FetchOptions<T>
+      source: string | (() => string),
+      options: FetchOptions<T>
     ): ComputedAtom<T> & {
       /** Aborts the currently active request. */
       abort: () => void;
@@ -562,9 +562,9 @@ declare global {
      * - When you need to share state (like themes or user sessions) across a deep DOM tree.
      * - When you want to control CSS properties reactively via atoms.
      *
-     * @param element - The host element or collection acting as provider.
-     * @param key - Unique identifier for the context.
-     * @param value - The reactive atom or static value to share.
+     * @param element The host element or collection acting as provider.
+     * @param key Unique identifier for the context.
+     * @param value The reactive atom or static value to share.
      *
      * @example
      * ```typescript
@@ -589,8 +589,8 @@ declare global {
      * - To consume state provided by a `provideAtom` ancestor.
      * - When components might be moved (drag-and-drop) and need to stay synced with their new context.
      *
-     * @param element - The element requesting the context.
-     * @param key - The unique identifier of the context to locate.
+     * @param element The element requesting the context.
+     * @param key The unique identifier of the context to locate.
      * @returns A reactive proxy atom representing the injected context.
      *
      * @example
@@ -620,7 +620,7 @@ declare global {
      * - Suitable for mapping attributes and slots to reactive atoms.
      * - When you need automatic cleanup of effects when an element is removed.
      *
-     * @param element - The host element (usually `this` in a Custom Element).
+     * @param element The host element (usually `this` in a Custom Element).
      * @returns A controller for managing the component's reactive lifecycle.
      *
      * @example
@@ -653,7 +653,7 @@ declare global {
      * DOM removal. You MUST call `cleanup(element)` manually to prevent
      * memory leaks.
      *
-     * @param config - Configuration options for patches and cleanup safety nets.
+     * @param config Configuration options for patches and cleanup safety nets.
      *
      * @example
      * ```typescript
@@ -681,8 +681,8 @@ declare global {
      * - Recommended for label synchronization, counters, or status messages.
      * - Suitable for displaying formatted strings derived from reactive data.
      *
-     * @param source - The reactive atom or computed value.
-     * @param formatter - Optional function to transform the value into a string.
+     * @param source The reactive atom or computed value.
+     * @param formatter Optional function to transform the value into a string.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -701,7 +701,7 @@ declare global {
      * When to use:
      * - Recommended for rendering complex markup or rich text with formatting tags.
      *
-     * @param source - The reactive atom containing the HTML string.
+     * @param source The reactive atom containing the HTML string.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -721,8 +721,8 @@ declare global {
      * Supports both toggling a single class based on a condition and managing
      * multiple classes through a mapping object.
      *
-     * @param classNameOrMap - A class name string or a map of `{ className: conditionAtom }`.
-     * @param condition - The condition for the class (required if `classNameOrMap` is a string).
+     * @param classNameOrMap A class name string or a map of `{ className: conditionAtom }`.
+     * @param condition The condition for the class (required if `classNameOrMap` is a string).
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -730,8 +730,8 @@ declare global {
      * $('.tab').atomClass('active', activeAtom);
      * ```
      */
-    atomClass(name: string, cond: AsyncReactiveValue<boolean>): this;
-    atomClass(map: Record<string, AsyncReactiveValue<boolean>>): this;
+    atomClass(classNameOrMap: string, condition: AsyncReactiveValue<boolean>): this;
+    atomClass(classNameOrMap: Record<string, AsyncReactiveValue<boolean>>): this;
     /**
      * Binds inline CSS properties to reactive sources.
      *
@@ -739,9 +739,9 @@ declare global {
      * Standardizes property values with optional units (e.g., 'px', 'em')
      * before applying them to the element's style.
      *
-     * @param propOrMap - A CSS property name or a binding map.
-     * @param source - The reactive atom providing the value.
-     * @param unit - Optional unit suffix (e.g., 'px').
+     * @param propOrMap A CSS property name or a binding map.
+     * @param source The reactive atom providing the value.
+     * @param unit Optional unit suffix (e.g., 'px').
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -749,8 +749,8 @@ declare global {
      * $('.box').atomCss('width', widthAtom, 'px');
      * ```
      */
-    atomCss(prop: string, source: AsyncReactiveValue<string | number>, unit?: string): this;
-    atomCss(map: CssBindings): this;
+    atomCss(propOrMap: string, source: CssValue, unit?: string): this;
+    atomCss(propOrMap: CssBindings): this;
     /**
      * Binds HTML attributes to reactive sources.
      *
@@ -759,8 +759,8 @@ declare global {
      * $('.link').atomAttr('href', urlAtom);
      * ```
      */
-    atomAttr(name: string, source: AsyncReactiveValue<PrimitiveValue>): this;
-    atomAttr(map: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
+    atomAttr(nameOrMap: string, source: AsyncReactiveValue<PrimitiveValue>): this;
+    atomAttr(nameOrMap: Record<string, AsyncReactiveValue<PrimitiveValue>>): this;
     /**
      * Binds DOM properties directly to reactive sources.
      *
@@ -769,8 +769,8 @@ declare global {
      * $('.input').atomProp('disabled', disabledAtom);
      * ```
      */
-    atomProp<T>(name: string, source: AsyncReactiveValue<T>): this;
-    atomProp(map: Record<string, AsyncReactiveValue<unknown>>): this;
+    atomProp<T>(nameOrMap: string, source: AsyncReactiveValue<T>): this;
+    atomProp(nameOrMap: Record<string, AsyncReactiveValue<unknown>>): this;
     /**
      * Controls the visibility of elements based on a reactive condition.
      *
@@ -778,7 +778,7 @@ declare global {
      * - Recommended for conditional rendering where the element should be
      *   visible when the condition is truthy.
      *
-     * @param condition - The reactive condition governing visibility.
+     * @param condition The reactive condition governing visibility.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -786,7 +786,7 @@ declare global {
      * $('.modal').atomShow(isOpenAtom);
      * ```
      */
-    atomShow(cond: AsyncReactiveValue<boolean>): this;
+    atomShow(condition: AsyncReactiveValue<boolean>): this;
     /**
      * Controls the invisibility of elements based on a reactive condition.
      *
@@ -794,7 +794,7 @@ declare global {
      * - Recommended for conditional rendering where the element should be
      *   hidden when the condition is truthy.
      *
-     * @param condition - The reactive condition governing invisibility.
+     * @param condition The reactive condition governing invisibility.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -802,7 +802,7 @@ declare global {
      * $('.overlay').atomHide(isLoadedAtom);
      * ```
      */
-    atomHide(cond: AsyncReactiveValue<boolean>): this;
+    atomHide(condition: AsyncReactiveValue<boolean>): this;
 
     /**
      * Performs two-way binding for form input values.
@@ -814,8 +814,8 @@ declare global {
      * Synchronizes the input's `value` with a writable atom, handling both
      * atom-to-DOM updates and DOM-to-atom changes (via `input` or `change` events).
      *
-     * @param atom - The writable atom to synchronize with the input value.
-     * @param options - Configuration for debouncing or event triggers.
+     * @param atom The writable atom to synchronize with the input value.
+     * @param options Configuration for debouncing or event triggers.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -823,12 +823,12 @@ declare global {
      * $('.search-input').atomVal(queryAtom, { debounce: 300 });
      * ```
      */
-    atomVal<T>(atom: WritableAtom<T>, opts?: ValOptions<T>): this;
+    atomVal<T>(atom: WritableAtom<T>, options?: ValOptions<T>): this;
 
     /**
      * Performs two-way binding for checkbox and radio button checked states.
      *
-     * @param atom - The writable atom to synchronize with the checked state.
+     * @param atom The writable atom to synchronize with the checked state.
      * @returns The original jQuery collection for chaining.
      */
     atomChecked(atom: WritableAtom<boolean>): this;
@@ -843,8 +843,8 @@ declare global {
      * Maps form fields (via `name` attributes) to nested properties within a
      * reactive object atom using structural lenses.
      *
-     * @param atom - The writable atom containing the form's data model.
-     * @param options - Configuration for validation or submission handling.
+     * @param atom The writable atom containing the form's data model.
+     * @param options Configuration for validation or submission handling.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -854,17 +854,17 @@ declare global {
      */
     atomForm<T extends object>(
       atom: WritableAtom<T> | WritableAtom<unknown>[],
-      opts?: FormOptions<T>
+      options?: FormOptions<T>
     ): this;
 
     /**
      * Binds a reactive event listener to elements.
      *
-     * @param event - The name of the DOM event.
-     * @param handler - The event handler function.
+     * @param event The name of the DOM event.
+     * @param handler The event handler function.
      * @returns The original jQuery collection for chaining.
      */
-    atomOn(event: string, handler: (e: JQuery.Event) => void): this;
+    atomOn(event: string, handler: (event: JQuery.Event) => void): this;
 
     /**
      * A unified entry point for declaring multiple reactive bindings in a single call.
@@ -877,7 +877,7 @@ declare global {
      * Iterates through the provided configuration and executes the corresponding
      * binding tasks in a predefined, deterministic order.
      *
-     * @param options - A configuration object defining multiple bindings.
+     * @param options A configuration object defining multiple bindings.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -889,7 +889,7 @@ declare global {
      * });
      * ```
      */
-    atomBind<T = unknown, TText = unknown>(opts: BindingOptions<T, TText>): this;
+    atomBind<T = unknown, TText = unknown>(options: BindingOptions<T, TText>): this;
 
     /**
      * Synchronizes an element's children with a reactive list source.
@@ -898,8 +898,8 @@ declare global {
      * - Recommended for rendering dynamic collections with high-performance O(N) updates.
      * - Suitable for lists requiring complex item templates or delegated event handling.
      *
-     * @param source - The reactive atom containing the array of items.
-     * @param options - Configuration for rendering, identification, and lifecycle hooks.
+     * @param source The reactive atom containing the array of items.
+     * @param options Configuration for rendering, identification, and lifecycle hooks.
      * @returns The original jQuery collection for chaining.
      *
      * @example
@@ -913,7 +913,7 @@ declare global {
      * });
      * ```
      */
-    atomList<T>(source: ReadonlyAtom<T[]>, opts: ListOptions<T>): this;
+    atomList<T>(source: ReadonlyAtom<T[]>, options: ListOptions<T>): this;
 
     /**
      * Logic: Component Lifecycle Orchestration

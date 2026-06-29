@@ -30,8 +30,8 @@ describe('Cold Start: First Evaluation', () => {
     `[Atom] creation + first .value read (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const a = atom(Math.random());
-        keep(a.value);
+        const someAtom = atom(Math.random());
+        keep(someAtom.value);
       }
     },
     coldBenchOptions
@@ -41,8 +41,8 @@ describe('Cold Start: First Evaluation', () => {
     `[Vanilla] function call (computed baseline) (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const x = Math.random();
-        keep(((value: number) => value * 2)(x));
+        const randomValue = Math.random();
+        keep(((value: number) => value * 2)(randomValue));
       }
     },
     coldBenchOptions
@@ -52,9 +52,9 @@ describe('Cold Start: First Evaluation', () => {
     `[Atom] lazy computed creation + first eval (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const a = atom(Math.random());
-        const c = computed(() => a.value * 2, { lazy: true });
-        keep(c.value);
+        const someAtom = atom(Math.random());
+        const computedInstance = computed(() => someAtom.value * 2, { lazy: true });
+        keep(computedInstance.value);
       }
     },
     coldBenchOptions
@@ -64,9 +64,9 @@ describe('Cold Start: First Evaluation', () => {
     `[Atom] eager computed creation + first eval (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const a = atom(Math.random());
-        const c = computed(() => a.value * 2);
-        keep(c.value);
+        const someAtom = atom(Math.random());
+        const computedInstance = computed(() => someAtom.value * 2);
+        keep(computedInstance.value);
       }
     },
     coldBenchOptions
@@ -76,9 +76,9 @@ describe('Cold Start: First Evaluation', () => {
     `[Atom] effect creation + first run + dispose (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const a = atom(Math.random());
-        const e = effect(() => keep(a.value), benchEffectOptions);
-        e.dispose();
+        const someAtom = atom(Math.random());
+        const effectInstance = effect(() => keep(someAtom.value), benchEffectOptions);
+        effectInstance.dispose();
       }
     },
     coldBenchOptions
@@ -88,9 +88,9 @@ describe('Cold Start: First Evaluation', () => {
 describe('Steady State: Repeated Operations', () => {
   const warmAtom = atom(0);
   const warmComputed = computed(() => warmAtom.value * 2);
-  let _warmSink = 0;
+  let warmSink = 0;
   effect(() => {
-    _warmSink = warmComputed.value;
+    warmSink = warmComputed.value;
   }, benchEffectOptions);
 
   bench(
@@ -111,7 +111,7 @@ describe('Steady State: Repeated Operations', () => {
       for (let i = 0; i < REPEATS; i++) {
         warmAtom.value = Math.random();
         keep(warmComputed.value);
-        keep(_warmSink);
+        keep(warmSink);
       }
     },
     microBenchOptions
@@ -144,8 +144,8 @@ describe('Cold vs Warm: Computed Cache', () => {
     () => {
       for (let i = 0; i < REPEATS; i++) {
         const source = atom(0);
-        const c = computed(() => source.value * 3);
-        keep(c.value);
+        const computedInstance = computed(() => source.value * 3);
+        keep(computedInstance.value);
       }
     },
     coldBenchOptions
@@ -187,8 +187,8 @@ describe('Cold vs Warm: Effect Subscription', () => {
     `[Cold] effect create + first run + dispose (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const e = effect(() => keep(source.value), benchEffectOptions);
-        e.dispose();
+        const effectInstance = effect(() => keep(source.value), benchEffectOptions);
+        effectInstance.dispose();
       }
     },
     coldBenchOptions

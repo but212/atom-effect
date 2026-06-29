@@ -343,8 +343,8 @@ class EffectImpl
  * - To perform logging, monitoring, or diagnostic tasks.
  * - To manage timers, network requests, or global subscriptions.
  *
- * @param effectCallback - The function to execute. Can return a synchronous or asynchronous cleanup handle.
- * @param options - Configuration for execution limits, custom error handlers, and sync delivery.
+ * @param effectCallback The function to execute. Can return a synchronous or asynchronous cleanup handle.
+ * @param options Configuration for execution limits, custom error handlers, and sync delivery.
  * @returns An `EffectObject` used to manually trigger or stop the effect.
  *
  * @throws {EffectError} If the provided `effectCallback` is not a function.
@@ -356,7 +356,7 @@ class EffectImpl
  * const count = atom(0);
  *
  * // Automatically logs whenever 'count' changes
- * const sub = effect(() => {
+ * const subscribe = effect(() => {
  *   console.log('Value:', count.value);
  *
  *   // Optional teardown called before the next run or on disposal
@@ -364,7 +364,7 @@ class EffectImpl
  * });
  *
  * count.value++; // Logs: "Value: 1"
- * sub.dispose(); // Stops the effect
+ * subscribe.dispose(); // Stops the effect
  * ```
  */
 export function effect(effectCallback: EffectFunction, options: EffectOptions = {}): EffectObject {

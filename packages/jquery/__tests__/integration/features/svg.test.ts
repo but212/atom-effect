@@ -85,10 +85,10 @@ describe('SVG Support', () => {
     const items = $.atom([1, 2, 3]);
 
     $g.atomList(items, {
-      key: (i: number) => i,
-      render: (i) => {
+      key: (item: number) => item,
+      render: (item) => {
         const element = document.createElementNS(SVG_NS, 'circle');
-        element.setAttribute('cx', String(i * 10));
+        element.setAttribute('cx', String(item * 10));
         element.setAttribute('cy', '10');
         element.setAttribute('r', '5');
         return element;

@@ -489,8 +489,8 @@ export const sanitizeCache = new FIFOCache<string, string>();
  * Sanitization is performed in the context of a detached `<template>`,
  * ensuring that active scripts are never executed during the process.
  *
- * @param html - The raw HTML string to be sanitized.
- * @param policy - The policy defining safe/unsafe elements. Defaults to `DEFAULT_POLICY`.
+ * @param html The raw HTML string to be sanitized.
+ * @param policy The policy defining safe/unsafe elements. Defaults to `DEFAULT_POLICY`.
  *
  * @returns A safe HTML string with dangerous elements neutralized and attributes scrubbed.
  *

@@ -21,8 +21,8 @@ describe('Constants Integrity', () => {
     });
 
     it('should evaluate to true if __ATOM_DEBUG__ is set on globalThis', async () => {
-      const origEnv = process.env.NODE_ENV;
-      const origDev = import.meta.env?.DEV;
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalDevFlag = import.meta.env?.DEV;
       try {
         process.env.NODE_ENV = 'production';
         if (import.meta.env) {
@@ -32,21 +32,21 @@ describe('Constants Integrity', () => {
 
         (globalThis as Record<string, unknown>).__ATOM_DEBUG__ = true;
         // @ts-expect-error
-        const mod = await import('../../src/constants?debug=1');
-        expect(mod.IS_DEV).toBe(true);
+        const constantsModule = await import('../../src/constants?debug=1');
+        expect(constantsModule.IS_DEV).toBe(true);
       } finally {
-        process.env.NODE_ENV = origEnv;
+        process.env.NODE_ENV = originalNodeEnv;
         if (import.meta.env) {
           // @ts-expect-error - restoring readonly property
-          import.meta.env.DEV = origDev;
+          import.meta.env.DEV = originalDevFlag;
         }
         (globalThis as Record<string, unknown>).__ATOM_DEBUG__ = undefined;
       }
     });
 
     it('should evaluate to true if sessionStorage has __ATOM_DEBUG__', async () => {
-      const origEnv = process.env.NODE_ENV;
-      const origDev = import.meta.env?.DEV;
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalDevFlag = import.meta.env?.DEV;
       const mockSessionStorage = {
         getItem: (key: string) => (key === '__ATOM_DEBUG__' ? 'true' : null),
         setItem: () => {},
@@ -65,21 +65,21 @@ describe('Constants Integrity', () => {
 
         (globalThis as Record<string, unknown>).sessionStorage = mockSessionStorage;
         // @ts-expect-error
-        const mod = await import('../../src/constants?debug=2');
-        expect(mod.IS_DEV).toBe(true);
+        const constantsModule = await import('../../src/constants?debug=2');
+        expect(constantsModule.IS_DEV).toBe(true);
       } finally {
-        process.env.NODE_ENV = origEnv;
+        process.env.NODE_ENV = originalNodeEnv;
         if (import.meta.env) {
           // @ts-expect-error - restoring readonly property
-          import.meta.env.DEV = origDev;
+          import.meta.env.DEV = originalDevFlag;
         }
         (globalThis as Record<string, unknown>).sessionStorage = undefined;
       }
     });
 
     it('should evaluate to true if __DEV__ is defined', async () => {
-      const origEnv = process.env.NODE_ENV;
-      const origDev = import.meta.env?.DEV;
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalDevFlag = import.meta.env?.DEV;
       try {
         process.env.NODE_ENV = 'production';
         if (import.meta.env) {
@@ -89,21 +89,21 @@ describe('Constants Integrity', () => {
 
         (globalThis as Record<string, unknown>).__DEV__ = true;
         // @ts-expect-error
-        const mod = await import('../../src/constants?debug=4');
-        expect(mod.IS_DEV).toBe(true);
+        const constantsModule = await import('../../src/constants?debug=4');
+        expect(constantsModule.IS_DEV).toBe(true);
       } finally {
-        process.env.NODE_ENV = origEnv;
+        process.env.NODE_ENV = originalNodeEnv;
         if (import.meta.env) {
           // @ts-expect-error - restoring readonly property
-          import.meta.env.DEV = origDev;
+          import.meta.env.DEV = originalDevFlag;
         }
         (globalThis as Record<string, unknown>).__DEV__ = undefined;
       }
     });
 
     it('should evaluate to false if all dev indicators are missing', async () => {
-      const origEnv = process.env.NODE_ENV;
-      const origDev = import.meta.env?.DEV;
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalDevFlag = import.meta.env?.DEV;
 
       try {
         process.env.NODE_ENV = 'production';
@@ -113,13 +113,13 @@ describe('Constants Integrity', () => {
         }
 
         // @ts-expect-error
-        const mod = await import('../../src/constants?debug=3');
-        expect(mod.IS_DEV).toBe(false);
+        const constantsModule = await import('../../src/constants?debug=3');
+        expect(constantsModule.IS_DEV).toBe(false);
       } finally {
-        process.env.NODE_ENV = origEnv;
+        process.env.NODE_ENV = originalNodeEnv;
         if (import.meta.env) {
           // @ts-expect-error - restoring readonly property
-          import.meta.env.DEV = origDev;
+          import.meta.env.DEV = originalDevFlag;
         }
       }
     });

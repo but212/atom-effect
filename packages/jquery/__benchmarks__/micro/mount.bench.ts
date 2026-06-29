@@ -22,26 +22,26 @@ const CounterComponent = ($element: JQuery, props: CounterProps) => {
 };
 
 describe('Mounting: Component Lifecycle', () => {
-  const run = (name: string, fn: ($c: JQuery) => void) =>
-    bench(name, withContainer(fn), microBenchOptions);
+  const run = (name: string, benchmarkFunction: ($container: JQuery) => void) =>
+    bench(name, withContainer(benchmarkFunction), microBenchOptions);
 
-  run('atomMount initial setup (100 elements)', ($c) => {
-    const elements = Array.from({ length: 100 }, () => $('<div></div>').appendTo($c));
+  run('atomMount initial setup (100 elements)', ($container) => {
+    const elements = Array.from({ length: 100 }, () => $('<div></div>').appendTo($container));
     for (let i = 0; i < 100; i++) {
       elements[i]?.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
     }
   });
 
-  run('atomMount replacement (10 elements x 10 re-mounts)', ($c) => {
-    const $element = $('<div></div>').appendTo($c);
+  run('atomMount replacement (10 elements x 10 re-mounts)', ($container) => {
+    const $element = $('<div></div>').appendTo($container);
     for (let i = 0; i < 100; i++) {
       $element.atomMount(CounterComponent, { initialCount: i, label: `Remount-${i}` });
     }
   });
 
-  run('atomUnmount (100 elements)', ($c) => {
+  run('atomUnmount (100 elements)', ($container) => {
     const elements = Array.from({ length: 100 }, (_, i) => {
-      const $element = $('<div></div>').appendTo($c);
+      const $element = $('<div></div>').appendTo($container);
       $element.atomMount(CounterComponent, { initialCount: i, label: 'Counter' });
       return $element;
     });
@@ -50,22 +50,22 @@ describe('Mounting: Component Lifecycle', () => {
     }
   });
 
-  run('mount and deep unmount (depth 4, breadth 3 ~ 120 nodes)', ($c) => {
-    const containerEl = $c[0];
+  run('mount and deep unmount (depth 4, breadth 3 ~ 120 nodes)', ($container) => {
+    const containerEl = $container[0];
     if (!containerEl) return;
     // Build tree
     let currentLevel: HTMLElement[] = [containerEl];
-    for (let d = 0; d < 4; d++) {
+    for (let depth = 0; depth < 4; depth++) {
       const nextLevel: HTMLElement[] = [];
-      for (const p of currentLevel) {
-        for (let b = 0; b < 3; b++) {
-          nextLevel.push(p.appendChild(document.createElement('div')));
+      for (const parent of currentLevel) {
+        for (let breadth = 0; breadth < 3; breadth++) {
+          nextLevel.push(parent.appendChild(document.createElement('div')));
         }
       }
       currentLevel = nextLevel;
     }
 
-    $c.find('div').last().atomMount(CounterComponent, { initialCount: 0, label: 'Deep' });
-    $c.atomUnmount();
+    $container.find('div').last().atomMount(CounterComponent, { initialCount: 0, label: 'Deep' });
+    $container.atomUnmount();
   });
 });

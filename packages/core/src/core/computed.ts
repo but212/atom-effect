@@ -539,8 +539,8 @@ class ComputedAtomImpl<T>
  * - To optimize performance through caching of expensive calculations.
  * - To transform or aggregate raw state for UI presentation.
  *
- * @param computationCallback - The computation function.
- * @param options - Configuration for custom equality checks or error handlers.
+ * @param computationCallback The computation function.
+ * @param options Configuration for custom equality checks or error handlers.
  *
  * @example
  * ```typescript
@@ -582,7 +582,7 @@ export function computed<T>(
  * Logic: Snapshot Aggregation
  * Merges the value types of all input atoms into a single unified object.
  *
- * @param atoms - A variadic list of atoms or computed nodes to merge.
+ * @param atoms A variadic list of atoms or computed nodes to merge.
  *
  * @example
  * ```typescript

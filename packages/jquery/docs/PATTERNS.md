@@ -1,5 +1,6 @@
 # Common Patterns
 
+> [!TIP]
 > **See also**: [API Reference](./API.md) · [Architecture](./ARCHITECTURE.md) · [Security Guide](./SECURITY.md)
 
 This document outlines standard architectural patterns for implementing `@but212/atom-effect-jquery` within applications.

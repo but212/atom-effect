@@ -61,50 +61,50 @@ describe('Scheduler Engine', () => {
 
   describe('batch()', () => {
     it('coalesces updates and maintains data consistency', () => {
-      const a = atom(0);
-      const c = computed(() => a.value + 1);
+      const someAtom = atom(0);
+      const computedInstance = computed(() => someAtom.value + 1);
       const log: number[] = [];
 
       effect(() => {
-        log.push(a.value);
+        log.push(someAtom.value);
       });
       log.length = 0; // Clear initial run
 
-      const result = batch(() => {
-        a.value = 1;
-        expect(c.value).toBe(2);
-        a.value = 10;
+      const batchResult = batch(() => {
+        someAtom.value = 1;
+        expect(computedInstance.value).toBe(2);
+        someAtom.value = 10;
         return 'done';
       });
 
-      expect(result).toBe('done');
+      expect(batchResult).toBe('done');
       expect(log).toEqual([10]);
-      expect(c.value).toBe(11);
+      expect(computedInstance.value).toBe(11);
     });
 
     it('recovers from errors while preserving pending changes', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const a = atom(0);
+      const someAtom = atom(0);
 
       expect(() => {
         batch(() => {
-          a.value = 42;
+          someAtom.value = 42;
           throw new Error('batch-fail');
         });
       }).toThrow('batch-fail');
 
-      expect(a.value).toBe(42);
+      expect(someAtom.value).toBe(42);
       expect(schedulerIsBatching(scheduler)).toBe(false);
       consoleError.mockRestore();
     });
 
     it('prevents stack overflow through flat execution loops', () => {
-      const depth = 500;
-      const batchedCallback = (d: number) => {
-        if (d > 0) batch(() => batchedCallback(d - 1));
+      const maxDepth = 500;
+      const batchedCallback = (depth: number) => {
+        if (depth > 0) batch(() => batchedCallback(depth - 1));
       };
 
-      expect(() => batchedCallback(depth)).not.toThrow();
+      expect(() => batchedCallback(maxDepth)).not.toThrow();
     });
 
     it('handles nested batch scopes correctly', () => {
@@ -131,13 +131,13 @@ describe('Scheduler Engine', () => {
 
   describe('aeNextTick()', () => {
     it('should wait for all reactive updates to be flushed', async () => {
-      const a = atom(0);
+      const someAtom = atom(0);
       let capturedValue = -1;
       effect(() => {
-        capturedValue = a.value;
+        capturedValue = someAtom.value;
       });
 
-      a.value = 42;
+      someAtom.value = 42;
       expect(capturedValue).toBe(0);
 
       await aeNextTick();
@@ -163,18 +163,18 @@ describe('Scheduler Engine', () => {
   describe('error isolation & recovery', () => {
     it('isolates job errors to prevent scheduler lockup', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const fail = vi.fn(() => {
+      const failingJob = vi.fn(() => {
         throw new Error('isolated-fail');
       });
-      const success = vi.fn();
+      const successJob = vi.fn();
 
-      schedulerSchedule(scheduler, fail);
-      schedulerSchedule(scheduler, success);
+      schedulerSchedule(scheduler, failingJob);
+      schedulerSchedule(scheduler, successJob);
 
       await sleep(10);
 
-      expect(fail).toHaveBeenCalled();
-      expect(success).toHaveBeenCalled();
+      expect(failingJob).toHaveBeenCalled();
+      expect(successJob).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalled();
       consoleError.mockRestore();
     });
@@ -250,12 +250,12 @@ describe('Scheduler Engine', () => {
 
       it('runInFlushScope executes successfully', () => {
         let executed = false;
-        const res = runInFlushScope(() => {
+        const flushScopeResult = runInFlushScope(() => {
           executed = true;
           return 'success';
         });
         expect(executed).toBe(true);
-        expect(res).toBe('success');
+        expect(flushScopeResult).toBe('success');
       });
 
       it('resets tracking context if flushQueues throws in queueMicrotask', async () => {
@@ -269,7 +269,7 @@ describe('Scheduler Engine', () => {
         };
         process.on('uncaughtException', handler);
 
-        const origCtx = trackingContext.current;
+        const originalTrackingContext = trackingContext.current;
         // @ts-expect-error - mock context
         trackingContext.current = { id: 999 };
 
@@ -282,7 +282,7 @@ describe('Scheduler Engine', () => {
         expect(trackingContext.current).toBeNull();
 
         process.off('uncaughtException', handler);
-        trackingContext.current = origCtx;
+        trackingContext.current = originalTrackingContext;
         spy.mockRestore();
       });
 

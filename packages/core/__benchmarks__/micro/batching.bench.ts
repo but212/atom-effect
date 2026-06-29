@@ -15,24 +15,26 @@ describe('Batching: Basic Operations', () => {
     `batch update ${REPEATS} atoms: active (x${REPEATS})`,
     () => {
       batch(() => {
-        for (const a of atoms) a.value++;
+        for (const someAtom of atoms) someAtom.value++;
       });
     },
     {
       ...microBenchOptions,
       setup: () => {
-        activeEffects = atoms.map((a) => effect(() => keep(a.value), benchEffectOptions));
+        activeEffects = atoms.map((someAtom) =>
+          effect(() => keep(someAtom.value), benchEffectOptions)
+        );
       },
       teardown: () => {
-        for (const e of activeEffects) e.dispose();
+        for (const effectInstance of activeEffects) effectInstance.dispose();
         activeEffects = [];
       },
     }
   );
 
-  const a = atom(0);
-  const b = atom(0);
-  const sum = computed(() => a.value + b.value);
+  const firstAtom = atom(0);
+  const secondAtom = atom(0);
+  const sum = computed(() => firstAtom.value + secondAtom.value);
   const doubled = computed(() => sum.value * 2);
 
   bench(
@@ -40,8 +42,8 @@ describe('Batching: Basic Operations', () => {
     () => {
       for (let i = 0; i < REPEATS; i++) {
         batch(() => {
-          a.value++;
-          b.value++;
+          firstAtom.value++;
+          secondAtom.value++;
         });
         keep(doubled.value);
       }
@@ -57,10 +59,12 @@ describe('Batching: Nesting Overhead', () => {
   const cleanupOptions = {
     ...microBenchOptions,
     setup: () => {
-      activeEffects = atoms.map((a) => effect(() => keep(a.value), benchEffectOptions));
+      activeEffects = atoms.map((someAtom) =>
+        effect(() => keep(someAtom.value), benchEffectOptions)
+      );
     },
     teardown: () => {
-      for (const e of activeEffects) e.dispose();
+      for (const effectInstance of activeEffects) effectInstance.dispose();
       activeEffects = [];
     },
   };
@@ -68,7 +72,7 @@ describe('Batching: Nesting Overhead', () => {
   bench(
     `unbatched ${REPEATS} writes`,
     () => {
-      for (const a of atoms) a.value++;
+      for (const someAtom of atoms) someAtom.value++;
     },
     cleanupOptions
   );
@@ -77,7 +81,7 @@ describe('Batching: Nesting Overhead', () => {
     `flat batch (${REPEATS} writes)`,
     () => {
       batch(() => {
-        for (const a of atoms) a.value++;
+        for (const someAtom of atoms) someAtom.value++;
       });
     },
     cleanupOptions
@@ -89,7 +93,7 @@ describe('Batching: Nesting Overhead', () => {
       batch(() =>
         batch(() =>
           batch(() => {
-            for (const a of atoms) a.value++;
+            for (const someAtom of atoms) someAtom.value++;
           })
         )
       );

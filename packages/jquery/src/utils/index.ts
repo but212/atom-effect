@@ -86,7 +86,7 @@ export function flattenToFormData(formData: FormData, prefix: string, sourceObje
  * dot-separated path (e.g., 'user.profile.name') compatible with lens-based
  * state access.
  *
- * @param name - The field name to normalize.
+ * @param name The field name to normalize.
  * @returns A dot-separated path string.
  *
  * @internal

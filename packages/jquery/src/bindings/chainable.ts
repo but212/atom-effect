@@ -45,8 +45,8 @@ import { debug } from '@/utils/debug';
  * Standardizes jQuery-style overloads (key-value pair or mapping object) into
  * a consistent Record for downstream binding operations.
  *
- * @param keyOrMap - A property name string or a mapping object.
- * @param bindingValue - The reactive value (required if `keyOrMap` is a string).
+ * @param keyOrMap A property name string or a mapping object.
+ * @param bindingValue The reactive value (required if `keyOrMap` is a string).
  * @internal
  */
 function resolveArgs<V>(
@@ -67,8 +67,8 @@ function resolveArgs<V>(
  * - Recommended for label synchronization, counters, or status messages.
  * - Suitable for displaying formatted strings derived from reactive data.
  *
- * @param source - The reactive atom or computed value.
- * @param formatter - Optional function to transform the value into a string.
+ * @param source The reactive atom or computed value.
+ * @param formatter Optional function to transform the value into a string.
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -93,7 +93,7 @@ $.fn.atomText = function <T>(
  * When to use:
  * - Recommended for rendering complex markup or rich text with formatting tags.
  *
- * @param source - The reactive atom containing the HTML string.
+ * @param source The reactive atom containing the HTML string.
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -112,8 +112,8 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
  * Encapsulates argument normalization and element iteration to provide a
  * declarative interface for chainable plugin methods.
  *
- * @param binder - The underlying binding function.
- * @param errorMessage - Error message to display if arguments are invalid.
+ * @param binder The underlying binding function.
+ * @param errorMessage Error message to display if arguments are invalid.
  * @internal
  */
 function createChainableMethod<V, O = V>(
@@ -149,8 +149,8 @@ function createChainableMethod<V, O = V>(
  * Supports both toggling a single class based on a condition and managing
  * multiple classes through a mapping object.
  *
- * @param classNameOrMap - A class name string or a map of `{ className: conditionAtom }`.
- * @param condition - The condition for the class (required if `classNameOrMap` is a string).
+ * @param classNameOrMap A class name string or a map of `{ className: conditionAtom }`.
+ * @param condition The condition for the class (required if `classNameOrMap` is a string).
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -190,9 +190,9 @@ $.fn.atomProp = createChainableMethod(bindProp, SYSTEM_BINDING.ERRORS.MISSING_SO
  * Standardizes property values with optional units (e.g., 'px', 'em')
  * before applying them to the element's style.
  *
- * @param propOrMap - A CSS property name or a binding map.
- * @param source - The reactive atom providing the value.
- * @param unit - Optional unit suffix (e.g., 'px').
+ * @param propOrMap A CSS property name or a binding map.
+ * @param source The reactive atom providing the value.
+ * @param unit Optional unit suffix (e.g., 'px').
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -214,7 +214,7 @@ $.fn.atomCss = createChainableMethod<CssValue, CssValue>(
  * - Recommended for conditional rendering where the element should be
  *   visible when the condition is truthy.
  *
- * @param condition - The reactive condition governing visibility.
+ * @param condition The reactive condition governing visibility.
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -233,7 +233,7 @@ $.fn.atomShow = function (condition: AsyncReactiveValue<boolean>): JQuery {
  * - Recommended for conditional rendering where the element should be
  *   hidden when the condition is truthy.
  *
- * @param condition - The reactive condition governing invisibility.
+ * @param condition The reactive condition governing invisibility.
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -255,8 +255,8 @@ $.fn.atomHide = function (condition: AsyncReactiveValue<boolean>): JQuery {
  * Synchronizes the input's `value` with a writable atom, handling both
  * atom-to-DOM updates and DOM-to-atom changes (via `input` or `change` events).
  *
- * @param atom - The writable atom to synchronize with the input value.
- * @param options - Configuration for debouncing or event triggers.
+ * @param atom The writable atom to synchronize with the input value.
+ * @param options Configuration for debouncing or event triggers.
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -271,7 +271,7 @@ $.fn.atomVal = function <T>(atom: WritableAtom<T>, options: ValOptions<T> = {}):
 /**
  * Performs two-way binding for checkbox and radio button checked states.
  *
- * @param atom - The writable atom to synchronize with the checked state.
+ * @param atom The writable atom to synchronize with the checked state.
  * @returns The original jQuery collection for chaining.
  */
 $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
@@ -288,8 +288,8 @@ $.fn.atomChecked = function (atom: WritableAtom<boolean>): JQuery {
  * Maps form fields (via `name` attributes) to nested properties within a
  * reactive object atom using structural lenses.
  *
- * @param atom - The writable atom containing the form's data model.
- * @param options - Configuration for validation or submission handling.
+ * @param atom The writable atom containing the form's data model.
+ * @param options Configuration for validation or submission handling.
  * @returns The original jQuery collection for chaining.
  *
  * @example
@@ -313,11 +313,11 @@ $.fn.atomForm = function <T extends object>(
 /**
  * Binds a reactive event listener to elements.
  *
- * @param event - The name of the DOM event.
- * @param handler - The event handler function.
+ * @param event The name of the DOM event.
+ * @param handler The event handler function.
  * @returns The original jQuery collection for chaining.
  */
-$.fn.atomOn = function (event: string, handler: (e: JQuery.Event) => void): JQuery {
+$.fn.atomOn = function (event: string, handler: (event: JQuery.Event) => void): JQuery {
   return atomEachElement(this, (element) => bindOn(element, event, handler));
 };
 
@@ -345,7 +345,7 @@ function unpack<T, O>(unpackedValue: T | [T, O]): [T, O?] {
  * Logic: Task Orchestration
  * Executes the corresponding binding tasks in a predefined, deterministic order.
  *
- * @param options - A configuration object defining multiple bindings.
+ * @param options A configuration object defining multiple bindings.
  * @returns The original jQuery collection for chaining.
  *
  * @example

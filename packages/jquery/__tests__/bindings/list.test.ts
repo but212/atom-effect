@@ -23,9 +23,9 @@ describe('$.atomList (Integration)', () => {
 
   describe('Core Rendering & Reconciliation', () => {
     it('should handle empty state transitions', async () => {
-      const list = $.atom<string[]>(['a']);
+      const itemsList = $.atom<string[]>(['a']);
 
-      $container.atomList(list, {
+      $container.atomList(itemsList, {
         key: (item: string) => item,
         render: (item) => `<span>${item}</span>`,
         empty: '<p>Empty</p>',
@@ -35,20 +35,20 @@ describe('$.atomList (Integration)', () => {
       expect($container.find('span').length).toBe(1);
       expect($container.find('p').length).toBe(0);
 
-      list.value = [];
+      itemsList.value = [];
       await $.nextTick();
       expect($container.find('span').length).toBe(0);
       expect($container.find('p').text()).toBe('Empty');
 
-      list.value = ['b'];
+      itemsList.value = ['b'];
       await $.nextTick();
       expect($container.find('p').length).toBe(0);
       expect($container.find('span').text()).toBe('b');
 
       // [Stability] Releasing empty list multiple times should not corrupt internal state
-      list.value = [];
-      list.value = [];
-      list.value = ['c'];
+      itemsList.value = [];
+      itemsList.value = [];
+      itemsList.value = ['c'];
       await $.nextTick();
       expect($container.find('span').text()).toBe('c');
     });
@@ -118,8 +118,8 @@ describe('$.atomList (Integration)', () => {
       const $ul = appendToBody('<ul>');
 
       $ul.atomList(items, {
-        key: (i: number) => i,
-        render: (i) => `<li>${i}</li>`,
+        key: (item: number) => item,
+        render: (item) => `<li>${item}</li>`,
       });
 
       await $.nextTick();
@@ -206,8 +206,8 @@ describe('$.atomList (Integration)', () => {
       const list = $.atom(['A']);
       const $container = appendToBody('<div>');
       $container.atomList(list, {
-        key: (i) => i,
-        render: (i) => `some text ${i}`, // text node
+        key: (item) => item,
+        render: (item) => `some text ${item}`, // text node
       });
       await $.nextTick();
       expect($container.text()).toBe('some text A');
@@ -218,8 +218,8 @@ describe('$.atomList (Integration)', () => {
       const $container2 = appendToBody('<div>');
       const onAdd = vi.fn();
       $container2.atomList(list2, {
-        key: (i) => i,
-        render: (i) => `<span>${i}</span>`,
+        key: (item) => item,
+        render: (item) => `<span>${item}</span>`,
         onAdd,
       });
       await $.nextTick();
@@ -231,8 +231,8 @@ describe('$.atomList (Integration)', () => {
       const $container3 = appendToBody('<div>');
       const onAdd3 = vi.fn();
       $container3.atomList(list3, {
-        key: (i) => i,
-        render: (i) => `<span>${i}</span>`,
+        key: (item) => item,
+        render: (item) => `<span>${item}</span>`,
         events: {
           'click span': () => {},
         },
@@ -248,7 +248,7 @@ describe('$.atomList (Integration)', () => {
 
       $container.atomList(items, {
         key: 'name',
-        render: (i) => `<span>${i.value}</span>`,
+        render: (item) => `<span>${item.value}</span>`,
       });
 
       await $.nextTick();
@@ -299,10 +299,10 @@ describe('$.atomList (Integration)', () => {
       let render1Count = 0;
 
       $container.atomList(list1, {
-        key: (i: number) => i,
-        render: (i) => {
+        key: (item: number) => item,
+        render: (item) => {
           render1Count++;
-          return `<li>${i}</li>`;
+          return `<li>${item}</li>`;
         },
       });
 
@@ -310,8 +310,8 @@ describe('$.atomList (Integration)', () => {
       expect(render1Count).toBe(2);
 
       $container.atomList(list2, {
-        key: (i: string) => i,
-        render: (i) => `<li>${i}</li>`,
+        key: (item: string) => item,
+        render: (item) => `<li>${item}</li>`,
       });
 
       await $.nextTick();
@@ -330,7 +330,7 @@ describe('$.atomList (Integration)', () => {
       const list = $.atom([{ id: 1 }]);
       $container.atomList(list, {
         key: 'id',
-        render: (i) => `<span class="item-${i.id}"></span>`,
+        render: (item) => `<span class="item-${item.id}"></span>`,
         onRemove: ($element) => {
           // Manually add the key back to trigger re-bound check in commitRemoval
           $element.attr('data-atom-key', '1');
@@ -443,10 +443,10 @@ describe('$.atomList (Integration)', () => {
       expect(handler).toHaveBeenCalledTimes(2); // btn click + row bubble
       const call = handler.mock.calls[0];
       if (!call) throw new Error('Expected call to be defined');
-      const [item, index, e] = call;
+      const [item, index, event] = call;
       expect(item).toEqual({ id: 2 });
       expect(index).toBe(1);
-      expect(e).toBeDefined();
+      expect(event).toBeDefined();
 
       // 2. Index reporting after reorder
       items.value = [{ id: 2 }, { id: 1 }];
@@ -554,10 +554,10 @@ describe('$.atomList (Integration)', () => {
 
       $container.atomList(items, {
         key: 'id',
-        render: (i) => `<span data-id="${i.id}"></span>`,
+        render: (item) => `<span data-id="${item.id}"></span>`,
         onRemove: () =>
-          new Promise<void>((r) => {
-            resolveRemove = r;
+          new Promise<void>((resolve) => {
+            resolveRemove = resolve;
           }),
       });
 
@@ -658,8 +658,8 @@ describe('$.atomList (Integration)', () => {
       const list = $.atom<({ id: number } | undefined)[]>([{ id: 1 }, undefined, { id: 2 }]);
 
       $container.atomList(list, {
-        key: (i) => i?.id ?? 'empty',
-        render: (i) => `<span>${i?.id ?? 'empty'}</span>`,
+        key: (item) => item?.id ?? 'empty',
+        render: (item) => `<span>${item?.id ?? 'empty'}</span>`,
       });
 
       await $.nextTick();
@@ -699,8 +699,8 @@ describe('$.atomList (Integration)', () => {
         0: null,
       });
       $.fn.atomList.call(mockJq, list, {
-        key: (i: unknown) => String(i),
-        render: (i: unknown) => `<span>${String(i)}</span>`,
+        key: (item: unknown) => String(item),
+        render: (item: unknown) => `<span>${String(item)}</span>`,
       });
     });
 

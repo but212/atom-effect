@@ -60,8 +60,9 @@ describe('Utils', () => {
       expect(sanitizeHtml(combined).split('<!--sep-->')).toHaveLength(3);
 
       // Security + preservation
-      const xss = '<div>Safe</div><!--sep--><script>alert(1)</script><!--sep--><span>OK</span>';
-      const sanitized = sanitizeHtml(xss);
+      const xssPayload =
+        '<div>Safe</div><!--sep--><script>alert(1)</script><!--sep--><span>OK</span>';
+      const sanitized = sanitizeHtml(xssPayload);
       const fragments = sanitized.split('<!--sep-->');
 
       expect(fragments).toHaveLength(3);

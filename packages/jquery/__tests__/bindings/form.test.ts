@@ -170,27 +170,27 @@ describe('Form Binding (atomForm)', () => {
 
   describe('Dynamic DOM Discovery (MutationObserver)', () => {
     it('should handle dynamic element addition, renaming, and removal', async () => {
-      const data = $.atom({ a: '1', b: '2', c: '3' });
-      const $form = appendToBody('<form><input name="a" id="id-a"></form>');
+      const data = $.atom({ fieldA: '1', fieldB: '2', fieldC: '3' });
+      const $form = appendToBody('<form><input name="fieldA" id="id-a"></form>');
 
       $form.atomForm(data);
       await $.nextTick();
 
       // 1. Dynamic Addition
-      $form.append('<div><input name="b" id="id-b"></div>');
+      $form.append('<div><input name="fieldB" id="id-b"></div>');
       await waitMutation();
       expect($form.find('#id-b').val()).toBe('2');
 
       // 2. Dynamic Renaming
       const $inputA = $form.find('#id-a');
-      $inputA.attr('name', 'c');
+      $inputA.attr('name', 'fieldC');
       await waitMutation();
       expect($inputA.val()).toBe('3');
 
       // 3. Removal & Sync Check
       $inputA.remove();
       await waitMutation();
-      data.value = { ...data.value, b: 'changed-b' };
+      data.value = { ...data.value, fieldB: 'changed-b' };
       await $.nextTick();
       expect($form.find('#id-b').val()).toBe('changed-b');
     });

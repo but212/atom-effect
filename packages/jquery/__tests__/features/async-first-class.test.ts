@@ -19,9 +19,9 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
    */
   async function flushEffects() {
     for (let i = 0; i < 2; i++) {
-      const p = $.nextTick();
+      const nextTickPromise = $.nextTick();
       vi.advanceTimersByTime(0);
-      await p;
+      await nextTickPromise;
     }
   }
 

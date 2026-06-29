@@ -42,7 +42,7 @@ import {
  * DOM removal. You MUST call `cleanup(element)` manually to prevent
  * memory leaks.
  *
- * @param config - Configuration options for patches and cleanup safety nets.
+ * @param config Configuration options for patches and cleanup safety nets.
  *
  * @example
  * ```typescript
@@ -99,7 +99,7 @@ export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
  * - If `autoCleanup` is disabled and you are removing elements from the DOM.
  * - To immediately release reactive resources before a large container removal.
  *
- * @param element - The element or JQuery collection to clean up.
+ * @param element The element or JQuery collection to clean up.
  *
  * @example
  * ```typescript

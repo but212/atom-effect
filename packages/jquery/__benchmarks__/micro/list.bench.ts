@@ -23,26 +23,26 @@ const makeItems = (count: number, offset = 0): ListItem[] =>
   }));
 
 describe('List Rendering: Initial Render (1000 items)', () => {
-  const run = (name: string, fn: ($c: JQuery) => void) =>
-    bench(name, withContainer(fn), microBenchOptions);
+  const run = (name: string, benchmarkFunction: ($container: JQuery) => void) =>
+    bench(name, withContainer(benchmarkFunction), microBenchOptions);
 
-  run('jQuery: manual render 1000 items', ($c) => {
+  run('jQuery: manual render 1000 items', ($container) => {
     const items = makeItems(1000);
     let html = '';
     for (let i = 0; i < 1000; i++) {
       html += `<div class="item">${items[i]?.text}</div>`;
     }
-    $c.html(html);
+    $container.html(html);
   });
 
-  run('atom-effect: atomList render 1000 items', ($c) => {
+  run('atom-effect: atomList render 1000 items', ($container) => {
     const items = $.atom<ListItem[]>(makeItems(1000));
-    $c.atomList(items, listOptions);
+    $container.atomList(items, listOptions);
   });
 
-  run('atom-effect: atomList render 1000 items (with bind callback)', ($c) => {
+  run('atom-effect: atomList render 1000 items (with bind callback)', ($container) => {
     const items = $.atom<ListItem[]>(makeItems(1000));
-    $c.atomList(items, {
+    $container.atomList(items, {
       key: 'id',
       render: () => '<div class="item"><span class="label"></span></div>',
       bind: ($element, item) => {
@@ -68,9 +68,9 @@ describe('List Rendering: Reconciliation (Base 100 items)', () => {
   for (const { name, next } of cases) {
     bench(
       name,
-      withContainer(($c) => {
+      withContainer(($container) => {
         const items = $.atom<ListItem[]>(base);
-        $c.atomList(items, listOptions);
+        $container.atomList(items, listOptions);
         items.value = next;
       }),
       microBenchOptions

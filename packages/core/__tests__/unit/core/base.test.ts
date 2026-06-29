@@ -53,25 +53,25 @@ describe('BaseEngine (base.ts)', () => {
   describe('Tracking Context Primitives', () => {
     describe('untracked()', () => {
       it('suppresses dependency collection while allowing value access', async () => {
-        const a = atom(1);
-        const b = atom(10);
+        const firstAtom = atom(1);
+        const secondAtom = atom(10);
         let computeCount = 0;
 
-        const c = computed(() => {
+        const computedInstance = computed(() => {
           computeCount++;
-          return a.value + untracked(() => b.value);
+          return firstAtom.value + untracked(() => secondAtom.value);
         });
 
-        expect(c.value).toBe(11);
+        expect(computedInstance.value).toBe(11);
 
-        b.value = 20;
+        secondAtom.value = 20;
         await sleep(10);
-        expect(c.value).toBe(11);
+        expect(computedInstance.value).toBe(11);
         expect(computeCount).toBe(1);
 
-        a.value = 2;
+        firstAtom.value = 2;
         await sleep(10);
-        expect(c.value).toBe(22);
+        expect(computedInstance.value).toBe(22);
         expect(computeCount).toBe(2);
 
         expect(untracked(() => 'foo')).toBe('foo');
@@ -85,25 +85,25 @@ describe('BaseEngine (base.ts)', () => {
 
     describe('Asynchronous tracking boundaries (Limitations)', () => {
       it('does not track dependencies accessed after an await boundary', async () => {
-        const a = atom(0);
+        const someAtom = atom(0);
         let runs = 0;
 
-        const c = computed(
+        const computedInstance = computed(
           async () => {
             runs++;
             await sleep(10);
-            return a.value;
+            return someAtom.value;
           },
           { defaultValue: -1 }
         );
 
-        c.value;
+        computedInstance.value;
         await sleep(30);
         expect(runs).toBe(1);
 
-        a.value = 1;
+        someAtom.value = 1;
         await sleep(30);
-        await c.value;
+        await computedInstance.value;
         expect(runs).toBe(1);
       });
 
@@ -220,21 +220,21 @@ describe('BaseEngine (base.ts)', () => {
     describe('Error Handling Timing', () => {
       it('should propagate the original evaluation error to subscribers instead of a circular dependency error', () => {
         const errorMsg = 'computation failed';
-        const c = computed(() => {
+        const computedInstance = computed(() => {
           throw new Error(errorMsg);
         });
 
         let subscriberError = null as unknown as Error;
-        c.subscribe(() => {
+        computedInstance.subscribe(() => {
           try {
-            c.value;
-          } catch (e: unknown) {
-            subscriberError = e as Error;
+            computedInstance.value;
+          } catch (err: unknown) {
+            subscriberError = err as Error;
           }
         });
 
         try {
-          c.value;
+          computedInstance.value;
         } catch (_e) {
           // Ignored: first evaluation throws
         }

@@ -56,19 +56,19 @@ describe('Scheduler: aeNextTick', () => {
 });
 
 describe('Scheduler: untracked context', () => {
-  const a = atom(0);
+  const someAtom = atom(0);
   // Pre-creating computed avoids creation/disposal overhead in the hot path
-  const c = computed(() => {
+  const computedInstance = computed(() => {
     let sum = 0;
-    for (let i = 0; i < REPEATS; i++) sum += a.value;
+    for (let i = 0; i < REPEATS; i++) sum += someAtom.value;
     return sum;
   });
 
   bench(
     `tracked read inside computed (x${REPEATS})`,
     () => {
-      a.value++; // Force re-computation
-      keep(c.value);
+      someAtom.value++; // Force re-computation
+      keep(computedInstance.value);
     },
     microBenchOptions
   );
@@ -78,7 +78,7 @@ describe('Scheduler: untracked context', () => {
     () => {
       let sum = 0;
       untracked(() => {
-        for (let i = 0; i < REPEATS; i++) sum += a.value;
+        for (let i = 0; i < REPEATS; i++) sum += someAtom.value;
       });
       keep(sum);
     },
@@ -89,7 +89,7 @@ describe('Scheduler: untracked context', () => {
     `peek() read — no context (x${REPEATS})`,
     () => {
       let sum = 0;
-      for (let i = 0; i < REPEATS; i++) sum += a.peek();
+      for (let i = 0; i < REPEATS; i++) sum += someAtom.peek();
       keep(sum);
     },
     microBenchOptions

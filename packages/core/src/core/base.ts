@@ -119,14 +119,14 @@ export function popTrackingSubscriber(context: TrackingContext): void {
 export function runInTrackingContext<T>(
   context: TrackingContext,
   subscriber: DependencySubscriber,
-  fn: () => T
+  callback: () => T
 ): T {
   // Optimization: Skip stack operations if already in the target context.
-  if (context.current === subscriber) return fn();
+  if (context.current === subscriber) return callback();
 
   pushTrackingSubscriber(context, subscriber);
   try {
-    return fn();
+    return callback();
   } finally {
     popTrackingSubscriber(context);
   }
@@ -152,7 +152,7 @@ export const trackingContext = createTrackingContext();
  * - Performing side-effects (e.g., logging, DOM analytics) that must not trigger re-runs.
  * - Breaking circular dependencies by performing silent reads.
  *
- * @param fn - The non-reactive scope to execute.
+ * @param callback The non-reactive scope to execute.
  * @returns The value returned by the provided function.
  *
  * @example
@@ -167,13 +167,13 @@ export const trackingContext = createTrackingContext();
  * });
  * ```
  */
-export function untracked<T>(fn: () => T): T {
+export function untracked<T>(callback: () => T): T {
   const ctx = trackingContext;
-  if (ctx.current === null) return fn();
+  if (ctx.current === null) return callback();
 
   pushTrackingSubscriber(ctx, null);
   try {
-    return fn();
+    return callback();
   } finally {
     popTrackingSubscriber(ctx);
   }

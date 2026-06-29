@@ -56,26 +56,26 @@ describe('Error Handling System', () => {
     });
 
     it('verifies initial error state integrity of computed atoms', () => {
-      const c = computed(() => 42);
-      expect(c.errors).toEqual([]);
-      expect(Object.isFrozen(c.errors)).toBe(true);
+      const computedAtom = computed(() => 42);
+      expect(computedAtom.errors).toEqual([]);
+      expect(Object.isFrozen(computedAtom.errors)).toBe(true);
     });
   });
 
   describe('Type guards (isAtom, isWritable, etc.)', () => {
     it('identifies reactive primitives correctly', () => {
-      const a = atom(0);
-      const c = computed(() => 1);
-      const e = effect(() => {});
+      const someAtom = atom(0);
+      const computedInstance = computed(() => 1);
+      const effectInstance = effect(() => {});
 
-      expect(isAtom(a)).toBe(true);
-      expect(isAtom(c)).toBe(true);
-      expect(isWritable(a)).toBe(true);
-      expect(isWritable(c)).toBe(false);
-      expect(isComputed(c)).toBe(true);
-      expect(isEffect(e)).toBe(true);
-      expect(isEffect(a)).toBe(false);
-      e.dispose();
+      expect(isAtom(someAtom)).toBe(true);
+      expect(isAtom(computedInstance)).toBe(true);
+      expect(isWritable(someAtom)).toBe(true);
+      expect(isWritable(computedInstance)).toBe(false);
+      expect(isComputed(computedInstance)).toBe(true);
+      expect(isEffect(effectInstance)).toBe(true);
+      expect(isEffect(someAtom)).toBe(false);
+      effectInstance.dispose();
     });
 
     it.each([
@@ -94,24 +94,24 @@ describe('Error Handling System', () => {
     it('getErrorChain handles falsy causes and prevents circular loops', () => {
       expect(getErrorChain(new AtomError('m', { cause: 0 }))[1]).toBe(0);
 
-      const err1 = new AtomError('1');
-      const err2 = new AtomError('2', { cause: err1 });
-      Reflect.set(err1, 'cause', err2);
+      const firstError = new AtomError('1');
+      const secondError = new AtomError('2', { cause: firstError });
+      Reflect.set(firstError, 'cause', secondError);
 
-      const chain = getErrorChain(err1);
+      const chain = getErrorChain(firstError);
       expect(chain).toHaveLength(2);
-      expect(chain[chain.length - 1]).toBe(err2);
+      expect(chain[chain.length - 1]).toBe(secondError);
     });
 
     it('deeply serializes complex error chains to JSON', () => {
-      const top = new AtomError('top', {
+      const topError = new AtomError('top', {
         cause: new ComputedError('mid', {
           cause: new TypeError('native'),
           recoverable: true,
           code: 'C1',
         }),
       });
-      const json = serializeError(top);
+      const json = serializeError(topError);
 
       expect(json.message).toBe('top');
       const mid = Reflect.get(json as object, 'cause');
@@ -121,8 +121,8 @@ describe('Error Handling System', () => {
     });
 
     it('serializeError returns non-Error objects as is', () => {
-      const obj = { x: 1 };
-      expect(serializeError(obj)).toBe(obj);
+      const testObject = { x: 1 };
+      expect(serializeError(testObject)).toBe(testObject);
       expect(serializeError(123)).toBe(123);
       expect(serializeError('hello')).toBe('hello');
     });
@@ -260,12 +260,12 @@ describe('Error Handling System', () => {
     });
 
     it('serializeError handles deeply nested errors with circular reference correctly', () => {
-      const parent = new Error('Parent error');
-      const child = new Error('Child error');
-      parent.cause = child;
-      child.cause = parent; // circular dependency
+      const parentError = new Error('Parent error');
+      const childError = new Error('Child error');
+      parentError.cause = childError;
+      childError.cause = parentError; // circular dependency
 
-      const serialized = serializeError(parent) as {
+      const serialized = serializeError(parentError) as {
         message: string;
         cause: { message: string; cause: { message: string } };
       };

@@ -26,8 +26,8 @@ export const nextSmi = (value: number): number => {
  * Logic: Performs a shallow merge using `Object.assign`. If multiple atoms
  * contain the same key, the value from the last atom in the array takes precedence.
  *
- * @param atoms - List of reactive dependencies to merge.
- * @param peek - Constraint: If true, uses `.peek()` to prevent the caller from
+ * @param atoms List of reactive dependencies to merge.
+ * @param peek Constraint: If true, uses `.peek()` to prevent the caller from
  * tracking these dependencies (e.g., during non-reactive initialization).
  *
  * @internal

@@ -6,7 +6,7 @@ This document outlines the conventions for TSDoc and inline comments within the 
 
 1. **Audience Segmentation**:
     - **User (API Consumer)**: Targets for Public TSDoc. Focus on usage, examples, and safety.
-    - **Contributor (Developer)**: Targets for Inline Comments. Focus on design intent, "why" decisions, and maintenance constraints.
+    - **Contributor (Developer)**: Targets for Inline/TSDoc Comments. Focus on design intent, "why" decisions, and maintenance constraints.
 2. **Document the "Why" and "When"**: Code shows *what* it does. Comments must explain *why* a particular approach was taken and *when* the code should (or should not) be used.
 3. **The 3-Second Rule**: A reader should grasp the core intent or constraint within 3 seconds. Use structured tags and concise language.
 4. **Neutrality & Technical Precision**: Avoid promotional, subjective, or anthropomorphic language. Use passive voice and objective technical terms (e.g., "Orchestrates synchronization" instead of "Magically handles updates").
@@ -58,7 +58,7 @@ All public-facing APIs **MUST** include TSDoc.
  * When to use:
  * - [Required Scenario 1: Guide the user on when this tool is appropriate]
  * 
- * @param [name] [Required if type alone doesn't convey intent or valid range]
+ * @param name [Required if type alone doesn't convey intent or valid range. Do NOT use a dash separator.]
  * 
  * @returns [Required if non-obvious] Description of return value and its meaning.
  * 
@@ -69,6 +69,12 @@ All public-facing APIs **MUST** include TSDoc.
  * $.effect(() => console.log(source.value));
  */
 ```
+
+> [!IMPORTANT]
+> **No-Dash @param Format**: Do not include a dash `-` separator after the parameter name in `@param` tags.
+>
+> - Correct: `@param options Configuration settings for the process.`
+> - Incorrect: `@param options - Configuration settings for the process.`
 
 ### 2. Detailed Explanations (`@remarks`)
 
@@ -116,11 +122,25 @@ export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
 
 ### 5. @internal vs @public
 
-- **`@public`**: Available to end-users. Requires full TSDoc and `@example`.
+- **`@public`**: Marks a symbol as public. **Note:** Most public APIs are implied by standard `export` statements. Use `@public` explicitly in type definition files (`types.ts`, `.d.ts`) to designate entry points for API document generators.
 - **`@internal`**: Used for cross-module members that are NOT part of the public API. Should still have TSDoc explaining its role to other contributors, but does not require `@example`.
   - **Constraint (Types):** Do NOT use `@internal` for types (interfaces, type aliases) that are referenced by any `@public` members. This causes bundling failures (leaked internal types) and broken declaration files (`.d.ts`). Such types must be `@public` to ensure the integrity of the distributed package.
 
-### 6. @deprecated Policy
+### 6. `@see` Reference Tag
+
+Use the `@see` tag to link to external references, MDN documentation, specifications, or related APIs.
+
+```typescript
+/**
+ * Triggers a DOM update using requestAnimationFrame.
+ * 
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame
+ */
+```
+
+### 7. @deprecated Policy (Reserved)
+
+*Note: This is a reserved policy. It will be actively applied when deprecations are introduced.*
 
 Deprecation is a critical communication tool for users. Always include:
 
@@ -138,19 +158,39 @@ Deprecation is a critical communication tool for users. Always include:
 
 ---
 
-## Inline Comment Conventions (For Contributors)
+## Comment Prefixes (For Contributors)
 
-Use specialized prefixes to categorize maintenance information. These can be used in JSDoc blocks for internal members or as single-line comments.
+Use specialized prefixes to categorize maintenance information.
 
-- **`Why:`**: Explains the rationale behind a specific value, constant, or design choice (e.g., "Why 31 bits?").
+### Prefix Locations
+
+Prefixes are dual-format and can be placed in two locations depending on scope:
+
+1. **Single-line implementation comments (`// Prefix: ...`)**: Best for low-level, line-specific behavior.
+2. **TSDoc blocks (`* Prefix: ...`)**: Best for overall API block explanations, design roles, and safety guarantees.
+
+### Prefix Types
+
+- **`Security:`**: Documents mechanisms for XSS mitigation, DOM Clobbering prevention, or sensitive data handling.
+- **`Caution:`**: Highlights fragile code prone to regressions, tricky side effects, or potential "glitches".
+- **`Constraint:`**: Documents hard requirements or limits (e.g., "Must be called before removal", "Max depth is 8").
 - **`Logic:`**: Explains the *intent* or implementation mechanics behind complex transitions, bitmasking, or non-linear branching.
 - **`Optimization:`**: Explains performance-related complexity, monomorphic access patterns, batching strategies, or diffing algorithms.
-- **`Reason:`**: Explains why a particular (perhaps non-obvious) approach was taken or why a simpler approach was discarded.
-- **`Constraint:`**: Documents hard requirements or limits (e.g., "Must be called before removal", "Max depth is 8").
-- **`Caution:`**: Highlights fragile code prone to regressions, tricky side effects, or potential "glitches".
-- **`Security:`**: **(Required)** Documents mechanisms for XSS mitigation, DOM Clobbering prevention, or sensitive data handling.
-- **`Role:`**: Defines the purpose of an interface or class in the broader system architecture.
-- **`Impact:`**: Describes the consequences or side effects of a configuration flag or constant.
+- **`Reason:`**: Explains the rationale behind a specific value, constant, design choice, or why a particular (perhaps non-obvious) approach was taken instead of a simpler one.
+
+### Priority & Ordering
+
+When multiple prefixes apply to the same code block, order them by safety priority (most critical first):
+
+$$\text{Security} \succ \text{Caution} \succ \text{Constraint} \succ \text{Logic} \succ \text{Optimization} \succ \text{Reason}$$
+
+```typescript
+/**
+ * Security: Validates the node identifier to prevent prototype pollution.
+ * Caution: This operation blocks the main thread. Do not invoke in raw loops.
+ * Reason: Needed to conform with Web Component lifecycle sequencing.
+ */
+```
 
 ---
 
@@ -172,7 +212,9 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 
 ---
 
-## TODO & FIXME Standards
+## TODO & FIXME Standards (Reserved)
+
+*Note: This is a reserved policy. It will be actively applied when introducing tasks/fixes.*
 
 - **Issue Tracking**: Every TODO or FIXME must reference an issue number or a specific owner.
 - **Resolution Condition**: State *what* must happen for the tag to be removed, rather than just a date.
@@ -189,6 +231,9 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 - **Redundant summaries**: Translating a descriptive function name into a comment.
 - **Implementation blow-by-blow**: "Step 1: Loop, Step 2: Push". Let the code speak.
 - **No-Audience comments**: Notes that won't make sense to anyone in 3 months.
+- **Self-explanatory `@returns`**: Avoid describing standard return types where the type signature is clear (e.g. `: boolean` methods returning "true if successful").
+- **Getter/Setter delegation**: Do not document simple property getters/setters that merely read/write a private backing field.
+- **Function name translations**: Do not paraphrase the function name (e.g., writing "Gets the value" above a method named `getValue()`).
 
 ---
 
@@ -204,10 +249,11 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 - [ ] Is the concurrency/cleanup logic explained for async operations?
 - [ ] Did I document polymorphic inputs (Logic: Polymorphic Input)?
 - [ ] Does `@deprecated` include the 'since' version and a migration path?
+- [ ] Are `@param` tags formatted without a dash?
 
 ### For Reviewers (During PR)
 
-- [ ] Is the information placed in the correct layer (User TSDoc vs Contributor Inline)?
+- [ ] Is the information placed in the correct layer (User TSDoc vs Contributor Comments)?
 - [ ] Does every TODO/FIXME have an issue reference or owner?
 - [ ] Is the TSDoc consistent with the current implementation's behavior?
 - [ ] Are `@remarks` used for long explanations and `@defaultValue` present on optional properties?

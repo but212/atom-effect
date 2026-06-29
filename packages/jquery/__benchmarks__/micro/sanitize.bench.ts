@@ -7,7 +7,8 @@ import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../../src/uti
 import { microBenchOptions } from '../utils/setup';
 
 describe('Sanitize: Safe Content & Vulnerability checks', () => {
-  const run = (name: string, fn: () => void) => bench(name, fn, microBenchOptions);
+  const run = (name: string, benchmarkFunction: () => void) =>
+    bench(name, benchmarkFunction, microBenchOptions);
 
   const safeCases = [
     { name: 'sanitize small safe HTML', html: '<p>Hello, World!</p>' },

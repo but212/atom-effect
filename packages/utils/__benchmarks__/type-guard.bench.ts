@@ -5,10 +5,10 @@ import { keep, REPEATS } from './setup';
 describe('type-guard', () => {
   const promise = Promise.resolve();
   const thenable = { then: () => {} };
-  const obj = {};
+  const emptyObject = {};
   const option = Option.some(1);
 
-  const rawInputs = [promise, thenable, obj, option, null, undefined];
+  const rawInputs = [promise, thenable, emptyObject, option, null, undefined];
   // Pre-generate mixed inputs of length REPEATS to avoid random selection overhead in the benchmark loop
   const mixedInputs = Array.from({ length: REPEATS }, (_, i) => rawInputs[i % rawInputs.length]);
 
@@ -26,7 +26,7 @@ describe('type-guard', () => {
 
   bench(`isPromise: object (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(isPromise(obj));
+      keep(isPromise(emptyObject));
     }
   });
 
@@ -38,7 +38,7 @@ describe('type-guard', () => {
 
   bench(`isOption: false (x${REPEATS})`, () => {
     for (let i = 0; i < REPEATS; i++) {
-      keep(isOption(obj));
+      keep(isOption(emptyObject));
     }
   });
 

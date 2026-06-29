@@ -15,13 +15,13 @@ function buildDeepTree(
   let currentLevel: HTMLElement[] = [container];
   const source = $.atom('reactive-text');
 
-  for (let d = 0; d < depth; d++) {
+  for (let depthIndex = 0; depthIndex < depth; depthIndex++) {
     const nextLevel: HTMLElement[] = [];
-    for (const p of currentLevel) {
-      for (let b = 0; b < breadth; b++) {
-        const child = p.appendChild(document.createElement('div'));
+    for (const parent of currentLevel) {
+      for (let breadthIndex = 0; breadthIndex < breadth; breadthIndex++) {
+        const child = parent.appendChild(document.createElement('div'));
         nextLevel.push(child);
-        if (bindReactive && (d + b) % 2 === 0) {
+        if (bindReactive && (depthIndex + breadthIndex) % 2 === 0) {
           $(child).atomText(source);
         }
       }
@@ -34,9 +34,9 @@ describe('Registry: Deep Tree Cleanup', () => {
   const run = (name: string, bindReactive: boolean) =>
     bench(
       name,
-      withContainer(($c) => {
-        if ($c[0]) buildDeepTree($c[0], 5, 4, bindReactive);
-        cleanup($c);
+      withContainer(($container) => {
+        if ($container[0]) buildDeepTree($container[0], 5, 4, bindReactive);
+        cleanup($container);
       }),
       microBenchOptions
     );

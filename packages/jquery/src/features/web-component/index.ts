@@ -47,7 +47,7 @@ const supportsInternals =
  * - Suitable for mapping attributes and slots to reactive atoms.
  * - When you need automatic cleanup of effects when an element is removed.
  *
- * @param element - The host element (usually `this` in a Custom Element).
+ * @param element The host element (usually `this` in a Custom Element).
  * @returns A controller for managing the component's reactive lifecycle.
  *
  * @example
@@ -319,9 +319,9 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
  * - When you need to share state (like themes or user sessions) across a deep DOM tree.
  * - When you want to control CSS properties reactively via atoms.
  *
- * @param element - The host element or collection acting as provider.
- * @param key - Unique identifier for the context.
- * @param value - The reactive atom or static value to share.
+ * @param element The host element or collection acting as provider.
+ * @param key Unique identifier for the context.
+ * @param value The reactive atom or static value to share.
  *
  * @example
  * ```typescript
@@ -383,8 +383,8 @@ export function provideAtom(
  * - To consume state provided by a `provideAtom` ancestor.
  * - When components might be moved (drag-and-drop) and need to stay synced with their new context.
  *
- * @param element - The element requesting the context.
- * @param key - The unique identifier of the context to locate.
+ * @param element The element requesting the context.
+ * @param key The unique identifier of the context to locate.
  * @returns A reactive proxy atom representing the injected context.
  *
  * @example

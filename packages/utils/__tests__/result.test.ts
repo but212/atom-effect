@@ -12,54 +12,54 @@ const NON_STRINGIFIABLE = {
 describe('Result<T, E>', () => {
   describe('Factories & Constructors', () => {
     it('Result.ok() should wrap present values or reuse the VOID_SUCCESS singleton', () => {
-      const ok = Result.ok(10);
-      expect(ok).toMatchObject({ ok: true, value: 10 });
+      const successResult = Result.ok(10);
+      expect(successResult).toMatchObject({ ok: true, value: 10 });
 
-      const res1 = Result.ok(undefined);
-      const res2 = Result.ok(undefined);
-      expect(res1).toBe(res2); // Should reuse VOID_SUCCESS
+      const voidResult1 = Result.ok(undefined);
+      const voidResult2 = Result.ok(undefined);
+      expect(voidResult1).toBe(voidResult2); // Should reuse VOID_SUCCESS
     });
 
     it('Result.err() should wrap failure values into the Err variant', () => {
-      const err = Result.err('failure');
-      expect(err).toMatchObject({ ok: false, error: 'failure' });
+      const errorResult = Result.err('failure');
+      expect(errorResult).toMatchObject({ ok: false, error: 'failure' });
     });
 
     it('shared VOID_SUCCESS should be frozen and immutable', () => {
-      const res = Result.ok(undefined);
+      const voidResult = Result.ok(undefined);
       expect(() => {
-        (res as { value: unknown }).value = 1;
+        (voidResult as { value: unknown }).value = 1;
       }).toThrow();
     });
 
     it('Result.fromPredicate() should return Ok of value when predicate evaluates to true', () => {
-      const res = Result.fromPredicate(42, (x) => x > 0);
-      expect(Result.unwrap(res)).toBe(42);
+      const predicateResult = Result.fromPredicate(42, (x) => x > 0);
+      expect(Result.unwrap(predicateResult)).toBe(42);
     });
 
     it('Result.fromPredicate() should narrow type when predicate is a type guard', () => {
-      const isString = (x: unknown): x is string => typeof x === 'string';
-      const res = Result.fromPredicate<unknown, string>('hello', isString);
-      expect(Result.unwrap(res)).toBe('hello');
+      const isString = (val: unknown): val is string => typeof val === 'string';
+      const predicateResult = Result.fromPredicate<unknown, string>('hello', isString);
+      expect(Result.unwrap(predicateResult)).toBe('hello');
     });
 
     it('Result.fromPredicate() should return Err with default Error when predicate evaluates to false', () => {
-      const res = Result.fromPredicate(-42, (x) => x > 0);
-      expect(Result.isErr(res)).toBe(true);
-      if (Result.isErr(res)) {
-        expect(res.error).toBeInstanceOf(Error);
-        expect(res.error.message).toBe('Predicate failed');
+      const predicateResult = Result.fromPredicate(-42, (x) => x > 0);
+      expect(Result.isErr(predicateResult)).toBe(true);
+      if (Result.isErr(predicateResult)) {
+        expect(predicateResult.error).toBeInstanceOf(Error);
+        expect(predicateResult.error.message).toBe('Predicate failed');
       }
     });
 
     it('Result.fromPredicate() should return Err with custom error when errorFactory is provided', () => {
       const customErr = new Error('custom failure');
-      const res = Result.fromPredicate(
+      const predicateResult = Result.fromPredicate(
         -42,
         (x) => x > 0,
         () => customErr
       );
-      expect(res).toEqual(Result.err(customErr));
+      expect(predicateResult).toEqual(Result.err(customErr));
     });
 
     it('Result.fromThrowable() should behave identically to tryCatch', () => {
@@ -99,12 +99,12 @@ describe('Result<T, E>', () => {
     });
 
     it('Result.isOk() and Result.isErr() should act as reliable compiler type guards', () => {
-      const ok = Result.ok(10);
-      const err = Result.err('fail');
-      expect(Result.isOk(ok)).toBe(true);
-      expect(Result.isOk(err)).toBe(false);
-      expect(Result.isErr(ok)).toBe(false);
-      expect(Result.isErr(err)).toBe(true);
+      const successResult = Result.ok(10);
+      const errorResult = Result.err('fail');
+      expect(Result.isOk(successResult)).toBe(true);
+      expect(Result.isOk(errorResult)).toBe(false);
+      expect(Result.isErr(successResult)).toBe(false);
+      expect(Result.isErr(errorResult)).toBe(true);
     });
   });
 
@@ -126,11 +126,11 @@ describe('Result<T, E>', () => {
       try {
         Result.expect(Result.err(original), 'Custom message');
         expect.fail('Should have thrown');
-      } catch (e: unknown) {
-        expect(e).toBeInstanceOf(Error);
-        const err = e as Error & { cause?: unknown };
-        expect(err.message).toBe('Custom message');
-        expect(err.cause).toBe(original);
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(Error);
+        const errorObj = err as Error & { cause?: unknown };
+        expect(errorObj.message).toBe('Custom message');
+        expect(errorObj.cause).toBe(original);
       }
     });
 
@@ -151,60 +151,60 @@ describe('Result<T, E>', () => {
   describe('Transformations (map, mapErr, andThen)', () => {
     describe('map()', () => {
       it('should transform the Ok value', () => {
-        const ok = Result.ok(2);
-        const mapped = Result.map(ok, (n: number) => n * 2);
-        expect(mapped).toMatchObject(Result.ok(4));
+        const successResult = Result.ok(2);
+        const mappedResult = Result.map(successResult, (num: number) => num * 2);
+        expect(mappedResult).toMatchObject(Result.ok(4));
       });
 
       it('should preserve the same instance when mapping NaN to NaN', () => {
-        const ok = Result.ok(NaN);
-        const mapped = Result.map(ok, (n: number) => n);
-        expect(mapped).toBe(ok);
+        const nanResult = Result.ok(NaN);
+        const mappedResult = Result.map(nanResult, (num: number) => num);
+        expect(mappedResult).toBe(nanResult);
       });
 
       it('should reuse the Result instance when mapping an object if the returned reference is identical', () => {
         const frozenObj = Object.freeze({ count: 1 });
-        const ok = Result.ok(frozenObj);
+        const frozenResult = Result.ok(frozenObj);
 
-        const mapped = Result.map(ok, (obj) => obj);
-        expect(mapped).toBe(ok);
+        const mappedResult = Result.map(frozenResult, (obj) => obj);
+        expect(mappedResult).toBe(frozenResult);
       });
 
       it('should NOT reuse the Result instance when mapping a mutable object if the returned reference is identical', () => {
         const mutableObj = { count: 1 };
-        const ok = Result.ok(mutableObj);
+        const mutableResult = Result.ok(mutableObj);
 
-        const mapped = Result.map(ok, (obj) => {
+        const mappedResult = Result.map(mutableResult, (obj) => {
           obj.count = 2;
           return obj;
         });
-        expect(mapped).not.toBe(ok);
+        expect(mappedResult).not.toBe(mutableResult);
       });
     });
 
     describe('mapErr()', () => {
       it('should transform the Err error value', () => {
-        const err = Result.err('fail');
-        const mapped = Result.mapErr(err, (s: string) => s.toUpperCase());
-        expect(mapped).toMatchObject(Result.err('FAIL'));
+        const errorResult = Result.err('fail');
+        const mappedResult = Result.mapErr(errorResult, (str: string) => str.toUpperCase());
+        expect(mappedResult).toMatchObject(Result.err('FAIL'));
       });
 
       it('should return the original Ok result unmodified', () => {
-        const ok = Result.ok(42);
-        const mapped = Result.mapErr(ok, (s: unknown) => `${s}!`);
-        expect(mapped).toBe(ok);
+        const successResult = Result.ok(42);
+        const mappedResult = Result.mapErr(successResult, (val: unknown) => `${val}!`);
+        expect(mappedResult).toBe(successResult);
       });
     });
 
     describe('andThen()', () => {
       it('should chain computations returning Results', () => {
-        const ok = Result.ok(1);
-        const chained = Result.andThen(ok, (n: number) => Result.ok(n + 1));
-        expect(chained).toMatchObject(Result.ok(2));
+        const successResult = Result.ok(1);
+        const chainedResult = Result.andThen(successResult, (num: number) => Result.ok(num + 1));
+        expect(chainedResult).toMatchObject(Result.ok(2));
       });
 
       it('should throw an error if the mapper returns an invalid Result', () => {
-        const ok = Result.ok(42);
+        const successResult = Result.ok(42);
         const spoofedResult = {
           ok: true,
           value: 42,
@@ -212,48 +212,55 @@ describe('Result<T, E>', () => {
           [RESULT_SYMBOL]: true,
         } as Result<number, unknown>;
 
-        expect(() => Result.andThen(ok, () => spoofedResult)).toThrow('Invalid Result instance');
+        expect(() => Result.andThen(successResult, () => spoofedResult)).toThrow(
+          'Invalid Result instance'
+        );
       });
 
       it('should return the original Err result unmodified', () => {
-        const err = Result.err('fail');
-        const chained = Result.andThen(err, (n: unknown) => Result.ok(n));
-        expect(chained).toBe(err);
+        const errorResult = Result.err('fail');
+        const chainedResult = Result.andThen(errorResult, (val: unknown) => Result.ok(val));
+        expect(chainedResult).toBe(errorResult);
       });
     });
   });
 
   describe('Control Flow Matcher (match)', () => {
     it('Result.match() should execute correct branch callbacks', () => {
-      const ok = Result.ok(10);
-      const err = Result.err('error');
+      const successResult = Result.ok(10);
+      const errorResult = Result.err('error');
 
       const matcher = {
-        ok: (v: number) => v + 1,
-        err: (e: string) => e.length,
+        ok: (num: number) => num + 1,
+        err: (errorString: string) => errorString.length,
       };
 
-      expect(Result.match(ok, matcher)).toBe(11);
-      expect(Result.match(err, matcher)).toBe(5);
+      expect(Result.match(successResult, matcher)).toBe(11);
+      expect(Result.match(errorResult, matcher)).toBe(5);
     });
   });
 
   describe('Array Operations (all)', () => {
     it('Result.all() should combine an array of Ok into a Ok of array', () => {
-      const res = Result.all([Result.ok(1), Result.ok(2), Result.ok(3)]);
-      expect(Result.unwrap(res)).toEqual([1, 2, 3]);
+      const combinedResult = Result.all([Result.ok(1), Result.ok(2), Result.ok(3)]);
+      expect(Result.unwrap(combinedResult)).toEqual([1, 2, 3]);
     });
 
     it('Result.all() should return the first Err if any Result is Err (fail-fast)', () => {
-      const err1 = Result.err('first error');
-      const err2 = Result.err('second error');
-      const res = Result.all([Result.ok(1), err1, Result.ok(3), err2]);
-      expect(res).toBe(err1);
+      const firstErrorResult = Result.err('first error');
+      const secondErrorResult = Result.err('second error');
+      const combinedResult = Result.all([
+        Result.ok(1),
+        firstErrorResult,
+        Result.ok(3),
+        secondErrorResult,
+      ]);
+      expect(combinedResult).toBe(firstErrorResult);
     });
 
     it('Result.all() should return Ok of empty array for empty input array', () => {
-      const res = Result.all([]);
-      expect(Result.unwrap(res)).toEqual([]);
+      const combinedResult = Result.all([]);
+      expect(Result.unwrap(combinedResult)).toEqual([]);
     });
   });
 
@@ -265,8 +272,8 @@ describe('Result<T, E>', () => {
     });
 
     it('Result.equals() should perform comparison on Err values', () => {
-      const err = new Error('fail');
-      expect(Result.equals(Result.err(err), Result.err(err))).toBe(true);
+      const errorObject = new Error('fail');
+      expect(Result.equals(Result.err(errorObject), Result.err(errorObject))).toBe(true);
     });
 
     it('Result.equals() should return true for two Ok(NaN) results', () => {
@@ -286,138 +293,141 @@ describe('Result<T, E>', () => {
     });
 
     it('Result.equals() should reject shape-alike non-Result objects', () => {
-      const spoofed = {
+      const spoofedResult = {
         ok: true,
         value: 42,
         error: undefined,
         [RESULT_SYMBOL]: true,
       };
-      expect(Result.equals(Result.ok(42), spoofed as Result<unknown, unknown>)).toBe(false);
+      expect(Result.equals(Result.ok(42), spoofedResult as Result<unknown, unknown>)).toBe(false);
     });
 
     it('Result.equals() should return true when comparing a Result instance to itself', () => {
-      const res = Result.ok(42);
-      expect(Result.equals(res, res)).toBe(true);
+      const successResult = Result.ok(42);
+      expect(Result.equals(successResult, successResult)).toBe(true);
     });
 
     it('Result.equals() should evaluate to false for identical non-Result objects', () => {
-      const nonRes = { ok: true, value: 42, error: undefined };
+      const invalidResultObject = { ok: true, value: 42, error: undefined };
       expect(
-        Result.equals(nonRes as Result<unknown, unknown>, nonRes as Result<unknown, unknown>)
+        Result.equals(
+          invalidResultObject as Result<unknown, unknown>,
+          invalidResultObject as Result<unknown, unknown>
+        )
       ).toBe(false);
     });
   });
 
   describe('Interoperability & Conversion', () => {
     it('Result.toOption() should convert Ok to Option.some and Err to Option.none', () => {
-      const ok = Result.ok(42);
-      const err = Result.err('fail');
-      expect(Result.toOption(ok)).toMatchObject(Option.some(42));
-      expect(Result.toOption(err)).toBe(Option.none);
+      const successResult = Result.ok(42);
+      const errorResult = Result.err('fail');
+      expect(Result.toOption(successResult)).toMatchObject(Option.some(42));
+      expect(Result.toOption(errorResult)).toBe(Option.none);
     });
   });
 
   describe('Synchronous & Asynchronous Wrappers (tryCatch, tryAsync)', () => {
     describe('tryCatch()', () => {
       it('should capture synchronous success and failure', () => {
-        const ok = Result.tryCatch(() => 42);
-        expect(ok).toMatchObject(Result.ok(42));
+        const successResult = Result.tryCatch(() => 42);
+        expect(successResult).toMatchObject(Result.ok(42));
 
         const error = new Error('fail');
-        const err = Result.tryCatch(() => {
+        const errorResult = Result.tryCatch(() => {
           throw error;
         });
-        expect(err).toMatchObject(Result.err(error));
+        expect(errorResult).toMatchObject(Result.err(error));
       });
 
       it('should normalize non-Error throws and preserve cause', () => {
         const original = 'not an error object';
-        const err = Result.tryCatch(() => {
+        const errorResult = Result.tryCatch(() => {
           throw original;
         });
-        expect(err.ok).toBe(false);
-        if (Result.isErr(err)) {
-          expect(err.error).toBeInstanceOf(Error);
-          expect(err.error.message).toBe(original);
-          expect(err.error.cause).toBe(original);
+        expect(errorResult.ok).toBe(false);
+        if (Result.isErr(errorResult)) {
+          expect(errorResult.error).toBeInstanceOf(Error);
+          expect(errorResult.error.message).toBe(original);
+          expect(errorResult.error.cause).toBe(original);
         }
       });
 
       it('should reuse VOID_SUCCESS for undefined returns', () => {
-        const res = Result.tryCatch(() => {});
-        expect(res).toBe(Result.ok(undefined));
+        const voidResult = Result.tryCatch(() => {});
+        expect(voidResult).toBe(Result.ok(undefined));
       });
 
       it('should handle non-stringifiable values gracefully', () => {
-        const res = Result.tryCatch(() => {
+        const errorResult = Result.tryCatch(() => {
           throw NON_STRINGIFIABLE;
         });
-        expect(res.ok).toBe(false);
-        if (Result.isErr(res)) {
-          expect(res.error).toBeInstanceOf(Error);
+        expect(errorResult.ok).toBe(false);
+        if (Result.isErr(errorResult)) {
+          expect(errorResult.error).toBeInstanceOf(Error);
         }
       });
 
       it('should handle non-string objects, null, and undefined values in ensureError', () => {
         // 1. Non-string object
-        const resObj = Result.tryCatch(() => {
+        const resultObject = Result.tryCatch(() => {
           throw { key: 'value' };
         });
-        expect(resObj.ok).toBe(false);
-        if (Result.isErr(resObj)) {
-          expect(resObj.error.message).toBe('[object Object]');
-          expect(resObj.error.cause).toEqual({ key: 'value' });
+        expect(resultObject.ok).toBe(false);
+        if (Result.isErr(resultObject)) {
+          expect(resultObject.error.message).toBe('[object Object]');
+          expect(resultObject.error.cause).toEqual({ key: 'value' });
         }
 
         // 2. null
-        const resNull = Result.tryCatch(() => {
+        const nullResult = Result.tryCatch(() => {
           throw null;
         });
-        expect(resNull.ok).toBe(false);
-        if (Result.isErr(resNull)) {
-          expect(resNull.error.message).toBe('Unknown error');
-          expect(resNull.error.cause).toBeNull();
+        expect(nullResult.ok).toBe(false);
+        if (Result.isErr(nullResult)) {
+          expect(nullResult.error.message).toBe('Unknown error');
+          expect(nullResult.error.cause).toBeNull();
         }
 
         // 3. undefined
-        const resUndefined = Result.tryCatch(() => {
+        const undefinedResult = Result.tryCatch(() => {
           throw undefined;
         });
-        expect(resUndefined.ok).toBe(false);
-        if (Result.isErr(resUndefined)) {
-          expect(resUndefined.error.message).toBe('Unknown error');
-          expect(resUndefined.error.cause).toBeUndefined();
+        expect(undefinedResult.ok).toBe(false);
+        if (Result.isErr(undefinedResult)) {
+          expect(undefinedResult.error.message).toBe('Unknown error');
+          expect(undefinedResult.error.cause).toBeUndefined();
         }
       });
     });
 
     describe('tryAsync()', () => {
       it('should capture asynchronous success and failure', async () => {
-        const ok = await Result.tryAsync(async () => 'async');
-        expect(ok).toMatchObject(Result.ok('async'));
+        const successResult = await Result.tryAsync(async () => 'async');
+        expect(successResult).toMatchObject(Result.ok('async'));
 
         const error = new Error('async fail');
-        const err = await Result.tryAsync(async () => {
+        const errorResult = await Result.tryAsync(async () => {
           throw error;
         });
-        expect(err).toMatchObject(Result.err(error));
+        expect(errorResult).toMatchObject(Result.err(error));
       });
 
       it('should reuse VOID_SUCCESS for undefined returns', async () => {
-        const res = await Result.tryAsync(async () => {});
-        expect(res).toBe(Result.ok(undefined));
+        const voidResult = await Result.tryAsync(async () => {});
+        expect(voidResult).toBe(Result.ok(undefined));
       });
 
       it('should normalize non-Error throws and preserve cause', async () => {
         const original = 'async failure';
-        const res = await Result.tryAsync(async () => {
+        const errorResult = await Result.tryAsync(async () => {
           throw original;
         });
-        expect(res.ok).toBe(false);
-        if (Result.isErr(res)) {
-          expect(res.error).toBeInstanceOf(Error);
-          expect(res.error.message).toBe(original);
-          expect(res.error.cause).toBe(original);
+        expect(errorResult.ok).toBe(false);
+        if (Result.isErr(errorResult)) {
+          expect(errorResult.error).toBeInstanceOf(Error);
+          expect(errorResult.error.message).toBe(original);
+          expect(errorResult.error.cause).toBe(original);
         }
       });
 
@@ -426,10 +436,10 @@ describe('Result<T, E>', () => {
           throw NON_STRINGIFIABLE;
         });
         await expect(promise).resolves.toBeDefined();
-        const res = await promise;
-        expect(res.ok).toBe(false);
-        if (Result.isErr(res)) {
-          expect(res.error).toBeInstanceOf(Error);
+        const errorResult = await promise;
+        expect(errorResult.ok).toBe(false);
+        if (Result.isErr(errorResult)) {
+          expect(errorResult.error).toBeInstanceOf(Error);
         }
       });
 
@@ -438,18 +448,18 @@ describe('Result<T, E>', () => {
           throw NON_STRINGIFIABLE;
         });
         await expect(promise).resolves.toBeDefined();
-        const res = await promise;
-        expect(res.ok).toBe(false);
-        if (Result.isErr(res)) {
-          expect(res.error).toBeInstanceOf(Error);
+        const errorResult = await promise;
+        expect(errorResult.ok).toBe(false);
+        if (Result.isErr(errorResult)) {
+          expect(errorResult.error).toBeInstanceOf(Error);
         }
       });
     });
   });
 
   describe('Algebraic Laws', () => {
-    const f = (x: number) => x * 2;
-    const g = (x: number) => x.toString();
+    const doubleValue = (x: number) => x * 2;
+    const convertToString = (x: number) => x.toString();
 
     it('Functor Identity', () => {
       expect(
@@ -467,29 +477,33 @@ describe('Result<T, E>', () => {
     });
 
     it('Functor Composition', () => {
-      const ok = Result.ok(10);
-      const res1 = Result.map(Result.map(ok, f), g);
-      const res2 = Result.map(ok, (x: number) => g(f(x)));
-      expect(Result.equals(res1, res2)).toBe(true);
+      const successResult = Result.ok(10);
+      const firstResult = Result.map(Result.map(successResult, doubleValue), convertToString);
+      const secondResult = Result.map(successResult, (x: number) =>
+        convertToString(doubleValue(x))
+      );
+      expect(Result.equals(firstResult, secondResult)).toBe(true);
     });
 
     it('Monad Left Identity', () => {
-      const f = (x: number) => Result.ok(x * 2);
-      expect(Result.equals(Result.andThen(Result.ok(10), f), f(10))).toBe(true);
+      const doubleValue = (x: number) => Result.ok(x * 2);
+      expect(Result.equals(Result.andThen(Result.ok(10), doubleValue), doubleValue(10))).toBe(true);
     });
 
     it('Monad Right Identity', () => {
-      const ok = Result.ok(10);
-      expect(Result.equals(Result.andThen(ok, Result.ok), ok)).toBe(true);
+      const successResult = Result.ok(10);
+      expect(Result.equals(Result.andThen(successResult, Result.ok), successResult)).toBe(true);
     });
 
     it('Monad Associativity', () => {
-      const f = (x: number) => Result.ok(x + 1);
-      const g = (x: number) => Result.ok(x * 2);
-      const ok = Result.ok(10);
+      const addOne = (x: number) => Result.ok(x + 1);
+      const doubleValue = (x: number) => Result.ok(x * 2);
+      const successResult = Result.ok(10);
 
-      const lhs = Result.andThen(Result.andThen(ok, f), g);
-      const rhs = Result.andThen(ok, (x: number) => Result.andThen(f(x), g));
+      const lhs = Result.andThen(Result.andThen(successResult, addOne), doubleValue);
+      const rhs = Result.andThen(successResult, (x: number) =>
+        Result.andThen(addOne(x), doubleValue)
+      );
       expect(Result.equals(lhs, rhs)).toBe(true);
     });
   });

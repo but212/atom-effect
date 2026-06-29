@@ -37,46 +37,46 @@ describe('Core Symbols & Branding', () => {
 
   describe('isAtom() / isWritable() / isComputed() / isEffect()', () => {
     it('stamps writable atoms with Atom and Writable flags', () => {
-      const a = atom(42);
-      const flags = (a as { [BRAND]: number })[BRAND];
+      const someAtom = atom(42);
+      const flags = (someAtom as { [BRAND]: number })[BRAND];
 
       expect(flags & BrandFlags.Atom).toBeTruthy();
       expect(flags & BrandFlags.Writable).toBeTruthy();
       expect(flags & BrandFlags.Computed).toBeFalsy();
       expect(flags & BrandFlags.Effect).toBeFalsy();
 
-      expect(isAtom(a)).toBe(true);
-      expect(isWritable(a)).toBe(true);
-      expect(isComputed(a)).toBe(false);
+      expect(isAtom(someAtom)).toBe(true);
+      expect(isWritable(someAtom)).toBe(true);
+      expect(isComputed(someAtom)).toBe(false);
     });
 
     it('stamps computed atoms with Atom and Computed flags', () => {
-      const c = computed(() => 100);
-      const flags = (c as { [BRAND]: number })[BRAND];
+      const computedInstance = computed(() => 100);
+      const flags = (computedInstance as { [BRAND]: number })[BRAND];
 
       expect(flags & BrandFlags.Atom).toBeTruthy();
       expect(flags & BrandFlags.Computed).toBeTruthy();
       expect(flags & BrandFlags.Writable).toBeFalsy();
       expect(flags & BrandFlags.Effect).toBeFalsy();
 
-      expect(isAtom(c)).toBe(true);
-      expect(isComputed(c)).toBe(true);
-      expect(isWritable(c)).toBe(false);
+      expect(isAtom(computedInstance)).toBe(true);
+      expect(isComputed(computedInstance)).toBe(true);
+      expect(isWritable(computedInstance)).toBe(false);
     });
 
     it('stamps effects with Effect flag only', () => {
-      const e = effect(() => {});
-      const flags = (e as { [BRAND]: number })[BRAND];
+      const effectInstance = effect(() => {});
+      const flags = (effectInstance as { [BRAND]: number })[BRAND];
 
       expect(flags & BrandFlags.Effect).toBeTruthy();
       expect(flags & BrandFlags.Atom).toBeFalsy();
       expect(flags & BrandFlags.Writable).toBeFalsy();
       expect(flags & BrandFlags.Computed).toBeFalsy();
 
-      expect(isEffect(e)).toBe(true);
-      expect(isAtom(e)).toBe(false);
+      expect(isEffect(effectInstance)).toBe(true);
+      expect(isAtom(effectInstance)).toBe(false);
 
-      e.dispose();
+      effectInstance.dispose();
     });
 
     it('does not identify plain objects as atoms even if they mimic the shape', () => {
@@ -110,23 +110,23 @@ describe('Core Symbols & Branding', () => {
 
     describe('mergeAtomValues', () => {
       it('should correctly merge object-based atoms', () => {
-        const a = atom({ x: 1 });
-        const b = atom({ y: 2 });
-        const res = mergeAtomValues([a, b]);
-        expect(res).toEqual({ x: 1, y: 2 });
+        const firstAtom = atom({ x: 1 });
+        const secondAtom = atom({ y: 2 });
+        const mergedResult = mergeAtomValues([firstAtom, secondAtom]);
+        expect(mergedResult).toEqual({ x: 1, y: 2 });
       });
 
       it('should fall back to indexed properties when merging primitive values', () => {
-        const a = atom(42);
-        const b = atom('hello');
-        const res = mergeAtomValues([a, b]);
-        expect(res).toEqual({ '0': 42, '1': 'hello' });
+        const firstAtom = atom(42);
+        const secondAtom = atom('hello');
+        const mergedResult = mergeAtomValues([firstAtom, secondAtom]);
+        expect(mergedResult).toEqual({ '0': 42, '1': 'hello' });
       });
 
       it('should use peek when peek parameter is true', () => {
-        const a = atom({ value: 1 });
-        const res = mergeAtomValues([a], true);
-        expect(res).toEqual({ value: 1 });
+        const someAtom = atom({ value: 1 });
+        const mergedResult = mergeAtomValues([someAtom], true);
+        expect(mergedResult).toEqual({ value: 1 });
       });
     });
   });

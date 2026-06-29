@@ -11,14 +11,14 @@ describe('Patch: jQuery method overrides overhead', () => {
     {
       name: 'text() - Patch disabled (Native jQuery, 1000 calls)',
       patch: false,
-      run: ($element: JQuery) => {
+      benchmarkAction: ($element: JQuery) => {
         for (let i = 0; i < 1000; i++) $element.text(`value-${i}`);
       },
     },
     {
       name: 'text() - Patch enabled (Reactive jQuery, 1000 calls)',
       patch: true,
-      run: ($element: JQuery) => {
+      benchmarkAction: ($element: JQuery) => {
         for (let i = 0; i < 1000; i++) $element.text(`value-${i}`);
       },
     },
@@ -26,7 +26,7 @@ describe('Patch: jQuery method overrides overhead', () => {
       name: 'html() - Patch disabled (Native jQuery, 1000 calls)',
       patch: false,
       html: true,
-      run: ($element: JQuery) => {
+      benchmarkAction: ($element: JQuery) => {
         for (let i = 0; i < 1000; i++) $element.html(`<span>value-${i}</span>`);
       },
     },
@@ -34,18 +34,18 @@ describe('Patch: jQuery method overrides overhead', () => {
       name: 'html() - Patch enabled (Reactive jQuery, 1000 calls)',
       patch: true,
       html: true,
-      run: ($element: JQuery) => {
+      benchmarkAction: ($element: JQuery) => {
         for (let i = 0; i < 1000; i++) $element.html(`<span>value-${i}</span>`);
       },
     },
   ];
 
-  for (const { name, patch, html, run } of cases) {
+  for (const { name, patch, html, benchmarkAction } of cases) {
     bench(
       name,
-      withContainer(($c) => {
+      withContainer(($container) => {
         initAEJ({ patch, autoCleanup: false });
-        run($(html ? '<div></div>' : '<span></span>').appendTo($c));
+        benchmarkAction($(html ? '<div></div>' : '<span></span>').appendTo($container));
       }),
       microBenchOptions
     );

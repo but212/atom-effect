@@ -16,7 +16,7 @@ describe('DOM Integration', () => {
   it('should update text content, attributes, styles and classes reactively', async () => {
     const text = atom('Hello');
     const isActive = atom(false);
-    const x = atom(0);
+    const xOffset = atom(0);
     const className = computed(() => (isActive.value ? 'active' : 'inactive'));
 
     const element = document.createElement('div');
@@ -25,7 +25,7 @@ describe('DOM Integration', () => {
     effect(() => {
       element.textContent = text.value;
       element.className = className.value;
-      element.style.transform = `translate(${x.value}px, 0px)`;
+      element.style.transform = `translate(${xOffset.value}px, 0px)`;
       element.classList.toggle('highlight', isActive.value);
     });
 
@@ -36,7 +36,7 @@ describe('DOM Integration', () => {
 
     text.value = 'World';
     isActive.value = true;
-    x.value = 100;
+    xOffset.value = 100;
     await aeNextTick();
     expect(element.textContent).toBe('World');
     expect(element.className).toContain('active');
@@ -48,8 +48,8 @@ describe('DOM Integration', () => {
     // 1. Text Input
     const inputValue = atom('');
     const input = document.createElement('input');
-    input.addEventListener('input', (e) => {
-      inputValue.value = (e.target as HTMLInputElement).value;
+    input.addEventListener('input', (event) => {
+      inputValue.value = (event.target as HTMLInputElement).value;
     });
     effect(() => {
       input.value = inputValue.value;
@@ -72,13 +72,13 @@ describe('DOM Integration', () => {
     const selection = atom('B');
     const select = document.createElement('select');
     for (const value of ['A', 'B']) {
-      const opt = document.createElement('option');
-      opt.value = value;
-      opt.text = value;
-      select.appendChild(opt);
+      const optionElement = document.createElement('option');
+      optionElement.value = value;
+      optionElement.text = value;
+      select.appendChild(optionElement);
     }
-    select.addEventListener('change', (e) => {
-      selection.value = (e.target as HTMLSelectElement).value;
+    select.addEventListener('change', (event) => {
+      selection.value = (event.target as HTMLSelectElement).value;
     });
     effect(() => {
       select.value = selection.value;
@@ -153,7 +153,7 @@ describe('DOM Integration', () => {
       clickCount++;
     };
 
-    const e = effect(() => {
+    const effectInstance = effect(() => {
       element.textContent = label.value;
       button.addEventListener('click', handler);
       return () => button.removeEventListener('click', handler);
@@ -164,7 +164,7 @@ describe('DOM Integration', () => {
     button.click();
     expect(clickCount).toBe(1);
 
-    e.dispose();
+    effectInstance.dispose();
 
     // Cleanup ran — listener removed
     button.click();
@@ -183,7 +183,7 @@ describe('DOM Integration', () => {
     container.appendChild(el1);
     container.appendChild(el2);
 
-    const e1 = effect(() => {
+    const effect1 = effect(() => {
       el1.textContent = title.value;
     });
     effect(() => {
@@ -194,7 +194,7 @@ describe('DOM Integration', () => {
     expect(el1.textContent).toBe('init');
     expect(el2.textContent).toBe('INIT');
 
-    e1.dispose();
+    effect1.dispose();
 
     title.value = 'updated';
     await aeNextTick();

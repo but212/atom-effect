@@ -11,8 +11,8 @@ describe('Debug Module (Black-box)', () => {
     vi.spyOn(console, 'log').mockImplementation(logSpy);
     vi.spyOn(console, 'warn').mockImplementation(warnSpy);
     vi.spyOn(console, 'error').mockImplementation(errorSpy);
-    for (const s of [logSpy, warnSpy, errorSpy]) {
-      s.mockClear();
+    for (const spy of [logSpy, warnSpy, errorSpy]) {
+      spy.mockClear();
     }
 
     // Ensure we start with a clean state
@@ -24,8 +24,8 @@ describe('Debug Module (Black-box)', () => {
     $.debug.enabled = false;
 
     // Clean up any styles or elements created during tests
-    for (const s of document.querySelectorAll('style[data-atom-debug]')) {
-      s.remove();
+    for (const styleTag of document.querySelectorAll('style[data-atom-debug]')) {
+      styleTag.remove();
     }
     if ('adoptedStyleSheets' in document) {
       document.adoptedStyleSheets = [];

@@ -57,7 +57,7 @@ describe('Complex App Scenarios', () => {
     expect($list.children().length).toBe(3);
 
     // Toggle done
-    todos.value = todos.value.map((t: Todo) => (t.id === 1 ? { ...t, done: true } : t));
+    todos.value = todos.value.map((todo: Todo) => (todo.id === 1 ? { ...todo, done: true } : todo));
     await $.nextTick();
     expect($list.find('#todo-1').hasClass('done')).toBe(true);
 

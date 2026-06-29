@@ -102,9 +102,9 @@ let instanceCounter = 0;
  * - When synchronizing a form control (input, textarea, select) with a `WritableAtom`.
  * - When custom parsing, formatting, or input debouncing is required.
  *
- * @param $element - The jQuery element wrap targeting a compatible form control.
- * @param atom - The reactive writable atom acting as the source of truth.
- * @param options - Configuration options for debouncing, custom events, parsing, and formatting.
+ * @param $element The jQuery element wrap targeting a compatible form control.
+ * @param atom The reactive writable atom acting as the source of truth.
+ * @param options Configuration options for debouncing, custom events, parsing, and formatting.
  *
  * @returns An object containing the reactive effect and a cleanup function.
  *

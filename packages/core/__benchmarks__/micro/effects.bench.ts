@@ -28,8 +28,8 @@ describe('Effects: Life-cycle & Propagation', () => {
     `creation & disposal (x${REPEATS})`,
     () => {
       for (let i = 0; i < REPEATS; i++) {
-        const e = effect(lifecycleFn, benchEffectOptions);
-        e.dispose();
+        const effectInstance = effect(lifecycleFn, benchEffectOptions);
+        effectInstance.dispose();
       }
     },
     microBenchOptions
@@ -54,7 +54,7 @@ describe('Effects: Life-cycle & Propagation', () => {
 
   const trigger = atom(0);
   const comp = computed(() => trigger.value * 2);
-  let _val = 0;
+  let executionValue = 0;
   let activeEffect: any;
 
   bench(
@@ -74,13 +74,13 @@ describe('Effects: Life-cycle & Propagation', () => {
       for (let i = 0; i < REPEATS; i++) {
         trigger.value++;
       }
-      keep(_val);
+      keep(executionValue);
     },
     {
       ...microBenchOptions,
       setup: () => {
         activeEffect = effect(() => {
-          _val = comp.value;
+          executionValue = comp.value;
         }, benchEffectOptions);
       },
       teardown: () => {
@@ -93,16 +93,16 @@ describe('Effects: Life-cycle & Propagation', () => {
     `cleanup execution (x${REPEATS})`,
     () => {
       let cleaned = 0;
-      const a = atom(0);
-      const e = effect(() => {
-        keep(a.value);
+      const someAtom = atom(0);
+      const effectInstance = effect(() => {
+        keep(someAtom.value);
         return () => {
           cleaned++;
         };
       }, benchEffectOptions);
 
-      for (let i = 0; i < REPEATS; i++) a.value++;
-      e.dispose();
+      for (let i = 0; i < REPEATS; i++) someAtom.value++;
+      effectInstance.dispose();
       keep(cleaned);
     },
     microBenchOptions
@@ -110,30 +110,30 @@ describe('Effects: Life-cycle & Propagation', () => {
 });
 
 describe('Subscribe / Unsubscribe Hotpath', () => {
-  const a = atom(0);
-  const c = computed(() => a.value * 2);
+  const someAtom = atom(0);
+  const computedInstance = computed(() => someAtom.value * 2);
   const callbackSet = new Set<() => void>();
 
   const subCases = [
     {
       name: 'baseline: Set add + delete',
       run: () => {
-        const cb = () => {};
-        callbackSet.add(cb);
-        callbackSet.delete(cb);
+        const callback = () => {};
+        callbackSet.add(callback);
+        callbackSet.delete(callback);
       },
     },
     {
       name: 'atom.subscribe + unsubscribe',
       run: () => {
-        const unsubscribeCallback = a.subscribe(() => {});
+        const unsubscribeCallback = someAtom.subscribe(() => {});
         unsubscribeCallback();
       },
     },
     {
       name: 'computed.subscribe + unsubscribe',
       run: () => {
-        const unsubscribeCallback = c.subscribe(() => {});
+        const unsubscribeCallback = computedInstance.subscribe(() => {});
         unsubscribeCallback();
       },
     },

@@ -20,11 +20,11 @@ describe('Debug Diagnostics: Runtime Overhead', () => {
   const run = (name: string, enabled: boolean) =>
     bench(
       name,
-      withContainer(($c) => {
+      withContainer(($container) => {
         $.debug.enabled = enabled;
         const source = $.atom('value');
         for (let i = 0; i < 100; i++) {
-          $('<span></span>').appendTo($c).atomText(source);
+          $('<span></span>').appendTo($container).atomText(source);
         }
         for (let i = 0; i < 20; i++) {
           source.value = `update-${i}`;

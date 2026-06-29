@@ -54,17 +54,17 @@ export const cleanupContainer = ($container: JQuery): void => {
 /**
  * Wraps a benchmark function to automatically handle container creation and cleanup.
  */
-export const withContainer = (fn: ($container: JQuery) => void | Promise<void>) => {
+export const withContainer = (benchmarkFunction: ($container: JQuery) => void | Promise<void>) => {
   return () => {
-    const $c = createContainer();
+    const $container = createContainer();
     try {
-      const result = fn($c);
+      const result = benchmarkFunction($container);
       if (result instanceof Promise) {
-        return result.finally(() => cleanupContainer($c));
+        return result.finally(() => cleanupContainer($container));
       }
-      cleanupContainer($c);
+      cleanupContainer($container);
     } catch (error) {
-      cleanupContainer($c);
+      cleanupContainer($container);
       throw error;
     }
   };

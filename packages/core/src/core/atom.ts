@@ -140,7 +140,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   /**
    * Attaches a listener that executes when the atom value changes.
    *
-   * @param listener - Callback receiving the new and previous values.
+   * @param listener Callback receiving the new and previous values.
    * @returns A disposal function to unsubscribe the listener.
    */
   subscribe(listener: SubscriberTarget<T>): () => void {
@@ -270,8 +270,8 @@ function validateAtomOptions<T>(options: AtomOptions<T>): Result<void, Error> {
  * - As the primary source of truth for local or shared application state.
  * - When data needs to be manually updated via the `.value` property.
  *
- * @param initialValue - The starting value of the atom.
- * @param options - Configuration for custom equality logic or delivery strategy.
+ * @param initialValue The starting value of the atom.
+ * @param options Configuration for custom equality logic or delivery strategy.
  *
  * @example
  * ```typescript

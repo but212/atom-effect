@@ -50,7 +50,7 @@ export type Option<T> = Some<T> | None;
  * When to use:
  * - To verify at runtime whether an unknown input conforms to the Option protocol.
  *
- * @param targetValue - The value to check.
+ * @param targetValue The value to check.
  * @returns True if the value is an Option, false otherwise.
  *
  * @example
@@ -90,7 +90,7 @@ export const Option = {
    * When to use:
    * - To wrap a present value into an Option type.
    *
-   * @param someValue - The value to wrap.
+   * @param someValue The value to wrap.
    * @returns A Some instance holding the value.
    *
    * @example
@@ -122,7 +122,7 @@ export const Option = {
    * When to use:
    * - As a type guard to narrow the type to Some.
    *
-   * @param targetOption - The Option to check.
+   * @param targetOption The Option to check.
    * @returns True if the Option is Some.
    *
    * @example
@@ -138,7 +138,7 @@ export const Option = {
    * When to use:
    * - As a type guard to narrow the type to None.
    *
-   * @param targetOption - The Option to check.
+   * @param targetOption The Option to check.
    * @returns True if the Option is None.
    *
    * @example
@@ -154,8 +154,8 @@ export const Option = {
    * When to use:
    * - When a value must be present, raising an error otherwise.
    *
-   * @param targetOption - The Option to extract the value from.
-   * @param message - The error message to throw.
+   * @param targetOption The Option to extract the value from.
+   * @param message The error message to throw.
    * @returns The inner value of Some.
    * @throws {Error} If the Option is None.
    *
@@ -173,7 +173,7 @@ export const Option = {
    * When to use:
    * - For assertion-style extraction when failure indicates a logic bug.
    *
-   * @param targetOption - The Option to extract the value from.
+   * @param targetOption The Option to extract the value from.
    * @returns The inner value of Some.
    * @throws {Error} If the Option is None.
    *
@@ -188,8 +188,8 @@ export const Option = {
    * When to use:
    * - To retrieve the value with a static fallback.
    *
-   * @param targetOption - The Option to extract the value from.
-   * @param fallback - The default value to use if None.
+   * @param targetOption The Option to extract the value from.
+   * @param fallback The default value to use if None.
    * @returns The inner value of Some, or the fallback.
    *
    * @example
@@ -207,8 +207,8 @@ export const Option = {
    * When to use:
    * - To retrieve the value with a lazily computed fallback.
    *
-   * @param targetOption - The Option to extract the value from.
-   * @param fallbackProviderCallback - A function that computes the fallback value.
+   * @param targetOption The Option to extract the value from.
+   * @param fallbackProviderCallback A function that computes the fallback value.
    * @returns The inner value of Some, or the computed fallback.
    *
    * @example
@@ -227,8 +227,8 @@ export const Option = {
    * When to use:
    * - To perform operations on the value without verifying presence first.
    *
-   * @param targetOption - The Option to map.
-   * @param valueMapperCallback - The function to apply to the inner value.
+   * @param targetOption The Option to map.
+   * @param valueMapperCallback The function to apply to the inner value.
    * @returns A new Option containing the transformed value, or None.
    *
    * @example
@@ -251,8 +251,8 @@ export const Option = {
    * When to use:
    * - To compose multiple operations that may each return an Option.
    *
-   * @param targetOption - The Option to chain.
-   * @param chainingCallback - The function returning an Option.
+   * @param targetOption The Option to chain.
+   * @param chainingCallback The function returning an Option.
    * @returns The resulting Option from the function, or None.
    *
    * @example
@@ -274,7 +274,7 @@ export const Option = {
    * When to use:
    * - To convert external nullable values into Option instances.
    *
-   * @param nullableValue - The value to normalize.
+   * @param nullableValue The value to normalize.
    * @returns Some if the value is non-nullable, otherwise None.
    *
    * @example
@@ -289,8 +289,8 @@ export const Option = {
    * When to use:
    * - To perform conditional logic for both cases of an Option.
    *
-   * @param targetOption - The Option to match.
-   * @param branchCallbacks - The handlers for Some and None.
+   * @param targetOption The Option to match.
+   * @param branchCallbacks The handlers for Some and None.
    * @returns The value returned by the executed branch.
    *
    * @example
@@ -310,8 +310,8 @@ export const Option = {
    * When to use:
    * - To filter a wrapped value based on a condition.
    *
-   * @param targetOption - The Option to filter.
-   * @param predicateCallback - The condition to test the value against.
+   * @param targetOption The Option to filter.
+   * @param predicateCallback The condition to test the value against.
    * @returns The Option if the predicate is met, otherwise None.
    *
    * @example
@@ -330,8 +330,8 @@ export const Option = {
    * When to use:
    * - To compare two Option states for equivalence.
    *
-   * @param comparableOptionA - The first Option to compare.
-   * @param comparableOptionB - The second Option to compare.
+   * @param comparableOptionA The first Option to compare.
+   * @param comparableOptionB The second Option to compare.
    * @returns True if both Options represent the same state and value.
    *
    * @example
@@ -353,7 +353,7 @@ export const Option = {
    * When to use:
    * - When interacting with legacy APIs that expect null.
    *
-   * @param targetOption - The Option to convert.
+   * @param targetOption The Option to convert.
    * @returns The inner value of Some, or null.
    *
    * @example
@@ -368,7 +368,7 @@ export const Option = {
    * When to use:
    * - When interacting with legacy APIs that expect undefined.
    *
-   * @param targetOption - The Option to convert.
+   * @param targetOption The Option to convert.
    * @returns The inner value of Some, or undefined.
    *
    * @example
@@ -382,7 +382,7 @@ export const Option = {
    *
    * If any Option is None, it returns None.
    *
-   * @param targetOptions - An array of Option instances.
+   * @param targetOptions An array of Option instances.
    * @returns Option containing an array of values, or None.
    *
    * @example
@@ -403,8 +403,8 @@ export const Option = {
    * If the predicate evaluates to true, it returns Some wrapping the value.
    * Otherwise, it returns None.
    *
-   * @param value - The value to evaluate.
-   * @param predicate - The condition function.
+   * @param value The value to evaluate.
+   * @param predicate The condition function.
    * @returns Option wrapping the value, or None.
    *
    * @example

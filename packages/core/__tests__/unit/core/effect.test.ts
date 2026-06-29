@@ -22,35 +22,35 @@ describe('Effect', () => {
       });
 
       it('maintains correct initial state', async () => {
-        const e = effect(() => {});
-        expect(e.isDisposed).toBe(false);
+        const effectInstance = effect(() => {});
+        expect(effectInstance.isDisposed).toBe(false);
 
         await vi.runAllTimersAsync();
-        expect(e.isExecuting).toBe(false);
-        expect(e.executionCount).toBe(1);
+        expect(effectInstance.isExecuting).toBe(false);
+        expect(effectInstance.executionCount).toBe(1);
 
-        e.dispose();
+        effectInstance.dispose();
       });
 
       it('isExecuting flags active execution periods', async () => {
-        const a = atom(0);
+        const someAtom = atom(0);
         let capturedExecuting = false;
-        let ref: ReturnType<typeof effect> | null = null;
+        let effectReference: ReturnType<typeof effect> | null = null;
 
-        const e = effect(() => {
-          a.value;
-          if (ref) capturedExecuting = ref.isExecuting;
+        const effectInstance = effect(() => {
+          someAtom.value;
+          if (effectReference) capturedExecuting = effectReference.isExecuting;
         });
-        ref = e;
+        effectReference = effectInstance;
 
         await vi.runAllTimersAsync();
-        a.value = 1;
+        someAtom.value = 1;
         await vi.runAllTimersAsync();
 
         expect(capturedExecuting).toBe(true);
-        expect(e.isExecuting).toBe(false);
+        expect(effectInstance.isExecuting).toBe(false);
 
-        e.dispose();
+        effectInstance.dispose();
       });
     });
 
@@ -61,13 +61,13 @@ describe('Effect', () => {
         const doubled = computed(() => source.value * 2);
 
         const log: number[] = [];
-        const e = effect(() => {
+        const effectInstance = effect(() => {
           log.push(doubled.value);
         });
 
         await vi.runAllTimersAsync();
         expect(log).toEqual([0]);
-        expect(e.executionCount).toBe(1);
+        expect(effectInstance.executionCount).toBe(1);
 
         untracked.value = 99;
         await vi.runAllTimersAsync();
@@ -75,51 +75,51 @@ describe('Effect', () => {
 
         source.value = 0;
         await vi.runAllTimersAsync();
-        expect(e.executionCount).toBe(1);
+        expect(effectInstance.executionCount).toBe(1);
 
         source.value = 5;
         await vi.runAllTimersAsync();
         expect(log).toEqual([0, 10]);
-        expect(e.executionCount).toBe(2);
+        expect(effectInstance.executionCount).toBe(2);
 
-        e.dispose();
+        effectInstance.dispose();
       });
 
       it('handles errors when checking if computed dependencies are dirty', async () => {
         const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
         let throwInComputed = false;
-        const c = computed(() => {
+        const computedInstance = computed(() => {
           if (throwInComputed) throw new Error('computed throw');
-          return a.value;
+          return someAtom.value;
         });
 
         let runs = 0;
-        const e = effect(() => {
-          c.value;
+        const effectInstance = effect(() => {
+          computedInstance.value;
           runs++;
         });
         await vi.runAllTimersAsync();
 
         throwInComputed = true;
-        a.value = 1;
+        someAtom.value = 1;
         await vi.runAllTimersAsync();
 
         expect(consoleWarnSpy).toHaveBeenCalled();
         expect(runs).toBe(1);
-        e.dispose();
+        effectInstance.dispose();
       });
 
       it('should remain reactive after the effect function throws before accessing any dependency', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
         let shouldThrow = false;
         let runs = 0;
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
             if (shouldThrow) throw new Error('boom before deps');
-            a.value;
+            someAtom.value;
             runs++;
           },
           { onError: () => {} }
@@ -129,30 +129,30 @@ describe('Effect', () => {
         expect(runs).toBe(1);
 
         shouldThrow = true;
-        a.value = 1;
+        someAtom.value = 1;
         await vi.runAllTimersAsync();
 
         shouldThrow = false;
-        a.value = 2;
+        someAtom.value = 2;
         await vi.runAllTimersAsync();
 
         expect(runs).toBe(2);
-        e.dispose();
+        effectInstance.dispose();
         consoleSpy.mockRestore();
       });
 
       it('should preserve unvisited dependencies when the function throws mid-tracking', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
-        const b = atom(0);
+        const firstAtom = atom(0);
+        const secondAtom = atom(0);
         let shouldThrow = false;
         let runs = 0;
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
-            a.value;
+            firstAtom.value;
             if (shouldThrow) throw new Error('boom mid-tracking');
-            b.value;
+            secondAtom.value;
             runs++;
           },
           { onError: () => {} }
@@ -162,31 +162,31 @@ describe('Effect', () => {
         expect(runs).toBe(1);
 
         shouldThrow = true;
-        a.value = 1;
+        firstAtom.value = 1;
         await vi.runAllTimersAsync();
 
         shouldThrow = false;
 
-        b.value = 99;
+        secondAtom.value = 99;
         await vi.runAllTimersAsync();
 
         expect(runs).toBe(2);
-        e.dispose();
+        effectInstance.dispose();
         consoleSpy.mockRestore();
       });
 
       it('should not truncate dependencies on the error path to preserve existing subscription counts', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
-        const b = atom(0);
-        const c = atom(0);
+        const firstAtom = atom(0);
+        const secondAtom = atom(0);
+        const thirdAtom = atom(0);
         let throwOnRun = false;
         const capturedValues: number[] = [];
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
             if (throwOnRun) throw new Error('kaboom');
-            capturedValues.push(a.value + b.value + c.value);
+            capturedValues.push(firstAtom.value + secondAtom.value + thirdAtom.value);
           },
           { onError: () => {} }
         );
@@ -194,74 +194,76 @@ describe('Effect', () => {
         await vi.runAllTimersAsync();
         expect(capturedValues).toEqual([0]);
 
-        const aSubsBefore = a.subscriberCount();
-        const bSubsBefore = b.subscriberCount();
-        const cSubsBefore = c.subscriberCount();
+        const aSubsBefore = firstAtom.subscriberCount();
+        const bSubsBefore = secondAtom.subscriberCount();
+        const cSubsBefore = thirdAtom.subscriberCount();
 
         expect(aSubsBefore).toBeGreaterThanOrEqual(1);
         expect(bSubsBefore).toBeGreaterThanOrEqual(1);
         expect(cSubsBefore).toBeGreaterThanOrEqual(1);
 
         throwOnRun = true;
-        a.value = 1;
+        firstAtom.value = 1;
         await vi.runAllTimersAsync();
 
-        expect(a.subscriberCount()).toBe(aSubsBefore);
-        expect(b.subscriberCount()).toBe(bSubsBefore);
-        expect(c.subscriberCount()).toBe(cSubsBefore);
+        expect(firstAtom.subscriberCount()).toBe(aSubsBefore);
+        expect(secondAtom.subscriberCount()).toBe(bSubsBefore);
+        expect(thirdAtom.subscriberCount()).toBe(cSubsBefore);
 
-        e.dispose();
+        effectInstance.dispose();
         consoleSpy.mockRestore();
       });
 
       it('should handle cases where the dependency buffer is disposed mid-execution gracefully', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
-        let eB: ReturnType<typeof effect> | null = null;
+        const someAtom = atom(0);
+        let effectB: ReturnType<typeof effect> | null = null;
 
-        const eA = effect(
+        const effectA = effect(
           () => {
-            a.value;
-            if (eB && !eB.isDisposed) eB.dispose();
+            someAtom.value;
+            if (effectB && !effectB.isDisposed) effectB.dispose();
           },
           { sync: true }
         );
 
-        eB = effect(
+        effectB = effect(
           () => {
-            a.value;
+            someAtom.value;
           },
           { sync: true }
         );
 
         expect(() => {
-          a.value = 1;
+          someAtom.value = 1;
         }).not.toThrow();
 
         await vi.runAllTimersAsync();
-        expect(eB.isDisposed).toBe(true);
+        expect(effectB.isDisposed).toBe(true);
 
-        eA.dispose();
+        effectA.dispose();
         consoleSpy.mockRestore();
       });
 
       it('should return Result.ok(false) from prepareExecution when executing re-entrantly', () => {
-        const a = atom(0, { sync: true });
-        let e: unknown;
+        const someAtom = atom(0, { sync: true });
+        let effectInstance: unknown;
         let executions = 0;
-        e = effect(
+        effectInstance = effect(
           () => {
             executions++;
-            a.value;
+            someAtom.value;
             if (executions === 2) {
-              const res = (e as { execute: () => Result<void, Error> }).execute();
-              expect(Result.isOk(res)).toBe(true);
+              const executionResult = (
+                effectInstance as { execute: () => Result<void, Error> }
+              ).execute();
+              expect(Result.isOk(executionResult)).toBe(true);
             }
           },
           { sync: true }
         );
 
-        a.value = 1;
+        someAtom.value = 1;
         expect(executions).toBe(2);
       });
     });
@@ -269,16 +271,16 @@ describe('Effect', () => {
     describe('run()', () => {
       it('forces an immediate synchronous re-execution', async () => {
         let count = 0;
-        const e = effect(() => {
+        const effectInstance = effect(() => {
           count++;
         });
         await vi.runAllTimersAsync();
 
-        e.run();
+        effectInstance.run();
         expect(count).toBe(2);
 
-        e.dispose();
-        expect(() => e.run()).toThrow(EffectError);
+        effectInstance.dispose();
+        expect(() => effectInstance.run()).toThrow(EffectError);
       });
     });
 
@@ -287,7 +289,7 @@ describe('Effect', () => {
         const source = atom(0, { sync: true });
         const order: string[] = [];
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
             source.value;
             order.push('run');
@@ -299,29 +301,29 @@ describe('Effect', () => {
         source.value = 1;
         await vi.runAllTimersAsync();
 
-        e.dispose();
+        effectInstance.dispose();
 
         expect(order).toEqual(['run', 'cleanup', 'run', 'cleanup']);
-        expect(e.isDisposed).toBe(true);
+        expect(effectInstance.isDisposed).toBe(true);
       });
 
       it('gracefully handles missing or invalid cleanup returns', async () => {
         // @ts-expect-error Testing invalid cleanup return
-        const e = effect(() => 'invalid');
+        const effectInstance = effect(() => 'invalid');
         await vi.runAllTimersAsync();
-        expect(() => e.dispose()).not.toThrow();
+        expect(() => effectInstance.dispose()).not.toThrow();
       });
 
       it('severs reactivity after disposal', async () => {
         const source = atom(0);
         let runs = 0;
-        const e = effect(() => {
+        const effectInstance = effect(() => {
           source.value;
           runs++;
         });
         await vi.runAllTimersAsync();
 
-        e.dispose();
+        effectInstance.dispose();
         source.value = 1;
         await vi.runAllTimersAsync();
         expect(runs).toBe(1);
@@ -329,13 +331,13 @@ describe('Effect', () => {
 
       it('should not corrupt dependency tracking when cleanup errors occur during execution', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
         let cleanupShouldThrow = true;
         let runs = 0;
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
-            a.value;
+            someAtom.value;
             runs++;
             return () => {
               if (cleanupShouldThrow) {
@@ -350,15 +352,15 @@ describe('Effect', () => {
         await vi.runAllTimersAsync();
         expect(runs).toBe(1);
 
-        a.value = 1;
+        someAtom.value = 1;
         await vi.runAllTimersAsync();
         expect(runs).toBe(2);
 
-        a.value = 2;
+        someAtom.value = 2;
         await vi.runAllTimersAsync();
         expect(runs).toBe(3);
 
-        e.dispose();
+        effectInstance.dispose();
         consoleSpy.mockRestore();
       });
     });
@@ -370,10 +372,10 @@ describe('Effect', () => {
           throw new Error('onError fail');
         });
 
-        const a = atom(0);
-        const e = effect(
+        const someAtom = atom(0);
+        const effectInstance = effect(
           () => {
-            a.value;
+            someAtom.value;
             throw new Error('Exec Fail');
           },
           { onError }
@@ -383,17 +385,17 @@ describe('Effect', () => {
 
         expect(consoleSpy).toHaveBeenCalled();
         expect(onError).toHaveBeenCalledWith(expect.any(EffectError));
-        expect(() => e.dispose()).not.toThrow();
-        expect(e.isDisposed).toBe(true);
+        expect(() => effectInstance.dispose()).not.toThrow();
+        expect(effectInstance.isDisposed).toBe(true);
       });
 
       it('handles errors in synchronous cleanups and maintains reactivity', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
         let runCount = 0;
 
-        const e = effect(() => {
-          a.value;
+        const effectInstance = effect(() => {
+          someAtom.value;
           runCount++;
           return () => {
             throw new Error('sync cleanup error');
@@ -402,29 +404,29 @@ describe('Effect', () => {
         await vi.runAllTimersAsync();
         expect(runCount).toBe(1);
 
-        a.value = 1;
+        someAtom.value = 1;
         await vi.runAllTimersAsync();
 
         expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
         expect(runCount).toBe(2);
 
-        a.value = 2;
+        someAtom.value = 2;
         await vi.runAllTimersAsync();
         expect(runCount).toBe(3);
 
-        e.dispose();
+        effectInstance.dispose();
       });
 
       it('should remain reactive on subsequent runs after recovering from an error', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
         let shouldThrow = false;
         let runs = 0;
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
             if (shouldThrow) throw new Error('boom');
-            a.value;
+            someAtom.value;
             runs++;
           },
           { onError: () => {} }
@@ -434,18 +436,18 @@ describe('Effect', () => {
         expect(runs).toBe(1);
 
         shouldThrow = true;
-        a.value = 1;
+        someAtom.value = 1;
         await vi.runAllTimersAsync();
 
         shouldThrow = false;
-        e.run();
+        effectInstance.run();
         expect(runs).toBe(2);
 
-        a.value = 2;
+        someAtom.value = 2;
         await vi.runAllTimersAsync();
 
         expect(runs).toBe(3);
-        e.dispose();
+        effectInstance.dispose();
         consoleSpy.mockRestore();
       });
     });
@@ -453,20 +455,20 @@ describe('Effect', () => {
     describe('edge cases', () => {
       it('handles dependency slot overflows (index >= 4)', async () => {
         const atoms = Array.from({ length: 6 }, (_, i) => atom(i));
-        const e = effect(() => {
-          for (const a of atoms) {
-            a.value;
+        const effectInstance = effect(() => {
+          for (const someAtom of atoms) {
+            someAtom.value;
           }
         });
         await vi.runAllTimersAsync();
-        expect(e.executionCount).toBe(1);
+        expect(effectInstance.executionCount).toBe(1);
 
         const a5 = atoms[5];
         if (!a5) throw new Error('Setup failed');
         a5.value = 100;
         await vi.runAllTimersAsync();
-        expect(e.executionCount).toBe(2);
-        e.dispose();
+        expect(effectInstance.executionCount).toBe(2);
+        effectInstance.dispose();
       });
 
       it('handles errors when a dependency subscription fails', async () => {
@@ -477,7 +479,7 @@ describe('Effect', () => {
           throw new Error('subscribe fail');
         });
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
             badDep.value;
           },
@@ -487,14 +489,14 @@ describe('Effect', () => {
         await vi.runAllTimersAsync();
         expect(consoleError).toHaveBeenCalled();
         expect(onError).toHaveBeenCalled();
-        e.dispose();
+        effectInstance.dispose();
       });
 
       it('runs the effect when there are no active dependencies, even if _depSlots.length is non-zero (due to null slots)', async () => {
-        const e = effect(() => {});
+        const effectInstance = effect(() => {});
         await vi.runAllTimersAsync();
 
-        const depSlots = Reflect.get(e, '_depSlots');
+        const depSlots = Reflect.get(effectInstance, '_depSlots');
         depSlots.lock();
         depSlots.push({ node: atom(0), version: 0, unsubscribeCallback: () => {} });
         depSlots.setAt(0, null);
@@ -503,20 +505,20 @@ describe('Effect', () => {
         expect(depSlots.length).toBe(1);
         expect(depSlots.size).toBe(0);
 
-        const initialCount = e.executionCount;
-        Reflect.get(e, 'execute').call(e, false);
+        const initialCount = effectInstance.executionCount;
+        Reflect.get(effectInstance, 'execute').call(effectInstance, false);
 
-        expect(e.executionCount).toBe(initialCount + 1);
-        e.dispose();
+        expect(effectInstance.executionCount).toBe(initialCount + 1);
+        effectInstance.dispose();
       });
 
       it('should not log errors twice when infinite loop is detected', async () => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-        const a = atom(0);
-        const _e = effect(() => {
-          a.value;
-          a.value = a.value + 1;
+        const someAtom = atom(0);
+        const _effectInstance = effect(() => {
+          someAtom.value;
+          someAtom.value = someAtom.value + 1;
         });
 
         await vi.runAllTimersAsync();
@@ -534,7 +536,7 @@ describe('Effect', () => {
         const staleCleanup = vi.fn();
         const freshCleanup = vi.fn();
 
-        const e = effect(async () => {
+        const effectInstance = effect(async () => {
           const value = source.value;
           await sleep(10);
           return value === 0 ? staleCleanup : freshCleanup;
@@ -543,7 +545,7 @@ describe('Effect', () => {
         await sleep(2);
         source.value = 1;
         await sleep(30);
-        e.dispose();
+        effectInstance.dispose();
 
         expect(staleCleanup).toHaveBeenCalled();
         expect(freshCleanup).toHaveBeenCalled();
@@ -556,27 +558,27 @@ describe('Effect', () => {
         });
 
         const cleanup = vi.fn();
-        const e = effect(() => promise);
+        const effectInstance = effect(() => promise);
 
         await sleep(10);
         resolvePromise(cleanup);
 
         await Promise.resolve();
 
-        e.dispose();
+        effectInstance.dispose();
         expect(cleanup).toHaveBeenCalledTimes(1);
       });
 
       it('should ignore async promise rejections after effect re-execution (stale session)', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
 
         let firstReject!: (error: Error) => void;
         let secondResolve!: (value: undefined) => void;
         let runIdx = 0;
 
-        const e = effect(() => {
-          a.value;
+        const effectInstance = effect(() => {
+          someAtom.value;
           runIdx++;
           if (runIdx === 1) {
             return new Promise((_r, rej) => {
@@ -590,7 +592,7 @@ describe('Effect', () => {
 
         await sleep(5);
 
-        a.value = 1;
+        someAtom.value = 1;
         await sleep(5);
 
         firstReject(new Error('stale rejection'));
@@ -599,7 +601,7 @@ describe('Effect', () => {
         expect(consoleSpy).not.toHaveBeenCalled();
 
         secondResolve(undefined);
-        e.dispose();
+        effectInstance.dispose();
         consoleSpy.mockRestore();
       });
 
@@ -619,8 +621,8 @@ describe('Effect', () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
         let resolveAsync!: (value: () => void) => void;
-        const e = effect(() => new Promise<() => void>((r) => (resolveAsync = r)));
-        e.dispose();
+        const effectInstance = effect(() => new Promise<() => void>((r) => (resolveAsync = r)));
+        effectInstance.dispose();
         resolveAsync(() => {
           throw new Error('cleanup error');
         });
@@ -634,39 +636,39 @@ describe('Effect', () => {
     describe('frequency constraints & budgets', () => {
       it('auto-disposes to prevent infinite loops based on frequency constraints', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
-            if (a.value > 0) a.value++;
+            if (someAtom.value > 0) someAtom.value++;
           },
           { sync: true, maxExecutionsPerFlush: 3 }
         );
 
-        a.value = 1;
+        someAtom.value = 1;
         await sleep(30);
 
-        expect(e.isDisposed).toBe(true);
+        expect(effectInstance.isDisposed).toBe(true);
         expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
       });
 
       it('should provide a clear error when run() is called after budget is exceeded, rather than double faulting', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0);
+        const someAtom = atom(0);
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
-            if (a.value > 0) a.value++;
+            if (someAtom.value > 0) someAtom.value++;
           },
           { sync: true, maxExecutionsPerFlush: 2 }
         );
 
-        a.value = 1;
+        someAtom.value = 1;
         await sleep(30);
 
-        expect(e.isDisposed).toBe(true);
+        expect(effectInstance.isDisposed).toBe(true);
 
-        expect(() => e.run()).toThrow(EffectError);
+        expect(() => effectInstance.run()).toThrow(EffectError);
 
         consoleSpy.mockRestore();
       });
@@ -677,10 +679,10 @@ describe('Effect', () => {
           .spyOn(globalScheduler, 'incrementFlushExecutionCount')
           .mockReturnValue(Result.err(new Error('Global flush limit exceeded')));
 
-        const a = atom(0);
+        const someAtom = atom(0);
         expect(() => {
           effect(() => {
-            a.value;
+            someAtom.value;
           });
         }).toThrow('Global flush limit exceeded');
 
@@ -690,18 +692,18 @@ describe('Effect', () => {
 
       it('disposes effect when executions per second limit is exceeded', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const a = atom(0, { sync: true });
+        const someAtom = atom(0, { sync: true });
 
-        const e = effect(
+        const effectInstance = effect(
           () => {
-            a.value;
+            someAtom.value;
           },
           { sync: true, maxExecutionsPerSecond: 1 }
         );
 
-        a.value = 1;
+        someAtom.value = 1;
 
-        expect(e.isDisposed).toBe(true);
+        expect(effectInstance.isDisposed).toBe(true);
         expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
 
         consoleSpy.mockRestore();
@@ -710,8 +712,8 @@ describe('Effect', () => {
 
     describe('internal constructor validation', () => {
       it('should throw EffectMustBeFunction error when private EffectImpl constructor is invoked with a non-function', () => {
-        const e = effect(() => {});
-        const EffectImplClass = e.constructor;
+        const effectInstance = effect(() => {});
+        const EffectImplClass = effectInstance.constructor;
         expect(
           () => new (EffectImplClass as unknown as new (fn: unknown) => unknown)(null)
         ).toThrow(EffectError);

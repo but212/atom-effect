@@ -8,17 +8,19 @@ import { atom, BRAND, BrandFlags, computed, isAtom, isComputed } from '../../dis
 import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
 describe('Type Guards: isAtom / isComputed', () => {
-  const a = atom(0);
-  const c = computed(() => a.value);
-  const e = { [BRAND]: BrandFlags.Effect };
+  const someAtom = atom(0);
+  const computedInstance = computed(() => someAtom.value);
+  const effectMock = { [BRAND]: BrandFlags.Effect };
   // Mix of valid and invalid targets to avoid mono-morphic optimization
-  const targets = [a, c, e, 0, 'str', null, {}, []];
+  const targets = [someAtom, computedInstance, effectMock, 0, 'str', null, {}, []];
 
   const guardCases = [
     {
       name: 'baseline: basic property check',
-      check: (t: any) =>
-        t !== null && (typeof t === 'object' || typeof t === 'function') && t[BRAND] !== undefined,
+      check: (target: any) =>
+        target !== null &&
+        (typeof target === 'object' || typeof target === 'function') &&
+        target[BRAND] !== undefined,
     },
     { name: 'isAtom checks', check: isAtom },
     { name: 'isComputed checks', check: isComputed },
@@ -29,7 +31,7 @@ describe('Type Guards: isAtom / isComputed', () => {
       `${name} (x${REPEATS * targets.length})`,
       () => {
         for (let i = 0; i < REPEATS; i++) {
-          for (const t of targets) keep(check(t));
+          for (const target of targets) keep(check(target));
         }
       },
       microBenchOptions

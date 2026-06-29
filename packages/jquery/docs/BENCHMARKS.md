@@ -99,7 +99,8 @@ Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 - **Browser**: Chromium (via Vitest browser mode)
 - **OS**: ubuntu-latest (GitHub Actions)
 
-> **[View Detailed Results](./BENCHMARKS_DETAILED.md)**
+> [!TIP]
+> [View Detailed Results](./BENCHMARKS_DETAILED.md) for per-operation breakdown.
 
 ---
 

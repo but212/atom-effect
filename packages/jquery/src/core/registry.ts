@@ -24,7 +24,7 @@ let isAutoCleanupEnabled = true;
  * allowing it to be disabled in environments or scenarios where manual
  * lifecycle management is strictly enforced.
  *
- * @param allowed - True to allow auto-cleanup, false to disable it.
+ * @param allowed True to allow auto-cleanup, false to disable it.
  * @internal
  */
 export function setAutoCleanupAllowed(allowed: boolean): void {
@@ -133,8 +133,8 @@ class BindingRegistry {
   /**
    * Registers a ShadowRoot to a host element for AEJ lifecycle tracking.
    *
-   * @param host - The host element.
-   * @param shadowRoot - The ShadowRoot (can be 'open' or 'closed').
+   * @param host The host element.
+   * @param shadowRoot The ShadowRoot (can be 'open' or 'closed').
    * @internal
    */
   registerShadow(host: Element, shadowRoot: ShadowRoot): void {
@@ -160,7 +160,7 @@ class BindingRegistry {
    * Optimization: This adds a CSS marker used by `cleanupDescendants` to
    * locate isolated Shadow DOM trees efficiently without full-tree traversal.
    *
-   * @param host - The host element to mark.
+   * @param host The host element to mark.
    * @internal
    */
   markHost(host: Element): void {
@@ -268,7 +268,7 @@ class BindingRegistry {
   /**
    * Disposes of all reactive resources associated with a single node.
    *
-   * @param node - The node to clean up.
+   * @param node The node to clean up.
    */
   cleanup(node: Node): void {
     const state = nodeStates.get(node);

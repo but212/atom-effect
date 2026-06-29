@@ -8,38 +8,38 @@ import { aeNextTick, atom, batch, computed, effect, untracked } from '@/index';
 
 describe('Version Semantics', () => {
   it('atom version increments on change, stays on same-value assignment', () => {
-    const a = atom(0);
-    const v0 = getNodeVersion(a);
+    const someAtom = atom(0);
+    const initialVersion = getNodeVersion(someAtom);
 
-    a.value = 1;
-    expect(getNodeVersion(a)).toBe(v0 + 1);
+    someAtom.value = 1;
+    expect(getNodeVersion(someAtom)).toBe(initialVersion + 1);
 
-    const v1 = getNodeVersion(a);
-    a.value = 1;
-    expect(getNodeVersion(a)).toBe(v1);
+    const firstVersion = getNodeVersion(someAtom);
+    someAtom.value = 1;
+    expect(getNodeVersion(someAtom)).toBe(firstVersion);
   });
 
   it('computed version bumps only on resolution with changed value', () => {
     const source = atom(0);
-    const c = computed(() => Math.floor(source.value / 10));
-    c.value;
-    const v0 = getNodeVersion(c);
+    const computedInstance = computed(() => Math.floor(source.value / 10));
+    computedInstance.value;
+    const initialVersion = getNodeVersion(computedInstance);
 
-    c.invalidate();
-    expect(getNodeVersion(c)).toBe(v0);
+    computedInstance.invalidate();
+    expect(getNodeVersion(computedInstance)).toBe(initialVersion);
 
     source.value = 5;
-    c.value;
-    expect(getNodeVersion(c)).toBe(v0);
+    computedInstance.value;
+    expect(getNodeVersion(computedInstance)).toBe(initialVersion);
 
     source.value = 99;
-    c.invalidate();
-    c.value;
-    expect(getNodeVersion(c)).toBeGreaterThan(v0);
+    computedInstance.invalidate();
+    computedInstance.value;
+    expect(getNodeVersion(computedInstance)).toBeGreaterThan(initialVersion);
   });
 
   it('computed bumps version on async error', async () => {
-    const c = computed(
+    const computedInstance = computed(
       async () => {
         await new Promise((r) => setTimeout(r, 5));
         throw new Error('async-fail');
@@ -47,13 +47,13 @@ describe('Version Semantics', () => {
       { defaultValue: -1 }
     );
 
-    c.value;
-    const v0 = getNodeVersion(c);
+    computedInstance.value;
+    const initialVersion = getNodeVersion(computedInstance);
 
     await new Promise((r) => setTimeout(r, 30));
 
-    expect(getNodeVersion(c)).toBeGreaterThan(v0);
-    expect(c.hasError).toBe(true);
+    expect(getNodeVersion(computedInstance)).toBeGreaterThan(initialVersion);
+    expect(computedInstance.hasError).toBe(true);
   });
 });
 
@@ -80,14 +80,14 @@ describe('Push-Pull Propagation', () => {
   it('effect pulls computed value during dirty check', async () => {
     const source = atom(0);
     let computeCount = 0;
-    const c = computed(() => {
+    const computedInstance = computed(() => {
       computeCount++;
       return source.value * 2;
     });
 
     const results: number[] = [];
-    const e = effect(() => {
-      results.push(c.value);
+    const effectInstance = effect(() => {
+      results.push(computedInstance.value);
     });
     expect(computeCount).toBe(1);
     expect(results).toEqual([0]);
@@ -97,77 +97,77 @@ describe('Push-Pull Propagation', () => {
     expect(results).toContain(10);
     expect(computeCount).toBeGreaterThanOrEqual(2);
 
-    e.dispose();
+    effectInstance.dispose();
   });
 });
 
 describe('Dependency Tracking', () => {
   it('tracks only accessed dependencies and prunes on branch switch', async () => {
     const toggle = atom(true);
-    const a = atom('A');
-    const b = atom('B');
+    const firstAtom = atom('A');
+    const secondAtom = atom('B');
     let runs = 0;
-    const c = computed(() => {
+    const computedInstance = computed(() => {
       runs++;
-      return toggle.value ? a.value : b.value;
+      return toggle.value ? firstAtom.value : secondAtom.value;
     });
 
-    expect(c.value).toBe('A');
+    expect(computedInstance.value).toBe('A');
     expect(runs).toBe(1);
 
-    b.value = 'B2';
+    secondAtom.value = 'B2';
     await aeNextTick();
-    c.invalidate();
-    expect(c.value).toBe('A');
+    computedInstance.invalidate();
+    expect(computedInstance.value).toBe('A');
     expect(runs).toBe(2);
 
     toggle.value = false;
-    c.invalidate();
-    expect(c.value).toBe('B2');
+    computedInstance.invalidate();
+    expect(computedInstance.value).toBe('B2');
     expect(runs).toBe(3);
 
     const runsAfterSwitch = runs;
-    a.value = 'A2';
+    firstAtom.value = 'A2';
     await aeNextTick();
     expect(runs).toBe(runsAfterSwitch);
   });
 
   it('untracked reads do not create dependencies', () => {
-    const a = atom(1);
-    const b = atom(100);
-    const c = computed(() => a.value + untracked(() => b.value));
+    const firstAtom = atom(1);
+    const secondAtom = atom(100);
+    const computedInstance = computed(() => firstAtom.value + untracked(() => secondAtom.value));
 
-    expect(c.value).toBe(101);
-    b.value = 200;
-    expect(c.value).toBe(101);
+    expect(computedInstance.value).toBe(101);
+    secondAtom.value = 200;
+    expect(computedInstance.value).toBe(101);
   });
 
   it('deduplicates same dependency accessed multiple times', () => {
-    const a = atom(1);
-    const c = computed(() => a.value + a.value + a.value);
-    expect(c.value).toBe(3);
-    expect(a.subscriberCount()).toBe(1);
+    const someAtom = atom(1);
+    const computedInstance = computed(() => someAtom.value + someAtom.value + someAtom.value);
+    expect(computedInstance.value).toBe(3);
+    expect(someAtom.subscriberCount()).toBe(1);
   });
 });
 
 describe('Batch Guarantees', () => {
   it('defers all notifications until outermost batch completes', async () => {
-    const a = atom(0);
-    const b = atom(0);
+    const firstAtom = atom(0);
+    const secondAtom = atom(0);
     const results: [number, number][] = [];
 
     effect(() => {
-      results.push([a.value, b.value]);
+      results.push([firstAtom.value, secondAtom.value]);
     });
     results.length = 0;
 
     batch(() => {
-      a.value = 1;
+      firstAtom.value = 1;
       batch(() => {
-        b.value = 2;
-        a.value = 3;
+        secondAtom.value = 2;
+        firstAtom.value = 3;
       });
-      b.value = 4;
+      secondAtom.value = 4;
     });
 
     await aeNextTick();
@@ -177,24 +177,24 @@ describe('Batch Guarantees', () => {
 
 describe('Disposal Finality', () => {
   it('all node types become unusable after dispose and dispose is idempotent', () => {
-    const a = atom(42);
-    const c = computed(() => a.value);
-    c.value;
-    const e = effect(() => {
-      void c.value;
+    const someAtom = atom(42);
+    const computedInstance = computed(() => someAtom.value);
+    computedInstance.value;
+    const effectInstance = effect(() => {
+      void computedInstance.value;
     });
 
-    a.dispose();
-    c.dispose();
-    e.dispose();
+    someAtom.dispose();
+    computedInstance.dispose();
+    effectInstance.dispose();
 
-    expect(a.value).toBeUndefined();
-    expect(() => c.value).toThrow();
-    expect(() => e.run()).toThrow();
+    expect(someAtom.value).toBeUndefined();
+    expect(() => computedInstance.value).toThrow();
+    expect(() => effectInstance.run()).toThrow();
 
-    a.dispose();
-    c.dispose();
-    e.dispose();
+    someAtom.dispose();
+    computedInstance.dispose();
+    effectInstance.dispose();
   });
 
   it('manual disposal prevents memory leaks and zombie listeners', async () => {
@@ -213,10 +213,10 @@ describe('Disposal Finality', () => {
 
     const safeContainer: number[] = [];
     {
-      const _safeEffect = effect(() => {
+      const safeEffect = effect(() => {
         safeContainer.push(source.value);
       });
-      _safeEffect.dispose();
+      safeEffect.dispose();
     }
 
     source.value = 2;
@@ -230,16 +230,16 @@ describe('Disposal Finality', () => {
 describe('Error Isolation', () => {
   it('subscriber errors do not affect sibling subscribers', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const a = atom(0);
+    const someAtom = atom(0);
     const bad = vi.fn(() => {
       throw new Error('bad');
     });
     const good = vi.fn();
 
-    a.subscribe(bad);
-    a.subscribe(good);
+    someAtom.subscribe(bad);
+    someAtom.subscribe(good);
 
-    a.value = 1;
+    someAtom.value = 1;
     await aeNextTick();
 
     expect(bad).toHaveBeenCalled();
@@ -248,14 +248,14 @@ describe('Error Isolation', () => {
   });
 
   it('computed wraps errors as ComputedError with cause', () => {
-    const c = computed(() => {
+    const computedInstance = computed(() => {
       throw new TypeError('raw');
     });
     try {
-      c.value;
-    } catch (e) {
-      expect(Reflect.get(e as object, 'name')).toBe('ComputedError');
-      expect(Reflect.get(e as object, 'cause')).toBeInstanceOf(TypeError);
+      computedInstance.value;
+    } catch (err) {
+      expect(Reflect.get(err as object, 'name')).toBe('ComputedError');
+      expect(Reflect.get(err as object, 'cause')).toBeInstanceOf(TypeError);
     }
   });
 
@@ -292,49 +292,49 @@ describe('Error Isolation', () => {
     trigger2.value = true;
     await aeNextTick();
 
-    const a = atom(0);
-    expect(computed(() => a.value + 1).value).toBe(1);
+    const someAtom = atom(0);
+    expect(computed(() => someAtom.value + 1).value).toBe(1);
     consoleSpy.mockRestore();
   });
 });
 
 describe('Equality Contract', () => {
   it('atom uses Object.is (NaN === NaN)', async () => {
-    const a = atom(NaN);
+    const someAtom = atom(NaN);
     const listener = vi.fn();
-    a.subscribe(listener);
+    someAtom.subscribe(listener);
 
-    a.value = NaN;
+    someAtom.value = NaN;
     await aeNextTick();
     expect(listener).not.toHaveBeenCalled();
   });
 
   it('computed supports custom equality to suppress version bumps', () => {
     const source = atom({ id: 1, data: 'a' });
-    const c = computed(() => source.value, {
+    const computedInstance = computed(() => source.value, {
       equal: (a, b) => a.id === b.id,
     });
 
-    c.value;
-    const v0 = getNodeVersion(c);
+    computedInstance.value;
+    const initialVersion = getNodeVersion(computedInstance);
 
     source.value = { id: 1, data: 'b' };
-    c.value;
-    expect(getNodeVersion(c)).toBe(v0);
+    computedInstance.value;
+    expect(getNodeVersion(computedInstance)).toBe(initialVersion);
   });
 });
 
 describe('Computed State Machine', () => {
   it('sync: IDLE → RESOLVED on first access', () => {
-    const c = computed(() => 42);
-    expect(c.state).toBe('idle');
+    const computedInstance = computed(() => 42);
+    expect(computedInstance.state).toBe('idle');
 
-    expect(c.value).toBe(42);
-    expect(c.state).toBe('resolved');
+    expect(computedInstance.value).toBe(42);
+    expect(computedInstance.state).toBe('resolved');
   });
 
   it('async: IDLE → PENDING → RESOLVED', async () => {
-    const c = computed(
+    const computedInstance = computed(
       async () => {
         await new Promise((r) => setTimeout(r, 10));
         return 99;
@@ -342,38 +342,38 @@ describe('Computed State Machine', () => {
       { defaultValue: 0 }
     );
 
-    expect(c.value).toBe(0);
-    expect(c.isPending).toBe(true);
+    expect(computedInstance.value).toBe(0);
+    expect(computedInstance.isPending).toBe(true);
 
     await new Promise((r) => setTimeout(r, 30));
-    expect(c.value).toBe(99);
-    expect(c.isResolved).toBe(true);
+    expect(computedInstance.value).toBe(99);
+    expect(computedInstance.isResolved).toBe(true);
   });
 });
 
 describe('Subscription Protocol', () => {
   it('unsubscribe decrements count and is idempotent', () => {
-    const a = atom(0);
-    const unsubscribeCallback = a.subscribe(() => {});
-    a.subscribe(() => {});
-    expect(a.subscriberCount()).toBe(2);
+    const someAtom = atom(0);
+    const unsubscribeCallback = someAtom.subscribe(() => {});
+    someAtom.subscribe(() => {});
+    expect(someAtom.subscriberCount()).toBe(2);
 
     unsubscribeCallback();
-    expect(a.subscriberCount()).toBe(1);
+    expect(someAtom.subscriberCount()).toBe(1);
 
     unsubscribeCallback();
-    expect(a.subscriberCount()).toBe(1);
+    expect(someAtom.subscriberCount()).toBe(1);
   });
 
   it('supports both function and object subscribers', async () => {
-    const a = atom(0);
+    const someAtom = atom(0);
     const fnCalls: number[] = [];
     const objCalls: number[] = [];
 
-    a.subscribe((value) => fnCalls.push(value ?? 0));
-    a.subscribe({ execute: () => objCalls.push(a.peek()) });
+    someAtom.subscribe((value) => fnCalls.push(value ?? 0));
+    someAtom.subscribe({ execute: () => objCalls.push(someAtom.peek()) });
 
-    a.value = 5;
+    someAtom.value = 5;
     await aeNextTick();
 
     expect(fnCalls).toEqual([5]);
@@ -381,17 +381,17 @@ describe('Subscription Protocol', () => {
   });
 
   it('concurrent unsubscribe prevents notification in current batch', () => {
-    const a = atom(0, { sync: true });
+    const someAtom = atom(0, { sync: true });
     const calls: string[] = [];
     let unsub2: () => void;
 
-    a.subscribe(() => {
+    someAtom.subscribe(() => {
       calls.push('first');
       unsub2();
     });
-    unsub2 = a.subscribe(() => calls.push('second'));
+    unsub2 = someAtom.subscribe(() => calls.push('second'));
 
-    a.value = 1;
+    someAtom.value = 1;
     expect(calls).toEqual(['first']);
   });
 });
@@ -401,7 +401,7 @@ describe('Async Computed Safety', () => {
     const source = atom(1);
     const results: number[] = [];
 
-    const c = computed(
+    const computedInstance = computed(
       async () => {
         const value = source.value;
         await new Promise((r) => setTimeout(r, 20));
@@ -411,16 +411,16 @@ describe('Async Computed Safety', () => {
     );
 
     effect(() => {
-      results.push(c.value);
+      results.push(computedInstance.value);
     });
 
     await new Promise((r) => setTimeout(r, 40));
-    expect(c.value).toBe(1);
+    expect(computedInstance.value).toBe(1);
 
     source.value = 2;
     await new Promise((r) => setTimeout(r, 60));
 
-    expect(c.value).toBe(2);
+    expect(computedInstance.value).toBe(2);
     expect(results[results.length - 1]).toBe(2);
   });
 });

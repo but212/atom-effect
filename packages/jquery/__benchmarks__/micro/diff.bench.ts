@@ -7,10 +7,13 @@ import $ from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
 describe('List Diffing: Reconciliation computation overhead (1000 items)', () => {
-  const baseItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, value: `Item ${i}` }));
-  const newItems = Array.from({ length: 100 }, (_, i) => ({
-    id: 1000 + i,
-    value: `New Item ${i}`,
+  const baseItems = Array.from({ length: 1000 }, (_, index) => ({
+    id: index,
+    value: `Item ${index}`,
+  }));
+  const newItems = Array.from({ length: 100 }, (_, index) => ({
+    id: 1000 + index,
+    value: `New Item ${index}`,
   }));
 
   const cases = [
@@ -25,9 +28,9 @@ describe('List Diffing: Reconciliation computation overhead (1000 items)', () =>
   for (const { name, next } of cases) {
     bench(
       name,
-      withContainer(($c) => {
+      withContainer(($container) => {
         const list = $.atom(baseItems);
-        $c.atomList(list, { key: 'id', render: () => '' });
+        $container.atomList(list, { key: 'id', render: () => '' });
         list.value = next;
       }),
       microBenchOptions

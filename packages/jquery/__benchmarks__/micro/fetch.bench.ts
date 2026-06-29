@@ -25,8 +25,11 @@ $.ajax = (): JQuery.jqXHR => {
 };
 
 describe('Fetch: Setup & Dependency Pipeline', () => {
-  const run = (name: string, fn: ($c: JQuery) => void | Promise<void>, iterations = 200) =>
-    bench(name, withContainer(fn), { ...microBenchOptions, iterations });
+  const run = (
+    name: string,
+    benchmarkFunction: ($container: JQuery) => void | Promise<void>,
+    iterations = 200
+  ) => bench(name, withContainer(benchmarkFunction), { ...microBenchOptions, iterations });
 
   run('setup eager atomFetch', () => {
     mockResponse = { id: 1, name: 'Alice' };
@@ -68,7 +71,7 @@ describe('Fetch: Setup & Dependency Pipeline', () => {
       const fetchAtom = $.atomFetch<string>(() => '/api/user', {
         defaultValue: '',
         eager: true,
-        transform: (data) => (data as FetchMockData).name.toUpperCase(),
+        transform: (rawData) => (rawData as FetchMockData).name.toUpperCase(),
       });
       await fetchAtom.value;
       fetchAtom.dispose();

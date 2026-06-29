@@ -22,21 +22,24 @@ describe('Chainable Methods', () => {
     });
 
     it('atomClass: handles multiple classes with overlapping protection', async () => {
-      const a1 = $.atom(true);
-      const a2 = $.atom(true);
+      const firstAtomClassState = $.atom(true);
+      const secondAtomClassState = $.atom(true);
       const isActive = $.atom(false);
       const $element = appendToBody('<div>');
 
       // Initial state
       $element.atomClass(' bg-red-500  font-bold ', isActive);
-      $element.atomClass({ 'active highlight': a1, 'active large': a2 });
+      $element.atomClass({
+        'active highlight': firstAtomClassState,
+        'active large': secondAtomClassState,
+      });
 
       await $.nextTick();
       expect($element.hasClass('bg-red-500')).toBe(false);
       expect($element.hasClass('active highlight large')).toBe(true);
 
-      // bug prevention: if a1 becomes false, 'active' should NOT be removed because a2 still needs it
-      a1.value = false;
+      // bug prevention: if firstAtomClassState becomes false, 'active' should NOT be removed because secondAtomClassState still needs it
+      firstAtomClassState.value = false;
       await $.nextTick();
       expect($element.hasClass('highlight')).toBe(false);
       expect($element.hasClass('active')).toBe(true);
@@ -139,8 +142,8 @@ describe('Chainable Methods', () => {
 
     it('atomChecked: syncs checkbox and radio (User & Programmatic Sync)', async () => {
       const check = $.atom(true);
-      const rA = $.atom(true);
-      const rB = $.atom(false);
+      const stateAtomA = $.atom(true);
+      const stateAtomB = $.atom(false);
       // Guardrail: special characters in radio name (\, ")
       const radioName = 'user[\\"role\\"]';
 
@@ -150,8 +153,8 @@ describe('Chainable Methods', () => {
       const $rB = $(`<input type="radio" name='${radioName}' value="B">`).appendTo($form);
 
       $check.atomChecked(check);
-      $rA.atomChecked(rA);
-      $rB.atomChecked(rB);
+      $rA.atomChecked(stateAtomA);
+      $rB.atomChecked(stateAtomB);
 
       await $.nextTick();
       expect($check.prop('checked')).toBe(true);
@@ -160,18 +163,18 @@ describe('Chainable Methods', () => {
       $check.prop('checked', false).trigger('change');
       expect(check.value).toBe(false);
 
-      // 2. Radio interaction (rB checked -> rA becomes false)
+      // 2. Radio interaction (stateAtomB checked -> stateAtomA becomes false)
       $rB.prop('checked', true).trigger('change');
       await $.nextTick();
-      expect(rB.value).toBe(true);
-      expect(rA.value).toBe(false);
+      expect(stateAtomB.value).toBe(true);
+      expect(stateAtomA.value).toBe(false);
 
-      // 3. Programmatic update (rA atom = true -> rB atom must become false)
-      rA.value = true;
+      // 3. Programmatic update (stateAtomA atom = true -> stateAtomB atom must become false)
+      stateAtomA.value = true;
       await $.nextTick();
       expect($rA.prop('checked')).toBe(true);
       expect($rB.prop('checked')).toBe(false);
-      expect(rB.value).toBe(false);
+      expect(stateAtomB.value).toBe(false);
     });
 
     it('atomForm: recursive form data binding', async () => {
@@ -189,14 +192,14 @@ describe('Chainable Methods', () => {
     });
 
     it('atomChecked: radio unregistration handles detached elements correctly without memory leaks', async () => {
-      const val1 = $.atom(true);
-      const val2 = $.atom(false);
+      const stateAtom1 = $.atom(true);
+      const stateAtom2 = $.atom(false);
       const $form = appendToBody('<form>');
       const $radio1 = $('<input type="radio" name="leak-test" value="A">').appendTo($form);
       const $radio2 = $('<input type="radio" name="leak-test" value="B">').appendTo($form);
 
-      $radio1.atomChecked(val1);
-      $radio2.atomChecked(val2);
+      $radio1.atomChecked(stateAtom1);
+      $radio2.atomChecked(stateAtom2);
       await $.nextTick();
 
       // Detach the element from the form/DOM before unbinding
@@ -249,15 +252,15 @@ describe('Chainable Methods', () => {
         </div>
       `).appendTo(shadowB);
 
-      const rA1 = $.atom(true);
-      const rA2 = $.atom(false);
-      const rB1 = $.atom(true);
-      const rB2 = $.atom(false);
+      const stateAtomA1 = $.atom(true);
+      const stateAtomA2 = $.atom(false);
+      const stateAtomB1 = $.atom(true);
+      const stateAtomB2 = $.atom(false);
 
-      $divA.find('#r-a1').atomChecked(rA1);
-      $divA.find('#r-a2').atomChecked(rA2);
-      $divB.find('#r-b1').atomChecked(rB1);
-      $divB.find('#r-b2').atomChecked(rB2);
+      $divA.find('#r-a1').atomChecked(stateAtomA1);
+      $divA.find('#r-a2').atomChecked(stateAtomA2);
+      $divB.find('#r-b1').atomChecked(stateAtomB1);
+      $divB.find('#r-b2').atomChecked(stateAtomB2);
 
       await $.nextTick();
 
@@ -271,12 +274,12 @@ describe('Chainable Methods', () => {
       $divA.find('#r-a2').prop('checked', true).trigger('change');
       await $.nextTick();
 
-      expect(rA2.value).toBe(true);
-      expect(rA1.value).toBe(false);
+      expect(stateAtomA2.value).toBe(true);
+      expect(stateAtomA1.value).toBe(false);
 
       // Verify shadowB is completely unaffected
-      expect(rB1.value).toBe(true);
-      expect(rB2.value).toBe(false);
+      expect(stateAtomB1.value).toBe(true);
+      expect(stateAtomB2.value).toBe(false);
       expect($divB.find('#r-b1').prop('checked')).toBe(true);
       expect($divB.find('#r-b2').prop('checked')).toBe(false);
 
