@@ -1,28 +1,57 @@
-# tsconfig
-# pnpm
+# 1. Package Managers & Dependency Directories
+node_modules/
 .pnpm-store
 .pnpm-modules.yaml
+
+# 2. Logs & Diagnostic Reports
+*.log
+pnpm-debug.log*
 .pnpm-debug.log
 .pnpm-log.txt
 
-# Turborepo
-.turbo
-
-node_modules/
+# 3. Build Outputs, Caches & Transpilation
 dist/
-coverage/
-*.log
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-*.swp
-*.swo
-# Benchmark results
-benchmarks/results/
+.turbo/
+*.tsbuildinfo
+temp/
 
-# Performance baseline (optional - commit if you want to track baseline)
+# 4. Testing, Coverage & Benchmarks
+coverage/
+.vitest/
+playwright-report/
+test-results/
+.playwright/
+benchmarks/results/
 .performance/
 
-# Graphify
+# 5. Local Configurations & Environment Secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# 6. Editors, IDEs & OS Files
+## IDEs
+.vscode/
+.idea/
+.history/
+
+## Editor Temp Files
+*.swp
+*.swo
+*.sw?
+*~
+
+## macOS
+.DS_Store
+.Spotlight-V100
+.Trashes
+
+## Windows
+Thumbs.db
+desktop.ini
+*.lnk
+
+# 7. Tool-Specific Ignores
+## Graphify (Auto-generated callgraphs/dependency graphs)
 graphify-out/
