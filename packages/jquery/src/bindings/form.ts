@@ -166,6 +166,28 @@ class InterceptedLens<T extends object, U> implements WritableAtom<unknown> {
     this.#base.dispose();
   }
 
+  // --- ReactiveNodeBase & Dependency Delegation ---
+  get id(): number {
+    return this.#base.id;
+  }
+  get version(): number {
+    return this.#base.version;
+  }
+  get flags(): number {
+    return this.#base.flags;
+  }
+  get _lastSeenEpoch(): number {
+    return this.#base._lastSeenEpoch;
+  }
+  get isComputed(): boolean {
+    return this.#base.isComputed;
+  }
+  get isRejected(): boolean {
+    return (this.#base as unknown as { isRejected: boolean }).isRejected ?? false;
+  }
+  get hasError(): boolean {
+    return this.#base.hasError;
+  }
   get [BRAND](): number {
     return Reflect.get(this.#base, BRAND) as number;
   }
@@ -281,19 +303,27 @@ export function bindForm<T extends object, U = unknown>(
   };
 
   const ensureField = (name: string): FieldEntry => {
-    let entry = entries.get(name);
+    const entry = entries.get(name);
     if (entry) {
       entry.refCount++;
       return entry;
     }
 
     const dotPath = normalizePath(name);
-    const baseLens = lensFor(targetAtom)(dotPath as Paths<T>);
-    const atom = new InterceptedLens(name, baseLens, options);
+    const baseLens = (lensFor(targetAtom) as (path: string) => WritableAtom<unknown>)(dotPath);
+    const atom = new InterceptedLens(
+      name,
+      baseLens as WritableAtom<PathValue<T, Paths<T>>>,
+      options
+    );
 
-    entry = { atom, name, refCount: 1 };
-    entries.set(name, entry);
-    return entry;
+    const newEntry: FieldEntry = {
+      atom: atom as unknown as WritableAtom<unknown>,
+      name,
+      refCount: 1,
+    };
+    entries.set(name, newEntry);
+    return newEntry;
   };
 
   const applyValidation = (
