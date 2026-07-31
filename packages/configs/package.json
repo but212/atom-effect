@@ -15,8 +15,8 @@
     "./tsconfig": "./tsconfig.base.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --tsconfig tsconfig.build.json --external unplugin-dts --external @vue/language-core",
-    "dev": "pnpm run build --watch",
+    "build": "node scripts/build.ts",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "clean:build": "rimraf dist",
     "test": "vitest",
     "test:run": "vitest run",
@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "rimraf": "catalog:",
-    "tsup": "catalog:build",
     "unplugin-dts": "catalog:build",
     "vite": "catalog:build",
     "vitest": "catalog:test"

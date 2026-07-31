@@ -215,7 +215,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
             include: ['src/**/*'],
             exclude: ['src/**/*.test.ts', '__tests__/**/*', '__benchmarks__/**/*', 'node_modules'],
             tsconfigPath: `${packageDir}/tsconfig.build.json`,
-            bundleTypes: true,
+            bundleTypes: false,
             ...dtsOptions,
           }),
         ],
