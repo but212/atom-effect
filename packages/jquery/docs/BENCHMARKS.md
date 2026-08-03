@@ -8,10 +8,10 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 | ---------- | ---------- | ----- | ------- |
 | **Text Binding** | Update (100el × 50) | 1.1K ops/sec | Direct text node synchronization |
 | **Class Binding** | Toggle (100el × 100) | 1.1K ops/sec | Class list manipulation |
-| **List Render** | Reconciliation (100 items) | 2.6K ops/sec | Keyed 3-pass reconciliation |
+| **List Render** | Reconciliation (100 items) | 2.7K ops/sec | Keyed 3-pass reconciliation |
 | **Input (DOM→Atom)** | 100 events | 2.0K ops/sec | Direct event-to-atom synchronization |
-| **Todo App** | Full workflow | 21.9K ops/sec | Batch-optimized workflow execution |
-| **Dashboard** | Fan-in chain | 2.5K ops/sec | Multi-level propagation chain |
+| **Todo App** | Full workflow | 23.6K ops/sec | Batch-optimized workflow execution |
+| **Dashboard** | Fan-in chain | 2.4K ops/sec | Multi-level propagation chain |
 
 ---
 
@@ -110,11 +110,11 @@ Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 | ---------- | ------ | -------- |
 | atomText update (100el × 50) | 1.1K ops/sec | Frequency for 5,000 total text node updates |
 | atomClass toggle (100el × 100) | 1.1K ops/sec | Frequency for 10,000 total class list toggles |
-| atomList reconciliation (100 items) | 2.6K ops/sec | Frequency for 100-item reconciliation cycles |
+| atomList reconciliation (100 items) | 2.7K ops/sec | Frequency for 100-item reconciliation cycles |
 | atomVal DOM→Atom (100 events) | 2.0K ops/sec | Frequency for 100 sequential input events |
-| Todo full workflow | 21.9K ops/sec | Frequency for combined CRUD operations |
-| Dashboard fan-in | 2.5K ops/sec | Frequency for multi-level fan-in propagation |
-| atomForm O(1) Scaling | 427.9K ops/sec | Validates consistent performance across form sizes |
+| Todo full workflow | 23.6K ops/sec | Frequency for combined CRUD operations |
+| Dashboard fan-in | 2.4K ops/sec | Frequency for multi-level fan-in propagation |
+| atomForm O(1) Scaling | 402.0K ops/sec | Validates consistent performance across form sizes |
 
 ## Contributing Benchmarks
 
