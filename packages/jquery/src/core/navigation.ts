@@ -63,7 +63,7 @@ export const getAbsoluteUrl = (url: string, base: string): Result<URL, Error> =>
  * SEO Metadata Schema
  * Defines the mapping between internal state keys and physical HTML tags.
  */
-export const META_SCHEMA = [
+const META_SCHEMA = [
   {
     selector: 'meta[name="description"]',
     tag: 'meta',
@@ -274,7 +274,7 @@ export function getScrollDecision(params: {
 }
 
 /** @internal */
-export function extractMetaData(document: Document | Element): Record<string, string> {
+function extractMetaData(document: Document | Element): Record<string, string> {
   const meta: Record<string, string> = {};
   for (const schema of META_SCHEMA) {
     const metaElement = document.querySelector(schema.selector);

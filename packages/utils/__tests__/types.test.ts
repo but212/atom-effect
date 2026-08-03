@@ -1,5 +1,5 @@
 import { assertType, describe, it } from 'vitest';
-import type { Option, Result } from '@/index';
+import type { Result } from '@/index';
 import type { Equal, Merge, Prettify, UnionToIntersection } from '@/types';
 
 describe('Type Utilities', () => {
@@ -37,11 +37,8 @@ describe('Type Utilities', () => {
     });
   });
 
-  describe('Option and Result Type Narrowing', () => {
+  describe('Result Type Narrowing', () => {
     it('should narrow types correctly', () => {
-      type OptionType = Option<string | number>;
-      assertType<Equal<Extract<OptionType, { ok: true }>['value'], string | number>>(true);
-
       type Mapped = ReturnType<typeof Result.mapErr<number, string | Error, number>>;
       assertType<Equal<Mapped, Result<number, number>>>(true);
     });

@@ -158,16 +158,6 @@ export const DEBUG_CONFIG = {
 
 /**
  * @internal
- * Optimization: Buffer limits for dependency list management.
- * Flat linear array searches are faster than Map lookups up to 8 items
- * due to CPU cache locality and lower initialization overhead.
- */
-export const BUFFER_CONFIG = {
-  MAP_THRESHOLD: 8,
-} as const;
-
-/**
- * @internal
  * Constraint: Limits lens property generation to prevent stack overflow.
  * Protects the path resolver against circular or excessively deep hierarchies.
  */
@@ -181,7 +171,6 @@ export const LENS_CONFIG = {
  */
 export const EPOCH_CONSTANTS = {
   UNINITIALIZED: -1,
-  MIN: 1,
 } satisfies Record<string, number>;
 
 /**

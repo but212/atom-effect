@@ -8,11 +8,11 @@ The following table summarizes key performance metrics observed in version `0.34
 
 | Category | Metric | Result | Context |
 | :--- | :--- | :--- | :--- |
-| **Atom** | Read (untracked) | 5.12M ops/sec | Performance of non-reactive reads (x10) |
-| **Computed** | Recompute (cached) | 362.8K ops/sec | Cached re-evaluation performance (x10) |
-| **Effect** | Propagation | 1.16M ops/sec | Full atom → computed → effect cycle (x10) |
-| **Workflow** | Todo App | 145.4K ops/sec | Comprehensive workflow performance |
-| **Latency** | 100 Atom updates | 0.0114 ms | Mean execution time for batched updates |
+| **Atom** | Read (untracked) | 5.32M ops/sec | Performance of non-reactive reads (x10) |
+| **Computed** | Recompute (cached) | 374.5K ops/sec | Cached re-evaluation performance (x10) |
+| **Effect** | Propagation | 1.04M ops/sec | Full atom → computed → effect cycle (x10) |
+| **Workflow** | Todo App | 150.6K ops/sec | Comprehensive workflow performance |
+| **Latency** | 100 Atom updates | 0.0105 ms | Mean execution time for batched updates |
 
 ---
 

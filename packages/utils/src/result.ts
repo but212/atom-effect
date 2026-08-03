@@ -8,7 +8,6 @@
  * Encourages explicit error handling by representing computations that can either succeed (Ok) or fail (Err).
  */
 
-import { Option } from './option';
 import { RESULT_BRAND, RESULT_SYMBOL } from './symbols';
 
 type ResultBase = {
@@ -359,15 +358,6 @@ export const Result = {
       return Result.err(ensureError(caughtError));
     }
   },
-
-  /**
-   * Converts a Result to an Option, dropping the error data.
-   *
-   * @param targetResult The Result to convert.
-   * @returns Some wrapping the value if Ok, otherwise None.
-   */
-  toOption: <T, E>(targetResult: Result<T, E>): Option<T> =>
-    targetResult.ok ? Option.some(targetResult.value) : Option.none,
 
   /**
    * Checks for structural and value equality between two Results.

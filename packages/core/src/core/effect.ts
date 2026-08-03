@@ -73,7 +73,6 @@ class EffectImpl
 
   _subscriberSlots: SlotBuffer<SubscriberTarget<void>> | null = null;
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
-  _depMap: Map<Dependency, number> | null = null;
   _depFlags: number = BUFFER_FLAGS.NONE;
 
   /** @internal */

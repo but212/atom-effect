@@ -100,55 +100,9 @@ export interface BaseViteConfigOptions {
 }
 
 /**
- * The build target derived from the `BUILD_TARGET` environment variable.
- */
-export let activeBuildTarget = process.env.BUILD_TARGET;
-
-const updateBuildTarget = (newBuildTarget: string | undefined) => {
-  activeBuildTarget = newBuildTarget;
-  isTypesBuild = newBuildTarget === 'types';
-  isBundleBuild = newBuildTarget === 'bundle';
-  isLibraryBuild = newBuildTarget === 'lib';
-};
-
-if (typeof process === 'object' && process !== null) {
-  const originalEnv = process.env;
-  const envProxy = new Proxy(originalEnv, {
-    get(targetEnv, propertyKey) {
-      return targetEnv[propertyKey as string];
-    },
-    set(targetEnv, propertyKey, newTargetValue) {
-      targetEnv[propertyKey as string] = newTargetValue;
-      if (propertyKey === 'BUILD_TARGET') {
-        updateBuildTarget(newTargetValue);
-      }
-      return true;
-    },
-  });
-
-  Object.defineProperty(process, 'env', {
-    get() {
-      return envProxy;
-    },
-    configurable: true,
-    enumerable: true,
-  });
-}
-
-/**
- * Tracks if the build target is 'types' (only TypeScript declarations).
- */
-export let isTypesBuild = activeBuildTarget === 'types';
-
-/**
  * Tracks if the build target is 'bundle' (bundled UMD builds).
  */
-export let isBundleBuild = activeBuildTarget === 'bundle';
-
-/**
- * Tracks if the build target is 'lib' (esm/cjs library builds).
- */
-export let isLibraryBuild = activeBuildTarget === 'lib';
+export const isBundleBuild = process.env.BUILD_TARGET === 'bundle';
 
 /**
  * Generates a base Vite configuration for building libraries and bundles.
@@ -166,7 +120,7 @@ export let isLibraryBuild = activeBuildTarget === 'lib';
  * });
  */
 export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig => {
-  const activeTarget = options.buildTarget ?? activeBuildTarget;
+  const activeTarget = options.buildTarget ?? process.env.BUILD_TARGET;
   const isTargetTypes = activeTarget === 'types';
   const isTargetBundle = activeTarget === 'bundle';
   const isTargetLibrary = activeTarget === 'lib';

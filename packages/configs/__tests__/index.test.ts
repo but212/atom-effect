@@ -11,7 +11,6 @@ vi.mock('unplugin-dts/vite', () => ({
 }));
 
 import {
-  activeBuildTarget,
   baseCoverageExclusionPatterns,
   defineViteConfig,
   defineVitestBenchConfig,
@@ -20,9 +19,6 @@ import {
   getBaseVitestBenchmarkConfig,
   getBaseVitestConfig,
   getResolveConfig,
-  isBundleBuild,
-  isLibraryBuild,
-  isTypesBuild,
   toKebabCase,
 } from '../src/index';
 
@@ -259,31 +255,6 @@ describe('packages/configs', () => {
         expect(vitestConfig.test?.benchmark?.include).toEqual(['__benchmarks__/**/*.bench.ts']);
         expect(vitestConfig.test?.benchmark?.exclude).toContain('**/custom-exclude/**');
       });
-    });
-  });
-
-  describe('environment target constants', () => {
-    it.each([
-      { envValue: 'lib', expectedLib: true, expectedTypes: false, expectedBundle: false },
-      { envValue: 'types', expectedLib: false, expectedTypes: true, expectedBundle: false },
-      { envValue: 'bundle', expectedLib: false, expectedTypes: false, expectedBundle: true },
-      { envValue: undefined, expectedLib: false, expectedTypes: false, expectedBundle: false },
-    ])('should reflect process.env.BUILD_TARGET = "$envValue" dynamically', ({
-      envValue,
-      expectedLib,
-      expectedTypes,
-      expectedBundle,
-    }) => {
-      const originalTarget = process.env.BUILD_TARGET;
-      try {
-        process.env.BUILD_TARGET = envValue;
-        expect(activeBuildTarget).toBe(envValue);
-        expect(isLibraryBuild).toBe(expectedLib);
-        expect(isTypesBuild).toBe(expectedTypes);
-        expect(isBundleBuild).toBe(expectedBundle);
-      } finally {
-        process.env.BUILD_TARGET = originalTarget;
-      }
     });
   });
 });

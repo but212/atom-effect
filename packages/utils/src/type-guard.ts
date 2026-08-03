@@ -1,5 +1,3 @@
-import type { Result } from './result';
-
 /**
  * Determines whether a value is a Promise or a Thenable.
  *
@@ -25,22 +23,3 @@ export function isPromise<T = unknown>(value: unknown): value is PromiseLike<T> 
       typeof (value as { then?: unknown }).then === 'function')
   );
 }
-
-export { isOption } from './option';
-
-/**
- * Checks if a value is a valid {@link Result} instance.
- *
- * When to use:
- * - When validating if an unknown object is a Result from this library.
- *
- * Logic:
- * - Uses `RESULT_SYMBOL` for disambiguation, preventing {@link Option}
- *   or generic objects from being misidentified as Results.
- *
- * @example
- * if (isResult(value)) {
- *   if (value.ok) console.log(value.value);
- * }
- */
-export { isResult } from './result';
