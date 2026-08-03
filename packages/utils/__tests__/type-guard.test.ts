@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isOption, isPromise, isResult, Option, Result } from '@/index';
-import { OPTION_SYMBOL, RESULT_SYMBOL } from '../src/symbols';
+import { isPromise, isResult, Result } from '@/index';
+import { RESULT_SYMBOL } from '../src/symbols';
 
 describe('Type Guards', () => {
   describe('isPromise', () => {
@@ -147,36 +147,6 @@ describe('Type Guards', () => {
     });
   });
 
-  describe('isOption', () => {
-    it('should return true for Option.some and Option.none', () => {
-      expect(isOption(Option.some(42))).toBe(true);
-      expect(isOption(Option.none)).toBe(true);
-    });
-
-    it('should return false for non-Option values', () => {
-      expect(isOption(null)).toBe(false);
-      expect(isOption(undefined)).toBe(false);
-      expect(isOption(42)).toBe(false);
-      expect(isOption('some')).toBe(false);
-      expect(isOption({})).toBe(false);
-      expect(isOption({ ok: true })).toBe(false);
-    });
-
-    it('should reject fake Option objects', () => {
-      const fakeOption = {
-        ok: true,
-        value: 42,
-        [OPTION_SYMBOL]: true,
-      };
-      expect(isOption(fakeOption)).toBe(false);
-    });
-
-    it('should distinguish Option from Result', () => {
-      expect(isOption(Result.ok(42))).toBe(false);
-      expect(isOption(Result.err(new Error('fail')))).toBe(false);
-    });
-  });
-
   describe('isResult', () => {
     it('should return true for Ok and Err Result instances', () => {
       expect(isResult(Result.ok(42))).toBe(true);
@@ -200,11 +170,6 @@ describe('Type Guards', () => {
         [RESULT_SYMBOL]: true,
       };
       expect(isResult(fakeResult)).toBe(false);
-    });
-
-    it('should distinguish Result from Option', () => {
-      expect(isResult(Option.some(42))).toBe(false);
-      expect(isResult(Option.none)).toBe(false);
     });
   });
 });

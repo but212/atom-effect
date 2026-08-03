@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isResult, Option, Result } from '@/index';
+import { isResult, Result } from '@/index';
 import { RESULT_SYMBOL } from '../src/symbols';
 
 // Logic: Shared test value that throws during string conversion to test error-handling robustness
@@ -82,10 +82,6 @@ describe('Result<T, E>', () => {
       expect(isResult(null)).toBe(false);
       expect(isResult(undefined)).toBe(false);
       expect(isResult(42)).toBe(false);
-    });
-
-    it('isResult() should distinguish Result from Option', () => {
-      expect(isResult(Option.some(1))).toBe(false);
     });
 
     it('isResult() should reject fake Result literals created externally', () => {
@@ -315,15 +311,6 @@ describe('Result<T, E>', () => {
           invalidResultObject as Result<unknown, unknown>
         )
       ).toBe(false);
-    });
-  });
-
-  describe('Interoperability & Conversion', () => {
-    it('Result.toOption() should convert Ok to Option.some and Err to Option.none', () => {
-      const successResult = Result.ok(42);
-      const errorResult = Result.err('fail');
-      expect(Result.toOption(successResult)).toMatchObject(Option.some(42));
-      expect(Result.toOption(errorResult)).toBe(Option.none);
     });
   });
 
