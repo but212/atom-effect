@@ -1,4 +1,3 @@
-import type { SlotBuffer } from '@but212/atom-effect-utils';
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
 import { STATE_FLAGS } from '@/constants';

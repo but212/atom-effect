@@ -211,6 +211,19 @@ describe('Computed', () => {
 
       expect(computedInstance.peek()).toBe(42);
     });
+
+    it('should preserve disposed peek compatibility without retaining executable computation state', () => {
+      const source = atom(1);
+      const computation = vi.fn(() => source.value);
+      const computedInstance = computed(computation);
+
+      expect(computedInstance.value).toBe(1);
+      computedInstance.dispose();
+      source.value = 2;
+
+      expect(computedInstance.peek()).toBe(1);
+      expect(computation).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('subscribe()', () => {

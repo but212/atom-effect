@@ -40,6 +40,7 @@ Async computeds are treated as state machines with sessions.
 - **Synchronous tracking boundary**: Only dependencies accessed **before the first `await`** are tracked. Dependencies after an `await` return their current value but do not trigger re-evaluation. This keeps tracking deterministic and avoids long-lived tracking contexts.
 - **AsyncState**: `'idle'`, `'pending'`, `'resolved'`, `'rejected'`.
 - **Pending read**: Accessing `.value` while a promise is pending throws `ComputedError` unless a `defaultValue` is configured; with `defaultValue`, that value is returned during pending.
+- **Effect cleanup sessions**: When an effect execution begins, all earlier asynchronous cleanup sessions become stale. A cleanup resolved by an older session cannot be installed as the current cleanup after a newer execution.
 
 ## 4. Scheduling & batching
 
@@ -51,9 +52,10 @@ Async computeds are treated as state machines with sessions.
 ## 5. Lifecycle
 
 - **Identity**: Each node gets a unique monotonic `DependencyId`.
-- **Disposal**: All nodes implement `.dispose()` severing strong references (subscriber slot buffers, dep maps) for immediate collection.
-- **Effect cleanup**: The previous cleanup handle runs before each effect re-run and on disposal.
+- **Disposal**: All nodes implement `.dispose()` severing graph references (subscriber slot buffers, dep maps) for immediate collection. Atoms release their stored value; computeds release executable computation, equality, default-value, and error-handler state while retaining only the last cached value required by `.peek()` compatibility.
+- **Effect cleanup**: The previous cleanup handle runs before each effect re-run and on disposal. A cleanup returned by a stale asynchronous execution is discarded and cannot overwrite a newer session.
 - **Post-disposal atom reads**: `value`/`peek()` return `undefined`; writes are no-ops. Check `isDisposed` before relying on reads.
+- **Post-disposal computed reads**: `.value` remains an invalid operation, while `.peek()` preserves the last cached value for compatibility without retaining executable computation state.
 
 ## 6. Error handling (Result propagation)
 

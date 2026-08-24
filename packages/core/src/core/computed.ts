@@ -366,6 +366,15 @@ class ComputedAtomImpl<T>
     this.#markDirty();
   }
 
+  #releaseComputationState(): void {
+    this.#computationCallback = () => {
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
+    };
+    this.#isEqual = DEFAULT_EQUAL;
+    this.#defaultValue = NO_DEFAULT_VALUE;
+    this.#onErrorCallback = null;
+  }
+
   /**
    * Logic: Resource Teardown
    * Disconnects from all dependencies and releases memory.
@@ -377,6 +386,7 @@ class ComputedAtomImpl<T>
     disposeAll(this);
 
     this._subscriberSlots?.clear();
+    this.#releaseComputationState();
     this.flags =
       COMPUTED_STATE_FLAGS.DISPOSED |
       COMPUTED_STATE_FLAGS.IS_COMPUTED |

@@ -393,7 +393,7 @@ theme.value = 'dark';
 
 ### Injecting Context
 
-Consumers maintain connections even if relocated within the DOM hierarchy.
+Consumers maintain connections even if relocated within the DOM hierarchy. A subscribed proxy resolves its current provider immediately, follows provider registration/removal and DOM topology changes, and releases its temporary subscription when unsubscribed or disposed. Replacing a provider also disposes its previous CSS synchronization effect.
 
 ```javascript
 class DeepChild extends HTMLElement {

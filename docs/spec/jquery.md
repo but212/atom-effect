@@ -89,8 +89,8 @@ Implementation invariants:
 | DOM relocation | ATTACHED → DETACHED → ATTACHED | None | `MutationObserver` checks `isConnected` during microtask; synchronous moves preserve bindings. |
 | `.detach()` | ATTACHED → DETACHED | None | `registry.keep()` bypasses auto-cleanup. |
 | Native removal | ATTACHED → DESTROYED | Deferred | Observer runs `cleanupTree()` in a microtask if still disconnected. |
-| Auto-setup | OFFLINE → ATTACHED | Immediate | `ContextEngine` runs `setup()` same microtask. |
-| `teardown()` | ATTACHED → DESTROYED | Deterministic | Synchronous `ComponentState.dispose()` then `ContextEngine.release()`. |
+| Auto-setup | OFFLINE → ATTACHED | Immediate | The component controller runs `setup()` in the same microtask. |
+| `teardown()` | ATTACHED → DESTROYED | Deterministic | Synchronous `ComponentState.dispose()` and provider cleanup, followed by registry cleanup. |
 
 ### 3.3 `BindingRegistry`
 
@@ -110,17 +110,20 @@ Implementation invariants:
 ### 3.6 Invariant rules
 
 1. **Idempotent cleanup**: redundant `cleanup()`/`teardown()` calls are side-effect free; once DESTROYED, no re-initialization.
-2. **Context consistency**: DOM structure mutation or release triggers a `ContextEngine` version bump, so late-bound injection proxies re-evaluate providers (no ghost references).
-3. **Shadow DOM transparency**: resource discovery and lifecycle manage open and closed shadow roots.
+2. **Context consistency**: Provider registration, replacement, teardown, or relevant DOM structure mutation increments the shared context revision, so late-bound injection proxies re-evaluate providers without ghost references.
+3. **Provider ownership**: Each provider key has one record containing its value and optional CSS synchronization effect. Replacing or tearing down a provider disposes the previous effect before releasing the record.
+4. **Shadow DOM transparency**: Resource discovery and lifecycle manage open and closed shadow roots.
 
-### 3.7 Reference counting (`ContextEngine`)
+### 3.7 Context subscription lifecycle
 
-`retain`/`release` for global resources (the global `MutationObserver`):
+`provideAtom` and `injectAtom` use synchronous direct-walk discovery through parent pointers, crossing a shadow boundary via `ShadowRoot.host`.
 
-- Retain on static-spec instantiation (not yet connected) or `injectAtom`.
-- First `retain` initializes and connects the observer to `document.documentElement`.
-- Release on `teardown()` or injection-proxy disposal.
-- At count zero, the observer disconnects and caches clear.
+- A subscribed injection proxy evaluates once before subscribing, so an already-present atom provider is observed immediately.
+- Provider atoms notify through the proxy's temporary computed subscription; static providers notify when the shared context revision changes.
+- Provider registration, replacement, component teardown, and child-list mutations increment the shared revision.
+- Atom-backed CSS synchronization effects, including effects created by direct `provideAtom()` calls, are registered with the `BindingRegistry` for automatic teardown.
+- Each active proxy subscription registers structure callbacks on the relevant document/root `RootObserver` instances. Unsubscribing or disposing the proxy removes those callbacks and the temporary computed.
+- `subscriberCount()` reports active proxy subscriptions; `dispose()` releases all subscriptions and is idempotent.
 
 ## 4. Security & sanitization policy
 
@@ -172,7 +175,7 @@ Implementation invariants:
 ### Controller internals
 
 - **`ComponentState`**: centralizes attribute lenses, slot listeners, effects for one instance; `teardown()` releases all synchronously.
-- **Context engine** (`provideAtom`/`injectAtom`): just-in-time observation via reference counting; direct-walk discovery traverses parent pointers (crossing shadow via `host`) for O(depth) resolution, falling back to bubbling `CustomEvent`; `injectAtom` returns a late-bound Proxy tracking `ContextEngine.version`.
+- **Context engine** (`provideAtom`/`injectAtom`): direct-walk discovery traverses parent pointers (crossing shadow via `host`) for O(depth) resolution. A shared context revision invalidates subscribed late-bound proxies when providers or DOM topology change; proxy subscriptions own their temporary computed and `RootObserver` callbacks.
 - **Stylesheet caching**: identical style strings parsed once, shared via `adoptedStyleSheets`; FIFO eviction, max 100 entries.
 
 ## 6. Routing & navigation

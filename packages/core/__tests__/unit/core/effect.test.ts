@@ -551,6 +551,36 @@ describe('Effect', () => {
         expect(freshCleanup).toHaveBeenCalled();
       });
 
+      it('invalidates pending cleanup when a later run is synchronous', async () => {
+        const source = atom(0);
+        const staleCleanup = vi.fn();
+        let resolveFirst!: (cleanup: () => void) => void;
+        let runCount = 0;
+
+        const effectInstance = effect(() => {
+          source.value;
+          runCount++;
+          if (runCount === 1) {
+            return new Promise<() => void>((resolve) => {
+              resolveFirst = resolve;
+            });
+          }
+          return undefined;
+        });
+
+        await sleep(5);
+        source.value = 1;
+        await sleep(5);
+
+        resolveFirst(staleCleanup);
+        await sleep(10);
+        source.value = 2;
+        await sleep(10);
+
+        expect(staleCleanup).toHaveBeenCalledTimes(1);
+        effectInstance.dispose();
+      });
+
       it('ensures async consistency by resolving results in the first microtask cycle', async () => {
         let resolvePromise!: (value: () => void) => void;
         const promise = new Promise<() => void>((r) => {
