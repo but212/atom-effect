@@ -320,7 +320,7 @@ export interface SchedulerState {
   sessionEpoch: number;
   sessionExecutionCount: number;
   queueSize: number;
-  onOverflow: ((droppedCount: number) => void) | null;
+  onOverflow: ((droppedCount: number, droppedJobs: SchedulerJob[]) => void) | null;
   nextEpoch(): number;
   startFlush(): boolean;
   endFlush(): void;

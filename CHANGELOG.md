@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+- **Scheduler**: `onOverflow` now receives the dropped jobs as a second argument: `onOverflow(droppedCount, droppedJobs)`.
+- **Scheduler**: Dropped jobs are re-queued exactly once after an overflow so transient overload still converges; a recurring overflow remains terminal until a clean drain re-arms recovery.
+
+### jQuery
+
+- **atomList**: Items with duplicate keys are now rendered (with a duplicate-key warning) instead of being silently dropped from the DOM.
+- **atomList**: Previous snapshots superseded by duplicate-key re-renders are torn down through the normal `onRemove` lifecycle, preventing orphaned DOM nodes.
+
 ## [0.34.0]
 
 ### Core

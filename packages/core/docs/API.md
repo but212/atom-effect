@@ -44,7 +44,7 @@ counter.dispose();
 - `peek(): T`: Returns the current value without registering a dependency. Recommended for one-time reads or initialization logic.
 - `subscribe(listener: ((newValue?: T, oldValue?: T) => void) | Subscriber): () => void`: Attaches a listener that executes whenever the value changes. Returns an unsubscription function. The callback parameters are optional as certain transition states may propagate `undefined`. Low-level scheduler integrations can provide a `Subscriber` object implementing the `execute(): void` interface.
 - `subscriberCount(): number`: Returns the number of active subscribers. Primarily used for diagnostics.
-- `dispose(): void`: Permanently disables the atom, clearing all subscribers and releasing the stored value for garbage collection.
+- `dispose(): void`: Permanently disables the atom, clearing all subscribers and releasing the stored value for garbage collection. After disposal, reading `value` or `peek()` returns `undefined` (regardless of the declared type parameter `T`) and setting `value` is a no-op — check `isDisposed` before relying on reads.
 - `isDisposed`: A read-only boolean indicating if the atom has been disposed. (Note: Excluded from the public `ReadonlyAtom`/`WritableAtom` TypeScript interfaces, but accessible on the runtime instance).
 
 ### Options

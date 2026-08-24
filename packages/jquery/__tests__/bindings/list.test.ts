@@ -617,7 +617,7 @@ describe('$.atomList (Integration)', () => {
   });
 
   describe('Edge Cases & Robustness', () => {
-    it('should ignore duplicate keys gracefully without crashing during updates', async () => {
+    it('should render duplicate-key items instead of silently dropping data', async () => {
       // Unique keys first to bypass initial fragment-optimization
       const items = $.atom([{ id: 1 }, { id: 2 }]);
 
@@ -633,8 +633,35 @@ describe('$.atomList (Integration)', () => {
 
       await $.nextTick();
 
-      // Primary items remain, duplicate is ignored
-      expect($container.find('span').length).toBe(3); // 1, 3, 2
+      // Both duplicate-key items are rendered (warned, but data is not dropped)
+      const text = $container
+        .find('span')
+        .map((_, element) => $(element).text())
+        .get();
+      expect(text).toEqual(['1', '3', '3', '2']);
+    });
+
+    it('should render duplicates on initial render and stay fresh on later updates', async () => {
+      const list = $.atom([{ id: 1 }, { id: 2 }, { id: 2 }]);
+
+      $container.atomList(list, {
+        key: 'id',
+        render: (i: { id: number }) => `<span>${i.id}</span>`,
+        update: ($element, i: { id: number }) => $element.text(`u${i.id}`),
+      });
+
+      await $.nextTick();
+      expect($container.find('span').length).toBe(3);
+
+      // Resolve the duplicate; every rendered item must reflect current data
+      list.value = [{ id: 1 }, { id: 3 }, { id: 2 }];
+      await $.nextTick();
+
+      const text = $container
+        .find('span')
+        .map((_, element) => $(element).text())
+        .get();
+      expect(text).toEqual(['1', '3', '2']);
     });
 
     it('should correctly handle trimming logic when old item was ignored due to duplicate keys', async () => {
@@ -750,6 +777,52 @@ describe('$.atomList (Integration)', () => {
         .map((_, element) => $(element).text())
         .get();
       expect(text).toEqual(['1', '3', '4', '2']);
+    });
+  });
+
+  describe('Reconciliation Invariants', () => {
+    it('keeps rendered keys in sync with source keys across random mutations', async () => {
+      // Deterministic PRNG (mulberry32) for reproducible sequences.
+      let seed = 42;
+      const random = () => {
+        seed |= 0;
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+
+      const items = $.atom<{ id: number }[]>([]);
+      $container.atomList(items, {
+        key: (item) => item.id,
+        render: (item) => `<span data-id="${item.id}"></span>`,
+      });
+      await $.nextTick();
+
+      let nextId = 0;
+      let current: { id: number }[] = [];
+      for (let step = 0; step < 60; step++) {
+        const roll = random();
+        if ((roll < 0.3 || current.length === 0) && nextId < 30) {
+          current = [...current, { id: nextId++ }];
+        } else if (roll < 0.6) {
+          current = current.slice(1); // remove head
+        } else if (roll < 0.85) {
+          const tail = current[current.length - 1];
+          if (tail) current = [{ id: tail.id }, ...current.slice(0, -1)]; // move tail to head
+        } else {
+          current = [...current].reverse();
+        }
+
+        items.value = current;
+        await $.nextTick();
+
+        const domIds = $container
+          .find('span')
+          .map((_, element) => Number($(element).attr('data-id')))
+          .get();
+        expect(domIds).toEqual(current.map((item) => item.id));
+      }
     });
   });
 

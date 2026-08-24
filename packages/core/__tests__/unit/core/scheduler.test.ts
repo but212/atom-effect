@@ -191,7 +191,9 @@ describe('Scheduler Engine', () => {
       const loop = () => schedulerSchedule(scheduler, loop);
       schedulerSchedule(scheduler, loop);
 
-      await sleep(20);
+      // One-shot recovery re-queues dropped jobs once; the second overflow is
+      // terminal, after which the queue is fully drained again.
+      await sleep(40);
 
       expect(onOverflow).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
@@ -199,6 +201,52 @@ describe('Scheduler Engine', () => {
 
       scheduler.onOverflow = null;
       expect(scheduler.onOverflow).toBeNull();
+      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      consoleError.mockRestore();
+    });
+
+    it('passes dropped jobs to onOverflow as the second argument', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const onOverflow = vi.fn();
+      scheduler.onOverflow = onOverflow;
+
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      schedulerSetMaxFlushIterations(scheduler, 10);
+
+      const loop = () => schedulerSchedule(scheduler, loop);
+      schedulerSchedule(scheduler, loop);
+
+      await sleep(20);
+
+      expect(onOverflow).toHaveBeenCalled();
+      const droppedCall = onOverflow.mock.calls[0];
+      const droppedJobs = (droppedCall?.[1] ?? []) as unknown[];
+      expect(Array.isArray(droppedJobs)).toBe(true);
+      expect(droppedJobs.length).toBeGreaterThan(0);
+
+      scheduler.onOverflow = null;
+      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      consoleError.mockRestore();
+    });
+
+    it('retries dropped jobs once so transient overload still converges', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      schedulerSetMaxFlushIterations(scheduler, 10);
+
+      let executions = 0;
+      const convergingJob = () => {
+        executions++;
+        if (executions < 100) schedulerSchedule(scheduler, convergingJob);
+      };
+      schedulerSchedule(scheduler, convergingJob);
+
+      await sleep(50);
+
+      // Without one-shot recovery the job would halt at ~5-6 executions.
+      // The retry must carry it well past a single flush budget.
+      expect(executions).toBeGreaterThanOrEqual(8);
+
       schedulerSetMaxFlushIterations(scheduler, originalMax);
       consoleError.mockRestore();
     });

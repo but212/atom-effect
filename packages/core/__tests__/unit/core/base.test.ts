@@ -6,8 +6,6 @@ import {
   BaseNode,
   nodeCommitDeps,
   nodeHasSubscription,
-  nodeIsComputed,
-  nodeIsNotifying,
   nodeNotifySubscribers,
   nodeTrackDependency,
   nodeUnsubscribe,
@@ -198,22 +196,6 @@ describe('BaseEngine (base.ts)', () => {
         expect(() => {
           nodeCommitDeps(mockTracker as unknown as DependencyTracker & ReactiveDependencyTracker);
         }).not.toThrow();
-      });
-    });
-
-    describe('nodeIsComputed() and nodeIsNotifying()', () => {
-      it('inspects node flags and slot buffer lock states correctly', () => {
-        const mockNode: { flags: number; _subscriberSlots: unknown } = {
-          flags: 0,
-          _subscriberSlots: null,
-        };
-        expect(nodeIsComputed(mockNode as unknown as ReactiveNode<unknown>)).toBe(false);
-        mockNode.flags = 1 << 1; // IS_COMPUTED flag
-        expect(nodeIsComputed(mockNode as unknown as ReactiveNode<unknown>)).toBe(true);
-
-        expect(nodeIsNotifying(mockNode as unknown as ReactiveNode<unknown>)).toBe(false);
-        mockNode._subscriberSlots = { isLocked: true } as unknown as SlotBuffer<never>;
-        expect(nodeIsNotifying(mockNode as unknown as ReactiveNode<unknown>)).toBe(true);
       });
     });
 

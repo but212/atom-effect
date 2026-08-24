@@ -14,7 +14,13 @@ import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
-import { createListContext, disposeContext, type ListContext, resolveEventTarget } from './context';
+import {
+  createListContext,
+  disposeContext,
+  type ListContext,
+  removeNode,
+  resolveEventTarget,
+} from './context';
 import { buildIndices } from './diff';
 import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
 import type { EventBinding, PlaceCallbacks } from './types';
@@ -110,6 +116,20 @@ export function applyListBinding<T>(
       ctx.keyToIndex = diff.keyToIndex;
 
       const fragment = renderItems(diff, options, isInitial);
+
+      // Tear down previous snapshots not claimed by any slot in the new diff
+      // (e.g. duplicate-key occurrences superseded by fresh renders). Key-based
+      // cleanup alone would miss them when the key still exists elsewhere.
+      const claimedOldIndices = new Set<number>();
+      for (const slot of diff.slots) {
+        if (slot && slot.oldIndex !== -1) claimedOldIndices.add(slot.oldIndex);
+      }
+      for (let i = 0; i < ctx.snapshots.length; i++) {
+        const snapshot = ctx.snapshots[i];
+        if (snapshot?.node && !claimedOldIndices.has(i) && !ctx.removingKeys.has(snapshot.key)) {
+          removeNode(ctx, snapshot.key, snapshot.node);
+        }
+      }
       cleanupRemoved(ctx);
       placeItems(ctx, diff, element, callbacks, fragment);
 

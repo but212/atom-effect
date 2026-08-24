@@ -195,7 +195,16 @@ export function placeItems<T>(
   const count = slots.length;
 
   if (htmlFragments) {
-    container.innerHTML = htmlFragments.join('');
+    // Fragments are pre-sanitized upstream (sanitizeHtml + injectKeyToHtml in
+    // renderItems); parse inertly instead of assigning innerHTML.
+    const parsedNodes = $.parseHTML(htmlFragments.join(''));
+    const parsedFragment = document.createDocumentFragment();
+    if (parsedNodes) {
+      for (const node of parsedNodes) {
+        if (node) parsedFragment.appendChild(node);
+      }
+    }
+    container.replaceChildren(parsedFragment);
     let element = container.firstElementChild;
     const { bind, onAdd } = callbacks;
 

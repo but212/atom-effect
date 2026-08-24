@@ -13,7 +13,6 @@
 
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import {
-  COMPUTED_STATE_FLAGS,
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
   IS_DEV,
@@ -426,16 +425,6 @@ export function nodeHandleError<T>(
   }
 
   nodeNotifySubscribers(node, undefined, undefined);
-}
-
-/** @internal - Checks computed flag. */
-export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
-  return (node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
-}
-
-/** @internal - Checks if the slot buffer is locked during notification. */
-export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
-  return node._subscriberSlots?.isLocked ?? false;
 }
 
 /** @internal - Returns active listener count. */

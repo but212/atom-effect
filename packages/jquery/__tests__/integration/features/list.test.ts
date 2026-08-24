@@ -4,9 +4,9 @@ import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Atom List Edge Cases', () => {
   const { appendToBody } = setupDOMCleanup();
-  it('should visually collapse items with duplicate keys', async () => {
-    // Current behavior: Duplicate keys result in only one DOM element being reused/moved
-    // distinct failure mode to document.
+  it('should render both items with duplicate keys and warn', async () => {
+    // Updated contract: duplicate keys are warned about but BOTH items render,
+    // so no data is silently dropped from the DOM.
 
     // Enable debug mode to capture warning
     const originalDebug = $.debug.enabled;
@@ -22,21 +22,18 @@ describe('Atom List Edge Cases', () => {
 
       $container.atomList(items, {
         key: 'id',
-        render: (item: { id: number; text: string }) =>
-          `<div id="item-${item.id}">${item.text}</div>`,
+        render: (item: { id: number; text: string }) => `<div class="dup-item">${item.text}</div>`,
       });
 
       await $.nextTick();
 
-      // Expectation: Only 1 element exists because of key collision in Map
-      expect($container.children().length).toBe(1);
-
-      // Expected Behavior under 1D Array Architecture:
-      // buildIndices scans forward. The first item creates the index entry.
-      // The second duplicate is skipped entirely (newIndices[i] = -1).
-      // During placeItems, the undefined slot for the duplicate is ignored.
-      // Therefore, ONLY the first item is rendered.
-      expect($container.find('#item-1').text()).toBe('First');
+      // Both duplicate-key items are rendered
+      expect($container.children().length).toBe(2);
+      const texts = $container
+        .find('.dup-item')
+        .map((_, element) => $(element).text())
+        .get();
+      expect(texts).toEqual(['First', 'Second']);
 
       expect(consoleWarnSpy).toHaveBeenCalled();
       consoleWarnSpy.mockRestore();
