@@ -145,7 +145,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
       sourcemap: true,
       outDir: 'dist',
       emptyOutDir,
-      minify: 'esbuild',
+      minify: 'oxc',
       lib: {
         entry,
         name,
