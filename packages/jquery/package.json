@@ -76,5 +76,6 @@
     "typescript": "catalog:build",
     "vite": "catalog:build",
     "vitest": "catalog:test"
-  }
+  },
+  "optionalDependencies": {}
 }

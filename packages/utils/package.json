@@ -35,5 +35,8 @@
     "typescript": "catalog:build",
     "cross-env": "catalog:build",
     "tinybench": "catalog:test"
-  }
+  },
+  "dependencies": {},
+  "peerDependencies": {},
+  "optionalDependencies": {}
 }
