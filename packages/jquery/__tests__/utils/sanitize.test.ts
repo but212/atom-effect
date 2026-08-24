@@ -154,14 +154,14 @@ describe('Atom-Effect: Security Specification', () => {
   });
 
   describe('Attribute Hardening: Event Handler Scrubbing', () => {
-    it.each(ATTACK_VECTORS.EVENT_HANDLERS)('should strip $handler from elements', async ({
-      payload,
-      handler,
-    }) => {
-      const result = (await TestKit.sanitize(payload)).toLowerCase();
-      expect(result).not.toContain(`${handler}=`);
-      expect(result).toContain('data-unsafe-attr=');
-    });
+    it.each(ATTACK_VECTORS.EVENT_HANDLERS)(
+      'should strip $handler from elements',
+      async ({ payload, handler }) => {
+        const result = (await TestKit.sanitize(payload)).toLowerCase();
+        expect(result).not.toContain(`${handler}=`);
+        expect(result).toContain('data-unsafe-attr=');
+      }
+    );
 
     it('should preserve original attribute order when multiple handlers are scrubbed', async () => {
       const payload = '<div onclick="a()" onmouseover="b()" onmouseenter="c()"></div>';

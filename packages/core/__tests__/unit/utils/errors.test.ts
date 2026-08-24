@@ -31,29 +31,27 @@ describe('Error Handling System', () => {
       { Class: SchedulerError, name: 'SchedulerError', recoverable: false, tag: 'SchedulerError' },
     ] as const;
 
-    it.each(errorTypes)('$name confirms inheritance, default state, and optional parameters', ({
-      Class,
-      name,
-      recoverable: defaultRecoverable,
-      tag,
-    }) => {
-      const cause = new Error('root');
+    it.each(errorTypes)(
+      '$name confirms inheritance, default state, and optional parameters',
+      ({ Class, name, recoverable: defaultRecoverable, tag }) => {
+        const cause = new Error('root');
 
-      const error = new Class('msg', { cause });
-      expect(error).toBeInstanceOf(AtomError);
-      expect(error.name).toBe(name);
-      expect(error._tag).toBe(tag);
-      expect(error.recoverable).toBe(defaultRecoverable);
-      expect(error.cause).toBe(cause);
+        const error = new Class('msg', { cause });
+        expect(error).toBeInstanceOf(AtomError);
+        expect(error.name).toBe(name);
+        expect(error._tag).toBe(tag);
+        expect(error.recoverable).toBe(defaultRecoverable);
+        expect(error.cause).toBe(cause);
 
-      const custom = new Class('msg', {
-        cause: null,
-        recoverable: !defaultRecoverable,
-        code: 'ERR_CODE',
-      });
-      expect(custom.recoverable).toBe(!defaultRecoverable);
-      expect(custom.code).toBe('ERR_CODE');
-    });
+        const custom = new Class('msg', {
+          cause: null,
+          recoverable: !defaultRecoverable,
+          code: 'ERR_CODE',
+        });
+        expect(custom.recoverable).toBe(!defaultRecoverable);
+        expect(custom.code).toBe('ERR_CODE');
+      }
+    );
 
     it('verifies initial error state integrity of computed atoms', () => {
       const computedAtom = computed(() => 42);
