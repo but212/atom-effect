@@ -104,33 +104,31 @@ describe('$.atomNav', () => {
       { label: 'right click', href: '/right', event: { button: 2 }, expected: false },
     ];
 
-    it.each(scenarios)('should handle $label correctly', async ({
-      href,
-      expected,
-      attrs,
-      event,
-    }) => {
-      const ajaxSpy = harness.mockAjax();
-      await harness.create({ selector: '.nav-link' });
-      const $link = appendToBody($('<a class="nav-link"></a>').attr({ href, ...attrs }));
+    it.each(scenarios)(
+      'should handle $label correctly',
+      async ({ href, expected, attrs, event }) => {
+        const ajaxSpy = harness.mockAjax();
+        await harness.create({ selector: '.nav-link' });
+        const $link = appendToBody($('<a class="nav-link"></a>').attr({ href, ...attrs }));
 
-      let intercepted = false;
-      const checkIntercept = (event: Event) => {
-        intercepted = event.defaultPrevented;
-        event.preventDefault();
-      };
-      document.addEventListener('click', checkIntercept, { once: true });
+        let intercepted = false;
+        const checkIntercept = (event: Event) => {
+          intercepted = event.defaultPrevented;
+          event.preventDefault();
+        };
+        document.addEventListener('click', checkIntercept, { once: true });
 
-      harness.simulateClick($link[0], event);
+        harness.simulateClick($link[0], event);
 
-      if (expected) {
-        expect(intercepted).toBe(true);
-        await vi.waitFor(() => expect(ajaxSpy).toHaveBeenCalled());
-      } else {
-        expect(ajaxSpy).not.toHaveBeenCalled();
+        if (expected) {
+          expect(intercepted).toBe(true);
+          await vi.waitFor(() => expect(ajaxSpy).toHaveBeenCalled());
+        } else {
+          expect(ajaxSpy).not.toHaveBeenCalled();
+        }
+        $link.remove();
       }
-      $link.remove();
-    });
+    );
 
     it('should resolve paths relative to <base> tag', async () => {
       harness.mockAjax({ data: 'Base Content' });

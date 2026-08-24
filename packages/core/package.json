@@ -78,5 +78,8 @@
     "@vitest/coverage-v8": "catalog:test",
     "@vitest/ui": "catalog:test",
     "playwright": "catalog:test"
-  }
+  },
+  "dependencies": {},
+  "peerDependencies": {},
+  "optionalDependencies": {}
 }

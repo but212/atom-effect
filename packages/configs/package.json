@@ -33,5 +33,7 @@
     "unplugin-dts": "catalog:build",
     "vite": "catalog:build",
     "vitest": "catalog:test"
-  }
+  },
+  "dependencies": {},
+  "optionalDependencies": {}
 }
