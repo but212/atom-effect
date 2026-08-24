@@ -17,6 +17,7 @@ import type { ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import {
   createListContext,
   disposeContext,
+  isNodeRemoving,
   type ListContext,
   removeNode,
   resolveEventTarget,
@@ -126,7 +127,11 @@ export function applyListBinding<T>(
       }
       for (let i = 0; i < ctx.snapshots.length; i++) {
         const snapshot = ctx.snapshots[i];
-        if (snapshot?.node && !claimedOldIndices.has(i) && !ctx.removingKeys.has(snapshot.key)) {
+        if (
+          snapshot?.node &&
+          !claimedOldIndices.has(i) &&
+          !isNodeRemoving(ctx.removingKeys, snapshot.key, snapshot.node)
+        ) {
           removeNode(ctx, snapshot.key, snapshot.node);
         }
       }
