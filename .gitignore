@@ -54,4 +54,4 @@ desktop.ini
 
 # 7. Tool-Specific Ignores
 ## Graphify (Auto-generated callgraphs/dependency graphs)
-graphify-out/
+graphify-out/*.backup.*
