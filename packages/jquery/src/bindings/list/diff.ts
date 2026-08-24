@@ -115,7 +115,9 @@ export function buildIndices<T>(
 
     if (newIndexMap.has(itemKey)) {
       debug.warn(SYSTEM_LIST.PREFIX, SYSTEM_LIST.ERRORS.DUPLICATE_KEY(itemKey, i));
-      slots[i] = {
+      // Render the duplicate as a fresh item instead of leaving an unrenderable
+      // `nodes: undefined` hole that poisons future reconciliation snapshots.
+      const duplicateSlot: DiffSlot<T> = {
         key: itemKey,
         item,
         state: ItemState.New,
@@ -123,6 +125,8 @@ export function buildIndices<T>(
         targetIndex: i,
         nodes: undefined,
       };
+      slots[i] = duplicateSlot;
+      toRender.push(duplicateSlot);
       continue;
     }
 

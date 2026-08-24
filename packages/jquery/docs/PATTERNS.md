@@ -279,6 +279,12 @@ $('ul').atomList(users, {
 });
 ```
 
+### Duplicate Keys
+
+If two items produce the same `key`, the reconciler logs a duplicate-key warning and renders **both** items as fresh DOM nodes — no data is silently dropped. When the duplicates later resolve to unique keys, superseded nodes are torn down through the normal `onRemove` lifecycle.
+
+> Prefer keys that are unique and stable (e.g. database IDs). Duplicate keys defeat node reuse and force full re-renders of the affected items.
+
 ---
 
 ## 8. Functional Components
