@@ -21,7 +21,7 @@ Implementation invariants:
 - **Task-based loop**: bindings are pre-compiled into a task array before iterating the collection; no key enumeration inside the DOM loop.
 - **Monomorphic strategy**: handlers resolve read/write strategy (e.g. `multipleSelect`) at construction, avoiding feature-detection branches in the reactive path.
 - **Local caching**: handlers cache the last written DOM value to avoid layout thrashing.
-- **O(1) radio indexing**: a scoped `WeakMap` cache of active radio inputs (keyed by form/document container) replaces global `$(document).find` scans.
+- **Scoped radio synchronization**: radio peers are found with a scoped `querySelectorAll` on the form or root container; synchronization does not currently maintain a persistent O(1) `WeakMap` cache.
 - `.atomUnbind()` disposes all bindings and effects on the elements and descendants.
 
 ### 1.2 Content & attributes
@@ -45,7 +45,7 @@ Implementation invariants:
 | Method | Contract |
 | :--- | :--- |
 | `.atomVal(atom, options?)` | Two-way sync for `<input>`, `<textarea>`, `<select>`; supports `<select multiple>` via `string[]`. IME-stable (composition states), cursor/focus preserved. Options: `debounce`, `format`, `parse`, `equal`. |
-| `.atomChecked(atom)` | Two-way for checkbox/radio. Radio groups sync peers sharing a `name` via the O(1) `WeakMap` cache. |
+| `.atomChecked(atom)` | Two-way for checkbox/radio. Radio groups sync peers sharing a `name` via scoped root/form queries. |
 | `.atomForm(atom \| atom[], options?)` | Two-way form sync mapping inputs by `name`. Multi-atom (merged via `mergeLenses`, later atoms win on overlap), nested dot-paths, dynamic inputs via `MutationObserver`, native Constraint Validation via `setCustomValidity`. |
 | `.atomOn(event, handler)` | Lifecycle-aware delegation; handlers run inside `batch()`; auto-unbound on teardown. |
 
@@ -61,7 +61,7 @@ Implementation invariants:
 1. **Head/tail fast-forwarding**: skip diffing for stable bounds.
 2. **Middle-range diffing**: compare the dirty middle using a persistent key map → insertion/deletion/move instructions.
 3. **Greedy placement**: reverse-order `insertBefore` for predictable cross-browser behavior.
-4. **Cold start**: initial render concatenates sanitized HTML and injects via `innerHTML`, bypassing jQuery instantiation.
+4. **Cold start**: initial render concatenates sanitized HTML, parses it with `$.parseHTML()`, and inserts the resulting fragment with `replaceChildren`, bypassing jQuery instantiation.
 
 **Optional callbacks/options:** `key` (required), `render`, `bind`, `update`, `onAdd`, `onRemove`, `empty`, `isEqual`, `events`.
 
@@ -131,8 +131,8 @@ Implementation invariants:
 
 ### 4.1 Prototype-bound bridge (clobbering protection)
 
-- The engine interacts with elements **only** through prototype-bound descriptors: `setAttribute`, `removeAttribute`, `localName` via `Element.prototype` call/apply.
-- Guarantees native behavior even if instance properties are shadowed.
+- Sanitizer parser, serializer, traversal, node replacement, text/child access, and attribute operations use captured native prototype methods/accessors for `Document`, `Element`, `Node`, `HTMLTemplateElement`, and `TreeWalker`.
+- Guarantees native behavior for these operations even if host-document or created-instance properties are shadowed. Prototype tampering before module initialization is outside this guarantee.
 
 ### 4.2 Inert template parsing (`sanitizeHtml`)
 
@@ -193,7 +193,7 @@ SPA router supporting HTML5 History and Hash modes.
 
 - **Concurrency**: "last navigation wins" — `AbortController` cancels a pending fetch on a newer navigation.
 - **Header coordination**: sends `X-PJAX-Container`; processes `X-PJAX-Title` / `X-PJAX-URL` to sync title/meta.
-- **DOM reconciliation**: cleans up existing DOM nodes before injecting new content.
+- **DOM reconciliation**: cleans up existing DOM nodes before injecting new content. The navigation sanitization policy includes the default blacklist, so fetched `<form>` elements are neutralized to `<span>` wrappers rather than preserved as live forms.
 - **Scroll management**: `#hash` targeting vs reset-to-top by transition type.
 - **Instance interface** (reactive): `currentUrl`, `isPending`, `hasError` as `ReadonlyAtom`; `navigate(url, { replace? })`, `destroy()`.
 

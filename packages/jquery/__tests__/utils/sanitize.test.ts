@@ -180,6 +180,46 @@ describe('Atom-Effect: Security Specification', () => {
         expect(result).not.toContain('id="attributes"');
       }
     });
+
+    it('should bypass shadowed host document methods during sanitization', () => {
+      sanitizeCache.clear();
+      const documentObject = document as Document & Record<string, unknown>;
+      const originalCreateElement = Object.getOwnPropertyDescriptor(document, 'createElement');
+      const originalCreateTreeWalker = Object.getOwnPropertyDescriptor(
+        document,
+        'createTreeWalker'
+      );
+
+      Object.defineProperty(documentObject, 'createElement', {
+        configurable: true,
+        value: () => {
+          throw new Error('shadowed createElement');
+        },
+      });
+      Object.defineProperty(documentObject, 'createTreeWalker', {
+        configurable: true,
+        value: () => {
+          throw new Error('shadowed createTreeWalker');
+        },
+      });
+
+      try {
+        expect(sanitizeHtml('<img src="native-prototype-test">')).toContain(
+          '<img src="native-prototype-test">'
+        );
+      } finally {
+        if (originalCreateElement) {
+          Object.defineProperty(documentObject, 'createElement', originalCreateElement);
+        } else {
+          Reflect.deleteProperty(documentObject, 'createElement');
+        }
+        if (originalCreateTreeWalker) {
+          Object.defineProperty(documentObject, 'createTreeWalker', originalCreateTreeWalker);
+        } else {
+          Reflect.deleteProperty(documentObject, 'createTreeWalker');
+        }
+      }
+    });
   });
 
   describe('URI Enforcement: Protocol Security', () => {

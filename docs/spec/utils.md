@@ -9,7 +9,7 @@ A discriminated union `Ok<T> | Err<E>` for functional error handling without thr
 - `Ok<T>`: `{ ok: true; value: T; error: undefined }`
 - `Err<E>`: `{ ok: false; value: undefined; error: E }`
 - Default error type `E = Error` when unspecified.
-- Consumers must check `result.ok` before accessing `value`/`error` (compile-time enforced). `isResult(value)` verifies the Result protocol at runtime.
+- Consumers must check `result.ok` before accessing `value`/`error` (compile-time enforced). `isResult(value)` verifies both the Result brands and the complete Ok/Err field invariants at runtime; malformed or throwing objects return `false`.
 
 ### Factory & helper contracts
 
@@ -54,11 +54,11 @@ High-performance ordered collection for V8 hidden-class stability, used by the r
 | :--- | :--- |
 | `at(index)` | Item or `null` if empty/out of bounds. |
 | `has(item)` | Reference membership; false for `null`/`undefined`. |
-| `forEach(cb)` | Iterates non-null items in order; locks the buffer (defers `compact()`). |
-| `some(pred)` | Early-exit predicate scan; locks during iteration. |
-| `push` / `compact` / `lock` / `unlock` | Structural ops; `compact()` deferred while locked. |
+| `forEach(cb)` | Iterates non-null items in order; locks the buffer and defers `compact()`. It is not a snapshot. |
+| `some(pred)` | Early-exit predicate scan; locks during iteration and is not a snapshot. |
+| `push` / `compact` / `lock` / `unlock` | Structural ops; `push`/`remove` remain possible during callbacks, while `compact()` is deferred until the lock count returns to zero. |
 
-**Iteration safety invariant**: structural changes are forbidden during `forEach`/`some`; `compact()` is deferred until the lock count returns to zero.
+**Iteration safety invariant**: callbacks run while the buffer is locked, so compaction is deferred. Structural mutation is not prohibited and traversal is not snapshot-isolated; callback code must not rely on newly added or removed items being visited in the current pass.
 
 ## 3. Type guards
 

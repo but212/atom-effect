@@ -22,7 +22,7 @@ The engine is a deterministic push-pull graph of three node roles:
 
 | Property | Contract |
 | :--- | :--- |
-| **Epoch** | Monotonically increasing global counter; SMI-masked to 31 bits. Used for job dedup and session validation. |
+| **Epoch** | Process-local 31-bit counter used for job deduplication and session validation; it increases monotonically until modulo rollover. |
 | **Version** | Per-node counter, increments only when the output value actually changes (per the equality check). |
 | **Drift** | Subscriber cached version differs from dependency's current version. |
 | **Glitch** | A node must never observe intermediate or stale state during a propagation cycle. |
@@ -47,11 +47,11 @@ Async computeds are treated as state machines with sessions.
 - **Default**: Updates defer to a microtask flush; coalescing multiple synchronous writes into one downstream pass.
 - **`batch(fn)`**: Groups updates into one notification cycle. Supports nesting (outermost batch flushes last) and commits state even if `fn` throws.
 - **`sync: true`**: Option on `atom` and `effect` to deliver synchronously, bypassing the microtask batching.
-- **Execution budget**: Effects cap at `maxExecutionsPerFlush` (default 100) per flush. Overflow is logged as `SchedulerError` and reported via `scheduler.onOverflow(droppedCount, droppedJobs)`; dropped jobs are re-queued exactly once. The flush microtask re-arms itself while the queue is non-empty, so jobs scheduled during a drain or `onOverflow` callback still execute.
+- **Execution budget**: Each effect enforces `maxExecutionsPerFlush` (default 100) independently; exceeding that per-effect limit disposes the effect. The scheduler separately enforces its aggregate per-flush limit; aggregate overflow is reported via `scheduler.onOverflow(droppedCount, droppedJobs)` and dropped jobs are re-queued exactly once. These limits and failure paths are distinct.
 
 ## 5. Lifecycle
 
-- **Identity**: Each node gets a unique monotonic `DependencyId`.
+- **Identity**: Each node receives a process-local numeric `DependencyId`. IDs are monotonic within the 31-bit SMI range; masking and rollover mean lifetime uniqueness and monotonicity are not guaranteed after rollover.
 - **Disposal**: All nodes implement `.dispose()` severing graph references (subscriber slot buffers, dep maps) for immediate collection. Atoms release their stored value; computeds release executable computation, equality, default-value, and error-handler state while retaining only the last cached value required by `.peek()` compatibility.
 - **Effect cleanup**: The previous cleanup handle runs before each effect re-run and on disposal. A cleanup returned by a stale asynchronous execution is discarded and cannot overwrite a newer session.
 - **Post-disposal atom reads**: `value`/`peek()` return `undefined`; writes are no-ops. Check `isDisposed` before relying on reads.
@@ -64,7 +64,7 @@ The engine uses a hybrid model to keep the core pure and avoid `try-catch` overh
 1. **Internal monadic propagation**: Internal checks (argument validation, loop budgets, disposed access, circularity) return a `Result<T, Error>`; they do not throw directly.
 2. **Synchronous boundary unwrapping**: Public boundaries (`.value` getters, factories, public scheduler wrappers) call `Result.unwrap`, throwing a standard `Error` (`ComputedError`, `EffectError`, `SchedulerError`) for compatibility with throwing consumer code.
 3. **Asynchronous scheduler isolation**: During flush, a failed job `Result` is wrapped in a `SchedulerError` and logged — never an unhandled rejection.
-4. **`defaultValue` swallowing**: With `defaultValue`, any computation failure or circular reference is caught internally, the `defaultValue` is returned instead of throwing, and the error is recorded on `errors`/`hasError`.
+4. **`defaultValue` swallowing**: With `defaultValue`, ordinary computation failures and circular-reference failures are caught internally, the `defaultValue` is returned instead of throwing, and the error is recorded on `errors`/`hasError`. `RangeError`, `ReferenceError`, and `SyntaxError` escape unchanged.
 
 **Circularity**: The `RECOMPUTING` flag identifies a node accessed during its own derivation, throwing `ComputedError`.
 
@@ -153,5 +153,5 @@ Internal: `SlotBuffer` and dependency buffers with lazy `Map`-based indexing pas
 1. **Sync tracking before await** — all reactive sources must be read before the first `await`.
 2. **No tracking after await** — dependencies after yield are intentionally not captured.
 3. **Class-based internals** — for V8 monomorphism; requires disciplined state management.
-4. **SMI-safe counters** — epoch/version/id remain 31-bit for SMI representation.
-5. **SlotBuffer (SVO)** — `#fastSlot0`–`#fastSlot3` inline slots avoid allocation for ≤4 connections.
+4. **SMI-safe counters** — epoch/version/id remain 31-bit for SMI representation and use modulo rollover when the range is exhausted; they are not lifetime-unique tokens.
+5. **SlotBuffer (SVO)** — `#fastSlot0`–`#fastSlot3` inline slots avoid allocation for ≤4 connections; iteration is locked but is not a mutation-proof snapshot.

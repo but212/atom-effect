@@ -58,10 +58,30 @@ export type Result<T, E = Error> = Ok<T> | Err<E>;
  * @example
  * const isRes = isResult(Result.ok(42)); // true
  */
-export const isResult = (targetValue: unknown): targetValue is Result<unknown, unknown> =>
-  !!targetValue &&
-  typeof targetValue === 'object' &&
-  (targetValue as Record<symbol, unknown>)[RESULT_BRAND] === true;
+export const isResult = (targetValue: unknown): targetValue is Result<unknown, unknown> => {
+  if (targetValue === null || typeof targetValue !== 'object') return false;
+
+  try {
+    const candidate = targetValue as Record<PropertyKey, unknown>;
+    if (
+      !Object.hasOwn(candidate, RESULT_SYMBOL) ||
+      candidate[RESULT_SYMBOL] !== true ||
+      !Object.hasOwn(candidate, RESULT_BRAND) ||
+      candidate[RESULT_BRAND] !== true ||
+      !Object.hasOwn(candidate, 'ok') ||
+      !Object.hasOwn(candidate, 'value') ||
+      !Object.hasOwn(candidate, 'error')
+    ) {
+      return false;
+    }
+
+    if (candidate.ok === true) return candidate.error === undefined;
+    if (candidate.ok === false) return candidate.value === undefined;
+    return false;
+  } catch {
+    return false;
+  }
+};
 
 // Logic: Asserts that a value is a valid Result instance. Used only at trust boundaries.
 function assertResult(targetValue: unknown): asserts targetValue is Result<unknown, unknown> {

@@ -157,45 +157,145 @@ const REGEX = {
  * preventing attackers from shadowing these methods on the instance.
  */
 const _call = Function.prototype.call.bind(Function.prototype.call);
-const _get = (prototypeObject: object, propertyName: string) =>
+const _get = <T extends object>(prototypeObject: T, propertyName: string) =>
   Object.getOwnPropertyDescriptor(prototypeObject, propertyName)?.get;
+const _set = <T extends object>(prototypeObject: T, propertyName: string) =>
+  Object.getOwnPropertyDescriptor(prototypeObject, propertyName)?.set;
+const _native = {
+  documentCreateElement:
+    typeof Document === 'undefined' ? undefined : Document.prototype.createElement,
+  documentCreateTreeWalker:
+    typeof Document === 'undefined' ? undefined : Document.prototype.createTreeWalker,
+  elementAttributes:
+    typeof Element === 'undefined' ? undefined : _get(Element.prototype, 'attributes'),
+  elementInnerHtmlGet:
+    typeof Element === 'undefined' ? undefined : _get(Element.prototype, 'innerHTML'),
+  elementInnerHtmlSet:
+    typeof Element === 'undefined' ? undefined : _set(Element.prototype, 'innerHTML'),
+  elementLocalName:
+    typeof Element === 'undefined' ? undefined : _get(Element.prototype, 'localName'),
+  elementRemoveAttribute:
+    typeof Element === 'undefined' ? undefined : Element.prototype.removeAttribute,
+  elementSetAttribute: typeof Element === 'undefined' ? undefined : Element.prototype.setAttribute,
+  nodeAppendChild: typeof Node === 'undefined' ? undefined : Node.prototype.appendChild,
+  nodeFirstChild: typeof Node === 'undefined' ? undefined : _get(Node.prototype, 'firstChild'),
+  nodeNodeType: typeof Node === 'undefined' ? undefined : _get(Node.prototype, 'nodeType'),
+  nodeParentNode: typeof Node === 'undefined' ? undefined : _get(Node.prototype, 'parentNode'),
+  nodeReplaceChild: typeof Node === 'undefined' ? undefined : Node.prototype.replaceChild,
+  nodeTextContentGet: typeof Node === 'undefined' ? undefined : _get(Node.prototype, 'textContent'),
+  nodeTextContentSet: typeof Node === 'undefined' ? undefined : _set(Node.prototype, 'textContent'),
+  templateContent:
+    typeof HTMLTemplateElement === 'undefined'
+      ? undefined
+      : _get(HTMLTemplateElement.prototype, 'content'),
+  treeWalkerNextNode: typeof TreeWalker === 'undefined' ? undefined : TreeWalker.prototype.nextNode,
+};
+const _requiredNative = <T>(value: T | undefined, operation: string): T => {
+  if (value === undefined) throw new TypeError(`Native DOM operation unavailable: ${operation}`);
+  return value;
+};
 
 /**
  * Logic: Prototype-Bound Bridge
- * Provides deterministic access to native DOM methods, bypassing potential
- * instance-level shadowing (DOM Clobbering) for critical security operations.
+ * Provides deterministic access to native DOM methods and accessors, bypassing
+ * instance-level shadowing (DOM Clobbering) for sanitizer security operations.
  * @internal
  */
 const DOM = {
   /** Retrieves all attributes from the prototype to ensure integrity. */
   getAttributes: (element: Element) => {
-    const getter = _get(Element.prototype, 'attributes');
-    const attrs = (getter ? _call(getter, element) : element.attributes) as NamedNodeMap;
+    const attrs = _call(
+      _requiredNative(_native.elementAttributes, 'Element.attributes'),
+      element
+    ) as NamedNodeMap;
     return Array.from(attrs, ({ name, value }) => ({ name, value }));
   },
   /** Sets an attribute bypassing instance-level shadowing. */
   setAttribute: (element: Element, key: string, value: string) =>
-    _call(Element.prototype.setAttribute, element, key, value),
+    _call(
+      _requiredNative(_native.elementSetAttribute, 'Element.setAttribute'),
+      element,
+      key,
+      value
+    ),
   /** Removes an attribute bypassing instance-level shadowing. */
   removeAttribute: (element: Element, key: string) =>
-    _call(Element.prototype.removeAttribute, element, key),
+    _call(_requiredNative(_native.elementRemoveAttribute, 'Element.removeAttribute'), element, key),
+  /** Retrieves HTML through the native prototype accessor. */
+  getInnerHtml: (element: Element) =>
+    _call(
+      _requiredNative(_native.elementInnerHtmlGet, 'Element.innerHTML getter'),
+      element
+    ) as string,
+  /** Sets HTML through the native prototype accessor. */
+  setInnerHtml: (element: Element, html: string) =>
+    _call(_requiredNative(_native.elementInnerHtmlSet, 'Element.innerHTML setter'), element, html),
+  /** Appends a node through the native prototype method. */
+  appendChild: (parent: Node, child: Node) =>
+    _call(_requiredNative(_native.nodeAppendChild, 'Node.appendChild'), parent, child),
+  /** Retrieves the first child through the native prototype accessor. */
+  getFirstChild: (node: Node) =>
+    _call(_requiredNative(_native.nodeFirstChild, 'Node.firstChild'), node) as Node | null,
+  /** Retrieves the node type through the native prototype accessor. */
+  getNodeType: (node: Node) =>
+    _call(_requiredNative(_native.nodeNodeType, 'Node.nodeType'), node) as number,
+  /** Retrieves the parent through the native prototype accessor. */
+  getParentNode: (node: Node) =>
+    _call(_requiredNative(_native.nodeParentNode, 'Node.parentNode'), node) as Node | null,
+  /** Retrieves text through the native prototype accessor. */
+  getTextContent: (node: Node) =>
+    _call(_requiredNative(_native.nodeTextContentGet, 'Node.textContent getter'), node) as
+      | string
+      | null,
+  /** Sets text through the native prototype accessor. */
+  setTextContent: (node: Node, text: string) =>
+    _call(_requiredNative(_native.nodeTextContentSet, 'Node.textContent setter'), node, text),
+  /** Replaces a child through the native prototype method. */
+  replaceChild: (parent: Node, newNode: Node, oldNode: Node) =>
+    _call(_requiredNative(_native.nodeReplaceChild, 'Node.replaceChild'), parent, newNode, oldNode),
   /** Replaces one node with another in the DOM tree. */
   replaceNode: (oldNode: Node, newNode: Node) => {
-    if (oldNode.parentNode) {
-      oldNode.parentNode.replaceChild(newNode, oldNode);
+    const parent = DOM.getParentNode(oldNode);
+    if (parent) {
+      DOM.replaceChild(parent, newNode, oldNode);
       return true;
     }
     return false;
   },
   /** Retrieves the lowercase local name reliably via the prototype. */
   getLocalName: (node: Node) => {
-    if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    const element = node as Element;
-    const getter = _get(Element.prototype, 'localName') ?? _get(Node.prototype, 'nodeName');
-    return (getter ? (_call(getter, element) as string) : (element.localName ?? '')).toLowerCase();
+    if (DOM.getNodeType(node) !== Node.ELEMENT_NODE) return '';
+    return (
+      _call(_requiredNative(_native.elementLocalName, 'Element.localName'), node) as string
+    ).toLowerCase();
   },
   /** Creates an HTMLElement in the current document context. */
-  createElement: <T extends HTMLElement>(tag: string) => document.createElement(tag) as T,
+  createElement: <T extends HTMLElement>(tag: string) =>
+    _call(
+      _requiredNative(_native.documentCreateElement, 'Document.createElement'),
+      document,
+      tag
+    ) as T,
+  /** Creates a tree walker through the native document method. */
+  createTreeWalker: (root: Node, whatToShow: number) =>
+    _call(
+      _requiredNative(_native.documentCreateTreeWalker, 'Document.createTreeWalker'),
+      document,
+      root,
+      whatToShow
+    ) as TreeWalker,
+  /** Retrieves inert template content through its native prototype accessor. */
+  getTemplateContent: (template: HTMLTemplateElement) =>
+    _call(
+      _requiredNative(_native.templateContent, 'HTMLTemplateElement.content'),
+      template
+    ) as DocumentFragment,
+  /** Advances traversal through the native TreeWalker method. */
+  nextNode: (walker: TreeWalker) =>
+    _call(
+      _requiredNative(_native.treeWalkerNextNode, 'TreeWalker.nextNode'),
+      walker
+    ) as Node | null,
 };
 
 /**
@@ -258,14 +358,14 @@ const Guard = {
  */
 function _sanitize(html: string, policy: SanitizationPolicy): string {
   const parser = DOM.createElement<HTMLTemplateElement>('template');
-  const serializer = document.createElement('div');
+  const serializer = DOM.createElement('div');
 
-  parser.innerHTML = html;
-  walkTree(parser.content, policy);
+  DOM.setInnerHtml(parser, html);
+  walkTree(DOM.getTemplateContent(parser), policy);
 
-  serializer.innerHTML = '';
-  serializer.appendChild(parser.content);
-  return serializer.innerHTML;
+  DOM.setInnerHtml(serializer, '');
+  DOM.appendChild(serializer, DOM.getTemplateContent(parser));
+  return DOM.getInnerHtml(serializer);
 }
 
 /**
@@ -381,8 +481,8 @@ function scrubElement(elementToScrub: HTMLElement, policy: SanitizationPolicy): 
 function processNode(node: Node, policy: SanitizationPolicy): Node {
   // 1. Logic: Text Node Sanitization
   // Detects and neutralizes encoded tags hidden within text content to prevent bypasses.
-  if (node.nodeType === Node.TEXT_NODE) {
-    const content = node.textContent ?? '';
+  if (DOM.getNodeType(node) === Node.TEXT_NODE) {
+    const content = DOM.getTextContent(node) ?? '';
     if (
       policy.blacklistedTags.some((tag) =>
         Guard.normalize(content).toLowerCase().includes(`<${tag}`)
@@ -396,14 +496,14 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
        * without relying on complex HTML entity encoding/decoding cycles,
        * which are subject to browser-specific interpretation quirks.
        */
-      span.textContent = content.replace(/</g, '[').replace(/>/g, ']');
+      DOM.setTextContent(span, content.replace(/</g, '[').replace(/>/g, ']'));
       return DOM.replaceNode(node, span) ? span : node;
     }
     return node;
   }
 
   // 2. Logic: Element Processing
-  if (node.nodeType !== Node.ELEMENT_NODE) return node;
+  if (DOM.getNodeType(node) !== Node.ELEMENT_NODE) return node;
   const element = node as HTMLElement;
   const tag = DOM.getLocalName(element);
 
@@ -415,15 +515,19 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
     const span = DOM.createElement('span');
     // Simplified attribute mirroring.
     for (const attribute of DOM.getAttributes(element)) {
-      span.setAttribute(attribute.name, attribute.value);
+      DOM.setAttribute(span, attribute.name, attribute.value);
     }
     scrubElement(span, policy);
 
     // Security: Recursive Style Protection
-    if (tag === 'style' && Guard.isDangerousCss(element.textContent ?? '')) {
-      span.textContent = '/* blocked */';
+    if (tag === 'style' && Guard.isDangerousCss(DOM.getTextContent(element) ?? '')) {
+      DOM.setTextContent(span, '/* blocked */');
     } else {
-      while (element.firstChild) span.appendChild(element.firstChild);
+      let child = DOM.getFirstChild(element);
+      while (child) {
+        DOM.appendChild(span, child);
+        child = DOM.getFirstChild(element);
+      }
     }
 
     return DOM.replaceNode(element, span) ? span : element;
@@ -438,16 +542,16 @@ function processNode(node: Node, policy: SanitizationPolicy): Node {
  */
 function walkTree(root: Node, policy: SanitizationPolicy): void {
   // Use native TreeWalker for efficient, non-recursive traversal.
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+  const walker = DOM.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
 
   let node: Node | null = root;
   while (node) {
-    const nextNode = walker.nextNode();
+    const nextNode = DOM.nextNode(walker);
     processNode(node, policy);
 
     // Template content must be handled separately as they are inert fragments.
-    if (node.nodeType === Node.ELEMENT_NODE && DOM.getLocalName(node) === 'template') {
-      walkTree((node as HTMLTemplateElement).content, policy);
+    if (DOM.getNodeType(node) === Node.ELEMENT_NODE && DOM.getLocalName(node) === 'template') {
+      walkTree(DOM.getTemplateContent(node as HTMLTemplateElement), policy);
     }
     node = nextNode;
   }

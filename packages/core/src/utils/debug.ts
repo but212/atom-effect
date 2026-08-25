@@ -28,8 +28,13 @@ import type { DebugConfig, DependencyId, IdentifiableNode, NodeMetadata } from '
 const noopCallback = () => {};
 
 /** Helper to resolve fallback node identity structurally. @internal */
-const getFallbackIdentity = (targetObject: object, id: DependencyId): NodeMetadata => {
-  const brand = (targetObject as { [BRAND]?: number })[BRAND];
+type DebugTarget = {
+  readonly id?: DependencyId;
+  readonly [BRAND]?: number;
+};
+
+const getFallbackIdentity = (targetObject: DebugTarget, id: DependencyId): NodeMetadata => {
+  const brand = targetObject[BRAND];
   const brandMetadata = brand === undefined ? undefined : BRAND_IDENTITY_MAP[brand & BRAND_MASK];
   const type = brandMetadata?.type ?? 'unknown';
   const prefix = brandMetadata?.prefix ?? `${type}_`;
@@ -71,12 +76,12 @@ class DevDebugEngine implements DebugConfig {
    * BRAND discriminator. Falls back to structural probing if the node is not
    * yet registered.
    */
-  #resolveIdentity(targetObject: object): { name: string; type: string } | undefined {
+  #resolveIdentity(targetObject: DebugTarget): { name: string; type: string } | undefined {
     if (targetObject === null || typeof targetObject !== 'object') {
       return undefined;
     }
 
-    const id = (targetObject as { id?: DependencyId }).id;
+    const id = targetObject.id;
     if (id === undefined) {
       return undefined;
     }
@@ -84,7 +89,7 @@ class DevDebugEngine implements DebugConfig {
     return this.#registry.get(id) ?? getFallbackIdentity(targetObject, id);
   }
 
-  #getOrCreateMetadata(targetObject: object, id: DependencyId): NodeMetadata {
+  #getOrCreateMetadata(targetObject: DebugTarget, id: DependencyId): NodeMetadata {
     let nodeMetadata = this.#registry.get(id);
     if (!nodeMetadata) {
       nodeMetadata = getFallbackIdentity(targetObject, id);
@@ -276,10 +281,11 @@ export const dumpGraph = () => debug.dumpGraph();
 let nextNodeId = 1;
 
 /**
- * Logic: Unique Node Identity
- * Generates an internal unique ID for each reactive node.
- * IDs are used for dependency tracking, graph visualization, and debugging.
+ * Logic: Node Identity
+ * Generates a process-local numeric ID for each reactive node.
+ * IDs are used for dependency tracking, graph visualization, and debugging;
+ * node-level SMI masking limits lifetime uniqueness after rollover.
  *
- * @returns A unique `DependencyId`.
+ * @returns A process-local `DependencyId`.
  */
 export const generateId = (): DependencyId => nextNodeId++;

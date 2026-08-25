@@ -33,13 +33,21 @@ import { DEFAULT_POLICY, sanitizeHtml } from '@/utils/sanitize';
 const NAV_POLICY = {
   ...DEFAULT_POLICY,
   urlAttributes: [...DEFAULT_POLICY.urlAttributes],
-  blacklistedTags: DEFAULT_POLICY.blacklistedTags.filter((tag) => tag !== 'form'),
+  blacklistedTags: [...DEFAULT_POLICY.blacklistedTags],
 };
 
 /** @internal */
 interface NavState {
   url: string;
   type: NavigationType;
+}
+
+function getCurrentUrl(win: Window): URL {
+  try {
+    return new URL(win.location.href);
+  } catch (error) {
+    throw new TypeError('Invalid window location URL', { cause: error });
+  }
 }
 
 /**
@@ -183,7 +191,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   $target.attr('data-atom-nav-target', 'true');
 
-  const initialUrlObject = new URL(win.location.href);
+  const initialUrlObject = getCurrentUrl(win);
   const initialUrl = initialUrlObject.pathname + initialUrlObject.search + initialUrlObject.hash;
   const initialPath = initialUrlObject.pathname + initialUrlObject.search;
 
@@ -353,7 +361,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       if (Result.isErr(targetUrlResult)) return;
 
       const target = Result.unwrap(targetUrlResult);
-      const current = new URL(win.location.href);
+      const current = getCurrentUrl(win);
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
 

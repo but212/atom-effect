@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { isResult, Result } from '@/index';
-import { RESULT_SYMBOL } from '../src/symbols';
+import { RESULT_BRAND, RESULT_SYMBOL } from '../src/symbols';
 
 // Logic: Shared test value that throws during string conversion to test error-handling robustness
 const NON_STRINGIFIABLE = {
@@ -92,6 +92,17 @@ describe('Result<T, E>', () => {
         [RESULT_SYMBOL]: true,
       };
       expect(isResult(spoofedResult)).toBe(false);
+    });
+
+    it('should reject branded objects with an invalid variant shape', () => {
+      const malformedResult = {
+        ok: true,
+        value: 42,
+        error: 'unexpected error',
+        [RESULT_SYMBOL]: true,
+        [RESULT_BRAND]: true,
+      };
+      expect(isResult(malformedResult)).toBe(false);
     });
 
     it('Result.isOk() and Result.isErr() should act as reliable compiler type guards', () => {
