@@ -44,7 +44,7 @@
     "playwright": "catalog:test",
     "rimraf": "catalog:",
     "tinybench": "catalog:test",
-    "turbo": "2.9.16",
+    "turbo": "2.10.11",
     "typescript": "catalog:build",
     "unplugin-dts": "catalog:build",
     "vite": "catalog:build",
