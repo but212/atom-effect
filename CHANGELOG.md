@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.34.1]
 
 ### Core
 

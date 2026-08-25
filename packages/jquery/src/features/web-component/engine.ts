@@ -260,6 +260,6 @@ if (typeof window !== 'undefined') {
   window.__AEJ_INTERNAL__ = {
     nodeStateMap,
     sheetCache,
-    version: '0.34.0',
+    version: '0.34.1',
   };
 }
