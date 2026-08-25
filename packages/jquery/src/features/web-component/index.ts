@@ -94,6 +94,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   }
 
   const state = new ComponentState(element);
+  let isTearingDown = false;
 
   const controller: AtomComponentController = {
     host: element,
@@ -283,6 +284,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       }
 
       state.isInitialized = true;
+      registry.setTeardown(element, () => controller.teardown());
     },
 
     /**
@@ -291,14 +293,20 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
      * associated with this component instance.
      */
     teardown() {
-      const componentState = nodeStateMap.get(element);
-      if (componentState) {
-        disposeProviders(element);
-        componentState.injects?.clear();
-      }
+      if (isTearingDown) return;
+      isTearingDown = true;
+      try {
+        const componentState = nodeStateMap.get(element);
+        if (componentState) {
+          disposeProviders(element);
+          componentState.injects?.clear();
+        }
 
-      state.dispose();
-      registry.cleanupTree(element);
+        state.dispose();
+        registry.cleanupTree(element);
+      } finally {
+        isTearingDown = false;
+      }
     },
   } as AtomComponentController;
 

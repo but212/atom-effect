@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registry } from '@/core/registry';
 import $ from '@/index';
 
 /**
@@ -225,6 +226,34 @@ describe('$.route() - SPA Routing System', () => {
       await router.navigate('about');
       await $.nextTick();
       expect(onUnmount).toHaveBeenCalled();
+    });
+
+    it('should clean bindings before replacing the previous route view', async () => {
+      const source = $.atom('old');
+      let oldElement: HTMLElement | undefined;
+      const router = await createRouter({
+        routes: {
+          home: {
+            render: (element) => {
+              oldElement = document.createElement('span');
+              $(oldElement).atomText(source);
+              element.appendChild(oldElement);
+            },
+          },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      expect(oldElement).toBeDefined();
+      expect(registry.hasBind(oldElement as HTMLElement)).toBe(true);
+
+      await router.navigate('about');
+      await $.nextTick();
+
+      expect(registry.hasBind(oldElement as HTMLElement)).toBe(false);
+      source.value = 'new';
+      await $.nextTick();
+      expect(oldElement?.textContent).toBe('old');
     });
 
     it('should prevent navigation when guard returns false', async () => {

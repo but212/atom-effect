@@ -516,7 +516,7 @@ describe('Effect', () => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
         const someAtom = atom(0);
-        const _effectInstance = effect(() => {
+        effect(() => {
           someAtom.value;
           someAtom.value = someAtom.value + 1;
         });

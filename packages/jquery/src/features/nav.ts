@@ -347,6 +347,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   const hasError = $.computed(() => content.hasError, { name: 'nav:hasError' });
 
   // Logic: Public API Implementation
+  let unregisterCoordinator = () => {};
+  let unregisterTargetCleanup: (() => void) | undefined;
   const navigator: AtomNav = {
     currentUrl: $.computed(() => rendered.value.url, { name: 'nav:public-url' }),
     isPending,
@@ -402,6 +404,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     },
 
     destroy() {
+      unregisterCoordinator();
+      unregisterTargetCleanup?.();
+      unregisterTargetCleanup = undefined;
       _lifecycleController.abort();
       _navController?.abort();
       mainEffect.dispose();
@@ -424,8 +429,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   };
 
   if ($target[0]) {
-    navCoordinator.register($target[0], 'nav');
-    registry.onCleanup($target[0], () => navigator.destroy());
+    unregisterCoordinator = navCoordinator.register($target[0], 'nav');
+    unregisterTargetCleanup = registry.onCleanup($target[0], () => navigator.destroy());
   }
 
   return navigator;

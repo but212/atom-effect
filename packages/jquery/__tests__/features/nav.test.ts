@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { navCoordinator } from '@/core/navigation';
 import $, { type AtomNav, type AtomNavOptions } from '@/index';
 import { castTo, createMockJqXHR, setupDOMCleanup } from '../utils/test-helpers';
 
@@ -208,6 +209,18 @@ describe('$.atomNav', () => {
       await vi.waitFor(() => expect(nav.isPending.value).toBe(false));
       expect(hooks.onUnmount).toHaveBeenCalled();
       expect(hooks.onMount).toHaveBeenCalledWith(expect.anything(), '/next');
+    });
+
+    it('should unregister from navigation coordination on destroy', async () => {
+      const nav = await harness.create();
+      const target = harness.$target[0];
+
+      expect(target).toBeDefined();
+      expect(navCoordinator.getManagerType(target as HTMLElement)).toBe('nav');
+
+      nav.destroy();
+
+      expect(navCoordinator.getManagerType(target as HTMLElement)).toBeUndefined();
     });
 
     it('should resolve race conditions (last navigation wins)', async () => {

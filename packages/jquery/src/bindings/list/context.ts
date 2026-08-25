@@ -193,6 +193,21 @@ export function resolveEventTarget<T>(
  * Full cleanup of state and DOM references.
  */
 export function disposeContext<T>(listContext: ListContext<T>): void {
+  const nodes = new Set<Node[]>();
+  for (const snapshot of listContext.snapshots) {
+    if (snapshot.node) nodes.add(snapshot.node);
+  }
+  for (const pendingNodes of listContext.removingKeys.values()) {
+    for (const pending of pendingNodes) nodes.add(pending);
+  }
+
+  for (const itemNodes of nodes) {
+    cleanupNodes(itemNodes);
+    for (const node of itemNodes) {
+      if (node.parentNode) node.parentNode.removeChild(node);
+    }
+  }
+
   listContext.removingKeys.clear();
   listContext.snapshots = [];
   listContext.keyToIndex.clear();

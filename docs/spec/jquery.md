@@ -46,7 +46,7 @@ Implementation invariants:
 | :--- | :--- |
 | `.atomVal(atom, options?)` | Two-way sync for `<input>`, `<textarea>`, `<select>`; supports `<select multiple>` via `string[]`. IME-stable (composition states), cursor/focus preserved. Options: `debounce`, `format`, `parse`, `equal`. |
 | `.atomChecked(atom)` | Two-way for checkbox/radio. Radio groups sync peers sharing a `name` via scoped root/form queries. |
-| `.atomForm(atom \| atom[], options?)` | Two-way form sync mapping inputs by `name`. Multi-atom (merged via `mergeLenses`, later atoms win on overlap), nested dot-paths, dynamic inputs via `MutationObserver`, native Constraint Validation via `setCustomValidity`. |
+| `.atomForm(atom \| atom[], options?)` | Two-way form sync mapping inputs by `name`. Multi-atom (merged via `mergeLenses`, later atoms win on overlap), nested dot-paths, dynamic inputs via `MutationObserver`, native Constraint Validation via `setCustomValidity`. Supports `debounce`, `event`, `parse`, `format`, `equal`, `transform`, `onChange`, and `validation`. |
 | `.atomOn(event, handler)` | Lifecycle-aware delegation; handlers run inside `batch()`; auto-unbound on teardown. |
 
 ### 1.5 Components & lifecycle hooks
@@ -71,6 +71,7 @@ Implementation invariants:
 - A re-bind backstop guarantees a pending node carrying `data-atom-key` is never physically removed.
 - **Node-identity tracking applies to `Element`/`jQuery`/`DocumentFragment` renders** (nodes persist across cycles). With **string `render`**, the container is rebuilt via `replaceChildren` each cycle, so identity cannot span a pending removal.
 - **Duplicate keys**: logged as a warning; both items render as fresh DOM nodes without silently dropping data; superseded nodes tear down via normal `onRemove`.
+- **Context disposal**: disposing or replacing a list binding synchronously cleans snapshot and pending-removal nodes, including their registry bindings, before clearing list state.
 
 ## 3. DOM lifecycle & memory invariants
 
@@ -96,6 +97,7 @@ Implementation invariants:
 
 - **WeakMap storage** (`nodeStateMap`): DOM elements → active `EffectObject`s; GC reclaims if an element is removed externally.
 - **Static snapshotting & early exit**: bound elements tagged `_aes-bound` / `_aes-has-shadow`; teardown checks classes via `getElementsByClassName` (O(1) index) to skip `querySelectorAll` on clean trees.
+- **Owned cleanup cancellation**: lifecycle owners may unregister their cleanup task before teardown; unregistering is idempotent and does not remove a newer manager registered for the same target.
 
 ### 3.4 Auto-teardown (`MutationObserver`)
 
@@ -174,7 +176,7 @@ Implementation invariants:
 
 ### Controller internals
 
-- **`ComponentState`**: centralizes attribute lenses, slot listeners, effects for one instance; `teardown()` releases all synchronously.
+- **`ComponentState`**: centralizes attribute lenses, slot listeners, effects for one instance; `teardown()` releases observers, effects, providers, and registry bindings synchronously. Teardown is re-entrancy-safe; already-returned attribute/slot lenses remain safe to read after teardown.
 - **Context engine** (`provideAtom`/`injectAtom`): direct-walk discovery traverses parent pointers (crossing shadow via `host`) for O(depth) resolution. A shared context revision invalidates subscribed late-bound proxies when providers or DOM topology change; proxy subscriptions own their temporary computed and `RootObserver` callbacks.
 - **Stylesheet caching**: identical style strings parsed once, shared via `adoptedStyleSheets`; FIFO eviction, max 100 entries.
 
@@ -186,7 +188,9 @@ SPA router supporting HTML5 History and Hash modes.
 
 - **Tiered matcher**: (1) static `Map` lookup O(1) for exact paths; (2) RegExp-compiled matching for dynamic paths with parameter extraction.
 - **Route lifecycle**: `onEnter` / `onLeave` navigation-guard hooks.
+- **DOM replacement**: the existing route subtree is cleaned through the binding registry before `replaceChildren()`; cleanup does not depend on the asynchronous observer.
 - **Instance interface** (reactive): `currentRoute`, `queryParams`, `params`, `location` (`{ path, query, params }`) as `ReadonlyAtom`; `navigate(to)`, `destroy()`.
+- **Deterministic destroy**: `destroy()` releases router-owned reactive atoms, route scanner effects, browser listeners, and navigation-coordinator registration; repeated calls are safe.
 - **Best practice**: always call `destroy()` on teardown to prevent listener leaks.
 
 ### 6.2 `$.atomNav(options)` (PJAX)
@@ -201,6 +205,7 @@ SPA router supporting HTML5 History and Hash modes.
 
 - Manages collisions when `atomNav` and `$.route` run together.
 - **Hierarchical guarding**: resolves `onLeave` guards across all registered routers before committing.
+- Coordinator registrations have an internal idempotent unregister path and are identity-checked so stale cleanup cannot delete a newer registration.
 - Nested routers skip initial scroll/focus, deferring to the parent `atomNav` container.
 
 ## 7. Data fetching — `$.atomFetch(urlOrFn, options)`
