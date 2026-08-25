@@ -1,16 +1,34 @@
 # Changelog
 
-## [Unreleased]
+## [0.34.1]
 
 ### Core
 
+- **Effect**: Async cleanup sessions are invalidated when a newer execution starts, preventing stale promises from installing cleanup after a later synchronous run.
+- **Computed**: Disposal now releases executable computation, equality, default-value, and error-handler state while preserving the established cached `peek()` value.
 - **Scheduler**: `onOverflow` now receives the dropped jobs as a second argument: `onOverflow(droppedCount, droppedJobs)`.
 - **Scheduler**: Dropped jobs are re-queued exactly once after an overflow so transient overload still converges; a recurring overflow remains terminal until a clean drain re-arms recovery.
+- **Scheduler**: The flush microtask now re-arms itself whenever the queue is non-empty, so jobs scheduled during a drain or from the `onOverflow` callback are guaranteed to execute.
+- **Identity**: Updated node and epoch documentation to describe process-local 31-bit counters and modulo rollover instead of lifetime-unique monotonic IDs.
 
 ### jQuery
 
+- **Web Components**: Context proxy subscriptions now observe existing providers, provider changes, and DOM topology changes while releasing temporary computed and observer resources on unsubscribe/disposal.
+- **Web Components**: Provider CSS synchronization is owned by a single provider record, so replacement and teardown dispose stale effects and direct providers participate in registry cleanup.
+- **Web Components**: The context lifecycle documentation now reflects shared revision invalidation and `RootObserver` subscription cleanup instead of the removed `ContextEngine` reference-counting model.
 - **atomList**: Items with duplicate keys are now rendered (with a duplicate-key warning) instead of being silently dropped from the DOM.
 - **atomList**: Previous snapshots superseded by duplicate-key re-renders are torn down through the normal `onRemove` lifecycle, preventing orphaned DOM nodes.
+- **atomList**: Pending removals are tracked by node identity instead of key, so a live item sharing a duplicate key is patched in place rather than re-rendered while its superseded twin's async `onRemove` is pending.
+- **Sanitizer**: DOM parsing, traversal, serialization, node replacement, and text/attribute access now use captured native prototype methods and accessors to resist instance-level DOM clobbering.
+- **atomNav**: Fetched `<form>` elements are neutralized to `<span>` wrappers under the default navigation sanitization policy.
+
+### Utils
+
+- **Result**: `isResult()` now validates both brands and the complete Ok/Err field shape, rejecting malformed or getter-throwing objects.
+
+### Documentation
+
+- **Specifications**: Synchronized core, jQuery, and utils contracts with implemented scheduler budgets, rollover semantics, sanitizer guarantees, radio lookup behavior, cold-start insertion, and SlotBuffer mutation behavior.
 
 ## [0.34.0]
 

@@ -410,7 +410,7 @@ class NavigationCoordinator {
    * Prevents unpredictable state by ensuring a single element is not
    * simultaneously managed by conflicting modules (e.g., atomNav and $.route).
    */
-  register(target: Element, type: NavFeatureType, canLeave?: () => boolean): void {
+  register(target: Element, type: NavFeatureType, canLeave?: () => boolean): () => void {
     const existing = this.#managers.get(target);
     if (existing && existing.type !== type) {
       debug.warn(
@@ -420,11 +420,20 @@ class NavigationCoordinator {
       );
     }
 
-    this.#managers.set(target, { type, canLeave });
+    const manager: NavManager = { type, canLeave };
+    this.#managers.set(target, manager);
+    let active = true;
+    let unregisterCleanup = () => {};
 
-    registry.onCleanup(target, () => {
-      this.#managers.delete(target);
-    });
+    const unregister = () => {
+      if (!active) return;
+      active = false;
+      if (this.#managers.get(target) === manager) this.#managers.delete(target);
+      unregisterCleanup();
+    };
+
+    unregisterCleanup = registry.onCleanup(target, unregister);
+    return unregister;
   }
 
   /**

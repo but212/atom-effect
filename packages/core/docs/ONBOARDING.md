@@ -63,6 +63,7 @@ console.log(total.value); // 110 (Evaluated lazily upon access)
 - **Lazy Evaluation**: The computation executes only when the value is accessed.
 - **Caching**: Results are cached. Re-evaluation occurs only if upstream dependencies have changed.
 - **Async Support**: Computeds can return a `Promise`. An explicit `defaultValue` is required to provide a synchronous state while the Promise is pending.
+- **Disposal**: `dispose()` releases executable computation state. `.peek()` intentionally keeps returning the last cached value, while `.value` remains invalid after disposal.
 
 ### 3. `effect(effectCallback, options?)`
 
@@ -85,6 +86,8 @@ name.value = 'User';
 
 handle.dispose();
 ```
+
+If an effect run returns a cleanup asynchronously, starting a newer run invalidates the older cleanup session. A stale promise cannot install cleanup over the newer run.
 
 ---
 
@@ -127,7 +130,7 @@ effect(() => {
 
 ### Microtask Flush
 
-By default, the scheduler coalesces multiple state changes into a single asynchronous microtask cycle. This prevents redundant executions of computeds and effects during synchronous operations.
+By default, computed nodes are invalidated synchronously so reads remain current, while external notifications and effect executions are coalesced into a single asynchronous microtask cycle. This prevents redundant effect executions during synchronous operations.
 
 ### Atomic Updates with `batch()`
 

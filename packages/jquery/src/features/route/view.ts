@@ -79,7 +79,9 @@ export function renderRoute(
   if (routeDefinition.meta) syncMetaData(window, routeDefinition.meta);
 
   // Logic: DOM Refresh
-  // Ensures a clean slate and resets the cleanup buffer for the new view lifecycle.
+  // Clean bindings before detaching the old view so cleanup does not depend on
+  // the asynchronous MutationObserver safety net.
+  registry.cleanupDescendants(container);
   container.replaceChildren();
   const onUnmount = (teardown: () => void) => renderer.cleanups.push(teardown);
 
@@ -241,6 +243,7 @@ export function setupRouteScanner(
     resolvePath,
     disconnect: () => {
       activeLinkSubscription.dispose();
+      currentPatternAtom.dispose();
       linkObserver.disconnect();
     },
   };

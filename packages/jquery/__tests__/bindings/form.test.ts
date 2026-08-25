@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import $ from '@/index';
-import { setupDOMCleanup } from '../utils/test-helpers';
+import { castTo, setupDOMCleanup } from '../utils/test-helpers';
 
 /** Helper to wait for MutationObserver and microtask flushes */
 const waitMutation = () => new Promise((r) => setTimeout(r, 20));
@@ -197,6 +197,31 @@ describe('Form Binding (atomForm)', () => {
   });
 
   describe('FormOptions', () => {
+    describe('value options', () => {
+      it('should forward parse, format, and equal to field bindings', async () => {
+        const data = $.atom({ age: 20 });
+        const equal = vi.fn((first: number, second: number) => first === second);
+        const $form = appendToBody('<form><input name="age"></form>');
+
+        $form.atomForm(
+          data,
+          castTo<never>({
+            parse: (value: string) => Number(value),
+            format: (value: number) => `age:${value}`,
+            equal,
+          })
+        );
+        await $.nextTick();
+
+        expect($form.find('input').val()).toBe('age:20');
+        $form.find('input').val('21').trigger('input');
+        await $.nextTick();
+
+        expect(data.value.age).toBe(21);
+        expect(equal).toHaveBeenCalled();
+      });
+    });
+
     describe('transform & onChange', () => {
       it('should apply transform and trigger onChange correctly', async () => {
         const data = $.atom({ age: 20, ids: [1] });

@@ -170,6 +170,7 @@ class EffectImpl
     if (!preparationResult.value) return Result.ok(undefined);
 
     this.#execCleanup();
+    this.#trackSessionId++;
 
     nodeStartTracking(this);
     prepareTracking(this);
@@ -238,7 +239,7 @@ class EffectImpl
    */
   // biome-ignore lint/suspicious/noConfusingVoidType: matches public EffectFunction return type
   #handleAsyncResult(promise: Promise<void | (() => void)>): void {
-    const sessionId = ++this.#trackSessionId;
+    const sessionId = this.#trackSessionId;
 
     promise.then(
       (cleanupCallback) => {

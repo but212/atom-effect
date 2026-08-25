@@ -283,6 +283,10 @@ $('ul').atomList(users, {
 
 If two items produce the same `key`, the reconciler logs a duplicate-key warning and renders **both** items as fresh DOM nodes — no data is silently dropped. When the duplicates later resolve to unique keys, superseded nodes are torn down through the normal `onRemove` lifecycle.
 
+Pending removals are tracked by node identity, not by key: while a superseded duplicate's async `onRemove` is pending, any live item sharing that key keeps its DOM node and is patched in place on subsequent updates instead of being re-rendered.
+
+> Node-identity removal tracking applies when `render` returns `Element`/`jQuery`/`DocumentFragment` (nodes persist across cycles). With **string** `render`, the container is rebuilt via `replaceChildren` each cycle, so nodes are recreated and identity cannot span a pending removal — treat string renders as un-optimized for this duplicate-key race.
+
 > Prefer keys that are unique and stable (e.g. database IDs). Duplicate keys defeat node reuse and force full re-renders of the affected items.
 
 ---
@@ -389,7 +393,7 @@ theme.value = 'dark';
 
 ### Injecting Context
 
-Consumers maintain connections even if relocated within the DOM hierarchy.
+Consumers maintain connections even if relocated within the DOM hierarchy. A subscribed proxy resolves its current provider immediately, follows provider registration/removal and DOM topology changes, and releases its temporary subscription when unsubscribed or disposed. Replacing a provider also disposes its previous CSS synchronization effect.
 
 ```javascript
 class DeepChild extends HTMLElement {

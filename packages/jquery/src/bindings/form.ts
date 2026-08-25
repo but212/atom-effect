@@ -386,6 +386,13 @@ export function bindForm<T extends object, U = unknown>(
       const valueOptions: ValOptions<unknown> = {};
       if (options.debounce !== undefined) valueOptions.debounce = options.debounce;
       if (options.event !== undefined) valueOptions.event = options.event;
+      if (options.parse !== undefined) valueOptions.parse = options.parse;
+      if (options.format !== undefined) {
+        valueOptions.format = (value) => options.format?.(value as U) ?? String(value ?? '');
+      }
+      if (options.equal !== undefined) {
+        valueOptions.equal = (first, second) => options.equal?.(first as U, second as U) ?? false;
+      }
       bindVal(control, entry.atom, valueOptions);
     }
 

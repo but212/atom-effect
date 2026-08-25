@@ -173,6 +173,32 @@ class ReactiveScheduler implements SchedulerState {
     }
   }
 
+  /**
+   * Logic: Flush Arming
+   * Guarantees exactly one pending flush microtask whenever the active buffer
+   * is non-empty. schedule() cannot queue a flush while PROCESSING is set, so
+   * jobs scheduled during a drain (including from the onOverflow callback)
+   * are picked up by the re-arm in the microtask's finally block.
+   */
+  #armFlush(): void {
+    if ((this.#state & SCHEDULER_STATE.PROCESSING) !== 0) return;
+    this.#state |= SCHEDULER_STATE.PROCESSING;
+    queueMicrotask(() => {
+      try {
+        if (this.#activeJobBuffer.size === 0) return;
+        this.flushQueues();
+      } catch (microtaskError) {
+        resetTrackingContext(trackingContext);
+        throw microtaskError;
+      } finally {
+        this.#state &= ~SCHEDULER_STATE.PROCESSING;
+        // Re-arm if jobs were scheduled after the last drain decision
+        // (e.g. during job execution or inside onOverflow).
+        if (this.#activeJobBuffer.size > 0) this.#armFlush();
+      }
+    });
+  }
+
   #handleFlushOverflow(): void {
     const droppedCount = this.#activeJobBuffer.size;
     const droppedJobs: SchedulerJob[] = [];
@@ -212,18 +238,9 @@ class ReactiveScheduler implements SchedulerState {
         job._nextEpoch = undefined;
         this.schedule(job);
       }
-
-      // Reason: schedule() skips queuing a new flush while PROCESSING is set,
-      // and we are inside the active flush microtask right now. Queue the
-      // recovery flush explicitly.
-      queueMicrotask(() => {
-        try {
-          if (this.#activeJobBuffer.size === 0) return;
-          this.flushQueues();
-        } finally {
-          this.#state &= ~SCHEDULER_STATE.PROCESSING;
-        }
-      });
+      // PROCESSING is still set here, so armFlush() no-ops; the owning flush
+      // microtask's finally re-arms once it clears PROCESSING.
+      this.#armFlush();
     }
   }
 
@@ -298,20 +315,7 @@ class ReactiveScheduler implements SchedulerState {
     const target = this.#activeJobBuffer;
     target.items[target.size++] = schedulerJob;
 
-    if ((this.#state & SCHEDULER_STATE.PROCESSING) === 0) {
-      this.#state |= SCHEDULER_STATE.PROCESSING;
-      queueMicrotask(() => {
-        try {
-          if (this.#activeJobBuffer.size === 0) return;
-          this.flushQueues();
-        } catch (microtaskError) {
-          resetTrackingContext(trackingContext);
-          throw microtaskError;
-        } finally {
-          this.#state &= ~SCHEDULER_STATE.PROCESSING;
-        }
-      });
-    }
+    this.#armFlush();
     return Result.ok(undefined);
   }
 

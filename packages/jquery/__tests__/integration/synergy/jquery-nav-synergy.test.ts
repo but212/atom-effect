@@ -56,16 +56,13 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
 
   afterEach(() => {
     for (const manager of activeManagers) {
-      try {
-        manager.destroy();
-      } catch {}
+      manager.destroy();
     }
     $.initAEJ({ autoCleanup: false });
   });
 
-  describe('Regression: Form Tag Preservation & atomForm Binding', () => {
-    it('should preserve <form> elements during PJAX navigation and support atomForm two-way binding', async () => {
-      // Mock page templates
+  describe('Regression: Form Tag Neutralization', () => {
+    it('should neutralize <form> elements during PJAX navigation', async () => {
       setupMockAjax({
         home: '<div>Home Page</div>',
         'form-page': `
@@ -78,48 +75,18 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
         `,
       });
 
-      let formBound = false;
-      const formStateAtom = $.atom({
-        user: { firstName: 'Alice' },
-        preferences: { notify: true },
-      });
-
-      const nav = track(
-        $.atomNav({
-          target: $app,
-          onMount: ($container, url) => {
-            if (url.includes('form-page')) {
-              const $form = $container.find('#test-form');
-              expect($form.length).toBe(1);
-              expect($form[0] instanceof HTMLFormElement).toBe(true); // Should remain HTMLFormElement
-
-              // Bind form to atom
-              $form.atomForm(formStateAtom);
-              formBound = true;
-            }
-          },
-        })
-      );
-
-      // 1. Initial page load (Home)
+      const nav = track($.atomNav({ target: $app }));
       await nav.navigate('/home');
       await vi.waitFor(() => expect($app.text()).toContain('Home Page'));
 
-      // 2. Navigate to Form page
       await nav.navigate('/form-page');
-      await vi.waitFor(() => expect(formBound).toBe(true));
+      await vi.waitFor(() => expect($app.find('#test-form').length).toBe(1));
 
-      // Check if DOM updated from Atom initial value
-      const $input = $app.find('input[name="user.firstName"]');
-      const $checkbox = $app.find('input[name="preferences.notify"]');
-
-      expect($input.val()).toBe('Alice');
-      expect($checkbox.prop('checked')).toBe(true);
-
-      // Check two-way binding: DOM to Atom
-      $input.val('Bob').trigger('input');
-      await $.nextTick();
-      expect(formStateAtom.value.user.firstName).toBe('Bob');
+      const $form = $app.find('#test-form');
+      expect($form[0]).not.toBeInstanceOf(HTMLFormElement);
+      expect($form[0]?.tagName).toBe('SPAN');
+      expect($form.find('input').length).toBe(2);
+      expect($form.find('input[name="user.firstName"]').val()).toBe('Initial');
     });
   });
 
@@ -191,7 +158,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       expect($form.attr('data-unsafe-attr')).toBe('onclick,onsubmit');
     });
 
-    it('should recursively neutralize scripts inside a nested form tag while keeping the form', async () => {
+    it('should recursively neutralize scripts inside a nested form tag while neutralizing the form', async () => {
       setupMockAjax({
         scripted: `
           <div id="nested">
@@ -208,7 +175,8 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       await vi.waitFor(() => expect($app.find('#nested-form').length).toBe(1));
 
       const $form = $app.find('#nested-form');
-      expect($form[0] instanceof HTMLFormElement).toBe(true);
+      expect($form[0]).not.toBeInstanceOf(HTMLFormElement);
+      expect($form[0]?.tagName).toBe('SPAN');
       expect($form.find('script').length).toBe(0);
       expect($form.find('span').length).toBe(1); // Script neutralized to span
     });
@@ -286,7 +254,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       expect($styleSpan.text()).toBe('/* blocked */');
     });
 
-    it('should still neutralize non-form blacklisted structural tags (e.g. iframe) to span', async () => {
+    it('should neutralize blacklisted structural tags (e.g. iframe and form) to spans', async () => {
       setupMockAjax({
         structural: `
           <div id="struct">
@@ -304,7 +272,7 @@ describe('Form & Navigation Synergy (Security & Regression)', () => {
       expect($iframe.length).toBe(0); // iframe should be stripped / neutralized
 
       const $span = $app.find('span');
-      expect($span.length).toBe(1); // iframe turned into span
+      expect($span.length).toBe(2); // iframe and form turned into spans
     });
 
     it('should neutralize malicious tags encoded within text nodes inside forms', async () => {

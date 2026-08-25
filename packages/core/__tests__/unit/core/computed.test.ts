@@ -51,6 +51,30 @@ describe('Computed', () => {
         expect(computationCallback).toHaveBeenCalledTimes(2);
       });
 
+      it('should invalidate cached values after repeated synchronous writes in default mode', () => {
+        const source = atom(0);
+        const computedInstance = computed(() => source.value + 1);
+
+        source.value = 5;
+        expect(computedInstance.value).toBe(6);
+
+        source.value = 42;
+        expect(computedInstance.value).toBe(43);
+      });
+
+      it('should invalidate cached values through a computed chain after repeated synchronous writes', () => {
+        const source = atom(0);
+        const first = computed(() => source.value + 1);
+        const second = computed(() => first.value * 2);
+
+        expect(second.value).toBe(2);
+
+        source.value = 5;
+        source.value = 42;
+
+        expect(second.value).toBe(86);
+      });
+
       it('should respect equality checks to prune recomputations', async () => {
         const source = atom({ x: 1 });
         const computationCallback = vi.fn(() => ({ x: source.value.x }));
@@ -142,6 +166,25 @@ describe('Computed', () => {
         expect(diamond.value).toBe(23);
       });
 
+      it('should defer default effects while allowing immediate computed reads', async () => {
+        const source = atom(0);
+        const derived = computed(() => source.value + 1);
+        const observed: number[] = [];
+        const runner = effect(() => {
+          observed.push(derived.value);
+        });
+        observed.length = 0;
+
+        source.value = 42;
+
+        expect(observed).toEqual([]);
+        expect(derived.value).toBe(43);
+
+        await aeNextTick();
+        expect(observed).toEqual([43]);
+        runner.dispose();
+      });
+
       it('should keep computed derivations pure and handle state changes inside effects', async () => {
         const someAtom = atom(1);
         const computedInstance = computed(() => someAtom.value * 2);
@@ -210,6 +253,19 @@ describe('Computed', () => {
       computedInstance.dispose();
 
       expect(computedInstance.peek()).toBe(42);
+    });
+
+    it('should preserve disposed peek compatibility without retaining executable computation state', () => {
+      const source = atom(1);
+      const computation = vi.fn(() => source.value);
+      const computedInstance = computed(computation);
+
+      expect(computedInstance.value).toBe(1);
+      computedInstance.dispose();
+      source.value = 2;
+
+      expect(computedInstance.peek()).toBe(1);
+      expect(computation).toHaveBeenCalledTimes(1);
     });
   });
 

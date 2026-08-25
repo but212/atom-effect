@@ -212,7 +212,7 @@ export function placeItems<T>(
       if (!element) break;
       const slot = slots[i];
       if (!slot) continue;
-      const { key, item } = slot;
+      const { item } = slot;
 
       // Lazy wrapping: JQuery wrapper only allocated if callback exists
       const $element = bind || onAdd ? $(element as HTMLElement) : null;
@@ -222,7 +222,6 @@ export function placeItems<T>(
       if (bind && $element) bind($element, item, i);
       if (onAdd && $element) {
         onAdd($element);
-        ctx.removingKeys.delete(key);
         debug.domUpdated(SYSTEM_LIST.PREFIX, $element, 'list.add', item);
       }
       element = element.nextElementSibling;
@@ -277,7 +276,7 @@ export function placeItems<T>(
   for (let i = 0; i < count; i++) {
     const slot = slots[i];
     if (!slot) continue;
-    const { state, nodes: node, item, key } = slot;
+    const { state, nodes: node, item } = slot;
     if (state === ItemState.Unchanged || !node) continue;
 
     if (bind || onAdd || (state === ItemState.Existing && update)) {
@@ -290,7 +289,6 @@ export function placeItems<T>(
           if (bind) bind($node, item, i);
           if (onAdd) {
             onAdd($node);
-            ctx.removingKeys.delete(key);
             debug.domUpdated(SYSTEM_LIST.PREFIX, $node, 'list.add', item);
           }
           break;
@@ -298,7 +296,6 @@ export function placeItems<T>(
           if (bind) bind($node, item, i);
           if (onAdd) {
             onAdd($node);
-            ctx.removingKeys.delete(key);
             debug.domUpdated(SYSTEM_LIST.PREFIX, $node, 'list.add', item);
           }
           break;

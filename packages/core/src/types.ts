@@ -11,12 +11,13 @@ import type { AsyncState, BRAND, KIND, SCHEDULER_STATE } from '@/constants';
 import type { AtomError } from '@/utils/errors';
 
 /**
- * A unique monotonic identifier for reactive nodes.
+ * A process-local numeric identifier for reactive nodes.
+ * Monotonicity and lifetime uniqueness are limited by the 31-bit SMI mask used by node ids.
  */
 export type DependencyId = number;
 
 /**
- * Represents an object identifiable by a unique DependencyId, typically used in debugging/diagnostics.
+ * Represents an object identifiable by a process-local DependencyId, typically used in debugging/diagnostics.
  * @internal
  */
 export type IdentifiableNode = object & { id: DependencyId };
@@ -164,6 +165,8 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
 export interface Subscriber {
   /** Invoked by the scheduler to perform the node's update logic. */
   execute(): void;
+  /** @internal Identifies computed nodes for synchronous dirty propagation. */
+  readonly isComputed?: boolean;
 }
 
 /**

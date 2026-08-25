@@ -211,10 +211,14 @@ class BindingRegistry {
   }
 
   /** Logic: Task Aggregation @internal */
-  #addCleanup(element: Element, cleanupFunction: () => void): void {
+  #addCleanup(element: Element, cleanupFunction: () => void): () => void {
     const record = this.#getOrCreateRecord(element);
     record.tasks ??= new SlotBuffer<() => void>();
-    record.tasks.push(cleanupFunction);
+    const task = cleanupFunction;
+    record.tasks.push(task);
+    return () => {
+      record.tasks?.remove(task);
+    };
   }
 
   /**
@@ -244,9 +248,9 @@ class BindingRegistry {
    * Registers a generic cleanup callback for manual resource management.
    * @internal
    */
-  onCleanup(element: Element, cleanupFunction: () => void): void {
+  onCleanup(element: Element, cleanupFunction: () => void): () => void {
     const selector = getSelector(element);
-    this.#addCleanup(element, () => {
+    return this.#addCleanup(element, () => {
       try {
         cleanupFunction();
       } catch (error) {

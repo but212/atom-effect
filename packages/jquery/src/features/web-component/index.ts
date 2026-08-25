@@ -12,7 +12,7 @@
  * development with automatic lifecycle management.
  */
 
-import { isAtom } from '@but212/atom-effect';
+import { type EffectObject, isAtom } from '@but212/atom-effect';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
@@ -24,7 +24,14 @@ import type {
   WritableAtom,
 } from '@/types';
 import { debug } from '@/utils/debug';
-import { createContextProxy, getInternalState, getOrCreateSheet, nodeStateMap } from './engine';
+import {
+  createContextProxy,
+  disposeProviders,
+  getInternalState,
+  getOrCreateSheet,
+  nodeStateMap,
+  setProvider,
+} from './engine';
 import { SetupFeatures } from './setup';
 import { ComponentState } from './state';
 import { resolveShadowRoot } from './utils';
@@ -87,6 +94,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   }
 
   const state = new ComponentState(element);
+  let isTearingDown = false;
 
   const controller: AtomComponentController = {
     host: element,
@@ -276,6 +284,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
       }
 
       state.isInitialized = true;
+      registry.setTeardown(element, () => controller.teardown());
     },
 
     /**
@@ -284,21 +293,20 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
      * associated with this component instance.
      */
     teardown() {
-      const componentState = nodeStateMap.get(element);
-      if (componentState) {
-        componentState.providers?.clear();
-
-        if (componentState.providerEffects) {
-          for (const providerEffect of componentState.providerEffects.values()) {
-            providerEffect.dispose();
-          }
+      if (isTearingDown) return;
+      isTearingDown = true;
+      try {
+        const componentState = nodeStateMap.get(element);
+        if (componentState) {
+          disposeProviders(element);
+          componentState.injects?.clear();
         }
-        componentState.providerEffects?.clear();
-        componentState.injects?.clear();
-      }
 
-      state.dispose();
-      registry.cleanupTree(element);
+        state.dispose();
+        registry.cleanupTree(element);
+      } finally {
+        isTearingDown = false;
+      }
     },
   } as AtomComponentController;
 
@@ -345,29 +353,23 @@ export function provideAtom(
         : ((element as JQuery).toArray() as HTMLElement[]);
 
   for (const element of targets) {
-    const state = getInternalState(element);
-    if (!state.providers) {
-      state.providers = new Map();
-    }
-    state.providers.set(key, value);
-
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
+    let providerEffect: EffectObject | undefined;
+
     if (keyStr) {
       const varName = `--aej-${keyStr}`;
       const sync = (newValue: unknown) =>
         element.style.setProperty(varName, String(newValue ?? ''));
       if (isAtom(value)) {
-        if (!state.providerEffects) state.providerEffects = new Map();
-        state.providerEffects.get(key)?.dispose();
-        state.providerEffects.set(
-          key,
-          $.effect(() => {
-            sync(value.value);
-            return undefined;
-          })
-        );
+        providerEffect = $.effect(() => {
+          sync(value.value);
+          return undefined;
+        });
       } else sync(value);
     }
+
+    setProvider(element, key, value, providerEffect);
+    if (providerEffect) registry.trackEffect(element, providerEffect);
   }
 }
 

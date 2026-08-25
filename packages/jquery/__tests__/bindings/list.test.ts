@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createListContext, resolveEventTarget } from '@/bindings/list/context';
+import { createListContext, removeNode, resolveEventTarget } from '@/bindings/list/context';
 import { applyListBinding } from '@/bindings/list/index';
 import { injectKeyToHtml } from '@/bindings/list/utils';
 import { registry } from '@/core/registry';
@@ -614,6 +614,35 @@ describe('$.atomList (Integration)', () => {
       // The item should STILL be there because it was re-added
       expect($container.find('.item-1').length).toBe(1);
     });
+
+    it('does not tear down a pending-removal node that was re-bound live before removal resolves', async () => {
+      let resolveRemove!: () => void;
+      const ctx = createListContext<{ id: number }>(
+        $container,
+        () =>
+          new Promise<void>((r) => {
+            resolveRemove = r;
+          })
+      );
+
+      const nodes = $.parseHTML('<span></span>');
+      $container.append(nodes);
+
+      // Seal ownership: node enters the removal lifecycle (key stripped).
+      removeNode(ctx, '1', nodes);
+
+      // Simulate the node being re-bound live (re-carrying its atom key)
+      // while its async removal is still pending.
+      for (const el of nodes) {
+        if (el instanceof Element) el.setAttribute('data-atom-key', '1');
+      }
+
+      resolveRemove();
+      await new Promise<void>((r) => setTimeout(r, 0));
+
+      // The re-bound node must survive: not removed from the DOM, not cleaned up.
+      expect($container.find('span').length).toBe(1);
+    });
   });
 
   describe('Edge Cases & Robustness', () => {
@@ -662,6 +691,62 @@ describe('$.atomList (Integration)', () => {
         .map((_, element) => $(element).text())
         .get();
       expect(text).toEqual(['1', '3', '2']);
+    });
+
+    it('should not re-render a live duplicate sibling while its superseded twin is pending async removal', async () => {
+      let resolveRemove!: () => void;
+      const list = $.atom([
+        { id: 1, v: 0 },
+        { id: 2, v: 1 },
+        { id: 2, v: 2 },
+      ]);
+      const onAdd = vi.fn();
+
+      $container.atomList(list, {
+        key: 'id',
+        render: (i: { id: number; v: number }) => `<span>${i.id}-${i.v}</span>`,
+        update: ($element, i: { id: number; v: number }) => $element.text(`u${i.id}-${i.v}`),
+        onAdd,
+        onRemove: () =>
+          new Promise<void>((r) => {
+            resolveRemove = r;
+          }),
+      });
+
+      await $.nextTick();
+      // Initial render: 3 items added (the third is the fresh duplicate).
+      expect(onAdd).toHaveBeenCalledTimes(3);
+
+      // Resolve the duplicate: the superseded occurrence starts an async removal.
+      list.value = [
+        { id: 1, v: 0 },
+        { id: 2, v: 1 },
+      ];
+      await $.nextTick();
+
+      // Capture the live key-2 element before the next update.
+      const liveElement = $container.find('span').get()[1];
+      expect(liveElement?.textContent).toBe('2-1');
+
+      // While the twin's removal is pending, update data: the live key-2 item
+      // must be patched IN PLACE (same node, update callback), NOT re-added.
+      list.value = [
+        { id: 1, v: 0 },
+        { id: 3, v: 5 },
+        { id: 2, v: 9 },
+      ];
+      await $.nextTick();
+
+      expect(onAdd).toHaveBeenCalledTimes(4); // only id:3 is new
+      const spans = $container.find('span').get();
+      const patchedLive = spans.find((el) => el === liveElement);
+      expect(patchedLive?.textContent).toBe('u2-9');
+      const texts = $(spans)
+        .map((_, element) => element.textContent)
+        .get();
+      expect(texts).toEqual(['1-0', '3-5', 'u2-9', '2-2']); // last = pending twin
+
+      resolveRemove();
     });
 
     it('should correctly handle trimming logic when old item was ignored due to duplicate keys', async () => {

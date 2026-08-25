@@ -12,13 +12,25 @@
  * and reactive tracking across the DOM tree.
  */
 
-import { BRAND, BrandFlags, type EffectObject, isAtom, isWritable } from '@but212/atom-effect';
+import {
+  atom,
+  BRAND,
+  BrandFlags,
+  type EffectObject,
+  isAtom,
+  isWritable,
+} from '@but212/atom-effect';
 import $ from 'jquery';
+import { getOrCreateRootObserver } from '@/core/observer';
 import type { AtomComponentController, WritableAtom } from '@/types';
 
+export interface ProviderEntry {
+  value: unknown;
+  effect?: EffectObject;
+}
+
 export interface NodeInternalState {
-  providers?: Map<string | symbol, unknown>;
-  providerEffects?: Map<string | symbol, EffectObject>;
+  providers?: Map<string | symbol, ProviderEntry>;
   injects?: Map<string | symbol, WritableAtom<unknown>>;
   controller?: AtomComponentController;
 }
@@ -94,8 +106,9 @@ export const discoverProvider = (target: Node, key: string | symbol): unknown | 
   let currentNode: Node | null = target;
   while (currentNode) {
     const state = nodeStateMap.get(currentNode);
-    if (state?.providers?.has(key)) {
-      return state.providers.get(key);
+    const provider = state?.providers?.get(key);
+    if (provider) {
+      return provider.value;
     }
     currentNode = currentNode instanceof ShadowRoot ? currentNode.host : currentNode.parentNode;
   }
@@ -108,25 +121,114 @@ export const discoverProvider = (target: Node, key: string | symbol): unknown | 
  * on every access.
  *
  * Design Intent:
- * Drops global state versioning. By traversing the DOM upon access,
- * the proxy ensures it always resolves to the current location's provider
- * without maintaining tracking state.
+ * Uses one shared context revision for provider and DOM topology changes.
+ * The provider is still resolved synchronously on every access, while the
+ * revision gives subscriptions a deterministic invalidation source.
  *
  * @internal
  */
+const contextRevision = atom(0, { sync: true });
+
+export function invalidateContext(): void {
+  contextRevision.value++;
+}
+
+export function setProvider(
+  node: Node,
+  key: string | symbol,
+  value: unknown,
+  effect?: EffectObject
+): void {
+  const state = getInternalState(node);
+  state.providers?.get(key)?.effect?.dispose();
+  state.providers ??= new Map();
+  state.providers.set(key, effect ? { value, effect } : { value });
+  invalidateContext();
+}
+
+export function disposeProviders(node: Node): void {
+  const state = nodeStateMap.get(node);
+  for (const provider of state?.providers?.values() ?? []) {
+    provider.effect?.dispose();
+  }
+  state?.providers?.clear();
+  invalidateContext();
+}
+
+function observeContext(target: HTMLElement): () => void {
+  const subscriptions = new Map<Node, () => void>();
+  const refresh = () => {
+    const roots = new Set<Node>([target.ownerDocument, target.getRootNode()]);
+    for (const [root, unsubscribe] of subscriptions) {
+      if (!roots.has(root)) {
+        unsubscribe();
+        subscriptions.delete(root);
+      }
+    }
+    for (const root of roots) {
+      if (subscriptions.has(root)) continue;
+      subscriptions.set(
+        root,
+        getOrCreateRootObserver(root).onStructureChanged(() => {
+          // Rebind after topology changes so detached and reattached targets keep tracking context.
+          invalidateContext();
+          refresh();
+        })
+      );
+    }
+  };
+
+  refresh();
+  return () => {
+    for (const unsubscribe of subscriptions.values()) unsubscribe();
+    subscriptions.clear();
+  };
+}
+
+function resolveContext<T>(target: HTMLElement, key: string | symbol, isPeek: boolean): T | null {
+  const provider = discoverProvider(target, key);
+  if (provider === undefined) return null;
+  return (isAtom(provider) ? (isPeek ? provider.peek() : provider.value) : provider) as T;
+}
+
+type ContextSubscriber<T> = Parameters<WritableAtom<T>['subscribe']>[0];
+
+function subscribeToContext<T>(
+  target: HTMLElement,
+  key: string | symbol,
+  callback: ContextSubscriber<T | null>
+): () => void {
+  const sharedComputed = $.computed(() => {
+    contextRevision.value;
+    return resolveContext(target, key, false);
+  });
+  sharedComputed.value;
+  const unsubscribeComputed = sharedComputed.subscribe(() => {
+    sharedComputed.value;
+    if (typeof callback === 'function') callback();
+    else callback.execute();
+  });
+  const stopObserving = observeContext(target);
+  let active = true;
+
+  return () => {
+    if (!active) return;
+    active = false;
+    unsubscribeComputed();
+    stopObserving();
+    sharedComputed.dispose();
+  };
+}
+
 export function createContextProxy<T>(
   target: HTMLElement,
   key: string | symbol
 ): WritableAtom<T | null> {
-  const resolve = (isPeek: boolean): T | null => {
-    const provider = discoverProvider(target, key);
-    if (provider === undefined) return null;
-    return (isAtom(provider) ? (isPeek ? provider.peek() : provider.value) : provider) as T;
-  };
+  const subscriptions = new Set<() => void>();
 
   return {
     get value() {
-      return resolve(false);
+      return resolveContext(target, key, false);
     },
     set value(newValue: T | null) {
       const provider = discoverProvider(target, key);
@@ -135,23 +237,20 @@ export function createContextProxy<T>(
       }
     },
     peek() {
-      return resolve(true);
+      return resolveContext(target, key, true);
     },
     subscribe(callback) {
-      // In this stateless model, we create a temporary computed that captures the current
-      // resolution value and subscribe to it. If the user wants to react to *movement* in the DOM,
-      // they must explicitly re-evaluate or use a component lifecycle hook.
-      // This enforces explicit bounds over implicit magical DOM tracking.
-      const sharedComputed = $.computed(() => resolve(false));
-      const unsubscribeCallback = sharedComputed.subscribe(callback);
-      return () => {
-        unsubscribeCallback();
-        sharedComputed.dispose();
+      const unsubscribeContext = subscribeToContext(target, key, callback);
+      const cleanup = () => {
+        if (!subscriptions.delete(cleanup)) return;
+        unsubscribeContext();
       };
+      subscriptions.add(cleanup);
+      return cleanup;
     },
-    subscriberCount: () => 0, // Proxy has no permanent subscribers.
+    subscriberCount: () => subscriptions.size,
     dispose() {
-      // No permanent resources to free in the proxy itself.
+      for (const cleanup of [...subscriptions]) cleanup();
     },
     [BRAND]: BrandFlags.Atom | BrandFlags.Writable,
   } as WritableAtom<T | null>;
@@ -161,6 +260,6 @@ if (typeof window !== 'undefined') {
   window.__AEJ_INTERNAL__ = {
     nodeStateMap,
     sheetCache,
-    version: '0.34.0',
+    version: '0.34.1',
   };
 }

@@ -82,6 +82,19 @@ describe('Scheduler Engine', () => {
       expect(computedInstance.value).toBe(11);
     });
 
+    it('keeps computed reads current while batching multiple writes', () => {
+      const source = atom(0);
+      const derived = computed(() => source.value + 1);
+
+      expect(derived.value).toBe(1);
+
+      batch(() => {
+        source.value = 5;
+        source.value = 42;
+        expect(derived.value).toBe(43);
+      });
+    });
+
     it('recovers from errors while preserving pending changes', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const someAtom = atom(0);
@@ -246,6 +259,34 @@ describe('Scheduler Engine', () => {
       // Without one-shot recovery the job would halt at ~5-6 executions.
       // The retry must carry it well past a single flush budget.
       expect(executions).toBeGreaterThanOrEqual(8);
+
+      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      consoleError.mockRestore();
+    });
+
+    it('flushes jobs scheduled from the onOverflow callback after a terminal overflow', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      schedulerSetMaxFlushIterations(scheduler, 10);
+
+      let overflows = 0;
+      const probe = vi.fn();
+      const loop = () => schedulerSchedule(scheduler, loop);
+      scheduler.onOverflow = () => {
+        overflows++;
+        if (overflows === 2) {
+          scheduler.onOverflow = null;
+          // Scheduled while PROCESSING is set and recovery is exhausted:
+          // the re-arm guarantee must still flush this job.
+          schedulerSchedule(scheduler, probe);
+        }
+      };
+      schedulerSchedule(scheduler, loop);
+
+      await sleep(50);
+
+      expect(overflows).toBeGreaterThanOrEqual(2);
+      expect(probe).toHaveBeenCalledTimes(1);
 
       schedulerSetMaxFlushIterations(scheduler, originalMax);
       consoleError.mockRestore();
