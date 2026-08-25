@@ -82,6 +82,19 @@ describe('Scheduler Engine', () => {
       expect(computedInstance.value).toBe(11);
     });
 
+    it('keeps computed reads current while batching multiple writes', () => {
+      const source = atom(0);
+      const derived = computed(() => source.value + 1);
+
+      expect(derived.value).toBe(1);
+
+      batch(() => {
+        source.value = 5;
+        source.value = 42;
+        expect(derived.value).toBe(43);
+      });
+    });
+
     it('recovers from errors while preserving pending changes', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const someAtom = atom(0);

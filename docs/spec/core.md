@@ -14,8 +14,8 @@ The engine is a deterministic push-pull graph of three node roles:
 
 **Propagation lifecycle (push → schedule → pull):**
 
-1. **Push**: An `atom` write increments its version and broadcasts a dirty signal to direct subscribers. Computeds become `DIRTY`; effects are scheduled.
-2. **Schedule**: Notifications are coalesced into a single microtask flush. Multiple writes coalesce into one downstream pass.
+1. **Push**: An `atom` write increments its version and synchronously invalidates direct computed subscribers. Computeds become `DIRTY`; effects are scheduled without executing their side effects in default mode.
+2. **Schedule**: Atom subscriber notifications and default effect executions are coalesced into a single microtask flush. Multiple writes coalesce into one downstream pass.
 3. **Pull**: On access or effect execution, a node validates its dependencies. Re-computation only occurs if an upstream version incremented. If a dependency re-evaluates to an identical result (version unchanged), the pull short-circuits.
 
 ## 2. Node invariants
@@ -44,7 +44,7 @@ Async computeds are treated as state machines with sessions.
 
 ## 4. Scheduling & batching
 
-- **Default**: Updates defer to a microtask flush; coalescing multiple synchronous writes into one downstream pass.
+- **Default**: Computed invalidation is synchronous, while atom subscriber notifications and default effect executions defer to a microtask flush; multiple synchronous writes still coalesce into one downstream pass.
 - **`batch(fn)`**: Groups updates into one notification cycle. Supports nesting (outermost batch flushes last) and commits state even if `fn` throws.
 - **`sync: true`**: Option on `atom` and `effect` to deliver synchronously, bypassing the microtask batching.
 - **Execution budget**: Each effect enforces `maxExecutionsPerFlush` (default 100) independently; exceeding that per-effect limit disposes the effect. The scheduler separately enforces its aggregate per-flush limit; aggregate overflow is reported via `scheduler.onOverflow(droppedCount, droppedJobs)` and dropped jobs are re-queued exactly once. These limits and failure paths are distinct.

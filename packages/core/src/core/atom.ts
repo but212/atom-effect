@@ -26,6 +26,7 @@ import {
 import {
   nextVersion,
   nodeGetSubscriberCount,
+  nodeNotifyComputedSubscribers,
   nodeNotifySubscribers,
   nodeSubscribe,
   trackingContext,
@@ -169,6 +170,10 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 
     this.#pendingPreviousValue = oldValue;
     this.flags |= SCHED;
+
+    // Computed nodes must become dirty synchronously so pull reads observe the
+    // latest source value even while ordinary notifications remain batched.
+    nodeNotifyComputedSubscribers(this);
 
     if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
       if (!slots.isLocked) this.#flushNotifications();

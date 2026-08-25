@@ -165,6 +165,8 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
 export interface Subscriber {
   /** Invoked by the scheduler to perform the node's update logic. */
   execute(): void;
+  /** @internal Identifies computed nodes for synchronous dirty propagation. */
+  readonly isComputed?: boolean;
 }
 
 /**

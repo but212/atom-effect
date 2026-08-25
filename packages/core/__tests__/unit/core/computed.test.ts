@@ -51,6 +51,30 @@ describe('Computed', () => {
         expect(computationCallback).toHaveBeenCalledTimes(2);
       });
 
+      it('should invalidate cached values after repeated synchronous writes in default mode', () => {
+        const source = atom(0);
+        const computedInstance = computed(() => source.value + 1);
+
+        source.value = 5;
+        expect(computedInstance.value).toBe(6);
+
+        source.value = 42;
+        expect(computedInstance.value).toBe(43);
+      });
+
+      it('should invalidate cached values through a computed chain after repeated synchronous writes', () => {
+        const source = atom(0);
+        const first = computed(() => source.value + 1);
+        const second = computed(() => first.value * 2);
+
+        expect(second.value).toBe(2);
+
+        source.value = 5;
+        source.value = 42;
+
+        expect(second.value).toBe(86);
+      });
+
       it('should respect equality checks to prune recomputations', async () => {
         const source = atom({ x: 1 });
         const computationCallback = vi.fn(() => ({ x: source.value.x }));
@@ -140,6 +164,25 @@ describe('Computed', () => {
         await aeNextTick();
 
         expect(diamond.value).toBe(23);
+      });
+
+      it('should defer default effects while allowing immediate computed reads', async () => {
+        const source = atom(0);
+        const derived = computed(() => source.value + 1);
+        const observed: number[] = [];
+        const runner = effect(() => {
+          observed.push(derived.value);
+        });
+        observed.length = 0;
+
+        source.value = 42;
+
+        expect(observed).toEqual([]);
+        expect(derived.value).toBe(43);
+
+        await aeNextTick();
+        expect(observed).toEqual([43]);
+        runner.dispose();
       });
 
       it('should keep computed derivations pure and handle state changes inside effects', async () => {

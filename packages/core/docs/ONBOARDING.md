@@ -130,7 +130,7 @@ effect(() => {
 
 ### Microtask Flush
 
-By default, the scheduler coalesces multiple state changes into a single asynchronous microtask cycle. This prevents redundant executions of computeds and effects during synchronous operations.
+By default, computed nodes are invalidated synchronously so reads remain current, while external notifications and effect executions are coalesced into a single asynchronous microtask cycle. This prevents redundant effect executions during synchronous operations.
 
 ### Atomic Updates with `batch()`
 
