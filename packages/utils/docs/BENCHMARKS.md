@@ -6,10 +6,10 @@ Benchmarking suite for `@but212/atom-effect-utils` to quantify the performance o
 
 | Category | Key Metric | Value | Technical Context |
 | :--- | :--- | :--- | :--- |
-| **SlotBuffer** | push (small) | 2.16M ops/sec | Internal high-performance buffer (x10) |
+| **SlotBuffer** | push (small) | 2.47M ops/sec | Internal high-performance buffer (x10) |
 | **Option** | isSome check | 2.04M ops/sec | Reactive-compatible Option type (x10) |
-| **Result** | ok creation | 1.79M ops/sec | Error handling primitive (x10) |
-| **Type Guard** | isPromise | 2.13M ops/sec | Fast async primitive detection (x10) |
+| **Result** | ok creation | 1.87M ops/sec | Error handling primitive (x10) |
+| **Type Guard** | isPromise | 2.63M ops/sec | Fast async primitive detection (x10) |
 
 ---
 
