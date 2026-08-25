@@ -173,6 +173,8 @@ Implementation invariants:
 **Static config:** `aejStyles`, `aejBind`, `aejAria`, `aejParts`, `aejDispatch`, `aejValue`, `aejValidation`.
 
 > **State isolation invariant**: static properties are shared across **all** instances. Mutable reactive state (`atom`/`computed`) must be instance properties registered in the constructor or `connectedCallback` via `this.aej.setup(...)`, not static specs.
+>
+> `aejValidation`/`validation` string results become custom validity messages. When a `ValidityStateFlags` result contains any true flag, the binding supplies `ElementInternals` with the default message `Invalid value`; an empty flags object clears validity.
 
 ### Controller internals
 

@@ -237,10 +237,9 @@ describe('$.atomFetch', () => {
       await $.nextTick();
       data.invalidate();
       void data.value;
-      abortFn();
 
       await $.nextTick();
-      expect(abortFn).toHaveBeenCalled();
+      expect(abortFn).toHaveBeenCalledTimes(1);
       expect(data.hasError).toBe(false); // superseded request error is ignored
       expect(data.value).toEqual({ ok: true });
     });

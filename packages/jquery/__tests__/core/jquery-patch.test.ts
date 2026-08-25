@@ -67,7 +67,7 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
     it('should apply reactive batching across all registration signatures', async () => {
       const count = $.atom(0);
       let computeCount = 0;
-      $.effect(() => {
+      const batchingEffect = $.effect(() => {
         count.value;
         computeCount++;
         return undefined;
@@ -112,6 +112,7 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
         await $.nextTick();
         expect(computeCount, `Batching failed for: ${name}`).toBe(1);
       }
+      batchingEffect.dispose();
       $btn.remove();
     });
 
