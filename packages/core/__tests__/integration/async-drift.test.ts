@@ -1,96 +1,139 @@
 /**
  * @fileoverview Async drift and REJECTED state tests
  *
- * Documents exactly when REJECTED fires and when epoch-based reset prevents it.
+ * Documents session locking and stale-result suppression with controlled promises.
  */
 
-import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncState, atom, computed, effect } from '@/index';
+import { AsyncState, aeNextTick, atom, computed } from '@/index';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+async function flushPromiseHandlers(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 describe('Async Drift Constraint & Recovery', () => {
-  it('resolves reliably without retries (maxAsyncRetries = 0) when dependencies remain stable', async () => {
+  it('resolves reliably when dependencies remain stable', async () => {
     const source = atom(42);
+    const request = deferred<void>();
 
     const computedInstance = computed(
       async () => {
         const value = source.value;
-        await sleep(30);
+        await request.promise;
         return value;
       },
       { defaultValue: -1 }
     );
 
-    computedInstance.value; // init
-    await sleep(50);
+    expect(computedInstance.value).toBe(-1);
+    expect(computedInstance.state).toBe(AsyncState.PENDING);
+
+    request.resolve(undefined);
+    await flushPromiseHandlers();
 
     expect(computedInstance.state).toBe(AsyncState.RESOLVED);
     expect(computedInstance.value).toBe(42);
   });
 
-  it('retries when dependencies mutate mid-flight maintaining fallback', async () => {
+  it('discards stale results when dependencies mutate mid-flight', async () => {
     const source = atom(0);
     const onError = vi.fn();
+    const requests: Array<ReturnType<typeof deferred<void>>> = [];
 
     const computedInstance = computed(
       async () => {
         const value = source.value;
-        await sleep(40);
+        const request = deferred<void>();
+        requests.push(request);
+        await request.promise;
         return value;
       },
       { defaultValue: -99, onError }
     );
 
-    computedInstance.value; // start computation
-
-    // Change dependency at an arbitrary mid-flight point (25ms out of 40ms)
-    await sleep(25);
+    expect(computedInstance.value).toBe(-99);
     source.value = 1;
+    await aeNextTick();
+    expect(computedInstance.value).toBe(-99);
+    expect(requests).toHaveLength(2);
 
-    // Await computation original finish + scheduler delay
-    await sleep(30);
+    const firstRequest = requests[0];
+    const secondRequest = requests[1];
+    if (!firstRequest || !secondRequest) throw new Error('Requests were not created');
+
+    firstRequest.resolve(undefined);
+    await flushPromiseHandlers();
 
     expect(computedInstance.state).toBe(AsyncState.PENDING);
     expect(computedInstance.value).toBe(-99);
 
-    // Verify error is NOT dispatched because it naturally retries
+    secondRequest.resolve(undefined);
+    await flushPromiseHandlers();
+
+    expect(computedInstance.state).toBe(AsyncState.RESOLVED);
+    expect(computedInstance.value).toBe(1);
     expect(onError).not.toHaveBeenCalled();
   });
 
-  it('isolates retry counting effectively within normal reactive bounds naturally', async () => {
+  it('starts a fresh session after a prior drift cycle', async () => {
     const source = atom(0);
+    const requests: Array<ReturnType<typeof deferred<void>>> = [];
 
     const computedInstance = computed(
       async () => {
         const value = source.value;
-        await sleep(50);
+        const request = deferred<void>();
+        requests.push(request);
+        await request.promise;
         return value;
       },
       { defaultValue: -1 }
     );
 
-    // Mount an effect to trigger continuous dependency pulls
-    const runner = effect(() => {
-      void computedInstance.value;
-    });
-
-    await sleep(70); // Resolve initial stable pull
-
-    // Round 1: Trigger a drift just before resolution
+    expect(computedInstance.value).toBe(-1);
     source.value = 1;
-    await sleep(10);
-    source.value = 2; // Drift 1 -> uses its 1 allowed retry -> begins next compute safely
+    await aeNextTick();
+    expect(computedInstance.value).toBe(-1);
 
-    await sleep(70);
+    const firstRequest = requests[0];
+    const secondRequest = requests[1];
+    if (!firstRequest || !secondRequest) throw new Error('Requests were not created');
 
-    // Round 2: A totally new drift cycle
+    firstRequest.resolve(undefined);
+    await flushPromiseHandlers();
+    expect(computedInstance.state).toBe(AsyncState.PENDING);
+
+    secondRequest.resolve(undefined);
+    await flushPromiseHandlers();
+    expect(computedInstance.value).toBe(1);
+
+    source.value = 2;
+    await aeNextTick();
+    expect(computedInstance.value).toBe(-1);
     source.value = 3;
-    await sleep(70); // Resolves normally without drift, no accumulated timeouts
+    await aeNextTick();
+    expect(computedInstance.value).toBe(-1);
 
-    // If the counter was global, round 2 drift would have exhausted the limit and rejected completely
+    const thirdRequest = requests[2];
+    const fourthRequest = requests[3];
+    if (!thirdRequest || !fourthRequest) throw new Error('Requests were not created');
+
+    thirdRequest.resolve(undefined);
+    await flushPromiseHandlers();
+    expect(computedInstance.state).toBe(AsyncState.PENDING);
+
+    fourthRequest.resolve(undefined);
+    await flushPromiseHandlers();
     expect(computedInstance.state).toBe(AsyncState.RESOLVED);
     expect(computedInstance.value).toBe(3);
-
-    runner.dispose();
   });
 });

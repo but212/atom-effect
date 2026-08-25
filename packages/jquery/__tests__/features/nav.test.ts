@@ -433,6 +433,7 @@ describe('$.atomNav', () => {
     });
 
     it('should not crash navigation if previous curRendered.url is invalid/malformed', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockWin = castTo<Window & typeof globalThis>({
         location: window.location,
         history: {
@@ -460,6 +461,8 @@ describe('$.atomNav', () => {
       harness.mockAjax({ data: 'Second Page' });
       await nav.navigate('/target');
       await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/target'));
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should allow retrying failed same-URL navigation', async () => {

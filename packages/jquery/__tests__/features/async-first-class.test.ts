@@ -152,7 +152,7 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
   });
 
   describe('Scenario 3: Unified Sync/Async Boundary', () => {
-    it('should behave identically for sync atoms and async atomFetch results in atomVal', async () => {
+    it('should synchronize writable atoms in atomVal', async () => {
       const keyword = $.atom('initial');
       $fixture.html('<input id="searchInput">');
 
@@ -162,9 +162,6 @@ describe('First-class Asynchronous Objects (AEJ)', () => {
       keyword.value = 'updated';
       await flushEffects();
       expect($('#searchInput').val()).toBe('updated');
-
-      // Note: atomVal is two-way for writeable atoms. atomFetch is Readonly, so it won't be two-way.
-      // But the user's punchline says "syntax is exactly the same".
     });
 
     it('should behave identically in atomList', async () => {

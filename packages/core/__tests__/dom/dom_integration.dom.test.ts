@@ -22,7 +22,7 @@ describe('DOM Integration', () => {
     const element = document.createElement('div');
     container.appendChild(element);
 
-    effect(() => {
+    const domEffect = effect(() => {
       element.textContent = text.value;
       element.className = className.value;
       element.style.transform = `translate(${xOffset.value}px, 0px)`;
@@ -42,6 +42,8 @@ describe('DOM Integration', () => {
     expect(element.className).toContain('active');
     expect(element.style.transform).toBe('translate(100px, 0px)');
     expect(element.classList.contains('highlight')).toBe(true);
+
+    domEffect.dispose();
   });
 
   it('should handle two-way form bindings (input, checkbox, select)', async () => {
@@ -51,7 +53,7 @@ describe('DOM Integration', () => {
     input.addEventListener('input', (event) => {
       inputValue.value = (event.target as HTMLInputElement).value;
     });
-    effect(() => {
+    const inputEffect = effect(() => {
       input.value = inputValue.value;
     });
     container.appendChild(input);
@@ -63,7 +65,7 @@ describe('DOM Integration', () => {
     checkbox.addEventListener('change', () => {
       isChecked.value = checkbox.checked;
     });
-    effect(() => {
+    const checkboxEffect = effect(() => {
       checkbox.checked = isChecked.value;
     });
     container.appendChild(checkbox);
@@ -80,7 +82,7 @@ describe('DOM Integration', () => {
     select.addEventListener('change', (event) => {
       selection.value = (event.target as HTMLSelectElement).value;
     });
-    effect(() => {
+    const selectEffect = effect(() => {
       select.value = selection.value;
     });
     container.appendChild(select);
@@ -104,9 +106,17 @@ describe('DOM Integration', () => {
     select.value = 'B';
     select.dispatchEvent(new Event('change'));
 
+    await aeNextTick();
     expect(inputValue.value).toBe('Updated');
     expect(isChecked.value).toBe(false);
     expect(selection.value).toBe('B');
+    expect(input.value).toBe('Updated');
+    expect(checkbox.checked).toBe(false);
+    expect(select.value).toBe('B');
+
+    inputEffect.dispose();
+    checkboxEffect.dispose();
+    selectEffect.dispose();
   });
 
   it('should handle conditional and list rendering', async () => {
@@ -115,7 +125,7 @@ describe('DOM Integration', () => {
     const ul = document.createElement('ul');
     container.appendChild(ul);
 
-    effect(() => {
+    const renderEffect = effect(() => {
       if (show.value) {
         ul.innerHTML = '';
         for (const item of items.value) {
@@ -139,6 +149,8 @@ describe('DOM Integration', () => {
     show.value = false;
     await aeNextTick();
     expect(container.contains(ul)).toBe(false);
+
+    renderEffect.dispose();
   });
 
   it('should stop updating DOM after dispose and run cleanup', async () => {
@@ -186,7 +198,7 @@ describe('DOM Integration', () => {
     const effect1 = effect(() => {
       el1.textContent = title.value;
     });
-    effect(() => {
+    const effect2 = effect(() => {
       el2.textContent = title.value.toUpperCase();
     });
 
@@ -201,5 +213,7 @@ describe('DOM Integration', () => {
 
     expect(el1.textContent).toBe('init'); // disposed — unchanged
     expect(el2.textContent).toBe('UPDATED'); // still active
+
+    effect2.dispose();
   });
 });

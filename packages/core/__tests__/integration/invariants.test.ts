@@ -201,11 +201,9 @@ describe('Disposal Finality', () => {
     const leakContainer: number[] = [];
     const source = atom(0);
 
-    {
-      const _leakEffect = effect(() => {
-        leakContainer.push(source.value);
-      });
-    }
+    const leakEffect = effect(() => {
+      leakContainer.push(source.value);
+    });
 
     source.value = 1;
     await aeNextTick();
@@ -224,6 +222,8 @@ describe('Disposal Finality', () => {
 
     expect(safeContainer).toEqual([1]);
     expect(leakContainer).toEqual([0, 1, 2]);
+
+    leakEffect.dispose();
   });
 });
 

@@ -75,7 +75,7 @@ describe('$.route() - SPA Routing System', () => {
     it('should maintain reactivity for query parameters', async () => {
       const router = await createRouter();
       const spy = vi.fn();
-      $.effect(() => spy(router.queryParams.value));
+      const queryEffect = $.effect(() => spy(router.queryParams.value));
 
       await router.navigate('home?id=123&mode=dark');
       await $.nextTick();
@@ -84,6 +84,7 @@ describe('$.route() - SPA Routing System', () => {
       await router.navigate('home?mode=dark&id=123');
       await $.nextTick();
       expect(spy).toHaveBeenCalledTimes(2);
+      queryEffect.dispose();
     });
 
     it('should update reactive state when only query parameters change', async () => {
@@ -369,6 +370,7 @@ describe('$.route() - SPA Routing System', () => {
 
   describe('Edge Cases & Resilience', () => {
     it('should handle malformed URIs gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const router = await createRouter();
 
       await router.navigate('home?bad=%FF');
@@ -378,6 +380,8 @@ describe('$.route() - SPA Routing System', () => {
       await router.navigate('user/%FF');
       await $.nextTick();
       expect(router.params.value.id).toBe('%FF');
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should work even if target container is missing initially', async () => {

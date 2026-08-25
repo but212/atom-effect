@@ -826,6 +826,7 @@ describe('Web Component Features', () => {
     });
 
     it('should sync validity state with native element internals using raw ValidityStateFlags', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const email = $.atom('valid@example.com');
       // Pass a custom computed atom containing raw ValidityStateFlags
       const validationFlags = $.computed(() => {
@@ -855,12 +856,14 @@ describe('Web Component Features', () => {
       email.value = 'invalid-email';
       await $.nextTick();
 
-      // According to ElementInternals specs, if no error message is provided, ValidityState is reset/valid
-      expect(element.aej.internals?.validity.typeMismatch).toBe(false);
-      expect(form.checkValidity()).toBe(true);
+      expect(element.aej.internals?.validity.typeMismatch).toBe(true);
+      expect(element.aej.internals?.validationMessage).toBe('Invalid value');
+      expect(form.checkValidity()).toBe(false);
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
 
       element.aej.teardown();
       element.remove();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should resolve static values and getter functions in resolveValue utility', async () => {

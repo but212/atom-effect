@@ -116,7 +116,7 @@ describe('Atom Mount (Component Lifecycle)', () => {
     const cleanup = vi.fn().mockReturnValue(undefined);
     let effectCount = 0;
 
-    $.effect(() => {
+    const batchingEffect = $.effect(() => {
       count.value;
       effectCount++;
       return undefined;
@@ -135,6 +135,7 @@ describe('Atom Mount (Component Lifecycle)', () => {
     $element.atomUnmount();
     $element.atomUnmount();
     expect(cleanup).toHaveBeenCalledTimes(1);
+    batchingEffect.dispose();
   });
 
   it('should skip and log when mounting on non-Element nodes', () => {
