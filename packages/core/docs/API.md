@@ -188,7 +188,7 @@ handle.dispose();
 `effect()` returns an `EffectObject`:
 
 - `run()`: Manually triggers the effect execution, regardless of dependency status.
-- `dispose()`: Stops the effect and executes any existing cleanup handle.
+- `dispose()`: Stops the effect and executes any existing cleanup handle. Results from async executions that settle after disposal are ignored.
 - `isDisposed`: Boolean indicating if the effect has been stopped.
 - `isExecuting`: Boolean indicating if the effect logic is currently running.
 - `executionCount`: The total number of times the effect has executed.
@@ -198,7 +198,7 @@ handle.dispose();
 - `name`: (Optional) A debugging identifier.
 - `sync`: (Default: `false`) If `true`, the effect runs synchronously when dependencies change.
 - `onError`: `(error: unknown) => void`. Custom error handler for execution or cleanup failures.
-- `maxExecutionsPerFlush`: (Default: `100`) Maximum executions allowed for this effect within a single flush cycle to prevent infinite loops.
+- `maxExecutionsPerFlush`: (Default: `100`) Maximum executions allowed for this effect within one propagation cascade (flush cycle) to prevent infinite loops. Independent synchronous updates start a new budget.
 - `maxExecutionsPerSecond`: (Development only) Threshold for detecting unintentional high-frequency updates.
 
 ---
@@ -284,6 +284,7 @@ Creates a writable virtual atom pointing to a dot-path within a source atom.
 - **Structural Sharing**: Updates only clone the objects along the modified path, preserving reference equality for unrelated branches.
 - **Path Support**: Supports dot-notation for deep objects, array indices (`users.0.name`), and `Map` keys. `Set` instances are treated as terminal values and do not support nested path traversal.
 - **Prototype Preservation**: Updates to class instances preserve the original prototype and methods.
+- **Disposal**: After `dispose()`, writes through the lens are ignored. Reads retain their existing behavior.
 
 ### `lensFor(atom)`
 

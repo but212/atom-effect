@@ -94,8 +94,9 @@ During re-computation, the engine performs **Link Swapping**. It compares new de
 
 Asynchronous computations are treated as state machines.
 
-- **Session Locking**: A rolling session ID ensures that only the result from the *most recent* asynchronous trigger can resolve the node. Results from previous, now-stale sessions are discarded.
+- **Session Locking**: A rolling session ID advances for every accepted effect execution, ensuring that only the result from the *most recent* asynchronous trigger can install cleanup or report an error. Results from previous, now-stale sessions are discarded or cleaned up immediately.
 - **Synchronous Tracking Boundary**: Tracking is strictly synchronous. Dependencies accessed after an `await` are not captured because the tracking context is cleared when the function yields. This design choice ensures deterministic tracking and prevents memory leaks from accidentally long-lived tracking sessions.
+- **Flush Session Isolation**: Flush-session identity is tracked independently from the queue's deduplication epoch, so entering a sync effect scope cannot invalidate same-cycle scheduling.
 
 ---
 
@@ -104,7 +105,11 @@ Asynchronous computations are treated as state machines.
 ### Circularity & Infinite Loops
 
 - **Circular Detection**: The `RECOMPUTING` flag identifies nodes that are accessed during their own derivation pass, throwing a `ComputedError`.
-- **Execution Budgets**: Effects have a mandatory `maxExecutionsPerFlush` (default 100) to prevent runaway reactive loops from hanging the main thread.
+- **Execution Budgets**: Effects have a mandatory `maxExecutionsPerFlush` (default 100) to prevent runaway reactive loops from hanging the main thread. The budget applies to one propagation cascade and resets between independent synchronous cascades.
+
+### Lens Lifecycle Integrity
+
+Lenses maintain one shared upstream subscription for their distinct downstream listeners. Duplicate listeners do not allocate another upstream link, and disposed writable lenses ignore subsequent writes.
 
 ### Prototype Integrity
 

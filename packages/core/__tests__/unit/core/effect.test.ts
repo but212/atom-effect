@@ -551,6 +551,33 @@ describe('Effect', () => {
         expect(freshCleanup).toHaveBeenCalled();
       });
 
+      it('keeps synchronous cleanup when an older async run resolves', async () => {
+        const source = atom(0, { sync: true });
+        const staleCleanup = vi.fn();
+        const freshCleanup = vi.fn();
+        let resolveStale!: (cleanup: () => void) => void;
+
+        const effectInstance = effect(
+          () => {
+            if (source.value === 0) {
+              return new Promise<() => void>((resolve) => {
+                resolveStale = resolve;
+              });
+            }
+            return freshCleanup;
+          },
+          { sync: true }
+        );
+
+        source.value = 1;
+        resolveStale(staleCleanup);
+        await Promise.resolve();
+
+        effectInstance.dispose();
+        expect(staleCleanup).toHaveBeenCalledTimes(1);
+        expect(freshCleanup).toHaveBeenCalledTimes(1);
+      });
+
       it('ensures async consistency by resolving results in the first microtask cycle', async () => {
         let resolvePromise!: (value: () => void) => void;
         const promise = new Promise<() => void>((r) => {
@@ -567,6 +594,25 @@ describe('Effect', () => {
 
         effectInstance.dispose();
         expect(cleanup).toHaveBeenCalledTimes(1);
+      });
+
+      it('should ignore async promise rejections after effect disposal', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        let rejectAsync!: (error: Error) => void;
+
+        const effectInstance = effect(
+          () =>
+            new Promise<void>((_, reject) => {
+              rejectAsync = reject;
+            })
+        );
+
+        effectInstance.dispose();
+        rejectAsync(new Error('disposed rejection'));
+        await Promise.resolve();
+
+        expect(consoleSpy).not.toHaveBeenCalled();
+        consoleSpy.mockRestore();
       });
 
       it('should ignore async promise rejections after effect re-execution (stale session)', async () => {
@@ -650,6 +696,64 @@ describe('Effect', () => {
 
         expect(effectInstance.isDisposed).toBe(true);
         expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
+      });
+
+      it('coalesces scheduled effects despite unrelated effect creation', async () => {
+        const source = atom(0, { sync: true });
+        let runCount = 0;
+
+        const effectInstance = effect(() => {
+          runCount++;
+          source.value;
+        });
+
+        source.value = 1;
+        const unrelatedEffect = effect(() => {});
+        source.value = 2;
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(runCount).toBe(2);
+        effectInstance.dispose();
+        unrelatedEffect.dispose();
+      });
+
+      it('does not warn when a scheduled sync effect runs inside a flush', async () => {
+        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const source = atom(0);
+        const effectInstance = effect(
+          () => {
+            source.value;
+          },
+          { sync: true }
+        );
+
+        source.value = 1;
+        await Promise.resolve();
+
+        expect(consoleSpy).not.toHaveBeenCalledWith('startFlush() called during flush - ignored');
+        effectInstance.dispose();
+        consoleSpy.mockRestore();
+      });
+
+      it('resets the per-flush budget between independent synchronous updates', () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const someAtom = atom(0, { sync: true });
+
+        const effectInstance = effect(
+          () => {
+            someAtom.value;
+          },
+          { sync: true, maxExecutionsPerFlush: 3 }
+        );
+
+        someAtom.value = 1;
+        someAtom.value = 2;
+        someAtom.value = 3;
+
+        expect(effectInstance.isDisposed).toBe(false);
+        expect(effectInstance.executionCount).toBe(4);
+        consoleSpy.mockRestore();
       });
 
       it('should provide a clear error when run() is called after budget is exceeded, rather than double faulting', async () => {

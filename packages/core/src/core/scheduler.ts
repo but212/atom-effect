@@ -202,7 +202,7 @@ class ReactiveScheduler implements SchedulerState {
       return false;
     }
     this.#isSessionActive = true;
-    this.#sessionEpoch = this.nextEpoch();
+    this.#sessionEpoch = nextSmi(this.#sessionEpoch);
     this.#sessionExecutionCount = 0;
     return true;
   }
@@ -381,7 +381,9 @@ export function batch<T>(callback: () => T): T {
 }
 
 /** @internal */
-export function runInFlushScope<T>(callback: () => T): T | undefined {
+export function runInFlushScope<T>(callback: () => T): T {
+  if (scheduler.isSessionActive) return callback();
+
   const started = scheduler.startFlush();
   try {
     return callback();

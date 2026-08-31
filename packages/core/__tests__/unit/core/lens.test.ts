@@ -221,6 +221,23 @@ describe('Lens System', () => {
   });
 
   describe('reactivity & lifecycle', () => {
+    it('should not leak a root subscription for duplicate lens listeners', () => {
+      const store = atom({ x: 1 });
+      const lens = atomLens(store, 'x');
+      const listener = () => {};
+
+      const unsubscribe1 = lens.subscribe(listener);
+      const unsubscribe2 = lens.subscribe(listener);
+
+      expect(lens.subscriberCount()).toBe(1);
+      expect(store.subscriberCount()).toBe(1);
+
+      unsubscribe1();
+      unsubscribe2();
+      expect(lens.subscriberCount()).toBe(0);
+      expect(store.subscriberCount()).toBe(0);
+    });
+
     it('should share a single root subscription for multiple lens listeners', () => {
       const store = atom({ x: 1 });
       const lens = atomLens(store, 'x');
@@ -379,6 +396,19 @@ describe('Lens System', () => {
   });
 
   describe('disposed lens behavior', () => {
+    it('should ignore writes after lens disposal', () => {
+      const store = atom({ a: { x: 1 }, b: { y: 2 } });
+      const lens = atomLens(store, 'a.x');
+      const merged = mergeLenses(atomLens(store, 'a'), atomLens(store, 'b'));
+
+      lens.dispose();
+      merged.dispose();
+      lens.value = 10;
+      merged.value = { x: 20, y: 30 };
+
+      expect(store.value).toEqual({ a: { x: 1 }, b: { y: 2 } });
+    });
+
     it('should set isDisposed to true when dispose is called on LensImpl/MergedLensImpl', () => {
       const store = atom({ x: 1, y: 2 });
       const lens = atomLens(store, 'x');

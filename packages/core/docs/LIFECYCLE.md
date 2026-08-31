@@ -54,7 +54,7 @@ logger.dispose();
 
 ### Automatic Effect Cleanup
 
-When an effect re-runs due to a dependency update, its previous cleanup function (if any was returned) is executed first.
+When an effect re-runs due to a dependency update, its previous cleanup function (if any was returned) is executed first. Every execution receives a new generation; an asynchronous result from an older generation cannot replace the cleanup owned by a newer run. A stale asynchronous cleanup is executed immediately instead. Async results that settle after disposal are ignored.
 
 - **Why**: This pattern (similar to React's `useEffect`) prevents side-effect accumulation, such as multiple event listeners or uncancelled HTTP requests.
 
@@ -70,6 +70,10 @@ effect(() => {
 });
 ```
 
+### Lens Subscription and Disposal
+
+A lens creates one shared upstream subscription when its first distinct listener is added and removes it after the last listener is removed. Duplicate listener registrations do not create additional upstream subscriptions. After a lens is disposed, writes through that lens are ignored; reads retain their existing behavior.
+
 ### Asynchronous Computed Lifecycles
 
 Async computations manage internal states (`pending`, `resolved`, `rejected`) and are locked into "sessions".
@@ -81,5 +85,6 @@ Async computations manage internal states (`pending`, `resolved`, `rejected`) an
 ## Best Practices
 
 1. **Always Dispose Terminal Nodes**: Effects are "sinks" that keep the graph alive. If an effect is tied to a temporary UI component, dispose of it when the component unmounts.
-2. **Avoid Circular Dependencies**: Modifying an atom inside an effect that reads the same atom triggers infinite loops. The effect guards against this with `maxExecutionsPerFlush`, logging and returning an `EffectError` if the budget is exhausted.
+2. **Avoid Circular Dependencies**: Modifying an atom inside an effect that reads the same atom triggers infinite loops. The effect guards against this with `maxExecutionsPerFlush`, logging and returning an `EffectError` if the budget is exhausted. The budget is shared by one propagation cascade and resets for independent synchronous updates.
 3. **Use `aeNextTick()` in Tests**: Because state updates are scheduled in microtasks, always await the next tick before asserting changes in your test suites.
+4. **Preserve Flush Boundaries**: A synchronous propagation cascade shares one flush budget; independent updates begin a fresh budget without disturbing queue deduplication.
