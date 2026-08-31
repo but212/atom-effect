@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registry } from '@/core/registry';
 import $ from '@/index';
 
 /**
@@ -74,7 +75,7 @@ describe('$.route() - SPA Routing System', () => {
     it('should maintain reactivity for query parameters', async () => {
       const router = await createRouter();
       const spy = vi.fn();
-      $.effect(() => spy(router.queryParams.value));
+      const queryEffect = $.effect(() => spy(router.queryParams.value));
 
       await router.navigate('home?id=123&mode=dark');
       await $.nextTick();
@@ -83,6 +84,7 @@ describe('$.route() - SPA Routing System', () => {
       await router.navigate('home?mode=dark&id=123');
       await $.nextTick();
       expect(spy).toHaveBeenCalledTimes(2);
+      queryEffect.dispose();
     });
 
     it('should update reactive state when only query parameters change', async () => {
@@ -227,6 +229,34 @@ describe('$.route() - SPA Routing System', () => {
       expect(onUnmount).toHaveBeenCalled();
     });
 
+    it('should clean bindings before replacing the previous route view', async () => {
+      const source = $.atom('old');
+      let oldElement: HTMLElement | undefined;
+      const router = await createRouter({
+        routes: {
+          home: {
+            render: (element) => {
+              oldElement = document.createElement('span');
+              $(oldElement).atomText(source);
+              element.appendChild(oldElement);
+            },
+          },
+          about: { template: '#tmpl-about' },
+        },
+      });
+
+      expect(oldElement).toBeDefined();
+      expect(registry.hasBind(oldElement as HTMLElement)).toBe(true);
+
+      await router.navigate('about');
+      await $.nextTick();
+
+      expect(registry.hasBind(oldElement as HTMLElement)).toBe(false);
+      source.value = 'new';
+      await $.nextTick();
+      expect(oldElement?.textContent).toBe('old');
+    });
+
     it('should prevent navigation when guard returns false', async () => {
       const onEnter = vi.fn(() => false as const);
       const router = await createRouter({
@@ -340,6 +370,7 @@ describe('$.route() - SPA Routing System', () => {
 
   describe('Edge Cases & Resilience', () => {
     it('should handle malformed URIs gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const router = await createRouter();
 
       await router.navigate('home?bad=%FF');
@@ -349,6 +380,8 @@ describe('$.route() - SPA Routing System', () => {
       await router.navigate('user/%FF');
       await $.nextTick();
       expect(router.params.value.id).toBe('%FF');
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should work even if target container is missing initially', async () => {

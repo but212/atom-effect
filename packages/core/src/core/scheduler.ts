@@ -45,7 +45,8 @@ class ReactiveScheduler implements SchedulerState {
   #activeJobBuffer: JobBuffer = { items: [], size: 0 };
   #standbyJobBuffer: JobBuffer = { items: [], size: 0 };
 
-  #onOverflowCallback: ((droppedCount: number) => void) | null = null;
+  #onOverflowCallback: ((droppedCount: number, droppedJobs: SchedulerJob[]) => void) | null = null;
+  #overflowRetryUsed = false;
 
   // Standard Getters/Setters for SchedulerState compliance
   get epoch() {
@@ -112,6 +113,10 @@ class ReactiveScheduler implements SchedulerState {
 
       this.#processQueue();
     }
+
+    // Logic: Recovery Rearm
+    // A clean drain re-enables the one-shot overflow recovery for future cycles.
+    this.#overflowRetryUsed = false;
   }
 
   /**
@@ -168,8 +173,41 @@ class ReactiveScheduler implements SchedulerState {
     }
   }
 
+  /**
+   * Logic: Flush Arming
+   * Guarantees exactly one pending flush microtask whenever the active buffer
+   * is non-empty. schedule() cannot queue a flush while PROCESSING is set, so
+   * jobs scheduled during a drain (including from the onOverflow callback)
+   * are picked up by the re-arm in the microtask's finally block.
+   */
+  #armFlush(): void {
+    if ((this.#state & SCHEDULER_STATE.PROCESSING) !== 0) return;
+    this.#state |= SCHEDULER_STATE.PROCESSING;
+    queueMicrotask(() => {
+      try {
+        if (this.#activeJobBuffer.size === 0) return;
+        this.flushQueues();
+      } catch (microtaskError) {
+        resetTrackingContext(trackingContext);
+        throw microtaskError;
+      } finally {
+        this.#state &= ~SCHEDULER_STATE.PROCESSING;
+        // Re-arm if jobs were scheduled after the last drain decision
+        // (e.g. during job execution or inside onOverflow).
+        if (this.#activeJobBuffer.size > 0) this.#armFlush();
+      }
+    });
+  }
+
   #handleFlushOverflow(): void {
     const droppedCount = this.#activeJobBuffer.size;
+    const droppedJobs: SchedulerJob[] = [];
+    const activeItems = this.#activeJobBuffer.items;
+    for (let i = 0; i < this.#activeJobBuffer.size; i++) {
+      const job = activeItems[i];
+      if (job !== undefined) droppedJobs.push(job);
+    }
+
     console.error(
       new SchedulerError(
         ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(this.#maxFlushIterations, droppedCount)
@@ -183,10 +221,26 @@ class ReactiveScheduler implements SchedulerState {
 
     if (this.#onOverflowCallback) {
       try {
-        this.#onOverflowCallback(droppedCount);
+        this.#onOverflowCallback(droppedCount, droppedJobs);
       } catch {
         /* Suppress */
       }
+    }
+
+    // Logic: One-shot Overflow Recovery
+    // Re-queue the dropped jobs exactly once so transient overload (e.g. a burst
+    // that tripped the iteration guard) still converges instead of leaving
+    // effects permanently stale. If the loop persists, the next overflow is
+    // terminal until a clean drain re-arms recovery.
+    if (!this.#overflowRetryUsed && droppedJobs.length > 0) {
+      this.#overflowRetryUsed = true;
+      for (const job of droppedJobs) {
+        job._nextEpoch = undefined;
+        this.schedule(job);
+      }
+      // PROCESSING is still set here, so armFlush() no-ops; the owning flush
+      // microtask's finally re-arms once it clears PROCESSING.
+      this.#armFlush();
     }
   }
 
@@ -261,20 +315,7 @@ class ReactiveScheduler implements SchedulerState {
     const target = this.#activeJobBuffer;
     target.items[target.size++] = schedulerJob;
 
-    if ((this.#state & SCHEDULER_STATE.PROCESSING) === 0) {
-      this.#state |= SCHEDULER_STATE.PROCESSING;
-      queueMicrotask(() => {
-        try {
-          if (this.#activeJobBuffer.size === 0) return;
-          this.flushQueues();
-        } catch (microtaskError) {
-          resetTrackingContext(trackingContext);
-          throw microtaskError;
-        } finally {
-          this.#state &= ~SCHEDULER_STATE.PROCESSING;
-        }
-      });
-    }
+    this.#armFlush();
     return Result.ok(undefined);
   }
 

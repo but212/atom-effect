@@ -82,6 +82,19 @@ describe('Scheduler Engine', () => {
       expect(computedInstance.value).toBe(11);
     });
 
+    it('keeps computed reads current while batching multiple writes', () => {
+      const source = atom(0);
+      const derived = computed(() => source.value + 1);
+
+      expect(derived.value).toBe(1);
+
+      batch(() => {
+        source.value = 5;
+        source.value = 42;
+        expect(derived.value).toBe(43);
+      });
+    });
+
     it('recovers from errors while preserving pending changes', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const someAtom = atom(0);
@@ -191,7 +204,9 @@ describe('Scheduler Engine', () => {
       const loop = () => schedulerSchedule(scheduler, loop);
       schedulerSchedule(scheduler, loop);
 
-      await sleep(20);
+      // One-shot recovery re-queues dropped jobs once; the second overflow is
+      // terminal, after which the queue is fully drained again.
+      await sleep(40);
 
       expect(onOverflow).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
@@ -199,6 +214,80 @@ describe('Scheduler Engine', () => {
 
       scheduler.onOverflow = null;
       expect(scheduler.onOverflow).toBeNull();
+      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      consoleError.mockRestore();
+    });
+
+    it('passes dropped jobs to onOverflow as the second argument', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const onOverflow = vi.fn();
+      scheduler.onOverflow = onOverflow;
+
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      schedulerSetMaxFlushIterations(scheduler, 10);
+
+      const loop = () => schedulerSchedule(scheduler, loop);
+      schedulerSchedule(scheduler, loop);
+
+      await sleep(20);
+
+      expect(onOverflow).toHaveBeenCalled();
+      const droppedCall = onOverflow.mock.calls[0];
+      const droppedJobs = (droppedCall?.[1] ?? []) as unknown[];
+      expect(Array.isArray(droppedJobs)).toBe(true);
+      expect(droppedJobs.length).toBeGreaterThan(0);
+
+      scheduler.onOverflow = null;
+      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      consoleError.mockRestore();
+    });
+
+    it('retries dropped jobs once so transient overload still converges', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      schedulerSetMaxFlushIterations(scheduler, 10);
+
+      let executions = 0;
+      const convergingJob = () => {
+        executions++;
+        if (executions < 100) schedulerSchedule(scheduler, convergingJob);
+      };
+      schedulerSchedule(scheduler, convergingJob);
+
+      await sleep(50);
+
+      // Without one-shot recovery the job would halt at ~5-6 executions.
+      // The retry must carry it well past a single flush budget.
+      expect(executions).toBeGreaterThanOrEqual(8);
+
+      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      consoleError.mockRestore();
+    });
+
+    it('flushes jobs scheduled from the onOverflow callback after a terminal overflow', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      schedulerSetMaxFlushIterations(scheduler, 10);
+
+      let overflows = 0;
+      const probe = vi.fn();
+      const loop = () => schedulerSchedule(scheduler, loop);
+      scheduler.onOverflow = () => {
+        overflows++;
+        if (overflows === 2) {
+          scheduler.onOverflow = null;
+          // Scheduled while PROCESSING is set and recovery is exhausted:
+          // the re-arm guarantee must still flush this job.
+          schedulerSchedule(scheduler, probe);
+        }
+      };
+      schedulerSchedule(scheduler, loop);
+
+      await sleep(50);
+
+      expect(overflows).toBeGreaterThanOrEqual(2);
+      expect(probe).toHaveBeenCalledTimes(1);
+
       schedulerSetMaxFlushIterations(scheduler, originalMax);
       consoleError.mockRestore();
     });

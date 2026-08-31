@@ -287,8 +287,9 @@ export const SetupFeatures = {
               element
             );
           } else {
-            // Otherwise, we pass the raw ValidityStateFlags.
-            internals.setValidity(validationResult, undefined, element);
+            // ElementInternals requires a message whenever a validity flag is set.
+            const hasInvalidFlag = Object.values(validationResult).some(Boolean);
+            internals.setValidity(validationResult, hasInvalidFlag ? 'Invalid value' : '', element);
           }
         }
         return undefined;

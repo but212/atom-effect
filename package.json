@@ -1,6 +1,6 @@
 {
   "name": "atom-effect-monorepo",
-  "version": "0.34.0",
+  "version": "0.34.1",
   "private": true,
   "type": "module",
   "description": "Monorepo for atom-effect reactive state management library and its ecosystem",
@@ -33,8 +33,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
-    "@microsoft/api-extractor": "^7.58.12",
+    "@microsoft/api-extractor": "^7.59.0",
     "@types/node": "catalog:",
+    "@typescript/typescript6": "catalog:build",
     "@vitest/browser": "catalog:test",
     "@vitest/browser-playwright": "catalog:test",
     "@vitest/coverage-v8": "catalog:test",
@@ -43,9 +44,8 @@
     "playwright": "catalog:test",
     "rimraf": "catalog:",
     "tinybench": "catalog:test",
-    "turbo": "2.9.16",
+    "turbo": "2.10.11",
     "typescript": "catalog:build",
-    "@typescript/typescript6": "catalog:build",
     "unplugin-dts": "catalog:build",
     "vite": "catalog:build",
     "vitest": "catalog:test"

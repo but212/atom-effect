@@ -1,6 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { AsyncState, IS_DEV, SCHEDULER_CONFIG } from '@/index';
 
+const DEV_INDICATORS = ['__ATOM_DEBUG__', '__DEV__', 'sessionStorage'] as const;
+
+type GlobalValues = Record<string, unknown>;
+
+function isolateDevIndicators(): () => void {
+  const target = globalThis as GlobalValues;
+  const snapshots = DEV_INDICATORS.map((key) => ({
+    key,
+    hadValue: Object.hasOwn(target, key),
+    value: target[key],
+  }));
+
+  for (const key of DEV_INDICATORS) Reflect.deleteProperty(target, key);
+
+  return () => {
+    for (const snapshot of snapshots) {
+      if (snapshot.hadValue) target[snapshot.key] = snapshot.value;
+      else Reflect.deleteProperty(target, snapshot.key);
+    }
+  };
+}
+
 describe('Constants Integrity', () => {
   describe('AsyncState', () => {
     it('should have all required state lifecycle values', () => {
@@ -23,6 +45,7 @@ describe('Constants Integrity', () => {
     it('should evaluate to true if __ATOM_DEBUG__ is set on globalThis', async () => {
       const originalNodeEnv = process.env.NODE_ENV;
       const originalDevFlag = import.meta.env?.DEV;
+      const restoreDevIndicators = isolateDevIndicators();
       try {
         process.env.NODE_ENV = 'production';
         if (import.meta.env) {
@@ -30,7 +53,7 @@ describe('Constants Integrity', () => {
           import.meta.env.DEV = false;
         }
 
-        (globalThis as Record<string, unknown>).__ATOM_DEBUG__ = true;
+        (globalThis as GlobalValues).__ATOM_DEBUG__ = true;
         // @ts-expect-error
         const constantsModule = await import('../../src/constants?debug=1');
         expect(constantsModule.IS_DEV).toBe(true);
@@ -40,13 +63,14 @@ describe('Constants Integrity', () => {
           // @ts-expect-error - restoring readonly property
           import.meta.env.DEV = originalDevFlag;
         }
-        (globalThis as Record<string, unknown>).__ATOM_DEBUG__ = undefined;
+        restoreDevIndicators();
       }
     });
 
     it('should evaluate to true if sessionStorage has __ATOM_DEBUG__', async () => {
       const originalNodeEnv = process.env.NODE_ENV;
       const originalDevFlag = import.meta.env?.DEV;
+      const restoreDevIndicators = isolateDevIndicators();
       const mockSessionStorage = {
         getItem: (key: string) => (key === '__ATOM_DEBUG__' ? 'true' : null),
         setItem: () => {},
@@ -63,7 +87,7 @@ describe('Constants Integrity', () => {
           import.meta.env.DEV = false;
         }
 
-        (globalThis as Record<string, unknown>).sessionStorage = mockSessionStorage;
+        (globalThis as GlobalValues).sessionStorage = mockSessionStorage;
         // @ts-expect-error
         const constantsModule = await import('../../src/constants?debug=2');
         expect(constantsModule.IS_DEV).toBe(true);
@@ -73,13 +97,14 @@ describe('Constants Integrity', () => {
           // @ts-expect-error - restoring readonly property
           import.meta.env.DEV = originalDevFlag;
         }
-        (globalThis as Record<string, unknown>).sessionStorage = undefined;
+        restoreDevIndicators();
       }
     });
 
     it('should evaluate to true if __DEV__ is defined', async () => {
       const originalNodeEnv = process.env.NODE_ENV;
       const originalDevFlag = import.meta.env?.DEV;
+      const restoreDevIndicators = isolateDevIndicators();
       try {
         process.env.NODE_ENV = 'production';
         if (import.meta.env) {
@@ -87,7 +112,7 @@ describe('Constants Integrity', () => {
           import.meta.env.DEV = false;
         }
 
-        (globalThis as Record<string, unknown>).__DEV__ = true;
+        (globalThis as GlobalValues).__DEV__ = true;
         // @ts-expect-error
         const constantsModule = await import('../../src/constants?debug=4');
         expect(constantsModule.IS_DEV).toBe(true);
@@ -97,13 +122,14 @@ describe('Constants Integrity', () => {
           // @ts-expect-error - restoring readonly property
           import.meta.env.DEV = originalDevFlag;
         }
-        (globalThis as Record<string, unknown>).__DEV__ = undefined;
+        restoreDevIndicators();
       }
     });
 
     it('should evaluate to false if all dev indicators are missing', async () => {
       const originalNodeEnv = process.env.NODE_ENV;
       const originalDevFlag = import.meta.env?.DEV;
+      const restoreDevIndicators = isolateDevIndicators();
 
       try {
         process.env.NODE_ENV = 'production';
@@ -121,6 +147,7 @@ describe('Constants Integrity', () => {
           // @ts-expect-error - restoring readonly property
           import.meta.env.DEV = originalDevFlag;
         }
+        restoreDevIndicators();
       }
     });
   });

@@ -135,8 +135,45 @@ $('#todo-list').atomList(todos, {
 
 ---
 
+## Configuration, Tooling & Debugging
+
+### Library configuration (`$.initAEJ`)
+
+The library auto-initializes on `document.body` by default. Use `$.initAEJ` to configure behavior or target specific container roots:
+
+```javascript
+// Customize patches and target a specific container
+$.initAEJ({
+  patch: { lifecycle: true, events: false },
+  autoCleanup: { root: myContainer }
+});
+
+// Manual mode (disable automated features)
+$.initAEJ({ patch: false, autoCleanup: false });
+```
+
+Subsequent calls to `initAEJ` replace the existing configuration.
+
+When accessed via a CDN (e.g., jsDelivr or unpkg), the library exposes the global `AtomEffectJQuery` namespace:
+
+- `initAEJ(config)` — unified entry point for library configuration (patches, auto-cleanup).
+- `enableAutoCleanup(container)` — attaches a MutationObserver to a specific element.
+- `disableAutoCleanup()` — removes all global observers.
+- `enablejQueryOverrides(options)` — enables patches for native jQuery methods (e.g., `.remove()`, `.empty()`).
+- `cleanup(element)` — triggers recursive teardown of reactive resources on an element and its Shadow DOM.
+
+### Debug mode
+
+When enabled via `$.debug.enabled = true`:
+
+- **Console Diagnostics**: Logs node updates and specific DOM operations.
+- **Visual Highlighting**: Outlines updated elements using native CSS animation (`Element.prototype.animate`) immediately when the DOM updates.
+- **Precision**: Logs structural paths using the `tag#id.class` format.
+
+The library extends the global `jQuery` (or `$`) object — methods like `$.atom()`, `$.computed()`, and `.atom*()` instance methods become available upon script evaluation.
+
 ## Next Steps
 
 - Check out [PATTERNS.md](./PATTERNS.md) for architectural strategies like routing and data fetching.
-- Read [LIFECYCLE.md](./LIFECYCLE.md) to understand how the engine prevents memory leaks and cleans up the DOM.
-- Browse [API.md](./API.md) for the complete method reference.
+- Read the authoritative [jQuery Specification](../../../docs/spec/jquery.md) for contracts, lifecycle invariants, and the security policy.
+- Browse [API.md](./API.md) for the walkthrough reference (contracts live in the [spec](../../../docs/spec/jquery.md)).

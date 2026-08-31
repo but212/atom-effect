@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { navCoordinator } from '@/core/navigation';
 import $, { type AtomNav, type AtomNavOptions } from '@/index';
 import { castTo, createMockJqXHR, setupDOMCleanup } from '../utils/test-helpers';
 
@@ -104,33 +105,31 @@ describe('$.atomNav', () => {
       { label: 'right click', href: '/right', event: { button: 2 }, expected: false },
     ];
 
-    it.each(scenarios)('should handle $label correctly', async ({
-      href,
-      expected,
-      attrs,
-      event,
-    }) => {
-      const ajaxSpy = harness.mockAjax();
-      await harness.create({ selector: '.nav-link' });
-      const $link = appendToBody($('<a class="nav-link"></a>').attr({ href, ...attrs }));
+    it.each(scenarios)(
+      'should handle $label correctly',
+      async ({ href, expected, attrs, event }) => {
+        const ajaxSpy = harness.mockAjax();
+        await harness.create({ selector: '.nav-link' });
+        const $link = appendToBody($('<a class="nav-link"></a>').attr({ href, ...attrs }));
 
-      let intercepted = false;
-      const checkIntercept = (event: Event) => {
-        intercepted = event.defaultPrevented;
-        event.preventDefault();
-      };
-      document.addEventListener('click', checkIntercept, { once: true });
+        let intercepted = false;
+        const checkIntercept = (event: Event) => {
+          intercepted = event.defaultPrevented;
+          event.preventDefault();
+        };
+        document.addEventListener('click', checkIntercept, { once: true });
 
-      harness.simulateClick($link[0], event);
+        harness.simulateClick($link[0], event);
 
-      if (expected) {
-        expect(intercepted).toBe(true);
-        await vi.waitFor(() => expect(ajaxSpy).toHaveBeenCalled());
-      } else {
-        expect(ajaxSpy).not.toHaveBeenCalled();
+        if (expected) {
+          expect(intercepted).toBe(true);
+          await vi.waitFor(() => expect(ajaxSpy).toHaveBeenCalled());
+        } else {
+          expect(ajaxSpy).not.toHaveBeenCalled();
+        }
+        $link.remove();
       }
-      $link.remove();
-    });
+    );
 
     it('should resolve paths relative to <base> tag', async () => {
       harness.mockAjax({ data: 'Base Content' });
@@ -210,6 +209,18 @@ describe('$.atomNav', () => {
       await vi.waitFor(() => expect(nav.isPending.value).toBe(false));
       expect(hooks.onUnmount).toHaveBeenCalled();
       expect(hooks.onMount).toHaveBeenCalledWith(expect.anything(), '/next');
+    });
+
+    it('should unregister from navigation coordination on destroy', async () => {
+      const nav = await harness.create();
+      const target = harness.$target[0];
+
+      expect(target).toBeDefined();
+      expect(navCoordinator.getManagerType(target as HTMLElement)).toBe('nav');
+
+      nav.destroy();
+
+      expect(navCoordinator.getManagerType(target as HTMLElement)).toBeUndefined();
     });
 
     it('should resolve race conditions (last navigation wins)', async () => {
@@ -422,6 +433,7 @@ describe('$.atomNav', () => {
     });
 
     it('should not crash navigation if previous curRendered.url is invalid/malformed', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockWin = castTo<Window & typeof globalThis>({
         location: window.location,
         history: {
@@ -449,6 +461,8 @@ describe('$.atomNav', () => {
       harness.mockAjax({ data: 'Second Page' });
       await nav.navigate('/target');
       await vi.waitFor(() => expect(nav.currentUrl.value).toBe('/target'));
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should allow retrying failed same-URL navigation', async () => {

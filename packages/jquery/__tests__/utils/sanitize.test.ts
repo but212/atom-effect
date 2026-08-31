@@ -154,14 +154,14 @@ describe('Atom-Effect: Security Specification', () => {
   });
 
   describe('Attribute Hardening: Event Handler Scrubbing', () => {
-    it.each(ATTACK_VECTORS.EVENT_HANDLERS)('should strip $handler from elements', async ({
-      payload,
-      handler,
-    }) => {
-      const result = (await TestKit.sanitize(payload)).toLowerCase();
-      expect(result).not.toContain(`${handler}=`);
-      expect(result).toContain('data-unsafe-attr=');
-    });
+    it.each(ATTACK_VECTORS.EVENT_HANDLERS)(
+      'should strip $handler from elements',
+      async ({ payload, handler }) => {
+        const result = (await TestKit.sanitize(payload)).toLowerCase();
+        expect(result).not.toContain(`${handler}=`);
+        expect(result).toContain('data-unsafe-attr=');
+      }
+    );
 
     it('should preserve original attribute order when multiple handlers are scrubbed', async () => {
       const payload = '<div onclick="a()" onmouseover="b()" onmouseenter="c()"></div>';
@@ -178,6 +178,46 @@ describe('Atom-Effect: Security Specification', () => {
       for (const payload of payloads) {
         const result = (await TestKit.sanitize(payload)).toLowerCase();
         expect(result).not.toContain('id="attributes"');
+      }
+    });
+
+    it('should bypass shadowed host document methods during sanitization', () => {
+      sanitizeCache.clear();
+      const documentObject = document as Document & Record<string, unknown>;
+      const originalCreateElement = Object.getOwnPropertyDescriptor(document, 'createElement');
+      const originalCreateTreeWalker = Object.getOwnPropertyDescriptor(
+        document,
+        'createTreeWalker'
+      );
+
+      Object.defineProperty(documentObject, 'createElement', {
+        configurable: true,
+        value: () => {
+          throw new Error('shadowed createElement');
+        },
+      });
+      Object.defineProperty(documentObject, 'createTreeWalker', {
+        configurable: true,
+        value: () => {
+          throw new Error('shadowed createTreeWalker');
+        },
+      });
+
+      try {
+        expect(sanitizeHtml('<img src="native-prototype-test">')).toContain(
+          '<img src="native-prototype-test">'
+        );
+      } finally {
+        if (originalCreateElement) {
+          Object.defineProperty(documentObject, 'createElement', originalCreateElement);
+        } else {
+          Reflect.deleteProperty(documentObject, 'createElement');
+        }
+        if (originalCreateTreeWalker) {
+          Object.defineProperty(documentObject, 'createTreeWalker', originalCreateTreeWalker);
+        } else {
+          Reflect.deleteProperty(documentObject, 'createTreeWalker');
+        }
       }
     });
   });

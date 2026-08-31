@@ -23,6 +23,7 @@ export class RootObserver {
   readonly #removalCallbacks = new Set<(node: Node) => void>();
   readonly #additionCallbacks = new Set<NodeAddedCallback>();
   readonly #attributeCallbacks = new Set<AttributeCallback>();
+  readonly #structureCallbacks = new Set<() => void>();
 
   constructor(root: Node) {
     this.#root = root;
@@ -32,55 +33,61 @@ export class RootObserver {
    * Registers a callback to be called when a node is removed from this subtree.
    */
   onNodeRemoved(callback: (node: Node) => void): () => void {
-    this.#removalCallbacks.add(callback);
-    this.#updateObserver();
-    return () => {
-      this.#removalCallbacks.delete(callback);
-      this.#updateObserver();
-      this.#checkEmpty();
-    };
+    return this.#subscribe(this.#removalCallbacks, callback);
   }
 
   /**
    * Registers a callback to be called when a node matching the selector is added to this subtree.
    */
   onNodeAdded(selector: string, callback: (element: Element) => void): () => void {
-    const record = { selector, callback };
-    this.#additionCallbacks.add(record);
-    this.#updateObserver();
-    return () => {
-      this.#additionCallbacks.delete(record);
-      this.#updateObserver();
-      this.#checkEmpty();
-    };
+    return this.#subscribe(this.#additionCallbacks, { selector, callback });
   }
 
   /**
    * Registers a callback to be called when an attribute with the specified name is mutated.
    */
   onAttributeChanged(attributeName: string, callback: (element: Element) => void): () => void {
-    const record = { attributeName, callback };
-    this.#attributeCallbacks.add(record);
+    return this.#subscribe(this.#attributeCallbacks, { attributeName, callback });
+  }
+
+  onStructureChanged(callback: () => void): () => void {
+    return this.#subscribe(this.#structureCallbacks, callback);
+  }
+
+  #subscribe<T>(callbacks: Set<T>, callback: T): () => void {
+    callbacks.add(callback);
     this.#updateObserver();
     return () => {
-      this.#attributeCallbacks.delete(record);
+      if (!callbacks.delete(callback)) return;
       this.#updateObserver();
       this.#checkEmpty();
     };
   }
 
+  #hasCallbacks(): boolean {
+    return (
+      this.#removalCallbacks.size > 0 ||
+      this.#additionCallbacks.size > 0 ||
+      this.#attributeCallbacks.size > 0 ||
+      this.#structureCallbacks.size > 0
+    );
+  }
+
   #updateObserver(): void {
-    if (
-      this.#removalCallbacks.size === 0 &&
-      this.#additionCallbacks.size === 0 &&
-      this.#attributeCallbacks.size === 0
-    ) {
+    if (!this.#hasCallbacks()) {
       this.disconnect();
       return;
     }
 
     if (!this.#observer) {
       this.#observer = new MutationObserver((mutations) => {
+        if (
+          this.#structureCallbacks.size > 0 &&
+          mutations.some((mutation) => mutation.type === 'childList')
+        ) {
+          for (const callback of this.#structureCallbacks) callback();
+        }
+
         // 1. Process removed nodes
         if (this.#removalCallbacks.size > 0) {
           for (const mutation of mutations) {
@@ -180,11 +187,7 @@ export class RootObserver {
   }
 
   #checkEmpty(): void {
-    if (
-      this.#removalCallbacks.size === 0 &&
-      this.#additionCallbacks.size === 0 &&
-      this.#attributeCallbacks.size === 0
-    ) {
+    if (!this.#hasCallbacks()) {
       this.disconnect();
       rootObserversMap.delete(this.#root);
     }

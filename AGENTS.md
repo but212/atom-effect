@@ -42,7 +42,9 @@ Before completing any task, ensure:
 
 ## 6. Documentation Index
 
+- **Specifications (authoritative contracts/invariants/security)**: [docs/spec/](./docs/spec/README.md) — `core.md`, `jquery.md`, `utils.md`
 - **Core Architecture**: [packages/core/docs/ARCHITECTURE.md](./packages/core/docs/ARCHITECTURE.md)
-- **jQuery Security**: [packages/jquery/docs/SECURITY.md](./packages/jquery/docs/SECURITY.md)
+- **jQuery Security**: [docs/spec/jquery.md](./docs/spec/jquery.md) (normative) · [packages/jquery/docs/ARCHITECTURE.md](./packages/jquery/docs/ARCHITECTURE.md)
 - **Coding Patterns**: [packages/jquery/docs/PATTERNS.md](./packages/jquery/docs/PATTERNS.md)
 - **API Reference**: [packages/core/docs/API.md](./packages/core/docs/API.md) | [packages/jquery/docs/API.md](./packages/jquery/docs/API.md)
+- **Lifecycle**: [docs/spec/core.md](./docs/spec/core.md) · [docs/spec/jquery.md](./docs/spec/jquery.md)

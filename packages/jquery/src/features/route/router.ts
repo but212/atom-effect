@@ -187,8 +187,10 @@ export class RouterImpl implements Router {
     // Constraint: Automatic Teardown
     // Binds the router lifecycle to the target element's DOM presence.
     if (this.#$target[0]) {
-      navCoordinator.register(this.#$target[0], 'router', () => this.#canLeave());
-      registry.onCleanup(this.#$target[0], () => this.destroy());
+      this.#cleanups.push(
+        navCoordinator.register(this.#$target[0], 'router', () => this.#canLeave())
+      );
+      this.#cleanups.push(registry.onCleanup(this.#$target[0], () => this.destroy()));
     }
   }
 
@@ -354,6 +356,14 @@ export class RouterImpl implements Router {
     if (this.#isDestroyed) return;
     this.#isDestroyed = true;
     runRendererCleanups(this.#renderer);
+    const atoms = [
+      this.#locationAtom,
+      this.location,
+      this.currentRoute,
+      this.queryParams,
+      this.params,
+    ];
+    for (const atom of atoms) atom.dispose?.();
     this.#cleanups.forEach((teardown: () => void) => Result.tryCatch(teardown));
     this.#cleanups.dispose();
   }

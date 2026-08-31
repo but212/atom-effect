@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createListContext, resolveEventTarget } from '@/bindings/list/context';
+import { createListContext, removeNode, resolveEventTarget } from '@/bindings/list/context';
 import { applyListBinding } from '@/bindings/list/index';
 import { injectKeyToHtml } from '@/bindings/list/utils';
 import { registry } from '@/core/registry';
@@ -614,10 +614,39 @@ describe('$.atomList (Integration)', () => {
       // The item should STILL be there because it was re-added
       expect($container.find('.item-1').length).toBe(1);
     });
+
+    it('does not tear down a pending-removal node that was re-bound live before removal resolves', async () => {
+      let resolveRemove!: () => void;
+      const ctx = createListContext<{ id: number }>(
+        $container,
+        () =>
+          new Promise<void>((r) => {
+            resolveRemove = r;
+          })
+      );
+
+      const nodes = $.parseHTML('<span></span>');
+      $container.append(nodes);
+
+      // Seal ownership: node enters the removal lifecycle (key stripped).
+      removeNode(ctx, '1', nodes);
+
+      // Simulate the node being re-bound live (re-carrying its atom key)
+      // while its async removal is still pending.
+      for (const el of nodes) {
+        if (el instanceof Element) el.setAttribute('data-atom-key', '1');
+      }
+
+      resolveRemove();
+      await new Promise<void>((r) => setTimeout(r, 0));
+
+      // The re-bound node must survive: not removed from the DOM, not cleaned up.
+      expect($container.find('span').length).toBe(1);
+    });
   });
 
   describe('Edge Cases & Robustness', () => {
-    it('should ignore duplicate keys gracefully without crashing during updates', async () => {
+    it('should render duplicate-key items instead of silently dropping data', async () => {
       // Unique keys first to bypass initial fragment-optimization
       const items = $.atom([{ id: 1 }, { id: 2 }]);
 
@@ -633,8 +662,91 @@ describe('$.atomList (Integration)', () => {
 
       await $.nextTick();
 
-      // Primary items remain, duplicate is ignored
-      expect($container.find('span').length).toBe(3); // 1, 3, 2
+      // Both duplicate-key items are rendered (warned, but data is not dropped)
+      const text = $container
+        .find('span')
+        .map((_, element) => $(element).text())
+        .get();
+      expect(text).toEqual(['1', '3', '3', '2']);
+    });
+
+    it('should render duplicates on initial render and stay fresh on later updates', async () => {
+      const list = $.atom([{ id: 1 }, { id: 2 }, { id: 2 }]);
+
+      $container.atomList(list, {
+        key: 'id',
+        render: (i: { id: number }) => `<span>${i.id}</span>`,
+        update: ($element, i: { id: number }) => $element.text(`u${i.id}`),
+      });
+
+      await $.nextTick();
+      expect($container.find('span').length).toBe(3);
+
+      // Resolve the duplicate; every rendered item must reflect current data
+      list.value = [{ id: 1 }, { id: 3 }, { id: 2 }];
+      await $.nextTick();
+
+      const text = $container
+        .find('span')
+        .map((_, element) => $(element).text())
+        .get();
+      expect(text).toEqual(['1', '3', '2']);
+    });
+
+    it('should not re-render a live duplicate sibling while its superseded twin is pending async removal', async () => {
+      let resolveRemove!: () => void;
+      const list = $.atom([
+        { id: 1, v: 0 },
+        { id: 2, v: 1 },
+        { id: 2, v: 2 },
+      ]);
+      const onAdd = vi.fn();
+
+      $container.atomList(list, {
+        key: 'id',
+        render: (i: { id: number; v: number }) => `<span>${i.id}-${i.v}</span>`,
+        update: ($element, i: { id: number; v: number }) => $element.text(`u${i.id}-${i.v}`),
+        onAdd,
+        onRemove: () =>
+          new Promise<void>((r) => {
+            resolveRemove = r;
+          }),
+      });
+
+      await $.nextTick();
+      // Initial render: 3 items added (the third is the fresh duplicate).
+      expect(onAdd).toHaveBeenCalledTimes(3);
+
+      // Resolve the duplicate: the superseded occurrence starts an async removal.
+      list.value = [
+        { id: 1, v: 0 },
+        { id: 2, v: 1 },
+      ];
+      await $.nextTick();
+
+      // Capture the live key-2 element before the next update.
+      const liveElement = $container.find('span').get()[1];
+      expect(liveElement?.textContent).toBe('2-1');
+
+      // While the twin's removal is pending, update data: the live key-2 item
+      // must be patched IN PLACE (same node, update callback), NOT re-added.
+      list.value = [
+        { id: 1, v: 0 },
+        { id: 3, v: 5 },
+        { id: 2, v: 9 },
+      ];
+      await $.nextTick();
+
+      expect(onAdd).toHaveBeenCalledTimes(4); // only id:3 is new
+      const spans = $container.find('span').get();
+      const patchedLive = spans.find((el) => el === liveElement);
+      expect(patchedLive?.textContent).toBe('u2-9');
+      const texts = $(spans)
+        .map((_, element) => element.textContent)
+        .get();
+      expect(texts).toEqual(['1-0', '3-5', 'u2-9', '2-2']); // last = pending twin
+
+      resolveRemove();
     });
 
     it('should correctly handle trimming logic when old item was ignored due to duplicate keys', async () => {
@@ -750,6 +862,52 @@ describe('$.atomList (Integration)', () => {
         .map((_, element) => $(element).text())
         .get();
       expect(text).toEqual(['1', '3', '4', '2']);
+    });
+  });
+
+  describe('Reconciliation Invariants', () => {
+    it('keeps rendered keys in sync with source keys across random mutations', async () => {
+      // Deterministic PRNG (mulberry32) for reproducible sequences.
+      let seed = 42;
+      const random = () => {
+        seed |= 0;
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+
+      const items = $.atom<{ id: number }[]>([]);
+      $container.atomList(items, {
+        key: (item) => item.id,
+        render: (item) => `<span data-id="${item.id}"></span>`,
+      });
+      await $.nextTick();
+
+      let nextId = 0;
+      let current: { id: number }[] = [];
+      for (let step = 0; step < 60; step++) {
+        const roll = random();
+        if ((roll < 0.3 || current.length === 0) && nextId < 30) {
+          current = [...current, { id: nextId++ }];
+        } else if (roll < 0.6) {
+          current = current.slice(1); // remove head
+        } else if (roll < 0.85) {
+          const tail = current[current.length - 1];
+          if (tail) current = [{ id: tail.id }, ...current.slice(0, -1)]; // move tail to head
+        } else {
+          current = [...current].reverse();
+        }
+
+        items.value = current;
+        await $.nextTick();
+
+        const domIds = $container
+          .find('span')
+          .map((_, element) => Number($(element).attr('data-id')))
+          .get();
+        expect(domIds).toEqual(current.map((item) => item.id));
+      }
     });
   });
 

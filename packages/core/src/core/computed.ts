@@ -162,7 +162,6 @@ class ComputedAtomImpl<T>
   #computationCallback: () => T | Promise<T>;
   #defaultValue: T | typeof NO_DEFAULT_VALUE;
   #onErrorCallback: ((error: Error) => void) | null;
-  #notifyCallback: () => void;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
     this._depSlots = new SlotBuffer<DependencyLink>();
@@ -173,7 +172,6 @@ class ComputedAtomImpl<T>
     this.#computationCallback = computation;
     this.#defaultValue = 'defaultValue' in options ? (options.defaultValue as T) : NO_DEFAULT_VALUE;
     this.#onErrorCallback = options.onError ?? null;
-    this.#notifyCallback = () => this.execute();
 
     debug.attachDebugInfo(this, 'computed', this.id, options.name);
 
@@ -366,6 +364,15 @@ class ComputedAtomImpl<T>
     this.#markDirty();
   }
 
+  #releaseComputationState(): void {
+    this.#computationCallback = () => {
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
+    };
+    this.#isEqual = DEFAULT_EQUAL;
+    this.#defaultValue = NO_DEFAULT_VALUE;
+    this.#onErrorCallback = null;
+  }
+
   /**
    * Logic: Resource Teardown
    * Disconnects from all dependencies and releases memory.
@@ -377,6 +384,7 @@ class ComputedAtomImpl<T>
     disposeAll(this);
 
     this._subscriberSlots?.clear();
+    this.#releaseComputationState();
     this.flags =
       COMPUTED_STATE_FLAGS.DISPOSED |
       COMPUTED_STATE_FLAGS.IS_COMPUTED |
@@ -392,7 +400,7 @@ class ComputedAtomImpl<T>
    * @internal
    */
   addDependency(dependency: Dependency): void {
-    nodeTrackDependency(this, dependency, this.#notifyCallback);
+    nodeTrackDependency(this, dependency, this);
   }
 
   /**

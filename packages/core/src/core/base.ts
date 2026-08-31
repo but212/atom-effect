@@ -13,7 +13,6 @@
 
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import {
-  COMPUTED_STATE_FLAGS,
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
   IS_DEV,
@@ -201,7 +200,7 @@ export function createDependencyLink(
 export function nodeTrackDependency(
   tracker: DependencyTracker & ReactiveDependencyTracker,
   dependency: Dependency,
-  notifyCallback: () => void
+  notifyCallback: SubscriberTarget<unknown>
 ): void {
   if (!tracker._depSlots) return;
 
@@ -314,7 +313,8 @@ export function nodeUnsubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTa
 export function nodeNotifySubscribers<T>(
   node: ReactiveNode<T>,
   newValue: T | undefined,
-  oldValue: T | undefined
+  oldValue: T | undefined,
+  computedOnly = false
 ): void {
   const slots = node._subscriberSlots;
   if (slots == null || slots.size === 0) return;
@@ -333,7 +333,10 @@ export function nodeNotifySubscribers<T>(
 
     for (let i = 0; i < slotsLength; i++) {
       const subscriber = slots.at(i);
-      if (subscriber) {
+      if (
+        subscriber &&
+        (!computedOnly || (typeof subscriber !== 'function' && subscriber.isComputed))
+      ) {
         try {
           if (typeof subscriber === 'function') {
             subscriber(newValue, oldValue);
@@ -351,6 +354,11 @@ export function nodeNotifySubscribers<T>(
     }
     slots.unlock();
   }
+}
+
+/** @internal - Invalidates computed subscribers without running external listeners. */
+export function nodeNotifyComputedSubscribers<T>(node: ReactiveNode<T>): void {
+  nodeNotifySubscribers(node, undefined, undefined, true);
 }
 
 /** @internal */
@@ -426,16 +434,6 @@ export function nodeHandleError<T>(
   }
 
   nodeNotifySubscribers(node, undefined, undefined);
-}
-
-/** @internal - Checks computed flag. */
-export function nodeIsComputed<T>(node: ReactiveNode<T>): boolean {
-  return (node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0;
-}
-
-/** @internal - Checks if the slot buffer is locked during notification. */
-export function nodeIsNotifying<T>(node: ReactiveNode<T>): boolean {
-  return node._subscriberSlots?.isLocked ?? false;
 }
 
 /** @internal - Returns active listener count. */

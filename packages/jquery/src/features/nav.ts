@@ -33,13 +33,21 @@ import { DEFAULT_POLICY, sanitizeHtml } from '@/utils/sanitize';
 const NAV_POLICY = {
   ...DEFAULT_POLICY,
   urlAttributes: [...DEFAULT_POLICY.urlAttributes],
-  blacklistedTags: DEFAULT_POLICY.blacklistedTags.filter((tag) => tag !== 'form'),
+  blacklistedTags: [...DEFAULT_POLICY.blacklistedTags],
 };
 
 /** @internal */
 interface NavState {
   url: string;
   type: NavigationType;
+}
+
+function getCurrentUrl(win: Window): URL {
+  try {
+    return new URL(win.location.href);
+  } catch (error) {
+    throw new TypeError('Invalid window location URL', { cause: error });
+  }
 }
 
 /**
@@ -183,7 +191,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
 
   $target.attr('data-atom-nav-target', 'true');
 
-  const initialUrlObject = new URL(win.location.href);
+  const initialUrlObject = getCurrentUrl(win);
   const initialUrl = initialUrlObject.pathname + initialUrlObject.search + initialUrlObject.hash;
   const initialPath = initialUrlObject.pathname + initialUrlObject.search;
 
@@ -339,6 +347,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   const hasError = $.computed(() => content.hasError, { name: 'nav:hasError' });
 
   // Logic: Public API Implementation
+  let unregisterCoordinator = () => {};
+  let unregisterTargetCleanup: (() => void) | undefined;
   const navigator: AtomNav = {
     currentUrl: $.computed(() => rendered.value.url, { name: 'nav:public-url' }),
     isPending,
@@ -353,7 +363,7 @@ export function atomNav(options: AtomNavOptions): AtomNav {
       if (Result.isErr(targetUrlResult)) return;
 
       const target = Result.unwrap(targetUrlResult);
-      const current = new URL(win.location.href);
+      const current = getCurrentUrl(win);
       const path = target.pathname + target.search;
       const isSamePath = path === current.pathname + current.search;
 
@@ -394,6 +404,9 @@ export function atomNav(options: AtomNavOptions): AtomNav {
     },
 
     destroy() {
+      unregisterCoordinator();
+      unregisterTargetCleanup?.();
+      unregisterTargetCleanup = undefined;
       _lifecycleController.abort();
       _navController?.abort();
       mainEffect.dispose();
@@ -416,8 +429,8 @@ export function atomNav(options: AtomNavOptions): AtomNav {
   };
 
   if ($target[0]) {
-    navCoordinator.register($target[0], 'nav');
-    registry.onCleanup($target[0], () => navigator.destroy());
+    unregisterCoordinator = navCoordinator.register($target[0], 'nav');
+    unregisterTargetCleanup = registry.onCleanup($target[0], () => navigator.destroy());
   }
 
   return navigator;

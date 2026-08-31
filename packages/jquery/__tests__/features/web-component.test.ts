@@ -76,6 +76,79 @@ describe('Web Component Features', () => {
       expect(atom.value).toBe('modified');
     });
 
+    it('should notify subscriptions for the currently discovered provider', async () => {
+      const provider = document.createElement('div');
+      const consumer = document.createElement('div');
+      const source = $.atom('initial');
+      provider.appendChild(consumer);
+      $.provideAtom(provider, 'key', source);
+
+      const injected = $.injectAtom<string>(consumer, 'key');
+      const listener = vi.fn();
+      const unsubscribe = injected?.subscribe(listener);
+
+      expect(injected?.subscriberCount()).toBe(1);
+      source.value = 'updated';
+      await $.nextTick();
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(injected?.value).toBe('updated');
+      unsubscribe?.();
+      expect(injected?.subscriberCount()).toBe(0);
+    });
+
+    it('should re-evaluate subscriptions when a provider is registered or removed', async () => {
+      const provider = document.createElement('div');
+      const consumer = document.createElement('div');
+      provider.appendChild(consumer);
+
+      const injected = $.injectAtom<string>(consumer, 'key');
+      const listener = vi.fn();
+      const unsubscribe = injected?.subscribe(listener);
+      expect(injected?.value).toBeNull();
+
+      const source = $.atom('provided');
+      $.provideAtom(provider, 'key', source);
+      await $.nextTick();
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(injected?.value).toBe('provided');
+
+      provider.removeChild(consumer);
+      await vi.waitFor(() => expect(injected?.value).toBeNull());
+      expect(listener).toHaveBeenCalledTimes(2);
+
+      unsubscribe?.();
+    });
+
+    it('should dispose replaced provider effects before installing the next provider', async () => {
+      const provider = document.createElement('div');
+      const first = $.atom('first');
+      $.provideAtom(provider, 'theme', first);
+      await $.nextTick();
+      expect(provider.style.getPropertyValue('--aej-theme')).toBe('first');
+
+      $.provideAtom(provider, 'theme', 'static');
+      expect(provider.style.getPropertyValue('--aej-theme')).toBe('static');
+
+      first.value = 'stale';
+      await $.nextTick();
+      expect(provider.style.getPropertyValue('--aej-theme')).toBe('static');
+    });
+
+    it('should auto-dispose direct provider effects when the element is removed', async () => {
+      const provider = document.createElement('div');
+      const source = $.atom('initial');
+      appendToBody(provider);
+      $.provideAtom(provider, 'theme', source);
+      await $.nextTick();
+
+      provider.remove();
+      source.value = 'after-remove';
+      await vi.waitFor(() =>
+        expect(provider.style.getPropertyValue('--aej-theme')).toBe('initial')
+      );
+    });
+
     it('should handle "Hybrid Discovery" during node movement (Critical Case)', async () => {
       const providerA = document.createElement('div');
       const providerB = document.createElement('div');
@@ -689,7 +762,7 @@ describe('Web Component Features', () => {
       expect(sheetCache.has('.new-class { color: blue; }')).toBe(true);
     });
 
-    it('should maintain 0 subscriber count in stateless proxy WritableAtom', () => {
+    it('should track and release proxy subscribers', () => {
       const host = document.createElement('div');
       appendToBody(host);
       $.provideAtom(host, 'context-proxy-key', $.atom(100));
@@ -699,14 +772,11 @@ describe('Web Component Features', () => {
 
       expect(proxyAtom.subscriberCount()).toBe(0);
 
-      // In stateless proxy, subscriber count doesn't track global retainers
-      const unsubscribeCallback = proxyAtom.subscribe(() => {});
-      expect(proxyAtom.subscriberCount()).toBe(0);
-
-      unsubscribeCallback();
-      expect(proxyAtom.subscriberCount()).toBe(0);
+      proxyAtom.subscribe(() => {});
+      expect(proxyAtom.subscriberCount()).toBe(1);
 
       proxyAtom.dispose();
+      expect(proxyAtom.subscriberCount()).toBe(0);
       host.remove();
     });
 
@@ -783,6 +853,7 @@ describe('Web Component Features', () => {
     });
 
     it('should sync validity state with native element internals using raw ValidityStateFlags', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const email = $.atom('valid@example.com');
       // Pass a custom computed atom containing raw ValidityStateFlags
       const validationFlags = $.computed(() => {
@@ -812,12 +883,14 @@ describe('Web Component Features', () => {
       email.value = 'invalid-email';
       await $.nextTick();
 
-      // According to ElementInternals specs, if no error message is provided, ValidityState is reset/valid
-      expect(element.aej.internals?.validity.typeMismatch).toBe(false);
-      expect(form.checkValidity()).toBe(true);
+      expect(element.aej.internals?.validity.typeMismatch).toBe(true);
+      expect(element.aej.internals?.validationMessage).toBe('Invalid value');
+      expect(form.checkValidity()).toBe(false);
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
 
       element.aej.teardown();
       element.remove();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should resolve static values and getter functions in resolveValue utility', async () => {
