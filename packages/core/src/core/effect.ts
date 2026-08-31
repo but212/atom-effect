@@ -50,7 +50,7 @@ import type {
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
-import { getCurrentFlushEpoch, scheduler, schedulerSchedule } from './scheduler';
+import { getCurrentFlushEpoch, runInFlushScope, scheduler, schedulerSchedule } from './scheduler';
 
 class EffectImpl
   implements
@@ -111,8 +111,8 @@ class EffectImpl
     this.#notifyCallback =
       (options.sync ?? false)
         ? () => {
-            const executionResult = this.execute();
-            if (Result.isErr(executionResult)) {
+            const executionResult = runInFlushScope(() => this.execute());
+            if (executionResult && Result.isErr(executionResult)) {
               console.error(executionResult.error);
             }
           }
@@ -130,7 +130,7 @@ class EffectImpl
     if (this.isDisposed) {
       throw new EffectError(ERROR_MESSAGES.EFFECT_DISPOSED);
     }
-    Result.unwrap(this.execute(true));
+    runInFlushScope(() => Result.unwrap(this.execute(true)));
   }
 
   /**
@@ -170,7 +170,7 @@ class EffectImpl
     if (!preparationResult.value) return Result.ok(undefined);
 
     this.#execCleanup();
-    this.#trackSessionId++;
+    const sessionId = ++this.#trackSessionId;
 
     nodeStartTracking(this);
     prepareTracking(this);
@@ -178,7 +178,7 @@ class EffectImpl
     try {
       const executionResult = runInTrackingContext(trackingContext, this, this.#effectCallback);
       nodeCommitDeps(this);
-      this.#handleResult(executionResult);
+      this.#handleResult(executionResult, sessionId);
     } catch (executionError) {
       this.#handleExecutionError(executionError);
     } finally {
@@ -217,7 +217,7 @@ class EffectImpl
    * Logic: Resolution Handling
    * Synchronously assigns the cleanup handle or delegates to the async handler.
    */
-  #handleResult(executionResult: ReturnType<EffectFunction>): void {
+  #handleResult(executionResult: ReturnType<EffectFunction>, sessionId: number): void {
     if (executionResult === undefined || executionResult === null) {
       this.#cleanupCallback = null;
       return;
@@ -226,7 +226,7 @@ class EffectImpl
     if (typeof executionResult === 'function') {
       this.#cleanupCallback = executionResult;
     } else if (isPromise(executionResult)) {
-      this.#handleAsyncResult(executionResult);
+      this.#handleAsyncResult(executionResult, sessionId);
     } else {
       this.#cleanupCallback = null;
     }
@@ -237,10 +237,11 @@ class EffectImpl
    * Orchestrates cleanup handles returned from Promises. Uses session IDs
    * to discard stale handles from invalidated tracking cycles.
    */
-  // biome-ignore lint/suspicious/noConfusingVoidType: matches public EffectFunction return type
-  #handleAsyncResult(promise: Promise<void | (() => void)>): void {
-    const sessionId = this.#trackSessionId;
-
+  #handleAsyncResult(
+    // biome-ignore lint/suspicious/noConfusingVoidType: matches public EffectFunction return type
+    promise: Promise<void | (() => void)>,
+    sessionId: number
+  ): void {
     promise.then(
       (cleanupCallback) => {
         const isStale = this.#trackSessionId !== sessionId || this.isDisposed;
@@ -261,7 +262,7 @@ class EffectImpl
         this.#cleanupCallback = cleanupCallback;
       },
       (executionError) => {
-        if (this.#trackSessionId === sessionId) {
+        if (this.#trackSessionId === sessionId && !this.isDisposed) {
           this.#handleExecutionError(executionError);
         }
       }
@@ -372,6 +373,6 @@ export function effect(effectCallback: EffectFunction, options: EffectOptions = 
     throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
   }
   const effectInstance = new EffectImpl(effectCallback, options);
-  Result.unwrap(effectInstance.execute());
+  runInFlushScope(() => Result.unwrap(effectInstance.execute()));
   return effectInstance;
 }

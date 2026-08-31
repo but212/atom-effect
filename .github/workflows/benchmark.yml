@@ -59,6 +59,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+
       - name: Download all raw results
         uses: actions/download-artifact@v8
         with:
@@ -66,10 +70,65 @@ jobs:
           merge-multiple: true
           path: results-merged/
 
+      - name: Validate benchmark documentation updater
+        run: node --test scripts/update-benchmarks.test.js
+
+      - name: Update benchmark documentation
+        run: node scripts/update-benchmarks.js results-merged
+
+      - name: Validate refreshed benchmark documentation
+        shell: bash
+        run: |
+          git diff --check -- \
+            packages/core/docs/BENCHMARKS.md \
+            packages/core/docs/BENCHMARKS_DETAILED.md \
+            packages/jquery/docs/BENCHMARKS.md \
+            packages/jquery/docs/BENCHMARKS_DETAILED.md \
+            packages/utils/docs/BENCHMARKS.md \
+            packages/utils/docs/BENCHMARKS_DETAILED.md
+          test -s packages/core/docs/BENCHMARKS.md
+          test -s packages/core/docs/BENCHMARKS_DETAILED.md
+          test -s packages/jquery/docs/BENCHMARKS.md
+          test -s packages/jquery/docs/BENCHMARKS_DETAILED.md
+          test -s packages/utils/docs/BENCHMARKS.md
+          test -s packages/utils/docs/BENCHMARKS_DETAILED.md
+
+      - name: Create commit-ready benchmark documentation patch
+        shell: bash
+        run: |
+          git diff --binary -- \
+            packages/core/docs/BENCHMARKS.md \
+            packages/core/docs/BENCHMARKS_DETAILED.md \
+            packages/jquery/docs/BENCHMARKS.md \
+            packages/jquery/docs/BENCHMARKS_DETAILED.md \
+            packages/utils/docs/BENCHMARKS.md \
+            packages/utils/docs/BENCHMARKS_DETAILED.md > benchmark-docs.patch
+          git diff --stat -- \
+            packages/core/docs/BENCHMARKS.md \
+            packages/core/docs/BENCHMARKS_DETAILED.md \
+            packages/jquery/docs/BENCHMARKS.md \
+            packages/jquery/docs/BENCHMARKS_DETAILED.md \
+            packages/utils/docs/BENCHMARKS.md \
+            packages/utils/docs/BENCHMARKS_DETAILED.md > benchmark-docs-summary.txt
+
       - name: Upload merged results
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: results-merged/
+
+      - name: Upload refreshed benchmark documentation
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-docs-updated
+          path: |
+            packages/core/docs/BENCHMARKS.md
+            packages/core/docs/BENCHMARKS_DETAILED.md
+            packages/jquery/docs/BENCHMARKS.md
+            packages/jquery/docs/BENCHMARKS_DETAILED.md
+            packages/utils/docs/BENCHMARKS.md
+            packages/utils/docs/BENCHMARKS_DETAILED.md
+            benchmark-docs.patch
+            benchmark-docs-summary.txt
 
 

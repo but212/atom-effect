@@ -33,6 +33,7 @@ const txtFiles = [
 const workspaceRoot = import.meta.dirname
   ? path.join(import.meta.dirname, '..')
   : path.join(process.cwd());
+const rawResultsRoot = process.argv[2] ? path.resolve(process.argv[2]) : workspaceRoot;
 const benchmarkDb = {};
 
 /**
@@ -53,7 +54,7 @@ function normalizeName(name) {
 
 // Parse Vitest benchmark result logs
 for (const file of txtFiles) {
-  const filePath = path.join(workspaceRoot, file);
+  const filePath = path.join(rawResultsRoot, file);
   if (!fs.existsSync(filePath)) {
     throw new Error(`[IO Error] Required benchmark source file missing: ${file}`);
   }

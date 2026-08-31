@@ -18,7 +18,23 @@ export const BUFFER_FLAGS = {
 
 /** @internal */
 export function prepareTracking(state: ReactiveDependencyTracker): void {
-  state._depFlags &= ~BUFFER_FLAGS.HAS_COMPUTEDS;
+  refreshDepFlags(state);
+}
+
+/** @internal */
+function refreshDepFlags(state: ReactiveDependencyTracker): void {
+  let flags = state._depFlags & ~BUFFER_FLAGS.HAS_COMPUTEDS;
+  const slots = state._depSlots;
+
+  for (let i = 0, slotsLength = slots.length; i < slotsLength; i++) {
+    const link = slots.at(i);
+    if (link?.node.isComputed) {
+      flags |= BUFFER_FLAGS.HAS_COMPUTEDS;
+      break;
+    }
+  }
+
+  state._depFlags = flags;
 }
 
 /**
@@ -175,21 +191,23 @@ function isDirtyInternal(state: ReactiveDependencyTracker, deep: boolean): boole
 export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: number): void {
   const slots = state._depSlots;
   const slotsLength = slots.length;
-  if (index >= slotsLength) return;
-
-  for (let i = index; i < slotsLength; i++) {
-    const link = slots.at(i);
-    if (link) {
-      if (link.unsubscribeCallback) {
-        try {
-          link.unsubscribeCallback();
-        } catch (unsubscribeError) {
-          if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
+  if (index < slotsLength) {
+    for (let i = index; i < slotsLength; i++) {
+      const link = slots.at(i);
+      if (link) {
+        if (link.unsubscribeCallback) {
+          try {
+            link.unsubscribeCallback();
+          } catch (unsubscribeError) {
+            if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
+          }
         }
       }
     }
+    slots.truncateFrom(index);
   }
-  slots.truncateFrom(index);
+
+  refreshDepFlags(state);
 }
 
 /**

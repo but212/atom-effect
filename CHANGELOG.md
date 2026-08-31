@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Core
+
+#### Fixed
+
+- Hardened effect lifecycle session tracking so stale asynchronous cleanups and rejections cannot overwrite or report after newer executions or disposal.
+- Isolated flush-session budgeting from scheduler queue deduplication, preventing duplicate same-cycle executions and nested-flush warnings.
+- Prevented duplicate lens subscriptions from leaking root listeners and made disposed lens writes inert.
+
 ## [0.34.1]
 
 ### Core

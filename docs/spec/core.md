@@ -40,7 +40,7 @@ Async computeds are treated as state machines with sessions.
 - **Synchronous tracking boundary**: Only dependencies accessed **before the first `await`** are tracked. Dependencies after an `await` return their current value but do not trigger re-evaluation. This keeps tracking deterministic and avoids long-lived tracking contexts.
 - **AsyncState**: `'idle'`, `'pending'`, `'resolved'`, `'rejected'`.
 - **Pending read**: Accessing `.value` while a promise is pending throws `ComputedError` unless a `defaultValue` is configured; with `defaultValue`, that value is returned during pending.
-- **Effect cleanup sessions**: When an effect execution begins, all earlier asynchronous cleanup sessions become stale. A cleanup resolved by an older session cannot be installed as the current cleanup after a newer execution.
+- **Effect cleanup sessions**: When an effect execution begins, all earlier asynchronous cleanup sessions become stale. A cleanup resolved by an older session cannot be installed as the current cleanup after a newer execution. Async results that settle after disposal are ignored.
 
 ## 4. Scheduling & batching
 
@@ -48,6 +48,7 @@ Async computeds are treated as state machines with sessions.
 - **`batch(fn)`**: Groups updates into one notification cycle. Supports nesting (outermost batch flushes last) and commits state even if `fn` throws.
 - **`sync: true`**: Option on `atom` and `effect` to deliver synchronously, bypassing the microtask batching.
 - **Execution budget**: Each effect enforces `maxExecutionsPerFlush` (default 100) independently; exceeding that per-effect limit disposes the effect. The scheduler separately enforces its aggregate per-flush limit; aggregate overflow is reported via `scheduler.onOverflow(droppedCount, droppedJobs)` and dropped jobs are re-queued exactly once. These limits and failure paths are distinct.
+- **Flush-session isolation**: Flush-session identity is tracked independently from the queue's deduplication epoch, so entering a synchronous effect scope cannot invalidate same-cycle scheduling.
 
 ## 5. Lifecycle
 
@@ -133,6 +134,7 @@ Options: `name`, `sync`, `onError`, `maxExecutionsPerFlush` (default 100), `maxE
 - **Prototype preservation**: updates to class instances preserve the original prototype and methods (`instanceof` intact).
 - `lensFor(atom)` — factory for multiple lenses bound to one source.
 - `composeLens(lens, path)` — sub-lens from an existing lens.
+- **Lens disposal**: After `dispose()`, lens and merged-lens writes are no-ops; reads retain their existing behavior. A lens maintains one shared upstream subscription for its distinct downstream listeners, and duplicate listeners do not allocate another upstream link.
 
 ## 9. State composition
 

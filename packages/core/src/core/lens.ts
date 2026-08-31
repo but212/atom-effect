@@ -142,7 +142,9 @@ const isForbiddenKey = (key: string) => FORBIDDEN_KEYS.has(key);
  * Supports Arrays, Maps, and plain Objects while preserving prototypes.
  * @internal
  */
-function cloneAndSet(container: object, key: string, value: unknown): object {
+type CloneContainer = Record<string, unknown> | unknown[] | Map<string, unknown>;
+
+function cloneAndSet(container: CloneContainer, key: string, value: unknown): object {
   if (Array.isArray(container)) {
     const clonedArray = [...container];
     Reflect.set(clonedArray, key, value);
@@ -182,12 +184,14 @@ export function setDeepValue(
     return targetObject;
 
   const previousValue =
-    targetObject instanceof Map ? targetObject.get(key) : Reflect.get(targetObject, key);
+    targetObject instanceof Map
+      ? targetObject.get(key)
+      : (targetObject as Record<string, unknown>)[key];
   const newValue = setDeepValue(previousValue, keys, index + 1, value);
 
   return DEFAULT_EQUAL(previousValue, newValue)
     ? targetObject
-    : cloneAndSet(targetObject, key, newValue);
+    : cloneAndSet(targetObject as CloneContainer, key, newValue);
 }
 
 /**
@@ -202,12 +206,9 @@ export function getPathValue(sourceObject: unknown, parts: string[]): any {
     resolvedValue =
       resolvedValue instanceof Map
         ? resolvedValue.get(part)
-        : Reflect.get(
-            typeof resolvedValue === 'object' || typeof resolvedValue === 'function'
-              ? resolvedValue
-              : Object(resolvedValue),
-            part
-          );
+        : typeof resolvedValue === 'object' || typeof resolvedValue === 'function'
+          ? (resolvedValue as Record<string, unknown>)[part]
+          : Object(resolvedValue)[part as keyof object];
   }
   return resolvedValue;
 }
@@ -261,6 +262,7 @@ class LensImpl<T extends object, P extends string>
   }
 
   set value(newValue: PathValue<T, P>) {
+    if (this.isDisposed) return;
     const currentValue = this.#root.peek();
     const updatedValue = setDeepValue(currentValue, this.#parts, 0, newValue);
     if (updatedValue !== currentValue) this.#root.value = updatedValue;
@@ -271,11 +273,12 @@ class LensImpl<T extends object, P extends string>
   }
 
   subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
+    const wasEmpty = nodeGetSubscriberCount(this) === 0;
     const innerUnsubscribeCallback = Result.unwrap(nodeSubscribe(this, listener));
     if (this.isDisposed) {
       return innerUnsubscribeCallback;
     }
-    if (nodeGetSubscriberCount(this) === 1) {
+    if (wasEmpty && nodeGetSubscriberCount(this) === 1) {
       this.#previousValue = this.peek();
       this.#sharedUnsubscribeCallback = this.#root.subscribe(() => this.#notify());
     }
@@ -404,6 +407,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   set value(newValue: MergedDependencyValue<L>) {
+    if (this.isDisposed) return;
     batch(() => {
       for (const lens of this.#lenses) lens.value = newValue;
     });
@@ -414,11 +418,12 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
+    const wasEmpty = nodeGetSubscriberCount(this) === 0;
     const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
     if (this.isDisposed) {
       return innerUnsub;
     }
-    if (nodeGetSubscriberCount(this) === 1) {
+    if (wasEmpty && nodeGetSubscriberCount(this) === 1) {
       this.#previousValue = this.peek();
       const notifyCallback = () => this.#notify();
       for (const lens of this.#lenses) {
