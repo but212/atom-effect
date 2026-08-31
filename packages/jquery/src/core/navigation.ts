@@ -147,7 +147,12 @@ export function updateAttributes(element: HTMLElement, next: Record<string, stri
  * Priority: Hash element > Window top (if fallback enabled).
  */
 export function performScroll(window: Window, hash?: string, fallbackToTop = false): void {
-  const id = decodeURIComponent(hash || '');
+  let id = hash || '';
+  try {
+    id = decodeURIComponent(id);
+  } catch {
+    // Preserve malformed fragments as-is so a bad URL cannot abort rendering.
+  }
   const hashElement = id ? window.document.getElementById(id) : null;
   if (hashElement) {
     hashElement.scrollIntoView({ behavior: 'auto', block: 'start' });

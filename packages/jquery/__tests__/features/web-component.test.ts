@@ -192,6 +192,33 @@ describe('Web Component Features', () => {
       expect(element.aej.slots('default').value[0]).toBe(child);
     });
 
+    it('should track closed-root slots when slots is accessed before setup', async () => {
+      const child = document.createElement('span');
+      const captured = { slot: null as { readonly value: Node[] } | null };
+      const element = defineAndCreate(
+        'closed-sr-late',
+        class extends HTMLElement {
+          connectedCallback() {
+            const controller = $.useAtomComponent(this);
+            const slots = controller.slots;
+            const slot = slots('default');
+            captured.slot = slot;
+            expect(slot.value.length).toBe(0);
+
+            const shadowRoot = this.attachShadow({ mode: 'closed' });
+            shadowRoot.innerHTML = '<slot></slot>';
+            controller.setup(shadowRoot);
+          }
+        }
+      );
+      element.appendChild(child);
+      appendToBody(element);
+
+      await $.nextTick();
+      if (!captured.slot) throw new Error('Expected slot lens to be captured before setup');
+      expect(captured.slot.value[0]).toBe(child);
+    });
+
     it('should handle slot access safely after teardown when slotsAtom is disposed', () => {
       const element = document.createElement('div');
       const ctrl = $.useAtomComponent(element);

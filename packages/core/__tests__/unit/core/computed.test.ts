@@ -406,6 +406,32 @@ describe('Computed', () => {
       expect(secondAtom.subscriberCount()).toBe(1);
     });
 
+    it('should preserve computed dependency flags when tracking aborts with a system error', () => {
+      const source = atom(1);
+      let childShouldFail = false;
+      let parentShouldFail = false;
+
+      const child = computed(() => {
+        if (childShouldFail) throw new Error('child_failure');
+        return source.value;
+      });
+      const parent = computed(() => {
+        if (parentShouldFail) throw new ReferenceError('parent_failure');
+        return child.value;
+      });
+
+      expect(parent.value).toBe(1);
+
+      childShouldFail = true;
+      child.invalidate();
+      expect(() => child.value).toThrow('child_failure');
+
+      parentShouldFail = true;
+      parent.invalidate();
+      expect(() => parent.value).toThrow(ReferenceError);
+      expect(parent.errors.some((error) => error.message.includes('child_failure'))).toBe(true);
+    });
+
     it('should surface error state when lazy:false computation throws', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const computedInstance = computed(
