@@ -302,7 +302,7 @@ export const Result = {
       (mappedValue === null ||
         (typeof mappedValue !== 'object' && typeof mappedValue !== 'function') ||
         Object.isFrozen(mappedValue))
-      ? (targetResult as Result<never, E>)
+      ? (targetResult as unknown as Result<U, E>)
       : Result.ok(mappedValue);
   },
 

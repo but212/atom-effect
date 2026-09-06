@@ -430,6 +430,23 @@ describe('SlotBuffer', () => {
       expect(items).toEqual([10, 30]);
     });
 
+    it('forEach() should visit items pushed into overflow during iteration', () => {
+      const slotBuffer = new SlotBuffer<number>();
+      for (const num of [0, 1, 2, 3, 4]) {
+        slotBuffer.push(num);
+      }
+
+      const collected: number[] = [];
+      slotBuffer.forEach((item) => {
+        collected.push(item);
+        if (item === 4) {
+          slotBuffer.push(5); // pushed while iterating inside overflow
+        }
+      });
+
+      expect(collected).toEqual([0, 1, 2, 3, 4, 5]);
+    });
+
     it('forEach() should do nothing on empty buffer', () => {
       const slotBuffer = new SlotBuffer<number>();
       let count = 0;
@@ -479,6 +496,25 @@ describe('SlotBuffer', () => {
       const slotBuffer = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) slotBuffer.push(i);
       expect(slotBuffer.some((value) => value === 99)).toBe(false);
+    });
+
+    it('some() should check items pushed into overflow during iteration', () => {
+      const slotBuffer = new SlotBuffer<number>();
+      for (const num of [0, 1, 2, 3, 4]) {
+        slotBuffer.push(num);
+      }
+
+      const checked: number[] = [];
+      const isFound = slotBuffer.some((item) => {
+        checked.push(item);
+        if (item === 4) {
+          slotBuffer.push(5); // pushed while iterating inside overflow
+        }
+        return item === 5;
+      });
+
+      expect(isFound).toBe(true);
+      expect(checked).toEqual([0, 1, 2, 3, 4, 5]);
     });
 
     it('some() should return false on empty buffer', () => {

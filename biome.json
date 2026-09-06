@@ -107,10 +107,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "packages/core/__benchmarks__/**/*.ts",
-        "packages/jquery/__benchmarks__/**/*.ts"
-      ],
+      "includes": ["packages/**/__benchmarks__/**/*.ts"],
       "linter": {
         "rules": {
           "suspicious": {

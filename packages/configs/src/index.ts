@@ -36,7 +36,7 @@ import { defineConfig as defineVitest, type ViteUserConfig } from 'vitest/config
 export const toKebabCase = (targetString: string): string =>
   targetString
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/([A-Z]{2,})([A-Z][a-z])/g, '$1-$2')
     .toLowerCase();
 
 /**
@@ -177,13 +177,22 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
 };
 
 /**
+ * Environment flags passed to dynamic Vite configuration factories.
+ */
+export interface BuildEnv {
+  readonly isBundle: boolean;
+  readonly isLib: boolean;
+  readonly isTypes: boolean;
+}
+
+/**
  * Defines a Vite configuration by merging a base configuration with user-provided overrides.
  *
  * When to use:
  * - Recommended for creating customized package-level `vite.config.ts` files in the monorepo.
  *
  * @param baseOptions Options for creating the base Vite configuration.
- * @param overrides Partial Vite configuration overrides to apply.
+ * @param overrides Partial Vite configuration overrides or an override factory function to apply.
  * @returns A Vite UserConfig configuration function/object.
  *
  * @example
@@ -194,8 +203,18 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
  */
 export const defineViteConfig = (
   baseOptions: BaseViteConfigOptions,
-  overrides: Partial<UserConfig> = {}
-) => defineVite(() => mergeConfig(getBaseViteConfig(baseOptions), overrides));
+  overrides: Partial<UserConfig> | ((env: BuildEnv) => Partial<UserConfig>) = {}
+) =>
+  defineVite(() => {
+    const activeTarget = baseOptions.buildTarget ?? process.env.BUILD_TARGET;
+    const env: BuildEnv = {
+      isBundle: activeTarget === 'bundle',
+      isLib: activeTarget === 'lib',
+      isTypes: activeTarget === 'types',
+    };
+    const resolvedOverrides = typeof overrides === 'function' ? overrides(env) : overrides;
+    return mergeConfig(getBaseViteConfig(baseOptions), resolvedOverrides);
+  });
 
 /**
  * Base coverage exclusion patterns for Vitest.

@@ -15,25 +15,21 @@
     "./tsconfig": "./tsconfig.base.json"
   },
   "scripts": {
-    "build": "node scripts/build.ts",
+    "build": "node scripts/build.js",
     "dev": "tsc -p tsconfig.build.json --watch",
     "clean:build": "rimraf dist",
-    "test": "vitest",
+    "test": "vitest run",
     "test:run": "vitest run",
     "test:coverage": "vitest --coverage",
     "typecheck": "tsc --noEmit"
   },
-  "peerDependencies": {
-    "unplugin-dts": "^1.0.2",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.8"
-  },
   "devDependencies": {
-    "rimraf": "catalog:",
+    "rimraf": "catalog:"
+  },
+  "dependencies": {
     "unplugin-dts": "catalog:build",
     "vite": "catalog:build",
     "vitest": "catalog:test"
   },
-  "dependencies": {},
   "optionalDependencies": {}
 }

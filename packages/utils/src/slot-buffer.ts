@@ -102,15 +102,9 @@ export class SlotBuffer<T> {
       const s3 = this.#fastSlot3;
       if (s3 !== null) callback(s3);
 
-      const overflowCount = this.#physicalCapacity - FAST_CAPACITY;
-      if (overflowCount <= 0) return;
-
-      const overflowBuffer = this.#overflowBuffer;
-      if (overflowBuffer !== null) {
-        for (let i = 0; i < overflowCount; i++) {
-          const item = overflowBuffer[i];
-          if (item !== null && item !== undefined) callback(item);
-        }
+      for (let i = 0; i < this.#physicalCapacity - FAST_CAPACITY; i++) {
+        const item = this.#overflowBuffer?.[i];
+        if (item !== null && item !== undefined) callback(item);
       }
     } finally {
       this.unlock();
@@ -134,15 +128,9 @@ export class SlotBuffer<T> {
       const s3 = this.#fastSlot3;
       if (s3 !== null && predicate(s3)) return true;
 
-      const overflowCount = this.#physicalCapacity - FAST_CAPACITY;
-      if (overflowCount <= 0) return false;
-
-      const overflowBuffer = this.#overflowBuffer;
-      if (overflowBuffer !== null) {
-        for (let i = 0; i < overflowCount; i++) {
-          const item = overflowBuffer[i];
-          if (item !== null && item !== undefined && predicate(item)) return true;
-        }
+      for (let i = 0; i < this.#physicalCapacity - FAST_CAPACITY; i++) {
+        const item = this.#overflowBuffer?.[i];
+        if (item !== null && item !== undefined && predicate(item)) return true;
       }
       return false;
     } finally {
