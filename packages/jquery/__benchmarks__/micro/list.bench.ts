@@ -2,7 +2,7 @@
  * @fileoverview Micro-benchmarks for reactive list rendering (atomList).
  */
 
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import $ from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
@@ -23,33 +23,42 @@ const makeItems = (count: number, offset = 0): ListItem[] =>
   }));
 
 describe('List Rendering: Initial Render (1000 items)', () => {
-  const run = (name: string, benchmarkFunction: ($container: JQuery) => void) =>
-    bench(name, withContainer(benchmarkFunction), microBenchOptions);
-
-  run('jQuery: manual render 1000 items', ($container) => {
-    const items = makeItems(1000);
-    let html = '';
-    for (let i = 0; i < 1000; i++) {
-      html += `<div class="item">${items[i]?.text}</div>`;
-    }
-    $container.html(html);
-  });
-
-  run('atom-effect: atomList render 1000 items', ($container) => {
-    const items = $.atom<ListItem[]>(makeItems(1000));
-    $container.atomList(items, listOptions);
-  });
-
-  run('atom-effect: atomList render 1000 items (with bind callback)', ($container) => {
-    const items = $.atom<ListItem[]>(makeItems(1000));
-    $container.atomList(items, {
-      key: 'id',
-      render: () => '<div class="item"><span class="label"></span></div>',
-      bind: ($element, item) => {
-        $element.find('.label').atomText($.atom(item.text));
-        $element.atomClass('even', $.atom(item.id % 2 === 0));
-      },
-    });
+  test('list initial render comparison', async ({ bench }) => {
+    await bench.compare(
+      bench(
+        'jQuery: manual render 1000 items',
+        withContainer(($container) => {
+          const items = makeItems(1000);
+          let html = '';
+          for (let i = 0; i < 1000; i++) {
+            html += `<div class="item">${items[i]?.text}</div>`;
+          }
+          $container.html(html);
+        })
+      ),
+      bench(
+        'atom-effect: atomList render 1000 items',
+        withContainer(($container) => {
+          const items = $.atom<ListItem[]>(makeItems(1000));
+          $container.atomList(items, listOptions);
+        })
+      ),
+      bench(
+        'atom-effect: atomList render 1000 items (with bind callback)',
+        withContainer(($container) => {
+          const items = $.atom<ListItem[]>(makeItems(1000));
+          $container.atomList(items, {
+            key: 'id',
+            render: () => '<div class="item"><span class="label"></span></div>',
+            bind: ($element, item: ListItem) => {
+              $element.find('.label').atomText($.atom(item.text));
+              $element.atomClass('even', $.atom(item.id % 2 === 0));
+            },
+          });
+        })
+      ),
+      microBenchOptions
+    );
   });
 });
 
@@ -65,15 +74,19 @@ describe('List Rendering: Reconciliation (Base 100 items)', () => {
     { name: 'reconciliation: remove 50 items', next: base.slice(0, 50) },
   ];
 
-  for (const { name, next } of cases) {
-    bench(
-      name,
-      withContainer(($container) => {
-        const items = $.atom<ListItem[]>(base);
-        $container.atomList(items, listOptions);
-        items.value = next;
-      }),
+  test('list reconciliation comparison', async ({ bench }) => {
+    await bench.compare(
+      ...cases.map(({ name, next }) =>
+        bench(
+          name,
+          withContainer(($container) => {
+            const items = $.atom<ListItem[]>(base);
+            $container.atomList(items, listOptions);
+            items.value = next;
+          })
+        )
+      ),
       microBenchOptions
     );
-  }
+  });
 });

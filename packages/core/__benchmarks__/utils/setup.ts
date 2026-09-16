@@ -3,7 +3,7 @@
  * @description Common utilities for benchmarking with Vitest and Tinybench
  */
 
-import type { BenchOptions } from 'vitest';
+import type { BenchOptions } from 'tinybench';
 import { runtimeDebug } from '../../dist/';
 
 /**
@@ -25,9 +25,7 @@ export const REPEATS = 10;
  * - Warmup ensures JIT compilation optimizations
  * - Higher iterations for statistical significance
  */
-const baseOptions: BenchOptions = {
-  throws: true,
-};
+const baseOptions: BenchOptions = {};
 
 /**
  * Standard benchmark options for micro-benchmarks

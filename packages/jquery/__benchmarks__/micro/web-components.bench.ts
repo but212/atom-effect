@@ -2,7 +2,7 @@
  * @fileoverview Micro-benchmarks for Custom Web Components (useAtomComponent, provide/inject context).
  */
 
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import $, { type AtomComponentController } from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
@@ -22,21 +22,6 @@ if (!customElements.get('benchmark-comp')) {
 }
 
 describe('Web Components: Lifecycle & Context', () => {
-  const run = (name: string, benchmarkFunction: ($container: JQuery) => void) =>
-    bench(name, withContainer(benchmarkFunction), microBenchOptions);
-
-  run('setup and teardown 100 components', ($container) => {
-    const container = $container[0];
-    if (!container) return;
-    for (let i = 0; i < 100; i++) {
-      const element = document.createElement('benchmark-comp') as BenchmarkComp;
-      container.appendChild(element);
-      element.setup();
-      element.teardown();
-      container.removeChild(element);
-    }
-  });
-
   const runDepthLookup = (depth: number) => ($container: JQuery) => {
     const root = $container[0];
     if (!root) return;
@@ -50,22 +35,45 @@ describe('Web Components: Lifecycle & Context', () => {
     }
   };
 
-  run('context injection (depth 5, lookup 100x)', runDepthLookup(5));
-  run('context injection (depth 20, lookup 100x)', runDepthLookup(20));
+  test('web components lifecycle and context comparison', async ({ bench }) => {
+    await bench.compare(
+      bench(
+        'setup and teardown 100 components',
+        withContainer(($container) => {
+          const container = $container[0];
+          if (!container) return;
+          for (let i = 0; i < 100; i++) {
+            const element = document.createElement('benchmark-comp') as BenchmarkComp;
+            container.appendChild(element);
+            element.setup();
+            element.teardown();
+            container.removeChild(element);
+          }
+        })
+      ),
+      bench('context injection (depth 5, lookup 100x)', withContainer(runDepthLookup(5))),
+      bench('context injection (depth 20, lookup 100x)', withContainer(runDepthLookup(20))),
+      bench(
+        'context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)',
+        withContainer(($container) => {
+          const container = $container[0];
+          if (!container) return;
+          $.provideAtom(container, 'theme-context', 'dark-theme');
 
-  run('context injection across Shadow DOM (depth 5 shadow hosts, lookup 100x)', ($container) => {
-    const container = $container[0];
-    if (!container) return;
-    $.provideAtom(container, 'theme-context', 'dark-theme');
+          let currentHost = container;
+          for (let i = 0; i < 5; i++) {
+            const host = currentHost.appendChild(document.createElement('div'));
+            currentHost = host
+              .attachShadow({ mode: 'open' })
+              .appendChild(document.createElement('div'));
+          }
 
-    let currentHost = container;
-    for (let i = 0; i < 5; i++) {
-      const host = currentHost.appendChild(document.createElement('div'));
-      currentHost = host.attachShadow({ mode: 'open' }).appendChild(document.createElement('div'));
-    }
-
-    for (let i = 0; i < 100; i++) {
-      $.injectAtom(currentHost, 'theme-context');
-    }
+          for (let i = 0; i < 100; i++) {
+            $.injectAtom(currentHost, 'theme-context');
+          }
+        })
+      ),
+      microBenchOptions
+    );
   });
 });

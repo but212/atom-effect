@@ -2,9 +2,9 @@
  * @fileoverview Micro-benchmarks for reactive network requests (atomFetch).
  */
 
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import $ from '../../dist';
-import { microBenchOptions, withContainer } from '../utils/setup';
+import { microBenchOptions } from '../utils/setup';
 
 interface FetchMockData {
   id: number;
@@ -25,63 +25,56 @@ $.ajax = (): JQuery.jqXHR => {
 };
 
 describe('Fetch: Setup & Dependency Pipeline', () => {
-  const run = (
-    name: string,
-    benchmarkFunction: ($container: JQuery) => void | Promise<void>,
-    iterations = 200
-  ) => bench(name, withContainer(benchmarkFunction), { ...microBenchOptions, iterations });
-
-  run('setup eager atomFetch', () => {
-    mockResponse = { id: 1, name: 'Alice' };
-    $.atomFetch<FetchMockData>(() => '/api/user', {
-      eager: true,
-      defaultValue: { id: 0, name: '' },
-    }).dispose();
+  test('fetch setup comparison', async ({ bench }) => {
+    await bench.compare(
+      bench('setup eager atomFetch', () => {
+        mockResponse = { id: 1, name: 'Alice' };
+        $.atomFetch<FetchMockData>(() => '/api/user', {
+          eager: true,
+          defaultValue: { id: 0, name: '' },
+        }).dispose();
+      }),
+      bench('setup lazy atomFetch', () => {
+        mockResponse = { id: 1, name: 'Alice' };
+        $.atomFetch<FetchMockData>(() => '/api/user', {
+          eager: false,
+          defaultValue: { id: 0, name: '' },
+        }).dispose();
+      }),
+      { ...microBenchOptions, iterations: 200 }
+    );
   });
 
-  run('setup lazy atomFetch', () => {
-    mockResponse = { id: 1, name: 'Alice' };
-    $.atomFetch<FetchMockData>(() => '/api/user', {
-      eager: false,
-      defaultValue: { id: 0, name: '' },
-    }).dispose();
+  test('fetch dependency pipeline comparison', async ({ bench }) => {
+    await bench.compare(
+      bench('trigger refetch on dependency update', async () => {
+        mockResponse = { id: 42, name: 'Bob' };
+        const userId = $.atom(1);
+        const fetchAtom = $.atomFetch<FetchMockData>(() => `/api/user/${userId.value}`, {
+          defaultValue: { id: 0, name: '' },
+          eager: true,
+        });
+        await fetchAtom.value;
+        userId.value = 2;
+        await fetchAtom.value;
+        fetchAtom.dispose();
+      }),
+      bench('trigger fetch with sync transformation pipeline', async () => {
+        mockResponse = { id: 42, name: 'Bob' };
+        const fetchAtom = $.atomFetch<string>(() => '/api/user', {
+          defaultValue: '',
+          eager: true,
+          transform: (rawData: unknown) => (rawData as FetchMockData).name.toUpperCase(),
+        });
+        await fetchAtom.value;
+        fetchAtom.dispose();
+      }),
+      { ...microBenchOptions, iterations: 100 }
+    );
   });
 
-  run(
-    'trigger refetch on dependency update',
-    async () => {
-      mockResponse = { id: 42, name: 'Bob' };
-      const userId = $.atom(1);
-      const fetchAtom = $.atomFetch<FetchMockData>(() => `/api/user/${userId.value}`, {
-        defaultValue: { id: 0, name: '' },
-        eager: true,
-      });
-      await fetchAtom.value;
-      userId.value = 2;
-      await fetchAtom.value;
-      fetchAtom.dispose();
-    },
-    100
-  );
-
-  run(
-    'trigger fetch with sync transformation pipeline',
-    async () => {
-      mockResponse = { id: 42, name: 'Bob' };
-      const fetchAtom = $.atomFetch<string>(() => '/api/user', {
-        defaultValue: '',
-        eager: true,
-        transform: (rawData) => (rawData as FetchMockData).name.toUpperCase(),
-      });
-      await fetchAtom.value;
-      fetchAtom.dispose();
-    },
-    100
-  );
-
-  run(
-    'rapid dependency updates causing multiple aborts (50 times)',
-    async () => {
+  test('rapid dependency updates with aborts', async ({ bench }) => {
+    await bench('rapid dependency updates causing multiple aborts (50 times)', async () => {
       mockResponse = { id: 99, name: 'Charlie' };
       const userId = $.atom(1);
       const fetchAtom = $.atomFetch<FetchMockData>(() => `/api/user/${userId.value}`, {
@@ -91,7 +84,6 @@ describe('Fetch: Setup & Dependency Pipeline', () => {
       for (let i = 0; i < 50; i++) userId.value = 10 + i;
       await fetchAtom.value;
       fetchAtom.dispose();
-    },
-    50
-  );
+    }).run({ ...microBenchOptions, iterations: 50 });
+  });
 });

@@ -1,15 +1,8 @@
-/**
- * @fileoverview Micro-benchmarks for the HTML Sanitization Engine (sanitizeHtml).
- */
-
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import { isDangerousCssValue, isDangerousUrl, sanitizeHtml } from '../../src/utils/sanitize';
 import { microBenchOptions } from '../utils/setup';
 
 describe('Sanitize: Safe Content & Vulnerability checks', () => {
-  const run = (name: string, benchmarkFunction: () => void) =>
-    bench(name, benchmarkFunction, microBenchOptions);
-
   const safeCases = [
     { name: 'sanitize small safe HTML', html: '<p>Hello, World!</p>' },
     {
@@ -17,12 +10,6 @@ describe('Sanitize: Safe Content & Vulnerability checks', () => {
       html: '<div class="card"><h3>Card Title</h3><p>This is a paragraph with <strong>bold</strong> and <em>italic</em> text.</p><span>Some item list:</span><ul><li>Item A</li><li>Item B</li></ul></div>',
     },
   ];
-
-  for (const { name, html } of safeCases) {
-    run(name, () => {
-      sanitizeHtml(html);
-    });
-  }
 
   const vulnerabilityCases = [
     {
@@ -39,27 +26,34 @@ describe('Sanitize: Safe Content & Vulnerability checks', () => {
     },
   ];
 
-  for (const { name, payload } of vulnerabilityCases) {
-    run(name, () => {
-      sanitizeHtml(payload);
-    });
-  }
-
-  run('check safe vs unsafe URLs (100 runs)', () => {
-    for (let i = 0; i < 50; i++) {
-      isDangerousUrl('href', 'https://example.com/path');
-      isDangerousUrl('src', 'javascript:alert(1)');
-    }
-  });
-
-  run('check safe vs unsafe CSS values (100 runs)', () => {
-    for (let i = 0; i < 50; i++) {
-      isDangerousCssValue('color: red');
-      isDangerousCssValue('width: expression(alert(1))');
-    }
-  });
-
-  run('mitigate complex DOM Clobbering payload', () => {
-    sanitizeHtml('<form id="attributes"><input name="id"><input id="parentNode"></form>');
+  test('sanitize safe and vulnerable HTML comparison', async ({ bench }) => {
+    await bench.compare(
+      ...safeCases.map(({ name, html }) =>
+        bench(name, () => {
+          sanitizeHtml(html);
+        })
+      ),
+      ...vulnerabilityCases.map(({ name, payload }) =>
+        bench(name, () => {
+          sanitizeHtml(payload);
+        })
+      ),
+      bench('mitigate complex DOM Clobbering payload', () => {
+        sanitizeHtml('<form id="attributes"><input name="id"><input id="parentNode"></form>');
+      }),
+      bench('check safe vs unsafe URLs (100 runs)', () => {
+        for (let i = 0; i < 50; i++) {
+          isDangerousUrl('href', 'https://example.com/path');
+          isDangerousUrl('src', 'javascript:alert(1)');
+        }
+      }),
+      bench('check safe vs unsafe CSS values (100 runs)', () => {
+        for (let i = 0; i < 50; i++) {
+          isDangerousCssValue('color: red');
+          isDangerousCssValue('width: expression(alert(1))');
+        }
+      }),
+      microBenchOptions
+    );
   });
 });

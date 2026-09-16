@@ -3,7 +3,7 @@
  * @description Real-world scenario simulations: Todo App, Dashboard, and Form scaling.
  */
 
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import type { WritableAtom } from '../../dist';
 import $ from '../../dist';
 import {
@@ -53,7 +53,7 @@ const runTodoWorkflow = (itemCount: number, toggleCount: number, deleteCount: nu
 
     $list.atomList(filtered, {
       key: 'id',
-      render: (todo) => `<li class="${todo.completed ? 'done' : ''}">${todo.text}</li>`,
+      render: (todo: Todo) => `<li class="${todo.completed ? 'done' : ''}">${todo.text}</li>`,
     });
 
     // 1. Add
@@ -71,70 +71,67 @@ const runTodoWorkflow = (itemCount: number, toggleCount: number, deleteCount: nu
   });
 
 describe('Macro: Todo App Scenarios', () => {
-  bench(
-    'full workflow (small): add(20) → toggle(10) → filter(active) → delete(5) → all',
-    runTodoWorkflow(20, 10, 5),
-    macroBenchOptions
-  );
+  test('todo app scenarios comparison', async ({ bench }) => {
+    await bench.compare(
+      bench(
+        'full workflow (small): add(20) → toggle(10) → filter(active) → delete(5) → all',
+        runTodoWorkflow(20, 10, 5)
+      ),
+      bench(
+        'full workflow (large): add(100) → toggle(50) → filter(active) → delete(25) → all',
+        runTodoWorkflow(100, 50, 25)
+      ),
+      bench(
+        'full workflow (massive): add(500) → toggle(250) → filter(active) → delete(125) → all',
+        runTodoWorkflow(500, 250, 125)
+      ),
+      bench(
+        'batch deletion: 500 items -> delete 250 items at once',
+        withContainer(($container) => {
+          const todos = $.atom(Array.from({ length: 500 }, (_, index) => createTodo(index + 1)));
+          $('<ul></ul>')
+            .appendTo($container)
+            .atomList(todos, {
+              key: 'id',
+              render: (todo: Todo) => `<li>${todo.text}</li>`,
+            });
 
-  bench(
-    'full workflow (large): add(100) → toggle(50) → filter(active) → delete(25) → all',
-    runTodoWorkflow(100, 50, 25),
-    macroBenchOptions
-  );
+          // Delete 250
+          todos.value = todos.value.slice(250);
+        })
+      ),
+      bench(
+        'filter toggling: 500 items -> toggle active/completed/all (10 times)',
+        withContainer(($container) => {
+          const todos = $.atom(
+            Array.from({ length: 500 }, (_, index) => createTodo(index + 1, index % 2 === 0))
+          );
+          const filter = $.atom<'all' | 'active' | 'completed'>('all');
+          const filtered = $.computed(() => {
+            const filterValue = filter.value;
+            return filterValue === 'all'
+              ? todos.value
+              : todos.value.filter((todo) => todo.completed === (filterValue === 'completed'));
+          });
 
-  bench(
-    'full workflow (massive): add(500) → toggle(250) → filter(active) → delete(125) → all',
-    runTodoWorkflow(500, 250, 125),
-    macroBenchOptions
-  );
+          $('<ul></ul>')
+            .appendTo($container)
+            .atomList(filtered, {
+              key: 'id',
+              render: (todo: Todo) =>
+                `<li class="${todo.completed ? 'done' : ''}">${todo.text}</li>`,
+            });
 
-  bench(
-    'batch deletion: 500 items -> delete 250 items at once',
-    withContainer(($container) => {
-      const todos = $.atom(Array.from({ length: 500 }, (_, index) => createTodo(index + 1)));
-      $('<ul></ul>')
-        .appendTo($container)
-        .atomList(todos, {
-          key: 'id',
-          render: (todo) => `<li>${todo.text}</li>`,
-        });
-
-      // Delete 250
-      todos.value = todos.value.slice(250);
-    }),
-    macroBenchOptions
-  );
-
-  bench(
-    'filter toggling: 500 items -> toggle active/completed/all (10 times)',
-    withContainer(($container) => {
-      const todos = $.atom(
-        Array.from({ length: 500 }, (_, index) => createTodo(index + 1, index % 2 === 0))
-      );
-      const filter = $.atom<'all' | 'active' | 'completed'>('all');
-      const filtered = $.computed(() => {
-        const filterValue = filter.value;
-        return filterValue === 'all'
-          ? todos.value
-          : todos.value.filter((todo) => todo.completed === (filterValue === 'completed'));
-      });
-
-      $('<ul></ul>')
-        .appendTo($container)
-        .atomList(filtered, {
-          key: 'id',
-          render: (todo) => `<li class="${todo.completed ? 'done' : ''}">${todo.text}</li>`,
-        });
-
-      for (let index = 0; index < 10; index++) {
-        filter.value = 'active';
-        filter.value = 'completed';
-        filter.value = 'all';
-      }
-    }),
-    macroBenchOptions
-  );
+          for (let index = 0; index < 10; index++) {
+            filter.value = 'active';
+            filter.value = 'completed';
+            filter.value = 'all';
+          }
+        })
+      ),
+      macroBenchOptions
+    );
+  });
 });
 
 // ============================================================================
@@ -142,109 +139,105 @@ describe('Macro: Todo App Scenarios', () => {
 // ============================================================================
 
 describe('Macro: Dashboard & Reactive Topology', () => {
-  bench(
-    '100 widgets batch update (50 rounds)',
-    withContainer(($container) => {
-      const widgets = Array.from({ length: 100 }, (_, index) => {
-        const value = $.atom(`Widget ${index}`);
-        const width = $.atom(100);
-        $('<div class="widget"><span class="label"></span></div>')
-          .appendTo($container)
-          .atomCss('width', width, 'px')
-          .find('.label')
-          .atomText(value);
-        return { value, width };
-      });
+  test('dashboard and reactive topology comparison', async ({ bench }) => {
+    await bench.compare(
+      bench(
+        '100 widgets batch update (50 rounds)',
+        withContainer(($container) => {
+          const widgets = Array.from({ length: 100 }, (_, index) => {
+            const value = $.atom(`Widget ${index}`);
+            const width = $.atom(100);
+            $('<div class="widget"><span class="label"></span></div>')
+              .appendTo($container)
+              .atomCss('width', width, 'px')
+              .find('.label')
+              .atomText(value);
+            return { value, width };
+          });
 
-      for (let round = 0; round < 50; round++) {
-        $.batch(() => {
-          for (const widget of widgets) {
-            widget.value.value = `Update ${round}`;
-            widget.width.value = 100 + round;
-          }
-        });
-      }
-    }),
-    macroBenchOptions
-  );
-
-  bench(
-    'mount/unmount 100 components (10 cycles)',
-    withContainer(($container) => {
-      for (let cycle = 0; cycle < 10; cycle++) {
-        for (let index = 0; index < 100; index++) {
-          $('<div class="slot"></div>')
-            .appendTo($container)
-            .atomMount(($element) => {
-              const count = $.atom(cycle * 100 + index);
-              $element.html('<span class="count"></span>').find('.count').atomText(count);
-              return () => {};
+          for (let round = 0; round < 50; round++) {
+            $.batch(() => {
+              for (const widget of widgets) {
+                widget.value.value = `Update ${round}`;
+                widget.width.value = 100 + round;
+              }
             });
-        }
-        $container.children().atomUnmount().remove();
-      }
-    }),
-    macroBenchOptions
-  );
+          }
+        })
+      ),
+      bench(
+        'mount/unmount 100 components (10 cycles)',
+        withContainer(($container) => {
+          for (let cycle = 0; cycle < 10; cycle++) {
+            for (let index = 0; index < 100; index++) {
+              $('<div class="slot"></div>')
+                .appendTo($container)
+                .atomMount(($element: JQuery) => {
+                  const count = $.atom(cycle * 100 + index);
+                  $element.html('<span class="count"></span>').find('.count').atomText(count);
+                  return () => {};
+                });
+            }
+            $container.children().atomUnmount().remove();
+          }
+        })
+      ),
+      bench(
+        'deep propagation: 10-level chain → 100 DOM widgets (50 updates)',
+        withContainer(($container) => {
+          const source = $.atom(0);
+          const ops = [
+            (x: number) => x * 2,
+            (x: number) => x + 1,
+            (x: number) => x * 3,
+            (x: number) => x - 10,
+            (x: number) => x + 5,
+            (x: number) => x * 2,
+            (x: number) => x - 1,
+            (x: number) => x + 100,
+            (x: number) => x / 2,
+          ];
 
-  bench(
-    'deep propagation: 10-level chain → 100 DOM widgets (50 updates)',
-    withContainer(($container) => {
-      const source = $.atom(0);
-      const ops = [
-        (x: number) => x * 2,
-        (x: number) => x + 1,
-        (x: number) => x * 3,
-        (x: number) => x - 10,
-        (x: number) => x + 5,
-        (x: number) => x * 2,
-        (x: number) => x - 1,
-        (x: number) => x + 100,
-        (x: number) => x / 2,
-      ];
+          let current: { value: number } = source;
+          for (const op of ops) {
+            const prev = current;
+            current = $.computed(() => op(prev.value));
+          }
+          const c10 = $.computed(() => `Result: ${current.value}`);
 
-      let current: { value: number } = source;
-      for (const op of ops) {
-        const prev = current;
-        current = $.computed(() => op(prev.value));
-      }
-      const c10 = $.computed(() => `Result: ${current.value}`);
-
-      for (let i = 0; i < 100; i++) $('<span></span>').appendTo($container).atomText(c10);
-      for (let i = 0; i < 50; i++) source.value = i;
-    }),
-    macroBenchOptions
-  );
-
-  bench(
-    'fan-out: 1 atom → 100 computed → 100 DOM bindings',
-    withContainer(($container) => {
-      const source = $.atom(0);
-      for (let i = 0; i < 100; i++) {
-        $('<span></span>')
-          .appendTo($container)
-          .atomText($.computed(() => `W${i}: ${source.value}`));
-      }
-      for (let i = 0; i < 100; i++) source.value = i;
-    }),
-    macroBenchOptions
-  );
-
-  bench(
-    'fan-in: 100 atoms → 1 computed → 1 DOM binding',
-    withContainer(($container) => {
-      const atoms = Array.from({ length: 100 }, (_, index) => $.atom(index));
-      $('<span></span>')
-        .appendTo($container)
-        .atomText($.computed(() => atoms.reduce((acc, someAtom) => acc + someAtom.value, 0)));
-      for (let round = 0; round < 50; round++) {
-        $.batch(() => {
-          for (const someAtom of atoms) someAtom.value = round;
-        });
-      }
-    }),
-    macroBenchOptions
-  );
+          for (let i = 0; i < 100; i++) $('<span></span>').appendTo($container).atomText(c10);
+          for (let i = 0; i < 50; i++) source.value = i;
+        })
+      ),
+      bench(
+        'fan-out: 1 atom → 100 computed → 100 DOM bindings',
+        withContainer(($container) => {
+          const source = $.atom(0);
+          for (let i = 0; i < 100; i++) {
+            $('<span></span>')
+              .appendTo($container)
+              .atomText($.computed(() => `W${i}: ${source.value}`));
+          }
+          for (let i = 0; i < 100; i++) source.value = i;
+        })
+      ),
+      bench(
+        'fan-in: 100 atoms → 1 computed → 1 DOM binding',
+        withContainer(($container) => {
+          const atoms = Array.from({ length: 100 }, (_, index) => $.atom(index));
+          $('<span></span>')
+            .appendTo($container)
+            .atomText($.computed(() => atoms.reduce((acc, someAtom) => acc + someAtom.value, 0)));
+          for (let round = 0; round < 50; round++) {
+            $.batch(() => {
+              for (const someAtom of atoms) someAtom.value = round;
+            });
+          }
+        })
+      ),
+      macroBenchOptions
+    );
+  });
 });
 
 // ============================================================================
@@ -287,26 +280,28 @@ describe('Macro: atomForm O(1) Scaling', () => {
     { count: 1000, name: `Update 1 field in 1000-field form (O(1) validation, x${REPEATS})` },
   ];
 
-  for (const { name, count } of cases) {
-    let $container: JQuery;
-    let updater: (index: number) => void;
+  test('atomForm O(1) scaling comparison', async ({ bench }) => {
+    const registrations = cases.map(({ name, count }) => {
+      let $container: JQuery;
+      let updater: (index: number) => void;
+      return bench(
+        name,
+        {
+          beforeAll() {
+            $container = createContainer();
+            const formAtom = createFormInContainer($container, count);
+            updater = createUpdater(formAtom);
+          },
+          afterAll() {
+            cleanupContainer($container);
+          },
+        },
+        () => {
+          for (let i = 0; i < REPEATS; i++) updater(i);
+        }
+      );
+    });
 
-    bench(
-      name,
-      () => {
-        for (let i = 0; i < REPEATS; i++) updater(i);
-      },
-      {
-        ...macroBenchOptions,
-        setup() {
-          $container = createContainer();
-          const formAtom = createFormInContainer($container, count);
-          updater = createUpdater(formAtom);
-        },
-        teardown() {
-          cleanupContainer($container);
-        },
-      }
-    );
-  }
+    await bench.compare(...registrations, macroBenchOptions);
+  });
 });

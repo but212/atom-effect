@@ -1,4 +1,4 @@
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import { Result } from '../dist';
 import { keep, REPEATS } from './setup';
 
@@ -28,76 +28,75 @@ describe('Result', () => {
 
   const mapCallback = (value: number) => value + 1;
 
-  bench(`Result.ok creation (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      keep(Result.ok(i));
-    }
-  });
-
-  bench(`Result.err creation (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      keep(Result.err(errorObject));
-    }
-  });
-
-  bench(`isOk (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      keep(Result.isOk(okValue));
-    }
-  });
-
-  bench(`unwrapOr (mixed, x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      keep(Result.unwrapOr(mixedResults[i], 0));
-    }
-  });
-
-  bench(`map (x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      keep(Result.map(okValue, mapCallback));
-    }
-  });
-
-  bench(`Result.match (mixed, x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      keep(Result.match(mixedResults[i], resultMatcher));
-    }
-  });
-
-  bench(`Result.tryCatch (mixed, x${REPEATS})`, () => {
-    for (let i = 0; i < REPEATS; i++) {
-      keep(Result.tryCatch(mixedCallbacks[i]));
-    }
+  test('Result Operations', async ({ bench }) => {
+    await bench.compare(
+      bench(`Result.ok creation (x${REPEATS})`, () => {
+        for (let i = 0; i < REPEATS; i++) {
+          keep(Result.ok(i));
+        }
+      }),
+      bench(`Result.err creation (x${REPEATS})`, () => {
+        for (let i = 0; i < REPEATS; i++) {
+          keep(Result.err(errorObject));
+        }
+      }),
+      bench(`isOk (x${REPEATS})`, () => {
+        for (let i = 0; i < REPEATS; i++) {
+          keep(Result.isOk(okValue));
+        }
+      }),
+      bench(`unwrapOr (mixed, x${REPEATS})`, () => {
+        for (let i = 0; i < REPEATS; i++) {
+          keep(Result.unwrapOr(mixedResults[i], 0));
+        }
+      }),
+      bench(`map (x${REPEATS})`, () => {
+        for (let i = 0; i < REPEATS; i++) {
+          keep(Result.map(okValue, mapCallback));
+        }
+      }),
+      bench(`Result.match (mixed, x${REPEATS})`, () => {
+        for (let i = 0; i < REPEATS; i++) {
+          keep(Result.match(mixedResults[i], resultMatcher));
+        }
+      }),
+      bench(`Result.tryCatch (mixed, x${REPEATS})`, () => {
+        for (let i = 0; i < REPEATS; i++) {
+          keep(Result.tryCatch(mixedCallbacks[i]));
+        }
+      })
+    );
   });
 
   describe('Native Comparison (try/catch)', () => {
-    bench(`Literal assignment (x${REPEATS})`, () => {
-      for (let i = 0; i < REPEATS; i++) {
-        keep(i);
-      }
-    });
-
-    bench(`Boolean flag check (x${REPEATS})`, () => {
-      const isSuccess = true;
-      for (let i = 0; i < REPEATS; i++) {
-        keep(isSuccess);
-      }
-    });
-
-    bench(`Ternary error fallback (mixed, x${REPEATS})`, () => {
-      for (let i = 0; i < REPEATS; i++) {
-        keep(mixedFlags[i] ? 1 : 0);
-      }
-    });
-
-    bench(`Native try/catch (mixed, x${REPEATS})`, () => {
-      for (let i = 0; i < REPEATS; i++) {
-        try {
-          keep(mixedCallbacks[i]());
-        } catch {
-          keep(-1);
-        }
-      }
+    test('native comparison', async ({ bench }) => {
+      await bench.compare(
+        bench(`Literal assignment (x${REPEATS})`, () => {
+          for (let i = 0; i < REPEATS; i++) {
+            keep(i);
+          }
+        }),
+        bench(`Boolean flag check (x${REPEATS})`, () => {
+          const isSuccess = true;
+          for (let i = 0; i < REPEATS; i++) {
+            keep(isSuccess);
+          }
+        }),
+        bench(`Ternary error fallback (mixed, x${REPEATS})`, () => {
+          for (let i = 0; i < REPEATS; i++) {
+            keep(mixedFlags[i] ? 1 : 0);
+          }
+        }),
+        bench(`Native try/catch (mixed, x${REPEATS})`, () => {
+          for (let i = 0; i < REPEATS; i++) {
+            try {
+              keep(mixedCallbacks[i]());
+            } catch {
+              keep(-1);
+            }
+          }
+        })
+      );
     });
   });
 });
