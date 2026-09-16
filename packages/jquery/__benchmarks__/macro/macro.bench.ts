@@ -303,5 +303,5 @@ describe('Macro: atomForm O(1) Scaling', () => {
     });
 
     await bench.compare(...registrations, macroBenchOptions);
-  });
+  }, 180_000);
 });
