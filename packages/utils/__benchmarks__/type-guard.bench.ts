@@ -11,26 +11,30 @@ describe('type-guard', () => {
   // Pre-generate mixed inputs of length REPEATS to avoid random selection overhead in the benchmark loop
   const mixedInputs = Array.from({ length: REPEATS }, (_, i) => rawInputs[i % rawInputs.length]);
 
+  const repeats = REPEATS;
+  const _keep = keep;
+  const _isPromise = isPromise;
+
   test('isPromise checks comparison', async ({ bench }) => {
     await bench.compare(
-      bench(`isPromise: native promise (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(isPromise(promise));
+      bench(`isPromise: native promise (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(_isPromise(promise));
         }
       }),
-      bench(`isPromise: thenable (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(isPromise(thenable));
+      bench(`isPromise: thenable (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(_isPromise(thenable));
         }
       }),
-      bench(`isPromise: object (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(isPromise(emptyObject));
+      bench(`isPromise: object (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(_isPromise(emptyObject));
         }
       }),
-      bench(`isPromise: mixed data (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(isPromise(mixedInputs[i]));
+      bench(`isPromise: mixed data (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(_isPromise(mixedInputs[i]));
         }
       })
     );

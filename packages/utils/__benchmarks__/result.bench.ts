@@ -28,41 +28,45 @@ describe('Result', () => {
 
   const mapCallback = (value: number) => value + 1;
 
+  const repeats = REPEATS;
+  const _keep = keep;
+  const { ok, err, isOk, unwrapOr, map, match, tryCatch } = Result;
+
   test('Result Operations', async ({ bench }) => {
     await bench.compare(
-      bench(`Result.ok creation (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(Result.ok(i));
+      bench(`Result.ok creation (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(ok(i));
         }
       }),
-      bench(`Result.err creation (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(Result.err(errorObject));
+      bench(`Result.err creation (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(err(errorObject));
         }
       }),
-      bench(`isOk (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(Result.isOk(okValue));
+      bench(`isOk (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(isOk(okValue));
         }
       }),
-      bench(`unwrapOr (mixed, x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(Result.unwrapOr(mixedResults[i], 0));
+      bench(`unwrapOr (mixed, x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(unwrapOr(mixedResults[i], 0));
         }
       }),
-      bench(`map (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(Result.map(okValue, mapCallback));
+      bench(`map (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(map(okValue, mapCallback));
         }
       }),
-      bench(`Result.match (mixed, x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(Result.match(mixedResults[i], resultMatcher));
+      bench(`Result.match (mixed, x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(match(mixedResults[i], resultMatcher));
         }
       }),
-      bench(`Result.tryCatch (mixed, x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(Result.tryCatch(mixedCallbacks[i]));
+      bench(`Result.tryCatch (mixed, x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(tryCatch(mixedCallbacks[i]));
         }
       })
     );
@@ -71,28 +75,28 @@ describe('Result', () => {
   describe('Native Comparison (try/catch)', () => {
     test('native comparison', async ({ bench }) => {
       await bench.compare(
-        bench(`Literal assignment (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
-            keep(i);
+        bench(`Literal assignment (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
+            _keep(i);
           }
         }),
-        bench(`Boolean flag check (x${REPEATS})`, () => {
+        bench(`Boolean flag check (x${repeats})`, () => {
           const isSuccess = true;
-          for (let i = 0; i < REPEATS; i++) {
-            keep(isSuccess);
+          for (let i = 0; i < repeats; i++) {
+            _keep(isSuccess);
           }
         }),
-        bench(`Ternary error fallback (mixed, x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
-            keep(mixedFlags[i] ? 1 : 0);
+        bench(`Ternary error fallback (mixed, x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
+            _keep(mixedFlags[i] ? 1 : 0);
           }
         }),
-        bench(`Native try/catch (mixed, x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
+        bench(`Native try/catch (mixed, x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
             try {
-              keep(mixedCallbacks[i]());
+              _keep(mixedCallbacks[i]());
             } catch {
-              keep(-1);
+              _keep(-1);
             }
           }
         })

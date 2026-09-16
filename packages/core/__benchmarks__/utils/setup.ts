@@ -18,7 +18,7 @@ if (runtimeDebug) {
   runtimeDebug.shouldWarnInfiniteLoop = false;
 }
 
-export const REPEATS = 10;
+export const REPEATS = 100;
 
 /**
  * Standard benchmark options for micro-benchmarks

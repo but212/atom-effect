@@ -7,45 +7,50 @@ import { describe, test } from 'vitest';
 import { atom, computed } from '../../dist';
 import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
+const repeats = REPEATS;
+const _keep = keep;
+const _atom = atom;
+const _computed = computed;
+
 describe('Computeds: Reactive Logic', () => {
   test('creation comparison', async ({ bench }) => {
     await bench.compare(
-      bench(`baseline: raw function creation (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`baseline: raw function creation (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           const aPlain = { value: 0 };
           const bPlain = { value: 1 };
           const cPlain = { value: 2 };
-          keep(() => aPlain.value + bPlain.value + cPlain.value);
+          _keep(() => aPlain.value + bPlain.value + cPlain.value);
         }
       }),
-      bench(`creation: flat computed (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const firstAtom = atom(0);
-          const secondAtom = atom(1);
-          const thirdAtom = atom(2);
-          keep(computed(() => firstAtom.value + secondAtom.value + thirdAtom.value));
+      bench(`creation: flat computed (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const firstAtom = _atom(0);
+          const secondAtom = _atom(1);
+          const thirdAtom = _atom(2);
+          _keep(_computed(() => firstAtom.value + secondAtom.value + thirdAtom.value));
         }
       }),
       bench('creation: chained computed (10 levels)', () => {
-        const someAtom = atom(0);
-        let current = computed(() => someAtom.value);
+        const someAtom = _atom(0);
+        let current = _computed(() => someAtom.value);
         for (let i = 0; i < 9; i++) {
           const previousComputed = current;
-          current = computed(() => previousComputed.value + 1);
+          current = _computed(() => previousComputed.value + 1);
         }
-        keep(current.value);
+        _keep(current.value);
       }),
       microBenchOptions
     );
   });
 
   test('evaluation and caching comparison', async ({ bench }) => {
-    const source = atom(0);
+    const source = _atom(0);
     const chain10 = (() => {
-      let curr = computed(() => source.value);
+      let curr = _computed(() => source.value);
       for (let i = 0; i < 9; i++) {
         const previousComputed = curr;
-        curr = computed(() => previousComputed.value + 1);
+        curr = _computed(() => previousComputed.value + 1);
       }
       return curr;
     })();
@@ -63,25 +68,25 @@ describe('Computeds: Reactive Logic', () => {
     const chain10RawComp = () => rawComp9() + 1;
 
     await bench.compare(
-      bench(`baseline: raw chained function evaluation (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`baseline: raw chained function evaluation (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           rawSource.value++;
-          keep(chain10RawComp());
-          keep(chain10RawComp());
+          _keep(chain10RawComp());
+          _keep(chain10RawComp());
         }
       }),
-      bench(`recomputation & cache (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`recomputation & cache (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           source.value++;
-          keep(chain10.value); // Recompute
-          keep(chain10.value); // Cache hit
+          _keep(chain10.value); // Recompute
+          _keep(chain10.value); // Cache hit
         }
       }),
-      bench(`lazy evaluation overhead (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const someAtom = atom(i);
-          const computedInstance = computed(() => someAtom.value * 2);
-          keep(computedInstance.value);
+      bench(`lazy evaluation overhead (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const someAtom = _atom(i);
+          const computedInstance = _computed(() => someAtom.value * 2);
+          _keep(computedInstance.value);
         }
       }),
       microBenchOptions
@@ -91,8 +96,8 @@ describe('Computeds: Reactive Logic', () => {
 
 describe('Computeds: Read Methods (.value vs .peek())', () => {
   test('read methods comparison', async ({ bench }) => {
-    const someAtom = atom(42);
-    const computedInstance = computed(() => someAtom.value + 1);
+    const someAtom = _atom(42);
+    const computedInstance = _computed(() => someAtom.value + 1);
     let unsubscribeCallback: () => void;
     const rawFn = () => 43;
 
@@ -105,7 +110,7 @@ describe('Computeds: Read Methods (.value vs .peek())', () => {
     await bench.compare(
       ...readCases.map(({ name, read }) =>
         bench(
-          `${name} (x${REPEATS})`,
+          `${name} (x${repeats})`,
           {
             beforeAll: () => {
               unsubscribeCallback = computedInstance.subscribe(() => {});
@@ -116,8 +121,8 @@ describe('Computeds: Read Methods (.value vs .peek())', () => {
           },
           () => {
             let sum = 0;
-            for (let i = 0; i < REPEATS; i++) sum += read();
-            keep(sum);
+            for (let i = 0; i < repeats; i++) sum += read();
+            _keep(sum);
           }
         )
       ),
@@ -133,18 +138,18 @@ describe('Computeds: Asynchronous Flows', () => {
     let asyncUnsub: () => void;
 
     await bench.compare(
-      bench(`creation: async computed (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const computedInstance = computed(async () => 42, { defaultValue: 0 });
-          keep(computedInstance);
+      bench(`creation: async computed (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const computedInstance = _computed(async () => 42, { defaultValue: 0 });
+          _keep(computedInstance);
           computedInstance.dispose();
         }
       }),
       bench(
-        `read: resolved value & state (x${REPEATS})`,
+        `read: resolved value & state (x${repeats})`,
         {
           beforeAll: () => {
-            resolvedAsync = computed(async () => 42, { defaultValue: 0 });
+            resolvedAsync = _computed(async () => 42, { defaultValue: 0 });
             resolvedUnsub = resolvedAsync.subscribe(() => {});
             resolvedAsync.value; // trigger evaluation
           },
@@ -154,9 +159,9 @@ describe('Computeds: Asynchronous Flows', () => {
           },
         },
         () => {
-          for (let i = 0; i < REPEATS; i++) {
-            keep(resolvedAsync.value);
-            keep(resolvedAsync.state);
+          for (let i = 0; i < repeats; i++) {
+            _keep(resolvedAsync.value);
+            _keep(resolvedAsync.state);
           }
         }
       ),
@@ -165,16 +170,16 @@ describe('Computeds: Asynchronous Flows', () => {
         const promise = new Promise<number>((r) => {
           resolve = r;
         });
-        const computedInstance = computed(() => promise, { defaultValue: 0 });
+        const computedInstance = _computed(() => promise, { defaultValue: 0 });
         asyncUnsub = computedInstance.subscribe(() => {});
 
         try {
-          keep(computedInstance.value); // trigger calculation, transitions to pending
+          _keep(computedInstance.value); // trigger calculation, transitions to pending
           resolve(42);
 
           await promise; // wait for promise to settle
           await Promise.resolve(); // wait for computed microtask to resolve
-          keep(computedInstance.value); // read resolved value
+          _keep(computedInstance.value); // read resolved value
         } finally {
           asyncUnsub();
           computedInstance.dispose();
