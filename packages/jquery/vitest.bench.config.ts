@@ -3,6 +3,7 @@ import { playwright } from '@vitest/browser-playwright';
 
 export default defineVitestBenchConfig(import.meta.dirname, {
   test: {
+    testTimeout: 180_000,
     browser: {
       enabled: true,
       provider: playwright(),
