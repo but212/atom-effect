@@ -19,6 +19,14 @@ import {
   type TodoItem,
 } from '../utils/setup.js';
 
+const repeats = REPEATS;
+const _keep = keep;
+const _atom = atom;
+const _computed = computed;
+const _effect = effect;
+const _atomLens = atomLens;
+const _benchEffectOptions = benchEffectOptions;
+
 // --- Domain Helpers ---
 const filterTodos = (todos: TodoItem[], filter: 'all' | 'active' | 'completed') =>
   filter === 'all' ? todos : todos.filter((todo) => todo.completed === (filter === 'completed'));
@@ -89,7 +97,7 @@ describe('Todo App: Comprehensive Workflow', () => {
           const completed = vanillaTodos.filter((todo) => todo.completed).length;
           const calculatedRate = total === 0 ? 0 : (completed / total) * 100;
 
-          keep([filtered.length, calculatedRate]);
+          _keep([filtered.length, calculatedRate]);
         }),
         bench('[Atom] full workflow: add → toggle → filter → delete → stats', () => {
           todosWorkflow.value = Array.from({ length: 100 }, (_, index) => ({
@@ -103,7 +111,7 @@ describe('Todo App: Comprehensive Workflow', () => {
           filterWorkflow.value = 'active';
           todosWorkflow.value = todosWorkflow.value.slice(20);
           filterWorkflow.value = 'all';
-          keep([displayCount, rate]);
+          _keep([displayCount, rate]);
         }),
         macroBenchOptions
       );
@@ -131,12 +139,12 @@ describe('Todo App: Input Size Tiers', () => {
         await bench.compare(
           bench(`[Atom] toggle filter (${size}: ${data.length} items)`, () => {
             filterAtom.value = filterAtom.value === 'all' ? 'active' : 'all';
-            keep(count);
+            _keep(count);
           }),
           bench(`[Vanilla] toggle filter (${size}: ${data.length} items)`, () => {
             vanillaFilter = vanillaFilter === 'all' ? 'active' : 'all';
             const filteredResult = filterTodos(data, vanillaFilter);
-            keep(filteredResult.length);
+            _keep(filteredResult.length);
           }),
           macroBenchOptions
         );
@@ -159,11 +167,11 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
     await bench.compare(
       bench('[Vanilla] toggle sort', () => {
         sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-        keep(sortGridData(data, sortDir)[0]);
+        _keep(sortGridData(data, sortDir)[0]);
       }),
       bench('[Atom] toggle sort', () => {
         sortDirAtom.value = sortDirAtom.value === 'asc' ? 'desc' : 'asc';
-        keep(sortedRows.value[0]); // Principle 2: Details - consistent with vanilla [0] return value
+        _keep(sortedRows.value[0]); // Principle 2: Details - consistent with vanilla [0] return value
       }),
       macroBenchOptions
     );
@@ -179,11 +187,11 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
     await bench.compare(
       bench('[Vanilla] switch filter', () => {
         selectedDepartment = selectedDepartment === 'Engineering' ? 'Sales' : 'Engineering';
-        keep(data.filter((row) => row.department === selectedDepartment)[0]);
+        _keep(data.filter((row) => row.department === selectedDepartment)[0]);
       }),
       bench('[Atom] switch filter', () => {
         departmentFilter.value = departmentFilter.value === 'Engineering' ? 'Sales' : 'Engineering';
-        keep(filteredRows.value[0]); // Principle 2: Details - consistent [0] return value
+        _keep(filteredRows.value[0]); // Principle 2: Details - consistent [0] return value
       }),
       macroBenchOptions
     );
@@ -204,11 +212,11 @@ describe('Data Grid: Core Operations (1000 Rows)', () => {
         const paginated = sortGridData(data, sortDirP)
           .filter((row) => row.department === 'Engineering')
           .slice(0, 20);
-        keep(paginated[0]);
+        _keep(paginated[0]);
       }),
       bench('[Atom] sort + filter + paginate', () => {
         sortDirComplex.value = sortDirComplex.value === 'asc' ? 'desc' : 'asc';
-        keep(paginatedRowsComplex.value[0]); // Principle 2: Details - consistent [0] return value
+        _keep(paginatedRowsComplex.value[0]); // Principle 2: Details - consistent [0] return value
       }),
       macroBenchOptions
     );
@@ -224,8 +232,8 @@ describe('Data Grid: Targeted Updates', () => {
 
   test('single cell update comparison', async ({ bench }) => {
     await bench.compare(
-      bench(`[Manual] update single cell (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`[Manual] update single cell (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           const nextRows = [...rowsAtom.peek()];
           const targetRow = nextRows[targetIdx];
           if (targetRow) {
@@ -234,8 +242,8 @@ describe('Data Grid: Targeted Updates', () => {
           rowsAtom.value = nextRows;
         }
       }),
-      bench(`[Lens] update single cell (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`[Lens] update single cell (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           nameLens.value = `Updated ${i}`;
         }
       }),
@@ -245,8 +253,8 @@ describe('Data Grid: Targeted Updates', () => {
 
   test('select/deselect rows', async ({ bench }) => {
     await bench('select/deselect rows (Set-based)', () => {
-      const selectedIds = atom<Set<number>>(new Set());
-      const selectedCount = computed(() => selectedIds.value.size);
+      const selectedIds = _atom<Set<number>>(new Set());
+      const selectedCount = _computed(() => selectedIds.value.size);
 
       for (let i = 1; i <= 100; i++) {
         const newSet = new Set(selectedIds.value);
@@ -258,7 +266,7 @@ describe('Data Grid: Targeted Updates', () => {
         newSet.delete(i);
         selectedIds.value = newSet;
       }
-      keep(selectedCount.value);
+      _keep(selectedCount.value);
     }).run(macroBenchOptions);
   });
 });
@@ -301,16 +309,16 @@ describe('Dependency Graph Patterns', () => {
     await bench.compare(
       bench('deep chain (100 levels)', () => {
         chainSource.value += 1;
-        keep(chainSink.value);
+        _keep(chainSink.value);
       }),
       bench('diamond pattern (1 → 10 → 10 → 1)', () => {
         diamondSource.value += 1;
-        keep(diamondSink.value);
+        _keep(diamondSink.value);
       }),
       bench('pyramid pattern (50 levels)', () => {
         const first = pyramidBase[0];
         if (first) first.value += 1;
-        if (pyramidApex) keep(pyramidApex.value);
+        if (pyramidApex) _keep(pyramidApex.value);
       }),
       macroBenchOptions
     );
@@ -342,15 +350,15 @@ describe('Complex Graph Architecture', () => {
         for (const computedInstance of mixedComputeds) {
           last = computedInstance.value;
         }
-        keep(last);
+        _keep(last);
       }),
-      bench(`circular avoidance (x${REPEATS})`, () => {
+      bench(`circular avoidance (x${repeats})`, () => {
         let result: any;
-        for (let i = 0; i < REPEATS; i++) {
+        for (let i = 0; i < repeats; i++) {
           circularAtomA.value += 1;
           result = circularComputedAll.value;
         }
-        keep(result);
+        _keep(result);
       }),
       macroBenchOptions
     );
@@ -369,24 +377,24 @@ describe('Dynamic Dependency Patterns', () => {
 
   test('dynamic dependency comparison', async ({ bench }) => {
     await bench.compare(
-      bench(`conditional dependencies (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`conditional dependencies (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           condAtom.value = !condAtom.value;
-          keep(condResult.value);
+          _keep(condResult.value);
           if (condAtom.value) condA.value++;
           else condB.value++;
-          keep(condResult.value);
+          _keep(condResult.value);
         }
       }),
-      bench(`array-based selection (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`array-based selection (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           idxAtom.value = (idxAtom.value + 1) % 10;
-          keep(arrSelected.value);
+          _keep(arrSelected.value);
           const valAtom = arrValues[idxAtom.value];
           if (valAtom) {
             valAtom.value++;
           }
-          keep(arrSelected.value);
+          _keep(arrSelected.value);
         }
       }),
       macroBenchOptions
@@ -433,7 +441,7 @@ describe('Large Grid with Lenses (50x50)', () => {
           const row = cellLenses[r];
           if (row) {
             for (let c = 0; c < COLS; c++) {
-              keep(row[c]?.value);
+              _keep(row[c]?.value);
             }
           }
         }
@@ -463,8 +471,8 @@ describe('Recursive Lens Depth Stress', () => {
 
   test('lens depth comparison', async ({ bench }) => {
     await bench.compare(
-      bench(`read depth ${DEPTH} lens chain (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) keep(currentLens.value);
+      bench(`read depth ${DEPTH} lens chain (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) _keep(currentLens.value);
       }),
       bench(`update depth ${DEPTH} lens chain`, () => {
         currentLens.value = { child: 'done' };
@@ -478,15 +486,15 @@ describe('Memory & GC pressure', () => {
   test('memory and GC comparison', async ({ bench }) => {
     await bench.compare(
       bench('create and dispose 1000 units (atom/comp/effect)', () => {
-        const someAtom = atom(0);
+        const someAtom = _atom(0);
         const units: { dispose(): void }[] = [];
         for (let i = 0; i < 1000; i++) {
           if (i < 333) {
-            units.push(atom(0));
+            units.push(_atom(0));
           } else if (i < 666) {
-            units.push(computed(() => someAtom.value + i));
+            units.push(_computed(() => someAtom.value + i));
           } else {
-            units.push(effect(() => keep(someAtom.value), benchEffectOptions));
+            units.push(_effect(() => _keep(someAtom.value), _benchEffectOptions));
           }
         }
         for (const unit of units) {
@@ -495,7 +503,7 @@ describe('Memory & GC pressure', () => {
         someAtom.dispose();
       }),
       bench('subscription churn (1K cycles)', () => {
-        const someAtom = atom(0);
+        const someAtom = _atom(0);
         for (let i = 0; i < 1000; i++) {
           const unsubscribeCallback = someAtom.subscribe(() => {});
           unsubscribeCallback();
@@ -504,8 +512,8 @@ describe('Memory & GC pressure', () => {
       }),
       bench('circular reference cleanup (100 cycles)', () => {
         for (let i = 0; i < 100; i++) {
-          const firstAtom = atom<any>({ ref: null });
-          const secondAtom = atom<any>({ ref: firstAtom });
+          const firstAtom = _atom<any>({ ref: null });
+          const secondAtom = _atom<any>({ ref: firstAtom });
           firstAtom.value = { ref: secondAtom };
           firstAtom.dispose();
           secondAtom.dispose();
@@ -521,29 +529,29 @@ describe('Large State Analysis', () => {
   test('large state comparison', async ({ bench }) => {
     await bench.compare(
       bench('10K entity state tree management', () => {
-        const state = atom(initialLargeState);
+        const state = _atom(initialLargeState);
 
-        const counts = computed(() => ({
+        const counts = _computed(() => ({
           usersCount: state.value.users.length,
           postsCount: state.value.posts.length,
           commentsCount: state.value.comments.length,
         }));
 
-        keep(counts.value);
+        _keep(counts.value);
         state.value = { ...state.value, users: [...state.value.users, { id: 1000, name: 'New' }] };
-        keep(counts.value);
+        _keep(counts.value);
         state.dispose();
       }),
       bench('heap monitoring (1000 large atoms)', () => {
         const before = getMemoryUsage();
-        const atoms = Array.from({ length: 1000 }, (_, i) => atom(new Array<number>(100).fill(i)));
+        const atoms = Array.from({ length: 1000 }, (_, i) => _atom(new Array<number>(100).fill(i)));
         const during = getMemoryUsage();
         for (const someAtom of atoms) {
           someAtom.dispose();
         }
         forceGC();
         const after = getMemoryUsage();
-        keep([before, during, after]);
+        _keep([before, during, after]);
       }),
       memoryBenchOptions
     );

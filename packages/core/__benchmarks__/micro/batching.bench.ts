@@ -7,23 +7,31 @@ import { describe, test } from 'vitest';
 import { atom, batch, computed, effect } from '../../dist';
 import { benchEffectOptions, keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
+const repeats = REPEATS;
+const _keep = keep;
+const _atom = atom;
+const _batch = batch;
+const _computed = computed;
+const _effect = effect;
+const _benchEffectOptions = benchEffectOptions;
+
 describe('Batching: Basic Operations', () => {
   test('basic batch operations', async ({ bench }) => {
-    const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
+    const atoms = Array.from({ length: repeats }, (_, i) => _atom(i));
     let activeEffects: any[] = [];
 
-    const firstAtom = atom(0);
-    const secondAtom = atom(0);
-    const sum = computed(() => firstAtom.value + secondAtom.value);
-    const doubled = computed(() => sum.value * 2);
+    const firstAtom = _atom(0);
+    const secondAtom = _atom(0);
+    const sum = _computed(() => firstAtom.value + secondAtom.value);
+    const doubled = _computed(() => sum.value * 2);
 
     await bench.compare(
       bench(
-        `batch update ${REPEATS} atoms: active (x${REPEATS})`,
+        `batch update ${repeats} atoms: active (x${repeats})`,
         {
           beforeAll: () => {
             activeEffects = atoms.map((someAtom) =>
-              effect(() => keep(someAtom.value), benchEffectOptions)
+              _effect(() => _keep(someAtom.value), _benchEffectOptions)
             );
           },
           afterAll: () => {
@@ -32,18 +40,18 @@ describe('Batching: Basic Operations', () => {
           },
         },
         () => {
-          batch(() => {
+          _batch(() => {
             for (const someAtom of atoms) someAtom.value++;
           });
         }
       ),
-      bench(`batched computed chain update (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          batch(() => {
+      bench(`batched computed chain update (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _batch(() => {
             firstAtom.value++;
             secondAtom.value++;
           });
-          keep(doubled.value);
+          _keep(doubled.value);
         }
       }),
       microBenchOptions
@@ -53,13 +61,13 @@ describe('Batching: Basic Operations', () => {
 
 describe('Batching: Nesting Overhead', () => {
   test('nesting overhead comparison', async ({ bench }) => {
-    const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
+    const atoms = Array.from({ length: repeats }, (_, i) => _atom(i));
     let activeEffects: any[] = [];
 
     const hookOptions = {
       beforeAll: () => {
         activeEffects = atoms.map((someAtom) =>
-          effect(() => keep(someAtom.value), benchEffectOptions)
+          _effect(() => _keep(someAtom.value), _benchEffectOptions)
         );
       },
       afterAll: () => {
@@ -69,18 +77,18 @@ describe('Batching: Nesting Overhead', () => {
     };
 
     await bench.compare(
-      bench(`unbatched ${REPEATS} writes`, hookOptions, () => {
+      bench(`unbatched ${repeats} writes`, hookOptions, () => {
         for (const someAtom of atoms) someAtom.value++;
       }),
-      bench(`flat batch (${REPEATS} writes)`, hookOptions, () => {
-        batch(() => {
+      bench(`flat batch (${repeats} writes)`, hookOptions, () => {
+        _batch(() => {
           for (const someAtom of atoms) someAtom.value++;
         });
       }),
-      bench(`nested batch 3 levels (${REPEATS} writes)`, hookOptions, () => {
-        batch(() =>
-          batch(() =>
-            batch(() => {
+      bench(`nested batch 3 levels (${repeats} writes)`, hookOptions, () => {
+        _batch(() =>
+          _batch(() =>
+            _batch(() => {
               for (const someAtom of atoms) someAtom.value++;
             })
           )

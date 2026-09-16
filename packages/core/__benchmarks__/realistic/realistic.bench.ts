@@ -14,6 +14,8 @@ import {
   memoryBenchOptions,
 } from '../utils/setup.js';
 
+const _keep = keep;
+
 describe('Efficiency: Batching vs Manual Propagation', () => {
   test('form reset comparison', async ({ bench }) => {
     // Scenario 1: Form Reset (20 fields)
@@ -21,7 +23,7 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
     const isFormValid = computed(() => formFields.every((f) => f.value.length > 0));
     let formRuns = 0;
     const effectInstance = effect(() => {
-      keep(isFormValid.value);
+      _keep(isFormValid.value);
       formRuns++;
     }, benchEffectOptions);
 
@@ -32,12 +34,12 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
           batch(() => {
             for (const f of formFields) f.value = nextVal;
           });
-          keep(formRuns);
+          _keep(formRuns);
         }),
         bench('[Manual] form reset (20 fields)', () => {
           const nextVal = formFields[0]?.value === '' ? 'initial' : '';
           for (const f of formFields) f.value = nextVal;
-          keep(formRuns);
+          _keep(formRuns);
         }),
         macroBenchOptions
       );
@@ -63,11 +65,11 @@ describe('Efficiency: Batching vs Manual Propagation', () => {
           batch(() => {
             for (const a of syncAtoms) a.value++;
           });
-          keep(syncSink);
+          _keep(syncSink);
         }),
         bench('[Manual] state sync (100 atoms)', () => {
           for (const a of syncAtoms) a.value++;
-          keep(syncSink);
+          _keep(syncSink);
         }),
         macroBenchOptions
       );
@@ -84,7 +86,7 @@ describe('Stability: Component Churn & Memory', () => {
         const state = atom({ id, data: 'initial' });
         const derived = computed(() => `ID: ${state.value.id} - ${state.value.data.toUpperCase()}`);
         const stop = effect(() => {
-          keep(derived.value);
+          _keep(derived.value);
         }, benchEffectOptions);
         return { state, stop };
       };
@@ -100,7 +102,7 @@ describe('Stability: Component Churn & Memory', () => {
         comp.stop.dispose();
       }
 
-      keep(components.length);
+      _keep(components.length);
     }).run(memoryBenchOptions);
   });
 });
@@ -113,24 +115,24 @@ describe('Search-as-you-type (1000 items)', () => {
     const sharedSearchResults = computed(() =>
       corpus.filter((item) => item.includes(queryAtom.value))
     );
-    const stopEffect = effect(() => keep(sharedSearchResults.value.length), benchEffectOptions);
+    const stopEffect = effect(() => _keep(sharedSearchResults.value.length), benchEffectOptions);
 
     try {
       await bench.compare(
         bench('[Vanilla] filter 1000 items on query change', () => {
           vanillaQuery = vanillaQuery === '' ? 'item 5' : '';
-          keep(corpus.filter((item) => item.includes(vanillaQuery)).length);
+          _keep(corpus.filter((item) => item.includes(vanillaQuery)).length);
         }),
         bench('[Atom] filter 1000 items (Fresh Computed each time)', () => {
           queryAtom.value = queryAtom.value === '' ? 'item 5' : '';
           const searchResults = computed(() =>
             corpus.filter((item) => item.includes(queryAtom.value))
           );
-          keep(searchResults.value.length);
+          _keep(searchResults.value.length);
         }),
         bench('[Atom] filter 1000 items (Cached/Subscription overhead)', () => {
           queryAtom.value = queryAtom.value === '' ? 'item 5' : '';
-          keep(sharedSearchResults.value.length);
+          _keep(sharedSearchResults.value.length);
         }),
         macroBenchOptions
       );
@@ -162,7 +164,7 @@ describe('Shopping Cart Workflow', () => {
     const totalComputed = computed(() => subtotalComputed.value * (1 - couponAtom.value));
 
     const stopEffect = effect(() => {
-      keep(totalComputed.value);
+      _keep(totalComputed.value);
     }, benchEffectOptions);
 
     try {
@@ -170,12 +172,12 @@ describe('Shopping Cart Workflow', () => {
         bench('[Vanilla] add items → apply coupon → total', () => {
           vanillaCart = PRODUCTS.slice(0, 10).map((product) => ({ ...product, qty: 2 }));
           vanillaCoupon = vanillaCoupon === 0 ? 0.1 : 0;
-          keep(calculateSubtotal(vanillaCart) * (1 - vanillaCoupon));
+          _keep(calculateSubtotal(vanillaCart) * (1 - vanillaCoupon));
         }),
         bench('[Atom] add items → apply coupon → total', () => {
           cartAtom.value = PRODUCTS.slice(0, 10).map((product) => ({ ...product, qty: 2 }));
           couponAtom.value = couponAtom.value === 0 ? 0.1 : 0;
-          keep(totalComputed.value);
+          _keep(totalComputed.value);
         }),
         macroBenchOptions
       );
@@ -222,7 +224,7 @@ describe('Dashboard KPI Pipeline (10 sources → 5 KPIs → 1 summary)', () => {
     const summary = computed(() => kpi1.value + kpi2.value + kpi3.value + kpi4.value + kpi5.value);
 
     const stopEffect = effect(() => {
-      keep(summary.value);
+      _keep(summary.value);
     }, benchEffectOptions);
 
     try {
@@ -236,11 +238,11 @@ describe('Dashboard KPI Pipeline (10 sources → 5 KPIs → 1 summary)', () => {
           const k3 = v4 + v5;
           const k4 = v6 * v7;
           const k5 = v8 - v9;
-          keep(k1 + k2 + k3 + k4 + k5);
+          _keep(k1 + k2 + k3 + k4 + k5);
         }),
         bench('[Atom] update source → reactive KPI pipeline', () => {
           ds0.value = (ds0.value + 1) % 10000;
-          keep(summary.value);
+          _keep(summary.value);
         }),
         macroBenchOptions
       );

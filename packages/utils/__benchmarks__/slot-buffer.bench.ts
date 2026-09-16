@@ -5,19 +5,23 @@ import { keep, REPEATS } from './setup';
 const LARGE_SIZE = 100;
 
 describe('SlotBuffer', () => {
+  const repeats = REPEATS;
+  const _keep = keep;
+  const BufferClass = SlotBuffer;
+
   test('push operations comparison', async ({ bench }) => {
     await bench.compare(
-      bench(`push (small, x${REPEATS})`, () => {
-        const buffer = new SlotBuffer<number>();
-        for (let i = 0; i < REPEATS; i++) {
-          keep(buffer.push(i));
+      bench(`push (small, x${repeats})`, () => {
+        const buffer = new BufferClass<number>();
+        for (let i = 0; i < repeats; i++) {
+          _keep(buffer.push(i));
         }
       }),
       bench('push (large, x10)', () => {
-        const buffer = new SlotBuffer<number>();
+        const buffer = new BufferClass<number>();
         for (let i = 0; i < LARGE_SIZE; i++) {
           for (let j = 0; j < 10; j++) {
-            keep(buffer.push(j));
+            _keep(buffer.push(j));
           }
         }
       })
@@ -25,31 +29,31 @@ describe('SlotBuffer', () => {
   });
 
   test('read, iterate and scan operations', async ({ bench }) => {
-    const filledBuffer = new SlotBuffer<number>();
+    const filledBuffer = new BufferClass<number>();
     for (let i = 0; i < LARGE_SIZE; i++) filledBuffer.push(i);
 
     const isFive = (value: number) => value === 5;
     const isNinetyNine = (value: number) => value === 99;
 
     await bench.compare(
-      bench(`has (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(filledBuffer.has(50));
+      bench(`has (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(filledBuffer.has(50));
         }
       }),
-      bench(`forEach (x${REPEATS})`, () => {
+      bench(`forEach (x${repeats})`, () => {
         let sum = 0;
         const add = (value: number) => {
           sum += value;
         };
-        for (let i = 0; i < REPEATS; i++) {
+        for (let i = 0; i < repeats; i++) {
           filledBuffer.forEach(add);
         }
-        keep(sum);
+        _keep(sum);
       }),
-      bench(`compact (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const buffer = new SlotBuffer<number>();
+      bench(`compact (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const buffer = new BufferClass<number>();
           for (let j = 0; j < 10; j++) buffer.push(j);
           buffer.remove(2);
           buffer.remove(5);
@@ -57,14 +61,14 @@ describe('SlotBuffer', () => {
           buffer.compact();
         }
       }),
-      bench(`some (early exit, x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(filledBuffer.some(isFive));
+      bench(`some (early exit, x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(filledBuffer.some(isFive));
         }
       }),
-      bench(`some (full scan, x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep(filledBuffer.some(isNinetyNine));
+      bench(`some (full scan, x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep(filledBuffer.some(isNinetyNine));
         }
       })
     );

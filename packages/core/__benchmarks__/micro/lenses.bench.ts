@@ -7,12 +7,19 @@ import { describe, test } from 'vitest';
 import { atom, atomLens, composeLens, computed } from '../../dist';
 import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
+const repeats = REPEATS;
+const _keep = keep;
+const _atom = atom;
+const _atomLens = atomLens;
+const _composeLens = composeLens;
+const _computed = computed;
+
 describe('Lenses: Structural Access', () => {
   test('read cases comparison', async ({ bench }) => {
     const plainSource = { a: { b: { c: 1 } } };
-    const source = atom({ a: { b: { c: 1 } } });
-    const lens = atomLens(source, 'a.b.c');
-    const computedInstance = computed(() => source.value.a.b.c);
+    const source = _atom({ a: { b: { c: 1 } } });
+    const lens = _atomLens(source, 'a.b.c');
+    const computedInstance = _computed(() => source.value.a.b.c);
     let computedUnsubscribe: () => void;
 
     const readCases = [
@@ -25,7 +32,7 @@ describe('Lenses: Structural Access', () => {
     await bench.compare(
       ...readCases.map(({ name, read }) =>
         bench(
-          `${name} (x${REPEATS})`,
+          `${name} (x${repeats})`,
           {
             beforeAll: () => {
               computedUnsubscribe = computedInstance.subscribe(() => {});
@@ -35,7 +42,7 @@ describe('Lenses: Structural Access', () => {
             },
           },
           () => {
-            for (let i = 0; i < REPEATS; i++) keep(read());
+            for (let i = 0; i < repeats; i++) _keep(read());
           }
         )
       ),
@@ -45,8 +52,8 @@ describe('Lenses: Structural Access', () => {
 
   test('write cases comparison', async ({ bench }) => {
     const plainSource = { a: { b: { c: 1 } } };
-    const source = atom({ a: { b: { c: 1 } } });
-    const lens = atomLens(source, 'a.b.c');
+    const source = _atom({ a: { b: { c: 1 } } });
+    const lens = _atomLens(source, 'a.b.c');
 
     const writeCases = [
       {
@@ -74,8 +81,8 @@ describe('Lenses: Structural Access', () => {
 
     await bench.compare(
       ...writeCases.map(({ name, write }) =>
-        bench(`${name} (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) write(i);
+        bench(`${name} (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) write(i);
         })
       ),
       microBenchOptions
@@ -83,9 +90,9 @@ describe('Lenses: Structural Access', () => {
   });
 
   test('composition and scaling', async ({ bench }) => {
-    const sharedSource = atom({ x: { y: 1 } });
-    const parentLens = atomLens(sharedSource, 'x');
-    const composed = composeLens(parentLens, 'y');
+    const sharedSource = _atom({ x: { y: 1 } });
+    const parentLens = _atomLens(sharedSource, 'x');
+    const composed = _composeLens(parentLens, 'y');
     let manyLensesUnsub: (() => void)[] = [];
     let value = 0;
 
@@ -94,7 +101,7 @@ describe('Lenses: Structural Access', () => {
       {
         beforeAll: () => {
           manyLensesUnsub = Array.from({ length: 100 }, () => {
-            const lensInstance = atomLens(sharedSource, 'x.y');
+            const lensInstance = _atomLens(sharedSource, 'x.y');
             return lensInstance.subscribe(() => {});
           });
         },
@@ -105,7 +112,7 @@ describe('Lenses: Structural Access', () => {
       },
       () => {
         sharedSource.value = { x: { y: ++value } };
-        keep(composed.value);
+        _keep(composed.value);
       }
     ).run(microBenchOptions);
   });

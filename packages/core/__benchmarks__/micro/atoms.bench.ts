@@ -7,22 +7,29 @@ import { describe, test } from 'vitest';
 import { atom, effect, untracked } from '../../dist';
 import { benchEffectOptions, keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
+const repeats = REPEATS;
+const _keep = keep;
+const _atom = atom;
+const _effect = effect;
+const _untracked = untracked;
+const _benchEffectOptions = benchEffectOptions;
+
 describe('Atoms: Core Operations', () => {
   const creationCases = [
     { name: 'baseline: plain object creation', create: (i: number) => ({ value: i }) },
-    { name: 'creation: primitive atom', create: (i: number) => atom(i) },
+    { name: 'creation: primitive atom', create: (i: number) => _atom(i) },
     {
       name: 'baseline: nested object creation',
       create: (i: number) => ({ value: { count: i } }),
     },
-    { name: 'creation: object atom', create: (i: number) => atom({ count: i }) },
+    { name: 'creation: object atom', create: (i: number) => _atom({ count: i }) },
   ];
 
   test('creation operations', async ({ bench }) => {
     await bench.compare(
       ...creationCases.map(({ name, create }) =>
-        bench(`${name} (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) keep(create(i));
+        bench(`${name} (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) _keep(create(i));
         })
       ),
       microBenchOptions
@@ -30,25 +37,25 @@ describe('Atoms: Core Operations', () => {
   });
 
   test('read/write operations', async ({ bench }) => {
-    const plainObjects = Array.from({ length: REPEATS }, (_, i) => ({ value: i }));
-    const atoms = Array.from({ length: REPEATS }, (_, i) => atom(i));
+    const plainObjects = Array.from({ length: repeats }, (_, i) => ({ value: i }));
+    const atoms = Array.from({ length: repeats }, (_, i) => _atom(i));
     let activeEffects: any[] = [];
 
     await bench.compare(
-      bench(`baseline: plain object read/write (x${REPEATS})`, () => {
+      bench(`baseline: plain object read/write (x${repeats})`, () => {
         let sum = 0;
         for (const obj of plainObjects) {
           obj.value++;
           sum += obj.value;
         }
-        keep(sum);
+        _keep(sum);
       }),
       bench(
-        `read/write performance: active (x${REPEATS})`,
+        `read/write performance: active (x${repeats})`,
         {
           beforeAll: () => {
             activeEffects = atoms.map((someAtom) =>
-              effect(() => keep(someAtom.value), benchEffectOptions)
+              _effect(() => _keep(someAtom.value), _benchEffectOptions)
             );
           },
           afterAll: () => {
@@ -62,15 +69,15 @@ describe('Atoms: Core Operations', () => {
             someAtom.value++;
             sum += someAtom.value;
           }
-          keep(sum);
+          _keep(sum);
         }
       ),
       bench(
-        `untracked read: active (x${REPEATS})`,
+        `untracked read: active (x${repeats})`,
         {
           beforeAll: () => {
             activeEffects = atoms.map((someAtom) =>
-              effect(() => keep(someAtom.value), benchEffectOptions)
+              _effect(() => _keep(someAtom.value), _benchEffectOptions)
             );
           },
           afterAll: () => {
@@ -79,10 +86,10 @@ describe('Atoms: Core Operations', () => {
           },
         },
         () => {
-          untracked(() => {
+          _untracked(() => {
             let sum = 0;
             for (const someAtom of atoms) sum += someAtom.value;
-            keep(sum);
+            _keep(sum);
           });
         }
       ),
@@ -94,7 +101,7 @@ describe('Atoms: Core Operations', () => {
 describe('Atoms: Read Methods (.value vs .peek())', () => {
   test('read methods comparison', async ({ bench }) => {
     const plainObj = { value: 42 };
-    const someAtom = atom(42);
+    const someAtom = _atom(42);
 
     const readCases = [
       { name: 'baseline: plain object property read', read: () => plainObj.value },
@@ -104,10 +111,10 @@ describe('Atoms: Read Methods (.value vs .peek())', () => {
 
     await bench.compare(
       ...readCases.map(({ name, read }) =>
-        bench(`${name} (x${REPEATS})`, () => {
+        bench(`${name} (x${repeats})`, () => {
           let sum = 0;
-          for (let i = 0; i < REPEATS; i++) sum += read();
-          keep(sum);
+          for (let i = 0; i < repeats; i++) sum += read();
+          _keep(sum);
         })
       ),
       microBenchOptions

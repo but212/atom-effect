@@ -14,6 +14,13 @@ import {
   REPEATS,
 } from '../utils/setup.js';
 
+const repeats = REPEATS;
+const _keep = keep;
+const _aeNextTick = aeNextTick;
+const _atom = atom;
+const _computed = computed;
+const _untracked = untracked;
+
 describe('Scheduler: aeNextTick', () => {
   test('single microtask comparison', async ({ bench }) => {
     await bench.compare(
@@ -21,27 +28,27 @@ describe('Scheduler: aeNextTick', () => {
         await Promise.resolve();
       }),
       bench('schedule 1 microtask', async () => {
-        await aeNextTick();
+        await _aeNextTick();
       }),
       asyncSingleBenchOptions
     );
   });
 
   test('parallel microtask comparison', async ({ bench }) => {
-    const promises = new Array<Promise<void>>(REPEATS);
+    const promises = new Array<Promise<void>>(repeats);
 
     const asyncParallelCases = [
       {
-        name: `baseline: schedule ${REPEATS} native microtasks`,
+        name: `baseline: schedule ${repeats} native microtasks`,
         schedule: () => Promise.resolve(),
       },
-      { name: `schedule ${REPEATS} microtasks`, schedule: () => aeNextTick() },
+      { name: `schedule ${repeats} microtasks`, schedule: () => _aeNextTick() },
     ];
 
     await bench.compare(
       ...asyncParallelCases.map(({ name, schedule }) =>
         bench(`${name} (parallel)`, async () => {
-          for (let i = 0; i < REPEATS; i++) {
+          for (let i = 0; i < repeats; i++) {
             promises[i] = schedule();
           }
           await Promise.all(promises);
@@ -54,30 +61,30 @@ describe('Scheduler: aeNextTick', () => {
 
 describe('Scheduler: untracked context', () => {
   test('untracked context comparison', async ({ bench }) => {
-    const someAtom = atom(0);
+    const someAtom = _atom(0);
     // Pre-creating computed avoids creation/disposal overhead in the hot path
-    const computedInstance = computed(() => {
+    const computedInstance = _computed(() => {
       let sum = 0;
-      for (let i = 0; i < REPEATS; i++) sum += someAtom.value;
+      for (let i = 0; i < repeats; i++) sum += someAtom.value;
       return sum;
     });
 
     await bench.compare(
-      bench(`tracked read inside computed (x${REPEATS})`, () => {
+      bench(`tracked read inside computed (x${repeats})`, () => {
         someAtom.value++; // Force re-computation
-        keep(computedInstance.value);
+        _keep(computedInstance.value);
       }),
-      bench(`untracked(() => read) (x${REPEATS})`, () => {
+      bench(`untracked(() => read) (x${repeats})`, () => {
         let sum = 0;
-        untracked(() => {
-          for (let i = 0; i < REPEATS; i++) sum += someAtom.value;
+        _untracked(() => {
+          for (let i = 0; i < repeats; i++) sum += someAtom.value;
         });
-        keep(sum);
+        _keep(sum);
       }),
-      bench(`peek() read — no context (x${REPEATS})`, () => {
+      bench(`peek() read — no context (x${repeats})`, () => {
         let sum = 0;
-        for (let i = 0; i < REPEATS; i++) sum += someAtom.peek();
-        keep(sum);
+        for (let i = 0; i < repeats; i++) sum += someAtom.peek();
+        _keep(sum);
       }),
       microBenchOptions
     );

@@ -15,44 +15,51 @@ import {
   REPEATS,
 } from '../utils/setup.js';
 
+const repeats = REPEATS;
+const _keep = keep;
+const _atom = atom;
+const _computed = computed;
+const _effect = effect;
+const _benchEffectOptions = benchEffectOptions;
+
 describe('Cold Start: First Evaluation', () => {
   test('cold start evaluation comparison', async ({ bench }) => {
     await bench.compare(
-      bench(`[Vanilla] object allocation (baseline) (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          keep({ value: Math.random() });
+      bench(`[Vanilla] object allocation (baseline) (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          _keep({ value: Math.random() });
         }
       }),
-      bench(`[Atom] creation + first .value read (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const someAtom = atom(Math.random());
-          keep(someAtom.value);
+      bench(`[Atom] creation + first .value read (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const someAtom = _atom(Math.random());
+          _keep(someAtom.value);
         }
       }),
-      bench(`[Vanilla] function call (computed baseline) (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
+      bench(`[Vanilla] function call (computed baseline) (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
           const randomValue = Math.random();
-          keep(((value: number) => value * 2)(randomValue));
+          _keep(((value: number) => value * 2)(randomValue));
         }
       }),
-      bench(`[Atom] lazy computed creation + first eval (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const someAtom = atom(Math.random());
-          const computedInstance = computed(() => someAtom.value * 2, { lazy: true });
-          keep(computedInstance.value);
+      bench(`[Atom] lazy computed creation + first eval (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const someAtom = _atom(Math.random());
+          const computedInstance = _computed(() => someAtom.value * 2, { lazy: true });
+          _keep(computedInstance.value);
         }
       }),
-      bench(`[Atom] eager computed creation + first eval (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const someAtom = atom(Math.random());
-          const computedInstance = computed(() => someAtom.value * 2);
-          keep(computedInstance.value);
+      bench(`[Atom] eager computed creation + first eval (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const someAtom = _atom(Math.random());
+          const computedInstance = _computed(() => someAtom.value * 2);
+          _keep(computedInstance.value);
         }
       }),
-      bench(`[Atom] effect creation + first run + dispose (x${REPEATS})`, () => {
-        for (let i = 0; i < REPEATS; i++) {
-          const someAtom = atom(Math.random());
-          const effectInstance = effect(() => keep(someAtom.value), benchEffectOptions);
+      bench(`[Atom] effect creation + first run + dispose (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const someAtom = _atom(Math.random());
+          const effectInstance = _effect(() => _keep(someAtom.value), _benchEffectOptions);
           effectInstance.dispose();
         }
       }),
@@ -63,37 +70,37 @@ describe('Cold Start: First Evaluation', () => {
 
 describe('Steady State: Repeated Operations', () => {
   test('steady state comparison', async ({ bench }) => {
-    const warmAtom = atom(0);
-    const warmComputed = computed(() => warmAtom.value * 2);
+    const warmAtom = _atom(0);
+    const warmComputed = _computed(() => warmAtom.value * 2);
     let warmSink = 0;
-    const effectInstance = effect(() => {
+    const effectInstance = _effect(() => {
       warmSink = warmComputed.value;
-    }, benchEffectOptions);
+    }, _benchEffectOptions);
 
     try {
       await bench.compare(
-        bench(`[Vanilla] variable write + read (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
+        bench(`[Vanilla] variable write + read (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
             let x = 0;
             x = Math.random() * 2;
-            keep(x);
+            _keep(x);
           }
         }),
-        bench(`[Atom] atom write + computed propagation (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
+        bench(`[Atom] atom write + computed propagation (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
             warmAtom.value = Math.random();
-            keep(warmComputed.value);
-            keep(warmSink);
+            _keep(warmComputed.value);
+            _keep(warmSink);
           }
         }),
-        bench(`[Atom] atom read only — warm cache (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
-            keep(warmAtom.value);
+        bench(`[Atom] atom read only — warm cache (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
+            _keep(warmAtom.value);
           }
         }),
-        bench(`[Atom] computed read only — warm cache hit (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
-            keep(warmComputed.value);
+        bench(`[Atom] computed read only — warm cache hit (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
+            _keep(warmComputed.value);
           }
         }),
         microBenchOptions
@@ -106,34 +113,34 @@ describe('Steady State: Repeated Operations', () => {
 
 describe('Cold vs Warm: Computed Cache', () => {
   test('cold computed cache', async ({ bench }) => {
-    await bench(`[Cold] new computed each iteration (x${REPEATS})`, () => {
-      for (let i = 0; i < REPEATS; i++) {
-        const source = atom(0);
-        const computedInstance = computed(() => source.value * 3);
-        keep(computedInstance.value);
+    await bench(`[Cold] new computed each iteration (x${repeats})`, () => {
+      for (let i = 0; i < repeats; i++) {
+        const source = _atom(0);
+        const computedInstance = _computed(() => source.value * 3);
+        _keep(computedInstance.value);
       }
     }).run(coldBenchOptions);
   });
 
   test('warm computed cache comparison', async ({ bench }) => {
-    const sharedSource = atom(0);
-    const cachedComputed = computed(() => sharedSource.value * 3);
+    const sharedSource = _atom(0);
+    const cachedComputed = _computed(() => sharedSource.value * 3);
 
-    const missSource = atom(0);
-    const missComputed = computed(() => missSource.value * 3);
+    const missSource = _atom(0);
+    const missComputed = _computed(() => missSource.value * 3);
     const unsubMiss = missComputed.subscribe(() => {}); // activate
 
     try {
       await bench.compare(
-        bench(`[Warm] reuse computed — cache hit (source unchanged) (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
-            keep(cachedComputed.value);
+        bench(`[Warm] reuse computed — cache hit (source unchanged) (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
+            _keep(cachedComputed.value);
           }
         }),
-        bench(`[Warm] reuse computed — cache miss (source changed) (x${REPEATS})`, () => {
-          for (let i = 0; i < REPEATS; i++) {
+        bench(`[Warm] reuse computed — cache miss (source changed) (x${repeats})`, () => {
+          for (let i = 0; i < repeats; i++) {
             missSource.value = missSource.peek() === 0 ? 1 : 0;
-            keep(missComputed.value);
+            _keep(missComputed.value);
           }
         }),
         microBenchOptions
@@ -146,19 +153,19 @@ describe('Cold vs Warm: Computed Cache', () => {
 
 describe('Cold vs Warm: Effect Subscription', () => {
   test('cold effect subscription', async ({ bench }) => {
-    const source = atom(0);
-    await bench(`[Cold] effect create + first run + dispose (x${REPEATS})`, () => {
-      for (let i = 0; i < REPEATS; i++) {
-        const effectInstance = effect(() => keep(source.value), benchEffectOptions);
+    const source = _atom(0);
+    await bench(`[Cold] effect create + first run + dispose (x${repeats})`, () => {
+      for (let i = 0; i < repeats; i++) {
+        const effectInstance = _effect(() => _keep(source.value), _benchEffectOptions);
         effectInstance.dispose();
       }
     }).run(coldBenchOptions);
   });
 
   test('warm effect repeated trigger', async ({ bench }) => {
-    const source = atom(0);
-    const warmEffect = effect(() => keep(source.value), benchEffectOptions);
-    keep(warmEffect); // prevent DCE
+    const source = _atom(0);
+    const warmEffect = _effect(() => _keep(source.value), _benchEffectOptions);
+    _keep(warmEffect); // prevent DCE
 
     try {
       await bench('[Warm] effect repeated trigger (x100)', () => {

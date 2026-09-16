@@ -6,7 +6,7 @@
 import $ from 'jquery';
 import type { BenchOptions } from 'tinybench';
 
-export const REPEATS = 10;
+export const REPEATS = 100;
 
 const baseOptions: BenchOptions = {};
 
