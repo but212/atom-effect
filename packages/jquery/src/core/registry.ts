@@ -41,7 +41,7 @@ const MARK_SHADOW = '_aes-has-shadow';
  * Represents the internal metadata for a bound element's reactive resources.
  * @internal
  */
-export interface BindingRecord {
+interface BindingRecord {
   /**
    * A collection of individual cleanup tasks (e.g., effect disposals).
    * Optimization: Uses SlotBuffer to minimize heap allocations for small

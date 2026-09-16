@@ -1,6 +1,6 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
-  "globalEnv": ["GITHUB_REF_NAME"],
+  "globalPassThroughEnv": ["GITHUB_REF_NAME"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@but212/atom-effect-configs/tsconfig",
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"]

@@ -1,7 +1,9 @@
 {
   "name": "@but212/atom-effect-utils",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.34.1",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -14,10 +16,9 @@
     }
   },
   "scripts": {
-    "build": "pnpm run build:types && pnpm run build:lib && pnpm run build:bundle",
+    "build": "pnpm run build:types && pnpm run build:lib",
     "build:types": "cross-env BUILD_TARGET=types vite build",
     "build:lib": "cross-env BUILD_TARGET=lib vite build",
-    "build:bundle": "cross-env BUILD_TARGET=bundle vite build",
     "clean:build": "rimraf dist",
     "dev": "vite",
     "test": "vitest run",

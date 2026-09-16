@@ -10,7 +10,7 @@
  * inconsistencies (e.g. SVG classNames) and normalize data for reactive state access.
  */
 
-export { isPromise } from '@but212/atom-effect-utils';
+export { isPromise } from '@but212/atom-effect';
 
 /**
  * Generates a concise, human-readable CSS selector for a DOM element.

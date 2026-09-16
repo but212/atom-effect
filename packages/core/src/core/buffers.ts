@@ -170,7 +170,14 @@ function isDirtyInternal(state: ReactiveDependencyTracker, deep: boolean): boole
         }
       } catch (error) {
         trackEvaluationFailure(dependency.id);
-        throw error;
+        if (
+          error instanceof RangeError ||
+          error instanceof ReferenceError ||
+          error instanceof SyntaxError
+        ) {
+          throw error;
+        }
+        return true;
       }
     }
 

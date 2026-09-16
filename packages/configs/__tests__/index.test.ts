@@ -38,6 +38,7 @@ describe('packages/configs', () => {
         ['lowercase', 'lowercase'],
         ['APIClient', 'api-client'],
         ['MyJSONParser', 'my-json-parser'],
+        ['AtomEffectJQuery', 'atom-effect-jquery'],
       ])('should convert "%s" to "%s"', (input, expected) => {
         expect(toKebabCase(input)).toBe(expected);
       });
@@ -184,6 +185,20 @@ describe('packages/configs', () => {
         expect(viteConfig.build?.target).toBe('ES2020');
         expect(viteConfig.build?.minify).toBe(false);
         expect(viteConfig.resolve?.alias).toEqual({ '@': `${TEST_DIRECTORY_PATH}/src` });
+      });
+
+      it('should support an override factory function receiving BuildEnv', async () => {
+        const configFactory = defineViteConfig(
+          { packageDir: TEST_DIRECTORY_PATH, name: TEST_PACKAGE_NAME, buildTarget: 'bundle' },
+          ({ isBundle }) => ({
+            build: {
+              minify: isBundle,
+            },
+          })
+        );
+
+        const viteConfig = await (configFactory as ConfigFactory<UserConfig>)();
+        expect(viteConfig.build?.minify).toBe(true);
       });
     });
   });

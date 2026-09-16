@@ -165,7 +165,7 @@ describe('DepBuffer', () => {
       expect(() => isBufferDirty(depBuffer)).toThrow(RangeError);
     });
 
-    it('should propagate non-system errors thrown during computed dependency evaluation', () => {
+    it('should mark buffer as dirty on non-system errors thrown during computed dependency evaluation', () => {
       const depBuffer = createDepBuffer();
 
       const customErrorDep: Partial<Dependency> = {
@@ -180,7 +180,7 @@ describe('DepBuffer', () => {
 
       depBufferPush(depBuffer, createLink(customErrorDep as Dependency, 1));
 
-      expect(() => isBufferDirty(depBuffer)).toThrowError('Custom computation error');
+      expect(isBufferDirty(depBuffer)).toBe(true);
     });
 
     it('runs untracked if trackingContext.current is active during dirty check', () => {

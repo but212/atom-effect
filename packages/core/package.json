@@ -17,7 +17,7 @@
     "build:lib": "cross-env BUILD_TARGET=lib vite build",
     "build:bundle": "cross-env BUILD_TARGET=bundle vite build",
     "clean:build": "rimraf dist",
-    "test": "vitest",
+    "test": "vitest run",
     "test:run": "vitest run",
     "test:unit": "vitest __tests__/unit",
     "test:integration": "vitest __tests__/integration",
@@ -65,7 +65,6 @@
   },
   "devDependencies": {
     "@but212/atom-effect-configs": "workspace:*",
-    "@but212/atom-effect-utils": "workspace:*",
     "rimraf": "catalog:",
     "vite": "catalog:build",
     "vitest": "catalog:test",
@@ -76,10 +75,11 @@
     "@vitest/browser": "catalog:test",
     "@vitest/browser-playwright": "catalog:test",
     "@vitest/coverage-v8": "catalog:test",
-    "@vitest/ui": "catalog:test",
     "playwright": "catalog:test"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@but212/atom-effect-utils": "workspace:*"
+  },
   "peerDependencies": {},
   "optionalDependencies": {}
 }

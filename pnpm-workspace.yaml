@@ -20,11 +20,11 @@ catalogs:
     unplugin-dts: 1.1.0
     cross-env: ^10.1.0
   test:
-    vitest: 4.1.11
-    "@vitest/browser": 4.1.11
-    "@vitest/browser-playwright": 4.1.11
-    "@vitest/coverage-v8": 4.1.11
-    "@vitest/ui": 4.1.11
+    vitest: 5.0.1
+    "@vitest/browser": 5.0.1
+    "@vitest/browser-playwright": 5.0.1
+    "@vitest/coverage-v8": 5.0.1
+    "@vitest/ui": 5.0.1
     playwright: 1.63.0
     tinybench: 6.2.0
 minimumReleaseAgeExclude:
@@ -33,3 +33,12 @@ minimumReleaseAgeExclude:
   - playwright-core@1.62.1
   - playwright@1.62.1
   - vite@8.2.0
+  - '@vitest/browser-playwright@5.0.1'
+  - '@vitest/browser@5.0.1'
+  - '@vitest/coverage-v8@5.0.1'
+  - '@vitest/mocker@5.0.1'
+  - '@vitest/pretty-format@5.0.1'
+  - '@vitest/spy@5.0.1'
+  - '@vitest/ui@5.0.1'
+  - '@vitest/utils@5.0.1'
+  - vitest@5.0.1
