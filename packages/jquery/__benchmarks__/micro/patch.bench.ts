@@ -1,8 +1,4 @@
-/**
- * @fileoverview Micro-benchmarks for jQuery overrides (html, text patches).
- */
-
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import $, { initAEJ } from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
@@ -40,14 +36,18 @@ describe('Patch: jQuery method overrides overhead', () => {
     },
   ];
 
-  for (const { name, patch, html, benchmarkAction } of cases) {
-    bench(
-      name,
-      withContainer(($container) => {
-        initAEJ({ patch, autoCleanup: false });
-        benchmarkAction($(html ? '<div></div>' : '<span></span>').appendTo($container));
-      }),
+  test('patch comparison', async ({ bench }) => {
+    await bench.compare(
+      ...cases.map(({ name, patch, html, benchmarkAction }) =>
+        bench(
+          name,
+          withContainer(($container) => {
+            initAEJ({ patch, autoCleanup: false });
+            benchmarkAction($(html ? '<div></div>' : '<span></span>').appendTo($container));
+          })
+        )
+      ),
       microBenchOptions
     );
-  }
+  });
 });

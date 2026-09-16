@@ -3,7 +3,7 @@
  * @description Standardized performance metrics for isAtom and isComputed checks.
  */
 
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import { atom, BRAND, BrandFlags, computed, isAtom, isComputed } from '../../dist';
 import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
@@ -26,15 +26,16 @@ describe('Type Guards: isAtom / isComputed', () => {
     { name: 'isComputed checks', check: isComputed },
   ];
 
-  for (const { name, check } of guardCases) {
-    bench(
-      `${name} (x${REPEATS * targets.length})`,
-      () => {
-        for (let i = 0; i < REPEATS; i++) {
-          for (const target of targets) keep(check(target));
-        }
-      },
+  test('guard checks comparison', async ({ bench }) => {
+    await bench.compare(
+      ...guardCases.map(({ name, check }) =>
+        bench(`${name} (x${REPEATS * targets.length})`, () => {
+          for (let i = 0; i < REPEATS; i++) {
+            for (const target of targets) keep(check(target));
+          }
+        })
+      ),
       microBenchOptions
     );
-  }
+  });
 });

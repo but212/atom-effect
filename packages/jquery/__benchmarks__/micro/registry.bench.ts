@@ -1,8 +1,4 @@
-/**
- * @fileoverview Micro-benchmarks for reactive registry lifecycle operations (cleanup).
- */
-
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import $, { cleanup } from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
@@ -31,16 +27,23 @@ function buildDeepTree(
 }
 
 describe('Registry: Deep Tree Cleanup', () => {
-  const run = (name: string, bindReactive: boolean) =>
-    bench(
-      name,
-      withContainer(($container) => {
-        if ($container[0]) buildDeepTree($container[0], 5, 4, bindReactive);
-        cleanup($container);
-      }),
+  test('cleanup comparison', async ({ bench }) => {
+    await bench.compare(
+      bench(
+        'cleanup() - non-reactive 1000 elements tree scan',
+        withContainer(($container) => {
+          if ($container[0]) buildDeepTree($container[0], 5, 4, false);
+          cleanup($container);
+        })
+      ),
+      bench(
+        'cleanup() - reactive 1000 elements tree (mixed bindings)',
+        withContainer(($container) => {
+          if ($container[0]) buildDeepTree($container[0], 5, 4, true);
+          cleanup($container);
+        })
+      ),
       microBenchOptions
     );
-
-  run('cleanup() - non-reactive 1000 elements tree scan', false);
-  run('cleanup() - reactive 1000 elements tree (mixed bindings)', true);
+  });
 });

@@ -4,14 +4,11 @@
  */
 
 import $ from 'jquery';
-import type { BenchOptions } from 'vitest';
+import type { BenchOptions } from 'tinybench';
 
 export const REPEATS = 10;
 
-const baseOptions: BenchOptions = {
-  warmupTime: 100,
-  throws: true,
-};
+const baseOptions: BenchOptions = {};
 
 /**
  * Standard benchmark options for micro-benchmarks

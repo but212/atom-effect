@@ -2,7 +2,7 @@
  * @fileoverview Micro-benchmarks for list reconciliation diffing engine (atomList diff cost).
  */
 
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import $ from '../../dist';
 import { microBenchOptions, withContainer } from '../utils/setup';
 
@@ -25,15 +25,19 @@ describe('List Diffing: Reconciliation computation overhead (1000 items)', () =>
     { name: 'Clear all items', next: [] as typeof baseItems },
   ];
 
-  for (const { name, next } of cases) {
-    bench(
-      name,
-      withContainer(($container) => {
-        const list = $.atom(baseItems);
-        $container.atomList(list, { key: 'id', render: () => '' });
-        list.value = next;
-      }),
+  test('list diffing reconciliation comparison', async ({ bench }) => {
+    await bench.compare(
+      ...cases.map(({ name, next }) =>
+        bench(
+          name,
+          withContainer(($container) => {
+            const list = $.atom(baseItems);
+            $container.atomList(list, { key: 'id', render: () => '' });
+            list.value = next;
+          })
+        )
+      ),
       microBenchOptions
     );
-  }
+  });
 });
