@@ -24,7 +24,7 @@ catalogs:
     "@vitest/browser": 5.0.1
     "@vitest/browser-playwright": 5.0.1
     "@vitest/coverage-v8": 5.0.1
-    "@vitest/ui": 5.0.1
+    "@vitest/ui": 5.0.2
     playwright: 1.63.0
     tinybench: 6.1.4
 minimumReleaseAgeExclude:
