@@ -111,16 +111,10 @@ jobs:
             packages/utils/docs/BENCHMARKS.md \
             packages/utils/docs/BENCHMARKS_DETAILED.md > benchmark-docs-summary.txt
 
-      - name: Upload merged results
+      - name: Upload benchmark results
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
-          path: results-merged/
-
-      - name: Upload refreshed benchmark documentation
-        uses: actions/upload-artifact@v7
-        with:
-          name: benchmark-docs-updated
           path: |
             packages/core/docs/BENCHMARKS.md
             packages/core/docs/BENCHMARKS_DETAILED.md
