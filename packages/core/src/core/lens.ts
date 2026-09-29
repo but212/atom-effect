@@ -6,8 +6,9 @@
  * Orchestrates immutable deep updates with structural sharing and path flattening.
  *
  * Design Intent:
- * Enables granular subscriptions to nested properties of complex state objects,
- * minimizing re-renders.
+ * Push-based subscriptions to a lens notify only when the sub-path value actually changes.
+ * A pull-based read of `lens.value` inside a tracked scope registers a dependency on the
+ * root atom, so it re-runs when any part of the root changes.
  *
  * Security: Prototype Pollution Guard
  * Prevents unauthorized modifications to object prototypes during deep updates
@@ -15,7 +16,14 @@
  */
 
 import { Result, shallowEqual } from '@but212/atom-effect-utils';
-import { BRAND, BrandFlags, DEFAULT_EQUAL, type LENS_CONFIG, STATE_FLAGS } from '@/constants';
+import {
+  BRAND,
+  BrandFlags,
+  DEFAULT_EQUAL,
+  ERROR_MESSAGES,
+  type LENS_CONFIG,
+  STATE_FLAGS,
+} from '@/constants';
 import {
   BaseNode,
   nodeGetSubscriberCount,
@@ -223,6 +231,9 @@ export function getPathValue(sourceObject: unknown, parts: string[]): any {
  * Logic: Shared Subscription
  * Only subscribes to the root atom when the lens itself has active listeners,
  * preventing memory leaks and unnecessary computations for unused lenses.
+ * `subscribe()` is granular: it re-notifies only when the sub-path value changes.
+ * A pull-based read of `value`/`peek()` tracks the root atom instead, so a tracked
+ * scope re-runs on any root write, even one that leaves this path unchanged.
  *
  * @internal
  */
@@ -263,6 +274,11 @@ class LensImpl<T extends object, P extends string>
 
   set value(newValue: PathValue<T, P>) {
     if (this.isDisposed) return;
+    // A merged root cannot partition a sub-path write: its setter forwards the whole value to
+    // every source, which would overwrite fields the caller never touched. Reads stay legal.
+    if (((this.#root[BRAND] || 0) & BrandFlags.Merged) !== 0) {
+      throw new Error(ERROR_MESSAGES.LENS_WRITE_THROUGH_MERGED_ROOT(this.#path));
+    }
     const currentValue = this.#root.peek();
     const updatedValue = setDeepValue(currentValue, this.#parts, 0, newValue);
     if (updatedValue !== currentValue) this.#root.value = updatedValue;
@@ -332,7 +348,7 @@ class LensImpl<T extends object, P extends string>
  *
  * When to use:
  * - To bind UI inputs to specific fields in a large state object.
- * - To minimize re-renders by subscribing only to a specific sub-path.
+ * - To re-notify subscribers only when a specific sub-path changes (via `.subscribe()`).
  * - To create "slices" of state that can be passed to components.
  *
  * Logic: Path Flattening
@@ -461,7 +477,7 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
   }
 
   get [BRAND]() {
-    return BrandFlags.Atom | BrandFlags.Writable;
+    return BrandFlags.Atom | BrandFlags.Writable | BrandFlags.Merged;
   }
 }
 

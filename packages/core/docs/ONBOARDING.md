@@ -220,6 +220,8 @@ combined.value = { name: 'Bob', theme: 'light' };
 // settings.value.config -> { name: 'Bob', theme: 'light' }
 ```
 
+A whole-value write lands in its entirety on every underlying lens — it is never split by path. A *sub-path* write over a merged root (`atomLens(combined, 'name').value = 'Bob'`) is rejected, because a merged root cannot partition it; read through the composed lens, but write to the underlying sources.
+
 ---
 
 ## Standard Practices

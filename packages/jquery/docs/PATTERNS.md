@@ -247,7 +247,7 @@ When validation fails:
 
 ### Multi-Atom Form Merging
 
-`atomForm` accepts an array of atoms, internally merging them into a unified writable context for forms spanning multiple state domains.
+`atomForm` accepts an array of atoms, for forms spanning multiple state domains. Each field reads through the merged view of every source, so the bound value follows the field if a source gains or drops that path. Each write is partitioned to the single source that currently owns the path — the last source defining it, falling back to the first source — so sibling state is never overwritten.
 
 ```javascript
 const user = $.atom({ name: 'Alice' });
@@ -255,6 +255,8 @@ const settings = $.atom({ theme: 'dark' });
 
 $('form').atomForm([user, settings]);
 ```
+
+Passing an empty array throws: a form with no source can never synchronize.
 
 ---
 

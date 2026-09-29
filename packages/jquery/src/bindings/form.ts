@@ -14,15 +14,18 @@
 import {
   BRAND,
   effect,
+  getPathValue,
   lensFor,
   mergeLenses,
   type Paths,
   type PathValue,
+  setDeepValue,
   untracked,
   type WritableAtom,
 } from '@but212/atom-effect';
-import { Result } from '@but212/atom-effect-utils';
+import { Result, shallowEqual } from '@but212/atom-effect-utils';
 import $ from 'jquery';
+import { SYSTEM_BINDING } from '@/constants';
 import { getOrCreateRootObserver } from '@/core/observer';
 import { registry } from '@/core/registry';
 import { markInternal } from '@/core/symbols';
@@ -92,6 +95,122 @@ function isToggleChecked(currentValue: unknown, targetValue: string, isCheck: bo
 }
 
 /**
+ * Logic: Field Ownership
+ * Resolves which source atom owns a field path, mirroring the read precedence of a merged lens
+ * (later sources win) while keeping writes partitioned to a single source. When no source defines
+ * the path yet, the first source takes ownership.
+ *
+ * Ownership is resolved per operation, never cached: a source may gain or drop the path at any
+ * time, and both the read and the write of a field must follow the current owner.
+ *
+ * @internal
+ */
+function resolveOwner(sources: WritableAtom<unknown>[], dotPath: string): WritableAtom<object> {
+  const parts = dotPath.split('.');
+  for (let i = sources.length - 1; i >= 0; i--) {
+    const source = sources[i];
+    if (source && getPathValue(source.peek(), parts) !== undefined) {
+      return source as WritableAtom<object>;
+    }
+  }
+  return sources[0] as WritableAtom<object>;
+}
+
+/**
+ * Role: Multi-Source Field Atom
+ *
+ * Design Intent:
+ * Backs one form field when {@link bindForm} is given several source atoms. Reads resolve through
+ * the merged view, so a read depends on *every* source and therefore stays correct when ownership
+ * moves after mount. Writes resolve the owning source at dispatch time and mutate only that source,
+ * so a field never corrupts a sibling source.
+ *
+ * Constraint:
+ * The read path must never be narrowed to a single source: doing so re-attaches the field to a
+ * stale owner as soon as a later source defines the path.
+ *
+ * @internal
+ */
+class MultiSourceField implements WritableAtom<unknown> {
+  readonly #sources: WritableAtom<unknown>[];
+  readonly #merged: WritableAtom<object>;
+  readonly #parts: string[];
+
+  constructor(sources: WritableAtom<unknown>[], dotPath: string) {
+    this.#sources = sources;
+    this.#parts = dotPath.split('.');
+    this.#merged = mergeLenses(...(sources as WritableAtom<object>[])) as WritableAtom<object>;
+  }
+
+  get value(): unknown {
+    // Tracking happens on the merged node, so every source is a dependency.
+    return getPathValue(this.#merged.value, this.#parts);
+  }
+
+  set value(targetValue: unknown) {
+    const owner = resolveOwner(this.#sources, this.#parts.join('.'));
+    const current = owner.peek();
+    const next = setDeepValue(current, this.#parts as never, 0, targetValue);
+    if (next !== current) owner.value = next;
+  }
+
+  peek(): unknown {
+    return getPathValue(this.#merged.peek(), this.#parts);
+  }
+
+  /**
+   * The merged node notifies on any source change, so subscriber notification is filtered to the
+   * cases where this field's own value actually changed.
+   */
+  subscribe(listener: (newValue?: unknown, oldValue?: unknown) => void): () => void {
+    let previous = this.peek();
+    return this.#merged.subscribe((newValue?: unknown) => {
+      const current = getPathValue(newValue, this.#parts);
+      if (shallowEqual(current, previous)) return;
+      const old = previous;
+      previous = current;
+      listener(current, old);
+    });
+  }
+
+  subscriberCount(): number {
+    return this.#merged.subscriberCount();
+  }
+
+  dispose(): void {
+    this.#merged.dispose();
+  }
+
+  // --- ReactiveNodeBase & Dependency Delegation ---
+  get id(): number {
+    return this.#merged.id;
+  }
+  get version(): number {
+    return this.#merged.version;
+  }
+  get flags(): number {
+    return this.#merged.flags;
+  }
+  get _lastSeenEpoch(): number {
+    return this.#merged._lastSeenEpoch;
+  }
+  get isComputed(): boolean {
+    return this.#merged.isComputed;
+  }
+  get isRejected(): boolean {
+    // SAFETY: the merged node exposes `isRejected` at runtime, but the public `WritableAtom` type
+    // does not declare it; the field atom has no rejection state of its own.
+    return (this.#merged as unknown as { isRejected: boolean }).isRejected ?? false;
+  }
+  get hasError(): boolean {
+    return this.#merged.hasError;
+  }
+  get [BRAND](): number {
+    return this.#merged[BRAND] ?? 0;
+  }
+}
+
+/**
  * Role: Interception Wrapper Class
  *
  * Design Intent:
@@ -117,7 +236,7 @@ class InterceptedLens<T extends object, U> implements WritableAtom<unknown> {
     this.#onChange = options.onChange;
   }
 
-  get value(): unknown {
+  get value(): PathValue<T, Paths<T>> {
     return this.#base.value;
   }
 
@@ -147,7 +266,7 @@ class InterceptedLens<T extends object, U> implements WritableAtom<unknown> {
     }
   }
 
-  peek(): unknown {
+  peek(): PathValue<T, Paths<T>> {
     return this.#base.peek();
   }
 
@@ -183,13 +302,15 @@ class InterceptedLens<T extends object, U> implements WritableAtom<unknown> {
     return this.#base.isComputed;
   }
   get isRejected(): boolean {
+    // SAFETY: `isRejected` exists on the reactive node at runtime but is absent from the public
+    // `WritableAtom` type, so the delegation cannot be typed directly.
     return (this.#base as unknown as { isRejected: boolean }).isRejected ?? false;
   }
   get hasError(): boolean {
     return this.#base.hasError;
   }
   get [BRAND](): number {
-    return Reflect.get(this.#base, BRAND) as number;
+    return this.#base[BRAND] ?? 0;
   }
 }
 
@@ -260,12 +381,15 @@ function getElementNameProperty(element: HTMLElement): string | undefined {
  *   browser-native APIs.
  *
  * Logic: Polymorphic Input
- * If an array of atoms is provided, they are merged via `mergeLenses`.
- * Later atoms in the array override properties with the same path from earlier atoms.
+ * For a single atom, field lenses are rooted at that atom. For an array of atoms, each field reads
+ * through the merged view of every source — so the bound value follows the field if ownership moves
+ * after mount — while each write mutates only the source that currently owns the field path (the
+ * last source defining it, falling back to the first source).
  *
  * @param form The target form element to bind.
- * @param atom A writable atom or an array of atoms providing the state.
+ * @param atom A writable atom or a non-empty array of atoms providing the state.
  * @param options Configuration for transformations, change callbacks, and validation.
+ * @throws If `atom` is an empty array: a form with no source can never synchronize.
  *
  * @example
  * ```typescript
@@ -284,7 +408,13 @@ export function bindForm<T extends object, U = unknown>(
   atom: WritableAtom<T> | WritableAtom<unknown>[],
   options: FormOptions<U> = {}
 ): void {
-  const targetAtom = Array.isArray(atom) ? mergeLenses(...atom) : atom;
+  const sources = Array.isArray(atom) ? atom : null;
+  const singleSource = sources ? null : atom;
+  // Rejected at the entry boundary: with no source, no field can be owned, and a deep failure
+  // inside field binding would name neither the cause nor the binding.
+  if (sources && sources.length === 0) {
+    throw new Error(SYSTEM_BINDING.ERRORS.EMPTY_SOURCES('bindForm'));
+  }
   registry.cleanup(form);
 
   const entries = new Map<string, FieldEntry>();
@@ -310,7 +440,13 @@ export function bindForm<T extends object, U = unknown>(
     }
 
     const dotPath = normalizePath(name);
-    const baseLens = (lensFor(targetAtom) as (path: string) => WritableAtom<unknown>)(dotPath);
+    // SAFETY: the field atom is a `WritableAtom<unknown>` by construction; the single-source path
+    // narrows it to the declared path type, and `InterceptedLens` only forwards reads and writes.
+    const baseLens = sources
+      ? (new MultiSourceField(sources, dotPath) as unknown as WritableAtom<PathValue<T, Paths<T>>>)
+      : ((lensFor(singleSource as WritableAtom<object>) as (path: string) => WritableAtom<unknown>)(
+          dotPath
+        ) as unknown as WritableAtom<PathValue<T, Paths<T>>>);
     const atom = new InterceptedLens(
       name,
       baseLens as WritableAtom<PathValue<T, Paths<T>>>,
@@ -318,6 +454,8 @@ export function bindForm<T extends object, U = unknown>(
     );
 
     const newEntry: FieldEntry = {
+      // SAFETY: the wrapper only stores an opaque `WritableAtom<unknown>`; its reads and writes are
+      // forwarded to `baseLens`, whose path type is erased for the multi-source case.
       atom: atom as unknown as WritableAtom<unknown>,
       name,
       refCount: 1,

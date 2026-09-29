@@ -61,6 +61,8 @@ export const BrandFlags = {
   Computed: 1 << 2,
   Effect: 1 << 3,
   Lens: 1 << 4,
+  /** Set on nodes that aggregate several writable sources into one (see `mergeLenses`). */
+  Merged: 1 << 5,
 } as const;
 
 /**
@@ -352,6 +354,9 @@ export const ERROR_MESSAGES = {
 
   SCHEDULER_FLUSH_OVERFLOW: (maxIterationsLimit: number, droppedJobsCount: number): string =>
     `Maximum flush iterations (${maxIterationsLimit}) exceeded. ${droppedJobsCount} jobs dropped. Possible infinite loop.`,
+
+  LENS_WRITE_THROUGH_MERGED_ROOT: (path: string): string =>
+    `Cannot write "${path}" through a lens rooted at a merged lens. A merged lens is a read-side aggregation; write to the underlying sources directly.`,
 
   CALLBACK_ERROR_IN_ERROR_HANDLER: 'Exception encountered in onError handler',
   EFFECT_FREQUENCY_LIMIT_EXCEEDED:

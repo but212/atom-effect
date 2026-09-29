@@ -520,7 +520,43 @@ describe('Lens System', () => {
       const firstAtom = atom({ x: 1 });
       const secondAtom = atom({ y: 2 });
       const merged = mergeLenses(firstAtom, secondAtom);
-      expect(merged[BRAND]).toBe(BrandFlags.Atom | BrandFlags.Writable);
+      expect(merged[BRAND]).toBe(BrandFlags.Atom | BrandFlags.Writable | BrandFlags.Merged);
+    });
+  });
+
+  describe('Lens over a merged root', () => {
+    it('should throw on write and leave both sources untouched', () => {
+      const user = atom({ name: 'Alice' });
+      const prefs = atom({ theme: 'dark' });
+      const nameLens = atomLens(mergeLenses(user, prefs), 'name');
+
+      expect(nameLens.value).toBe('Alice');
+      expect(() => {
+        nameLens.value = 'Bob';
+      }).toThrowError(/merged lens/);
+
+      expect(user.value).toEqual({ name: 'Alice' });
+      expect(prefs.value).toEqual({ theme: 'dark' });
+    });
+
+    it('should still allow a whole-value write on the merged lens itself', () => {
+      const user = atom({ name: 'Alice' });
+      const prefs = atom({ theme: 'dark' });
+      const merged = mergeLenses(user, prefs);
+
+      merged.value = { name: 'Bob', theme: 'light' };
+
+      expect(user.value).toEqual({ name: 'Bob', theme: 'light' });
+      expect(prefs.value).toEqual({ name: 'Bob', theme: 'light' });
+    });
+
+    it('should keep nested sub-path writes working on a non-merged root', () => {
+      const state = atom({ profile: { name: 'Alice' } });
+      const nameLens = atomLens(state, 'profile.name');
+
+      nameLens.value = 'Bob';
+
+      expect(state.value).toEqual({ profile: { name: 'Bob' } });
     });
   });
 });
