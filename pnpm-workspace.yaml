@@ -27,7 +27,6 @@ catalogs:
     "@vitest/coverage-v8": 5.0.2
     "@vitest/ui": 5.0.2
     playwright: 1.63.0
-    tinybench: 6.2.0
 minimumReleaseAgeExclude:
   - esbuild@0.28.1
   - tinybench@6.1.2

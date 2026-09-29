@@ -3,7 +3,7 @@
  * @description Common utilities for benchmarking with Vitest and Tinybench
  */
 
-import type { BenchOptions } from 'tinybench';
+import type { BenchRunOptions as BenchOptions } from 'vitest';
 import { runtimeDebug } from '../../dist/';
 
 /**
