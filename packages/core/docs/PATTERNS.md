@@ -97,6 +97,8 @@ formState.value = { name: 'Bob', notifications: false };
 
 > [!WARNING]
 > **Write Propagation Constraint**: `mergeLenses` propagates the assigned value in its entirety to each underlying lens (i.e., `lens.value = newVal` for each lens). It does not partition or split the assigned object properties by path. Consequently, target atoms will receive the entire merged object, and primitive-value lenses will be overwritten with the merged object itself. When precise property splitting is required, updates should be applied directly to the individual sub-lenses instead of the merged lens.
+>
+> A **sub-path** write over a merged root (`atomLens(merged, 'path').value = v`) is rejected with an error, because a merged root cannot partition it. Reads still work; assign to the underlying sources instead.
 
 ---
 

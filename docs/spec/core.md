@@ -49,6 +49,7 @@ Async computeds are treated as state machines with sessions.
 - **`sync: true`**: Option on `atom` and `effect` to deliver synchronously, bypassing the microtask batching.
 - **Execution budget**: Each effect enforces `maxExecutionsPerFlush` (default 100) independently; exceeding that per-effect limit disposes the effect. The scheduler separately enforces its aggregate per-flush limit; aggregate overflow is reported via `scheduler.onOverflow(droppedCount, droppedJobs)` and dropped jobs are re-queued exactly once. These limits and failure paths are distinct.
 - **Flush-session isolation**: Flush-session identity is tracked independently from the queue's deduplication epoch, so entering a synchronous effect scope cannot invalidate same-cycle scheduling.
+- **Synchronous notification budget**: a `{ sync: true }` atom whose subscriber writes back to that same atom would otherwise cycle forever inside a single assignment. The notification cascade is capped at `SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS` rounds (1000 by default), mirroring the batched flush limit; on overflow the pending notification is dropped and the overflow is reported as a `SchedulerError`.
 
 ## 5. Lifecycle
 
@@ -134,6 +135,7 @@ Options: `name`, `sync`, `onError`, `maxExecutionsPerFlush` (default 100), `maxE
 - **Prototype preservation**: updates to class instances preserve the original prototype and methods (`instanceof` intact).
 - `lensFor(atom)` — factory for multiple lenses bound to one source.
 - `composeLens(lens, path)` — sub-lens from an existing lens.
+- **Notification granularity**: `.subscribe()` re-notifies only when the sub-path value actually changes. A pull-based read of `lens.value` inside a tracked scope registers the **root atom** as its dependency, so the scope re-runs on any root write, even one that leaves this path unchanged.
 - **Lens disposal**: After `dispose()`, lens and merged-lens writes are no-ops; reads retain their existing behavior. A lens maintains one shared upstream subscription for its distinct downstream listeners, and duplicate listeners do not allocate another upstream link.
 
 ## 9. State composition
@@ -142,6 +144,7 @@ Options: `name`, `sync`, `onError`, `maxExecutionsPerFlush` (default 100), `maxE
 - `mergeLenses(...lenses)` — writable unified atom.
 - **Object nodes only**: merging primitive-valued nodes causes a type/runtime mismatch (static type `string`, runtime index-keyed object). If applied, this discrepancy is a type-only divergence, not a runtime safety guarantee.
 - **Write propagation**: `merged.value = v` writes the value **in its entirety** to every underlying lens within a single `batch`; it is not partitioned by path. Each underlying lens must accept the whole merged object.
+- **Sub-path writes over a merged root are rejected**: a lens whose root is a merged lens reads normally, but assigning to it throws, because a merged root cannot partition a sub-path write. Write to the underlying sources instead.
 
 ## 10. Type guards & utilities
 

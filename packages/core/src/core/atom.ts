@@ -19,8 +19,10 @@ import {
   BrandFlags,
   DEFAULT_EQUAL,
   EPOCH_CONSTANTS,
+  ERROR_MESSAGES,
   IS_DEV,
   KIND,
+  SCHEDULER_CONFIG,
   SMI_MAX,
 } from '@/constants';
 import {
@@ -38,7 +40,7 @@ import type {
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
-import { AtomError, debug, generateId } from '@/utils';
+import { AtomError, debug, generateId, SchedulerError } from '@/utils';
 import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 
 /**
@@ -201,7 +203,26 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     const isSyncActive =
       (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
 
+    // SAFETY: this method never re-enters itself. {@link nodeNotifySubscribers} holds
+    // `slots.lock()`, so a write-back from inside a subscriber finds `slots.isLocked === true` and
+    // takes the `schedulerSchedule` branch in {@link #scheduleNotification} instead of recursing.
+    // A self-writing sync subscriber therefore re-arms SCHED and re-loops *here*, within one frame,
+    // so a frame-local round counter bounds the cascade correctly and needs no per-atom state.
+    //
+    // The bound matches the batched scheduler's iteration limit; on overflow the pending
+    // notification is dropped, mirroring the scheduler's overflow semantics.
+    const maxRounds = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+    let flushRounds = 0;
+
     while ((this.flags & MASK) === SCHED) {
+      if (flushRounds >= maxRounds) {
+        console.error(new SchedulerError(ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(maxRounds, 0)));
+        this.flags &= ~SCHED;
+        this.#pendingPreviousValue = NO_VALUE;
+        break;
+      }
+      flushRounds++;
+
       const prev = this.#pendingPreviousValue;
       if (prev === NO_VALUE) {
         this.flags &= ~SCHED;

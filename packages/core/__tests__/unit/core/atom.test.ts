@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { ATOM_STATE_FLAGS } from '@/constants';
+import { ATOM_STATE_FLAGS, SCHEDULER_CONFIG } from '@/constants';
 import { AtomError, aeNextTick, atom, batch, computed, globalScheduler } from '@/index';
 
 describe('Atom', () => {
@@ -138,6 +138,29 @@ describe('Atom', () => {
           'sub1: 2 -> 3',
           'sub2: 2 -> 3',
         ]);
+      });
+
+      it('bounds a self-writing sync subscriber and reports overflow', () => {
+        const someAtom = atom(0, { sync: true });
+        const unsubscribe = someAtom.subscribe((newValue) => {
+          someAtom.value = (newValue as number) + 1;
+        });
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        someAtom.value = 1;
+
+        // The cascade is cut off at the scheduler's flush limit instead of running forever.
+        expect(errorSpy).toHaveBeenCalled();
+        expect(String(errorSpy.mock.calls[0]?.[0])).toMatch(/Maximum flush iterations/);
+        expect(someAtom.peek()).toBe(1 + SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS);
+
+        // The atom is still usable once the runaway subscriber is detached.
+        errorSpy.mockRestore();
+        unsubscribe();
+        someAtom.value = 7;
+        expect(someAtom.peek()).toBe(7);
+
+        someAtom.dispose();
       });
 
       it('should handle unsubscription safely during the notification loop (Re-entry)', () => {

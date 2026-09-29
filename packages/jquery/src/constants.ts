@@ -34,6 +34,8 @@ export const SYSTEM_BINDING = {
   ERRORS: {
     INVALID_INPUT_ELEMENT: (tagName: string) => `Invalid element <${tagName}> for val.`,
     MISSING_SOURCE: (bindingName: string) => `[${bindingName}] source required.`,
+    EMPTY_SOURCES: (bindingName: string) =>
+      `[${bindingName}] requires at least one source atom; received an empty array.`,
     MISSING_CONDITION: (bindingName: string) => `[${bindingName}] condition required.`,
     UPDATER_ERROR: (bindingType: string, isStatic?: boolean) =>
       `Updater failed: "${bindingType}"${isStatic ? ' (static)' : ''}`,

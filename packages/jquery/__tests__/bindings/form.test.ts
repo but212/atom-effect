@@ -166,6 +166,120 @@ describe('Form Binding (atomForm)', () => {
       expect($form.find('[name="name"]').val()).toBe('Charlie');
       expect($form.find('[name="theme"]').val()).toBe('high-contrast');
     });
+
+    it('should write only to the source atom that owns the field', async () => {
+      const user = $.atom({ name: 'Alice', age: 30 });
+      const settings = $.atom({ theme: 'dark' });
+
+      const $form = appendToBody(`
+        <form>
+          <input name="name">
+          <input name="theme">
+        </form>
+      `);
+
+      $form.atomForm([user, settings]);
+      await $.nextTick();
+
+      $form.find('[name="name"]').val('Bob').trigger('input');
+      await $.nextTick();
+
+      expect(user.value).toEqual({ name: 'Bob', age: 30 });
+      expect(settings.value).toEqual({ theme: 'dark' });
+    });
+
+    it('should own an overlapping field by the last source, and an unknown field by the first', async () => {
+      const primary = $.atom({ shared: 'primary', only: 'p' });
+      const override = $.atom({ shared: 'override' });
+
+      const $form = appendToBody(`
+        <form>
+          <input name="shared">
+          <input name="only">
+          <input name="fresh">
+        </form>
+      `);
+
+      $form.atomForm([primary, override]);
+      await $.nextTick();
+
+      expect($form.find('[name="shared"]').val()).toBe('override');
+
+      $form.find('[name="shared"]').val('next').trigger('input');
+      $form.find('[name="only"]').val('o').trigger('input');
+      await $.nextTick();
+
+      expect(override.value).toEqual({ shared: 'next' });
+      expect(primary.value).toEqual({ shared: 'primary', only: 'o' });
+
+      $form.find('[name="fresh"]').val('created').trigger('input');
+      await $.nextTick();
+
+      expect(primary.value).toEqual({ shared: 'primary', only: 'o', fresh: 'created' });
+      expect(override.value).toEqual({ shared: 'next' });
+    });
+
+    it('should follow a field whose owner changes after mount', async () => {
+      const user = $.atom({ name: 'Alice' });
+      const draft = $.atom<Record<string, string>>({});
+
+      const $form = appendToBody(`
+        <form>
+          <input name="name">
+        </form>
+      `);
+
+      // At mount only `user` defines "name", so it owns the field.
+      $form.atomForm([user, draft]);
+      await $.nextTick();
+      expect($form.find('[name="name"]').val()).toBe('Alice');
+
+      // A later source takes the path over: the read must follow it.
+      draft.value = { name: 'Bob' };
+      await $.nextTick();
+      expect($form.find('[name="name"]').val()).toBe('Bob');
+
+      // ...and the write must target the new owner, not the mount-time one.
+      $form.find('[name="name"]').val('Carl').trigger('input');
+      await $.nextTick();
+      expect(draft.value).toEqual({ name: 'Carl' });
+      expect(user.value).toEqual({ name: 'Alice' });
+    });
+
+    it('should return ownership to an earlier source when a later source drops the path', async () => {
+      const primary = $.atom({ shared: 'primary' });
+      const override = $.atom<Record<string, string>>({ shared: 'override' });
+
+      const $form = appendToBody(`
+        <form>
+          <input name="shared">
+        </form>
+      `);
+
+      $form.atomForm([primary, override]);
+      await $.nextTick();
+      expect($form.find('[name="shared"]').val()).toBe('override');
+
+      override.value = {};
+      await $.nextTick();
+      expect($form.find('[name="shared"]').val()).toBe('primary');
+
+      $form.find('[name="shared"]').val('back').trigger('input');
+      await $.nextTick();
+      expect(primary.value).toEqual({ shared: 'back' });
+      expect(override.value).toEqual({});
+    });
+
+    it('should reject an empty source array with a named error', async () => {
+      const withControl = appendToBody('<form><input name="username"></form>');
+      const withoutControl = appendToBody('<form></form>');
+
+      for (const $form of [withControl, withoutControl]) {
+        expect(() => $form.atomForm([])).toThrowError(
+          /\[bindForm\] requires at least one source atom; received an empty array\./
+        );
+      }
+    });
   });
 
   describe('Dynamic DOM Discovery (MutationObserver)', () => {

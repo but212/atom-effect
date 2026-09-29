@@ -46,8 +46,10 @@ Implementation invariants:
 | :--- | :--- |
 | `.atomVal(atom, options?)` | Two-way sync for `<input>`, `<textarea>`, `<select>`; supports `<select multiple>` via `string[]`. IME-stable (composition states), cursor/focus preserved. Options: `debounce`, `format`, `parse`, `equal`. |
 | `.atomChecked(atom)` | Two-way for checkbox/radio. Radio groups sync peers sharing a `name` via scoped root/form queries. |
-| `.atomForm(atom \| atom[], options?)` | Two-way form sync mapping inputs by `name`. Multi-atom (merged via `mergeLenses`, later atoms win on overlap), nested dot-paths, dynamic inputs via `MutationObserver`, native Constraint Validation via `setCustomValidity`. Supports `debounce`, `event`, `parse`, `format`, `equal`, `transform`, `onChange`, and `validation`. |
+| `.atomForm(atom \| atom[], options?)` | Two-way form sync mapping inputs by `name`. Multi-atom (a field reads through the merged view of every source, so it follows the field if a source gains or drops the path; a write mutates only the source that currently owns the path — the last source defining it, falling back to the first source), nested dot-paths, dynamic inputs via `MutationObserver`, native Constraint Validation via `setCustomValidity`. Supports `debounce`, `event`, `parse`, `format`, `equal`, `transform`, `onChange`, and `validation`. An empty source array throws; a form with no source can never synchronize. |
 | `.atomOn(event, handler)` | Lifecycle-aware delegation; handlers run inside `batch()`; auto-unbound on teardown. |
+
+**Multi-atom trade-off**: because a field read observes every source, a write to any source re-runs that field's effect. The DOM write is still skipped when the field value is unchanged, so this costs CPU, not DOM mutations.
 
 ### 1.5 Components & lifecycle hooks
 

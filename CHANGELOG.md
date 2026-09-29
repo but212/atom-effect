@@ -9,6 +9,16 @@
 - Hardened effect lifecycle session tracking so stale asynchronous cleanups and rejections cannot overwrite or report after newer executions or disposal.
 - Isolated flush-session budgeting from scheduler queue deduplication, preventing duplicate same-cycle executions and nested-flush warnings.
 - Prevented duplicate lens subscriptions from leaking root listeners and made disposed lens writes inert.
+- Bounded the synchronous notification cascade of a `{ sync: true }` atom, so a subscriber that writes back to its own atom reports a `SchedulerError` and drops the pending notification instead of cycling forever. The round counter is frame-local and adds no per-atom state.
+- A lens rooted at a merged lens now throws on write while still reading normally, instead of silently broadcasting a sub-path assignment to every source. A whole-value write to the merged lens itself is unchanged.
+
+### jQuery
+
+#### Fixed
+
+- **atomForm**: A field write in a multi-atom form now mutates only the source atom that owns the field path (the last source defining it, falling back to the first) instead of broadcasting the write to every source, which previously corrupted sibling state.
+- **atomForm**: Field ownership is resolved per operation, so a field bound to several sources follows the path if a source gains or drops it, instead of staying pinned to whichever source owned it at mount.
+- **atomForm**: An empty source array is now rejected with a named error at the binding boundary, instead of failing with an unrelated `TypeError` deep in field binding.
 
 ## [0.34.1]
 
