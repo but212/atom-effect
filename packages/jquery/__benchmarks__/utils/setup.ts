@@ -4,7 +4,7 @@
  */
 
 import $ from 'jquery';
-import type { BenchOptions } from 'tinybench';
+import type { BenchRunOptions as BenchOptions } from 'vitest';
 
 export const REPEATS = 100;
 

@@ -41,7 +41,6 @@
     "cross-env": "catalog:build",
     "playwright": "catalog:test",
     "rimraf": "catalog:",
-    "tinybench": "catalog:test",
     "turbo": "2.10.12",
     "typescript": "catalog:build",
     "unplugin-dts": "catalog:build",

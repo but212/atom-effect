@@ -70,7 +70,6 @@
     "vitest": "catalog:test",
     "typescript": "catalog:build",
     "cross-env": "catalog:build",
-    "tinybench": "catalog:test",
     "@types/node": "catalog:",
     "@vitest/browser": "catalog:test",
     "@vitest/browser-playwright": "catalog:test",
