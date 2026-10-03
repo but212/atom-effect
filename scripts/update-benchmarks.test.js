@@ -171,3 +171,38 @@ test('parses Vitest 5 benchmark when case name contains "ops/sec"', async (t) =>
   // Even if not matching the exact detailed table key, the parser must successfully parse it into benchmarkDb without throwing
   assert.ok(detailed.length > 0);
 });
+
+test('fails when no benchmark results parse', async (t) => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'atom-effect-benchmarks-empty-'));
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+
+  const temporaryScriptsDirectory = path.join(temporaryRoot, 'scripts');
+  const temporaryResultsDirectory = path.join(temporaryRoot, 'results-merged');
+  await mkdir(temporaryScriptsDirectory, { recursive: true });
+  await mkdir(temporaryResultsDirectory, { recursive: true });
+
+  await cp(
+    path.join(scriptsDirectory, 'update-benchmarks.js'),
+    path.join(temporaryScriptsDirectory, 'update-benchmarks.js')
+  );
+  const { main } = await loadUpdater(temporaryScriptsDirectory);
+
+  for (const relativePath of documentationFiles) {
+    const destination = path.join(temporaryRoot, relativePath);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await cp(path.join(repositoryRoot, relativePath), destination);
+  }
+
+  for (const fileName of rawResultFiles) {
+    await writeFile(
+      path.join(temporaryResultsDirectory, fileName),
+      'vitest failed: no benchmark output\n',
+      'utf8'
+    );
+  }
+
+  assert.throws(
+    () => main(['node', 'update-benchmarks.js', temporaryResultsDirectory]),
+    /No benchmark results parsed/
+  );
+});

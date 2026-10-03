@@ -101,6 +101,7 @@ function parseBenchmarkLine(line) {
 
 function loadBenchmarkResults(rawResultsRoot) {
   const benchmarkDb = {};
+  let parsedCount = 0;
   for (const file of RAW_RESULT_FILES) {
     const filePath = path.join(rawResultsRoot, file);
     if (!fs.existsSync(filePath)) {
@@ -110,8 +111,14 @@ function loadBenchmarkResults(rawResultsRoot) {
     const lines = fs.readFileSync(filePath, 'utf8').split('\n');
     for (const line of lines) {
       const result = parseBenchmarkLine(line);
-      if (result) benchmarkDb[result.key] = result.measurement;
+      if (result) {
+        benchmarkDb[result.key] = result.measurement;
+        parsedCount++;
+      }
     }
+  }
+  if (parsedCount === 0) {
+    throw new Error('[Validation Error] No benchmark results parsed from raw output');
   }
   return benchmarkDb;
 }

@@ -31,6 +31,9 @@ jobs:
           pnpm build
           pnpm typecheck
 
+      - name: Test
+        run: pnpm test:run
+
       - name: Publish to NPM
         run: pnpm -r publish --no-git-checks --provenance --access public
         env:
@@ -40,4 +43,4 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           body_path: RELEASE_NOTES.md
-          generate_release_notes: true
+          generate_release_notes: false
