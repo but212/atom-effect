@@ -58,6 +58,8 @@ import {
   schedulerSchedule,
 } from './scheduler';
 
+const EMPTY_EFFECT: EffectFunction = () => undefined;
+
 class EffectImpl
   implements
     EffectObject,
@@ -153,6 +155,7 @@ class EffectImpl
 
     this.#execCleanup();
     disposeAll(this);
+    if (!this.isExecuting) this.#releaseCallbacks();
   }
 
   /** Total executions since initialization. */
@@ -193,6 +196,7 @@ class EffectImpl
       this.#handleExecutionError(executionError);
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+      if (this.isDisposed) this.#releaseCallbacks();
     }
 
     return Result.ok(undefined);
@@ -219,7 +223,7 @@ class EffectImpl
 
   /** Registers a dependency during the tracking session. */
   addDependency(dependency: Dependency): void {
-    if (!this.isExecuting) return;
+    if (!this.isExecuting || this.isDisposed) return;
     nodeTrackDependency(this, dependency, this.#notifyCallback);
   }
 
@@ -235,6 +239,7 @@ class EffectImpl
 
     if (typeof executionResult === 'function') {
       this.#cleanupCallback = executionResult;
+      if (this.isDisposed) this.#execCleanup();
     } else if (isPromise(executionResult)) {
       this.#handleAsyncResult(executionResult, sessionId);
     } else {
@@ -290,6 +295,11 @@ class EffectImpl
     } catch (cleanupError) {
       this.#handleExecutionError(cleanupError, ERROR_MESSAGES.EFFECT_CLEANUP_FAILED);
     }
+  }
+
+  #releaseCallbacks(): void {
+    this.#effectCallback = EMPTY_EFFECT;
+    this.#onErrorCallback = null;
   }
 
   #validateBudget(): Result<void, Error> {

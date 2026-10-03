@@ -87,7 +87,7 @@ name.value = 'User';
 handle.dispose();
 ```
 
-If an effect run returns a cleanup asynchronously, starting a newer run invalidates the older cleanup session. A stale promise cannot install cleanup over the newer run.
+If an effect run returns a cleanup asynchronously, starting a newer run invalidates the older cleanup session. If the stale promise later returns a cleanup, it runs immediately and cannot replace the current cleanup. A cleanup returned after the effect is disposed also runs immediately; promise rejections after disposal are ignored. A synchronous cleanup returned by a run that disposes its own effect runs immediately as well.
 
 ---
 
