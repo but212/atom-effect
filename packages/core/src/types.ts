@@ -327,7 +327,7 @@ export interface SchedulerState {
   nextEpoch(): number;
   startFlush(): boolean;
   endFlush(): void;
-  incrementFlushExecutionCount(): Result<number, Error>;
+  incrementFlushExecutionCount(job?: SchedulerJob): Result<number, Error>;
   resetFlushState(): void;
   schedule(callback: SchedulerJob): Result<void, Error>;
   flushSync(): void;

@@ -42,12 +42,22 @@ describe('Dependency Graph Safety', () => {
       // c1 returns its defaultValue instead of throwing.
       // This means the cycle resolves to a finite value rather than a stack overflow.
       const box = { c2: null as ReturnType<typeof computed<number>> | null };
+      const useCycle = atom(true);
 
-      const computed1 = computed(() => (box.c2?.value ?? 0) + 1, { defaultValue: 0 });
+      const computed1 = computed(() => (useCycle.value ? (box.c2?.value ?? 0) + 1 : 7), {
+        defaultValue: 0,
+      });
       box.c2 = computed(() => computed1.value + 1);
 
       // No throw — cycle terminates via defaultValue base case
       expect(() => computed1.value).not.toThrow();
+      expect(computed1.hasError).toBe(true);
+      expect(computed1.errors.some((error) => error.message.includes('Circular'))).toBe(true);
+
+      useCycle.value = false;
+      expect(computed1.value).toBe(7);
+      expect(computed1.hasError).toBe(false);
+      expect(computed1.errors).toHaveLength(0);
     });
 
     it('handles deep dependency chains without stack overflow', async () => {

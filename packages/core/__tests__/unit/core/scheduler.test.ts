@@ -405,6 +405,45 @@ describe('Scheduler Engine', () => {
 
         scheduler.endFlush();
       });
+
+      it('keeps sync effects alive and retries once after aggregate execution overflow', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const originalOnOverflow = scheduler.onOverflow;
+        const onOverflow = vi.fn();
+        scheduler.onOverflow = onOverflow;
+
+        const source = atom(0, { sync: true });
+        const observed: number[] = [];
+        const effectInstance = effect(
+          () => {
+            observed.push(source.value);
+          },
+          { sync: true }
+        );
+
+        const started = scheduler.startFlush();
+        expect(started).toBe(true);
+        for (let i = 1; i < SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH; i++) {
+          expect(Result.isOk(scheduler.incrementFlushExecutionCount())).toBe(true);
+        }
+
+        source.value = 1;
+        source.value = 2;
+        expect(observed).toEqual([0, 1]);
+        expect(effectInstance.isDisposed).toBe(false);
+        expect(onOverflow).toHaveBeenCalledTimes(1);
+        expect(onOverflow.mock.calls[0]?.[1]).toContain(effectInstance);
+        scheduler.endFlush();
+
+        await aeNextTick();
+        expect(observed).toEqual([0, 1, 2]);
+        expect(effectInstance.isDisposed).toBe(false);
+
+        effectInstance.dispose();
+        source.dispose();
+        scheduler.onOverflow = originalOnOverflow;
+        consoleError.mockRestore();
+      });
     });
   });
 });

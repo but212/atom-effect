@@ -26,6 +26,13 @@ import { nextSmi, SchedulerError } from '@/utils';
 
 import { resetTrackingContext, trackingContext } from './base';
 
+class AggregateExecutionLimitError extends Error {
+  constructor() {
+    super(`${LOG_PREFIX} Infinite loop detected: limit exceeded.`);
+    this.name = 'AggregateExecutionLimitError';
+  }
+}
+
 /**
  * Role: Central orchestrator for the reactive task lifecycle.
  *
@@ -47,6 +54,11 @@ class ReactiveScheduler implements SchedulerState {
 
   #onOverflowCallback: ((droppedCount: number, droppedJobs: SchedulerJob[]) => void) | null = null;
   #overflowRetryUsed = false;
+  #aggregateOverflowHandled = false;
+  #aggregateOverflowJobs = new Set<SchedulerJob>();
+  #processingJobs: (SchedulerJob | undefined)[] | null = null;
+  #processingIndex = -1;
+  #abortCurrentQueue = false;
 
   // Standard Getters/Setters for SchedulerState compliance
   get epoch() {
@@ -112,6 +124,7 @@ class ReactiveScheduler implements SchedulerState {
       }
 
       this.#processQueue();
+      if (this.#abortCurrentQueue) return;
     }
 
     // Logic: Recovery Rearm
@@ -136,8 +149,10 @@ class ReactiveScheduler implements SchedulerState {
 
     this.nextEpoch();
     const functionKind = KIND.Fn;
+    this.#processingJobs = activeJobs;
 
     for (let i = 0; i < activeJobsCount; i++) {
+      this.#processingIndex = i;
       const job = activeJobs[i];
       if (job === undefined) continue;
       activeJobs[i] = undefined;
@@ -152,14 +167,16 @@ class ReactiveScheduler implements SchedulerState {
           > | void;
           if (executionResult !== undefined && Result.isErr(executionResult)) {
             const executionError = executionResult.error;
-            console.error(
-              new SchedulerError(
-                `Error occurred during scheduler execution: ${executionError?.message || String(executionError)}`,
-                {
-                  cause: executionError,
-                }
-              )
-            );
+            if (!(executionError instanceof AggregateExecutionLimitError)) {
+              console.error(
+                new SchedulerError(
+                  `Error occurred during scheduler execution: ${executionError?.message || String(executionError)}`,
+                  {
+                    cause: executionError,
+                  }
+                )
+              );
+            }
           }
         }
       } catch (unknownError) {
@@ -170,7 +187,12 @@ class ReactiveScheduler implements SchedulerState {
           )
         );
       }
+
+      if (this.#abortCurrentQueue) break;
     }
+
+    this.#processingJobs = null;
+    this.#processingIndex = -1;
   }
 
   /**
@@ -244,6 +266,65 @@ class ReactiveScheduler implements SchedulerState {
     }
   }
 
+  #handleAggregateExecutionOverflow(job: SchedulerJob): void {
+    if (this.#aggregateOverflowHandled) {
+      if (this.#aggregateOverflowJobs.has(job)) return;
+      this.#aggregateOverflowJobs.add(job);
+      if (!this.#overflowRetryUsed) {
+        job._nextEpoch = undefined;
+        this.schedule(job);
+      }
+      return;
+    }
+
+    this.#aggregateOverflowHandled = true;
+    const droppedJobs = new Set<SchedulerJob>([job]);
+
+    const processingJobs = this.#processingJobs;
+    if (processingJobs) {
+      for (let i = this.#processingIndex + 1; i < processingJobs.length; i++) {
+        const pendingJob = processingJobs[i];
+        if (pendingJob !== undefined) droppedJobs.add(pendingJob);
+      }
+      this.#abortCurrentQueue = true;
+    }
+
+    const activeJobs = this.#activeJobBuffer.items;
+    for (let i = 0; i < this.#activeJobBuffer.size; i++) {
+      const pendingJob = activeJobs[i];
+      if (pendingJob !== undefined) droppedJobs.add(pendingJob);
+    }
+
+    this.#aggregateOverflowJobs = droppedJobs;
+    this.#activeJobBuffer.size = 0;
+    this.#activeJobBuffer.items.length = 0;
+    this.#standbyJobBuffer.size = 0;
+    this.#standbyJobBuffer.items.length = 0;
+
+    const overflowError = new SchedulerError(
+      `Aggregate scheduler execution exceeded ${SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH} effects.`,
+      { cause: new AggregateExecutionLimitError() }
+    );
+    console.error(overflowError);
+
+    if (this.#onOverflowCallback) {
+      try {
+        this.#onOverflowCallback(droppedJobs.size, [...droppedJobs]);
+      } catch {
+        /* Suppress */
+      }
+    }
+
+    if (!this.#overflowRetryUsed && droppedJobs.size > 0) {
+      this.#overflowRetryUsed = true;
+      for (const droppedJob of droppedJobs) {
+        droppedJob._nextEpoch = undefined;
+        this.schedule(droppedJob);
+      }
+      this.#armFlush();
+    }
+  }
+
   nextEpoch(): number {
     this.#epoch = nextSmi(this.#epoch);
     return this.#epoch;
@@ -258,6 +339,9 @@ class ReactiveScheduler implements SchedulerState {
     this.#isSessionActive = true;
     this.#sessionEpoch = nextSmi(this.#sessionEpoch);
     this.#sessionExecutionCount = 0;
+    this.#aggregateOverflowHandled = false;
+    this.#aggregateOverflowJobs.clear();
+    this.#abortCurrentQueue = false;
     return true;
   }
 
@@ -267,12 +351,14 @@ class ReactiveScheduler implements SchedulerState {
   }
 
   /** @internal - Tracks the number of jobs executed in the current cycle. */
-  incrementFlushExecutionCount(): Result<number, Error> {
+  incrementFlushExecutionCount(job?: SchedulerJob): Result<number, Error> {
     if (!this.#isSessionActive) return Result.ok(0);
     const count = ++this.#sessionExecutionCount;
     if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return Result.ok(count);
 
-    return Result.err(new Error(`${LOG_PREFIX} Infinite loop detected: limit exceeded.`));
+    const error = new AggregateExecutionLimitError();
+    if (job) this.#handleAggregateExecutionOverflow(job);
+    return Result.err(error);
   }
 
   resetFlushState(): void {
@@ -353,6 +439,11 @@ class ReactiveScheduler implements SchedulerState {
 
 /** @internal */
 export const scheduler = new ReactiveScheduler();
+
+/** @internal */
+export function isAggregateExecutionLimitError(error: Error): boolean {
+  return error instanceof AggregateExecutionLimitError;
+}
 
 /** @internal */
 export const schedulerSchedule = (state: SchedulerState, callback: SchedulerJob) =>

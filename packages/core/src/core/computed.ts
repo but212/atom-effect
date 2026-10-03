@@ -93,7 +93,7 @@ export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst:
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
-    if ((node.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) {
+    if (node._error || (node.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) {
       collected.push(
         node._error ?? new Error('Internal Inconsistency: REJECTED flag set but error is null')
       );
@@ -156,6 +156,7 @@ class ComputedAtomImpl<T>
   // Logic: Strictly encapsulated state
   #activeSessionId = 0;
   #sessionCounter = 0;
+  #circularErrorForResolution: Error | null = null;
 
   #value: T;
   #isEqual: (a: T, b: T) => boolean;
@@ -233,9 +234,14 @@ class ComputedAtomImpl<T>
     }
 
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
-      return this.#getFallbackOrError(
-        new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY)
-      );
+      const error = new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
+      if (
+        this.#defaultValue !== NO_DEFAULT_VALUE &&
+        (flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0
+      ) {
+        this.#circularErrorForResolution = error;
+      }
+      return this.#getFallbackOrError(error);
     }
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
@@ -310,6 +316,7 @@ class ComputedAtomImpl<T>
   get hasError(): boolean {
     trackingContext.current?.addDependency(this);
 
+    if (this._error) return true;
     if ((this.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) return true;
     if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
 
@@ -414,6 +421,7 @@ class ComputedAtomImpl<T>
 
     this.flags =
       (this.flags & ~COMPUTED_STATE_FLAGS.FORCE_COMPUTE) | COMPUTED_STATE_FLAGS.RECOMPUTING;
+    this.#circularErrorForResolution = null;
 
     try {
       nodeStartTracking(this);
@@ -452,13 +460,12 @@ class ComputedAtomImpl<T>
    * to discard results from computation cycles that are no longer valid.
    */
   #handleAsyncComputation(promise: Promise<T>): void {
+    const flushSessionId = ++this.#sessionCounter;
+    this.#activeSessionId = flushSessionId;
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.PENDING;
     nodeNotifySubscribers(this, undefined, undefined);
-
-    const flushSessionId = ++this.#sessionCounter;
-    this.#activeSessionId = flushSessionId;
 
     promise.then(
       (result) => {
@@ -479,6 +486,7 @@ class ComputedAtomImpl<T>
   }
 
   #handleError(error: unknown, message: string, shouldThrow = false): void {
+    this.#circularErrorForResolution = null;
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.REJECTED;
@@ -494,12 +502,17 @@ class ComputedAtomImpl<T>
   #finalizeResolution(value: T): void {
     const flags = this.flags;
     const asyncState = flags & STATE_MASKS.ASYNC_MASK;
-    if (asyncState !== COMPUTED_STATE_FLAGS.RESOLVED || !this.#isEqual(this.#value, value)) {
+    if (
+      asyncState !== COMPUTED_STATE_FLAGS.RESOLVED ||
+      !this.#isEqual(this.#value, value) ||
+      this._error !== this.#circularErrorForResolution
+    ) {
       this.version = nextVersion(this.version);
     }
 
     this.#value = value;
-    this._error = null;
+    this._error = this.#circularErrorForResolution;
+    this.#circularErrorForResolution = null;
     this.flags =
       (flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.RESOLVED;

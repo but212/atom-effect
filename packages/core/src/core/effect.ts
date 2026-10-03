@@ -50,7 +50,13 @@ import type {
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
-import { getCurrentFlushEpoch, runInFlushScope, scheduler, schedulerSchedule } from './scheduler';
+import {
+  getCurrentFlushEpoch,
+  isAggregateExecutionLimitError,
+  runInFlushScope,
+  scheduler,
+  schedulerSchedule,
+} from './scheduler';
 
 class EffectImpl
   implements
@@ -112,7 +118,11 @@ class EffectImpl
       (options.sync ?? false)
         ? () => {
             const executionResult = runInFlushScope(() => this.execute());
-            if (executionResult && Result.isErr(executionResult)) {
+            if (
+              executionResult &&
+              Result.isErr(executionResult) &&
+              !isAggregateExecutionLimitError(executionResult.error)
+            ) {
               console.error(executionResult.error);
             }
           }
@@ -298,9 +308,8 @@ class EffectImpl
     }
 
     // Constraint: Global safeguard against aggregate scheduler instability.
-    const globalExecutionCountResult = scheduler.incrementFlushExecutionCount();
+    const globalExecutionCountResult = scheduler.incrementFlushExecutionCount(this);
     if (Result.isErr(globalExecutionCountResult)) {
-      this.dispose();
       return globalExecutionCountResult;
     }
 
