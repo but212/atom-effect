@@ -9,6 +9,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Required to match and strip ANSI terminal escape sequences
 const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
@@ -20,7 +21,7 @@ const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-O
  */
 const stripAnsi = (str) => str.replace(ansiRegex, '');
 
-const txtFiles = [
+const RAW_RESULT_FILES = [
   'core-macro.txt',
   'core-micro.txt',
   'core-realistic.txt',
@@ -29,12 +30,6 @@ const txtFiles = [
   'jquery-micro.txt',
   'utils-all.txt',
 ];
-
-const workspaceRoot = import.meta.dirname
-  ? path.join(import.meta.dirname, '..')
-  : path.join(process.cwd());
-const rawResultsRoot = process.argv[2] ? path.resolve(process.argv[2]) : workspaceRoot;
-const benchmarkDb = {};
 
 /**
  * Normalizes test case names to enable resilient dictionary mapping.
@@ -52,80 +47,73 @@ function normalizeName(name) {
     .trim();
 }
 
-// Parse Vitest benchmark result logs
-for (const file of txtFiles) {
-  const filePath = path.join(rawResultsRoot, file);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`[IO Error] Required benchmark source file missing: ${file}`);
+function parseLegacyResult(line) {
+  const parts = line.split(/\s+/);
+  const opsSecIdx = parts.lastIndexOf('ops/sec');
+  if (opsSecIdx === -1 || opsSecIdx === 0) return null;
+
+  const meanIdx = parts.indexOf('(mean:');
+  const p99Idx = parts.indexOf('(p99:');
+  return {
+    hz: parseFloat(parts[opsSecIdx - 1].replace(/,/g, '')),
+    mean: meanIdx === -1 ? NaN : parseFloat(parts[meanIdx + 1]),
+    p99: p99Idx === -1 ? NaN : parseFloat(parts[p99Idx + 1]),
+    name: parts.slice(0, opsSecIdx - 1).join(' '),
+  };
+}
+
+function parseVitest5Result(line) {
+  // The final 10 columns are statistics; Vitest may append a ranking indicator.
+  const parts = line.split(/\s+/);
+  const hasRanking = ['fastest', 'slowest'].includes(parts.at(-1));
+  const tokens = hasRanking ? parts.slice(0, -1) : parts;
+  if (tokens.length < 11) return null;
+
+  const stats = tokens.slice(-10);
+  if (!stats[8].includes('%')) return null;
+
+  return {
+    hz: parseFloat(stats[0].replace(/,/g, '')),
+    mean: parseFloat(stats[3].replace(/,/g, '')),
+    p99: parseFloat(stats[5].replace(/,/g, '')),
+    name: tokens.slice(0, -10).join(' '),
+  };
+}
+
+function parseBenchmarkLine(line) {
+  const cleanLine = stripAnsi(line).trim();
+  if (!cleanLine || /^name\s+hz\b/i.test(cleanLine)) return null;
+
+  const isLegacyResult = cleanLine.includes('(mean:') && cleanLine.includes('(p99:');
+  const result = isLegacyResult ? parseLegacyResult(cleanLine) : parseVitest5Result(cleanLine);
+  if (!result || Number.isNaN(result.hz) || Number.isNaN(result.mean) || Number.isNaN(result.p99)) {
+    return null;
   }
 
-  const content = fs.readFileSync(filePath, 'utf8');
-  for (const line of content.split('\n')) {
-    const cleanLine = stripAnsi(line).trim();
-    if (!cleanLine) continue;
+  const name = result.name.replace(/^[·\s]+/, '').trim();
+  if (!name) return null;
 
-    // Skip table header lines
-    if (/^name\s+hz\b/i.test(cleanLine)) continue;
+  return {
+    key: normalizeName(name),
+    measurement: { hz: result.hz, mean: result.mean, p99: result.p99 },
+  };
+}
 
-    let hz = NaN;
-    let mean = NaN;
-    let p99 = NaN;
-    let nameParts = [];
-
-    // Format 1: Legacy v4 with "(mean:" and "(p99:"
-    if (cleanLine.includes('(mean:') && cleanLine.includes('(p99:')) {
-      const parts = cleanLine.split(/\s+/);
-      const opsSecIdx = parts.lastIndexOf('ops/sec');
-      if (opsSecIdx !== -1 && opsSecIdx > 0) {
-        hz = parseFloat(parts[opsSecIdx - 1].replace(/,/g, ''));
-        const meanIdx = parts.indexOf('(mean:');
-        const p99Idx = parts.indexOf('(p99:');
-        mean = meanIdx === -1 ? NaN : parseFloat(parts[meanIdx + 1]);
-        p99 = p99Idx === -1 ? NaN : parseFloat(parts[p99Idx + 1]);
-        nameParts = parts.slice(0, opsSecIdx - 1);
-      }
-    } else {
-      // Format 2: Vitest 5 / Tinybench table format
-      // Row ends with 10 stat columns: hz, min, max, mean, p75, p99, p995, p999, rme, samples
-      // followed by optional ranking indicator ("fastest" or "slowest")
-      const parts = cleanLine.split(/\s+/);
-      let tokens = parts;
-      if (
-        tokens.length > 0 &&
-        (tokens[tokens.length - 1] === 'fastest' || tokens[tokens.length - 1] === 'slowest')
-      ) {
-        tokens = tokens.slice(0, -1);
-      }
-      if (tokens.length >= 11) {
-        const stats = tokens.slice(-10);
-        const candHz = parseFloat(stats[0].replace(/,/g, ''));
-        const candMean = parseFloat(stats[3].replace(/,/g, ''));
-        const candP99 = parseFloat(stats[5].replace(/,/g, ''));
-        if (
-          !Number.isNaN(candHz) &&
-          !Number.isNaN(candMean) &&
-          !Number.isNaN(candP99) &&
-          stats[8].includes('%')
-        ) {
-          hz = candHz;
-          mean = candMean;
-          p99 = candP99;
-          nameParts = tokens.slice(0, -10);
-        }
-      }
+function loadBenchmarkResults(rawResultsRoot) {
+  const benchmarkDb = {};
+  for (const file of RAW_RESULT_FILES) {
+    const filePath = path.join(rawResultsRoot, file);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`[IO Error] Required benchmark source file missing: ${file}`);
     }
 
-    if (!Number.isNaN(hz) && !Number.isNaN(mean) && !Number.isNaN(p99)) {
-      const name = nameParts
-        .join(' ')
-        .replace(/^[·\s]+/, '')
-        .trim();
-      if (name) {
-        const normalized = normalizeName(name);
-        benchmarkDb[normalized] = { hz, mean, p99 };
-      }
+    const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+    for (const line of lines) {
+      const result = parseBenchmarkLine(line);
+      if (result) benchmarkDb[result.key] = result.measurement;
     }
   }
+  return benchmarkDb;
 }
 
 /**
@@ -238,7 +226,7 @@ const OVERVIEW_SCHEMAS = [
         format: 'hz',
       },
       'Dashboard fan-in': { key: 'fan-in: 100 atoms → 1 computed → 1 DOM binding', format: 'hz' },
-      'atomForm O(1) Scaling': { key: 'Update 1 field in 100-field form (x10)', format: 'hz' },
+      'atomForm O(1) Scaling': { key: 'Update 1 field in 100-field form', format: 'hz' },
     },
   },
   {
@@ -246,16 +234,16 @@ const OVERVIEW_SCHEMAS = [
     headers: ['Category', 'Key Metric', 'Value'],
     matchRow: (row) => `${row.Category} | ${row['Key Metric']}`,
     mappings: {
-      '**SlotBuffer** | push (small)': { key: 'push (small, x10)', format: 'hz' },
-      '**Option** | isSome check': { key: 'isSome (x10)', format: 'hz' },
-      '**Result** | ok creation': { key: 'Result.ok creation (x10)', format: 'hz' },
-      '**Type Guard** | isPromise': { key: 'isPromise: native promise (x10)', format: 'hz' },
+      '**SlotBuffer** | push (small)': { key: 'push (small)', format: 'hz' },
+      '**Option** | isSome check': { key: 'isSome', format: 'hz' },
+      '**Result** | ok creation': { key: 'Result.ok creation', format: 'hz' },
+      '**Type Guard** | isPromise': { key: 'isPromise: native promise', format: 'hz' },
     },
   },
 ];
 
 // Helper to update a table in place using a list of lines and a specific schema definition
-function processTableLines(lines, schema) {
+function processTableLines(lines, schema, benchmarkDb) {
   let headerIndexes = null;
   return lines.map((line) => {
     if (line.trim().startsWith('|') && line.includes('|')) {
@@ -297,45 +285,20 @@ function processTableLines(lines, schema) {
   });
 }
 
-// 1. Update Overview files
-const filesToUpdate = new Set(OVERVIEW_SCHEMAS.map((s) => s.filePath));
-for (const relPath of filesToUpdate) {
-  const filePath = path.join(workspaceRoot, relPath);
-  if (!fs.existsSync(filePath)) continue;
-
-  let lines = fs.readFileSync(filePath, 'utf8').split('\n');
-  const schemasForFile = OVERVIEW_SCHEMAS.filter((s) => s.filePath === relPath);
-
-  for (const schema of schemasForFile) {
-    lines = processTableLines(lines, schema);
-  }
-
-  fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
-  console.log(`Updated: ${filePath}`);
-}
-
-// ============================================================================
-// 2. Update Detailed Benchmark Files
-// ============================================================================
-const detailedFiles = [
+const DETAILED_DOCS = [
   'packages/core/docs/BENCHMARKS_DETAILED.md',
   'packages/jquery/docs/BENCHMARKS_DETAILED.md',
   'packages/utils/docs/BENCHMARKS_DETAILED.md',
 ];
 
-for (const mdFile of detailedFiles) {
-  const filePath = path.join(workspaceRoot, mdFile);
-  if (!fs.existsSync(filePath)) continue;
-
-  const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+function processDetailedTableLines(lines, benchmarkDb) {
   let headerIndexes = null;
-  const updated = lines.map((line) => {
+  return lines.map((line) => {
     if (line.trim().startsWith('|') && line.includes('|')) {
       const lowerLine = line.toLowerCase();
       const isHeader = lowerLine.includes('ops/sec (hz)') && lowerLine.includes('mean (ms)');
       if (isHeader) {
         const cols = line.split('|').map((c) => c.trim());
-        // Find whichever column denotes the case name dynamically
         const caseColName = cols.find((c) =>
           ['test case', 'benchmark case', 'pattern', 'scenario'].includes(c.toLowerCase())
         );
@@ -367,7 +330,51 @@ for (const mdFile of detailedFiles) {
     }
     return line;
   });
+}
 
+function updateMarkdownFile(workspaceRoot, relativePath, transformLines) {
+  const filePath = path.join(workspaceRoot, relativePath);
+  if (!fs.existsSync(filePath)) return;
+
+  const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+  const updated = transformLines(lines);
   fs.writeFileSync(filePath, updated.join('\n'), 'utf8');
   console.log(`Updated: ${filePath}`);
+}
+
+function updateOverviewDocs(workspaceRoot, benchmarkDb) {
+  const filePaths = new Set(OVERVIEW_SCHEMAS.map((schema) => schema.filePath));
+  for (const filePath of filePaths) {
+    const schemas = OVERVIEW_SCHEMAS.filter((schema) => schema.filePath === filePath);
+    updateMarkdownFile(workspaceRoot, filePath, (lines) =>
+      schemas.reduce(
+        (currentLines, schema) => processTableLines(currentLines, schema, benchmarkDb),
+        lines
+      )
+    );
+  }
+}
+
+function updateDetailedDocs(workspaceRoot, benchmarkDb) {
+  for (const filePath of DETAILED_DOCS) {
+    updateMarkdownFile(workspaceRoot, filePath, (lines) =>
+      processDetailedTableLines(lines, benchmarkDb)
+    );
+  }
+}
+
+function updateBenchmarkDocs(workspaceRoot, rawResultsRoot) {
+  const benchmarkDb = loadBenchmarkResults(rawResultsRoot);
+  updateOverviewDocs(workspaceRoot, benchmarkDb);
+  updateDetailedDocs(workspaceRoot, benchmarkDb);
+}
+
+export function main(argv = process.argv) {
+  const workspaceRoot = import.meta.dirname ? path.join(import.meta.dirname, '..') : process.cwd();
+  const rawResultsRoot = argv[2] ? path.resolve(argv[2]) : workspaceRoot;
+  updateBenchmarkDocs(workspaceRoot, rawResultsRoot);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main();
 }
