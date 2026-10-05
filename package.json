@@ -41,7 +41,7 @@
     "cross-env": "catalog:build",
     "playwright": "catalog:test",
     "rimraf": "catalog:",
-    "turbo": "2.10.12",
+    "turbo": "2.11.7",
     "typescript": "catalog:build",
     "unplugin-dts": "catalog:build",
     "vite": "catalog:build",
