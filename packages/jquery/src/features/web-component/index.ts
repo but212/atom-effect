@@ -14,7 +14,6 @@
 
 import { atomLens, type EffectObject, isAtom } from '@but212/atom-effect';
 import $ from 'jquery';
-import { SYSTEM_COMPONENT } from '@/constants';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
 import { CLEANUP_MARKER } from '@/core/symbols';
 import type {
@@ -23,7 +22,7 @@ import type {
   JQueryScopedSelector,
   WritableAtom,
 } from '@/types';
-import { debug } from '@/utils/debug';
+import { warnIfUnregistered } from '@/utils/debug';
 import {
   createContextProxy,
   disposeProviders,
@@ -74,12 +73,7 @@ const supportsInternals =
  */
 export function useAtomComponent(element: HTMLElement): AtomComponentController {
   // Security: Guard against use on unregistered elements to prevent silent initialization failures.
-  if (debug.enabled && typeof customElements !== 'undefined') {
-    const tagName = element.tagName.toLowerCase();
-    if (tagName.includes('-') && !customElements.get(tagName)) {
-      debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
-    }
-  }
+  warnIfUnregistered(element);
 
   const internal = getInternalState(element);
   if (internal.controller) return internal.controller;
@@ -274,6 +268,13 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
   return controller;
 }
 
+/** Resolves an element, jQuery collection, or selector into its host elements. */
+function resolveHosts(host: HTMLElement | JQuery | string): HTMLElement[] {
+  if (host instanceof HTMLElement) return [host];
+  if (typeof host === 'string') return Array.from(document.querySelectorAll<HTMLElement>(host));
+  return host.toArray() as HTMLElement[];
+}
+
 /**
  * Logic: Dependency Provider
  * Registers a value or atom to be provided to all descendant elements.
@@ -286,7 +287,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
  * - When you need to share state (like themes or user sessions) across a deep DOM tree.
  * - When you want to control CSS properties reactively via atoms.
  *
- * @param element The host element or collection acting as provider.
+ * @param host The host element or collection acting as provider.
  * @param key Unique identifier for the context.
  * @param value The reactive atom or static value to share.
  *
@@ -300,18 +301,11 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
  * ```
  */
 export function provideAtom(
-  element: HTMLElement | JQuery | string,
+  host: HTMLElement | JQuery | string,
   key: string | symbol,
   value: unknown
 ): void {
-  const targets =
-    element instanceof HTMLElement
-      ? [element]
-      : typeof element === 'string'
-        ? Array.from(document.querySelectorAll<HTMLElement>(element))
-        : ((element as JQuery).toArray() as HTMLElement[]);
-
-  for (const element of targets) {
+  for (const element of resolveHosts(host)) {
     const keyStr = typeof key === 'symbol' ? key.description : String(key);
     let providerEffect: EffectObject | undefined;
 
@@ -344,7 +338,7 @@ export function provideAtom(
  * - To consume state provided by a `provideAtom` ancestor.
  * - When components might be moved (drag-and-drop) and need to stay synced with their new context.
  *
- * @param element The element requesting the context.
+ * @param host The element requesting the context.
  * @param key The unique identifier of the context to locate.
  * @returns A reactive proxy atom representing the injected context.
  *
@@ -361,24 +355,13 @@ export function provideAtom(
  * ```
  */
 export function injectAtom<T = unknown>(
-  element: HTMLElement | JQuery | string,
+  host: HTMLElement | JQuery | string,
   key: string | symbol
 ): WritableAtom<T | null> | null {
-  const targetElement =
-    element instanceof HTMLElement
-      ? element
-      : typeof element === 'string'
-        ? document.querySelector<HTMLElement>(element)
-        : ((element as JQuery)[0] as HTMLElement);
-
+  const targetElement = resolveHosts(host)[0];
   if (!targetElement) return null;
 
-  if (debug.enabled && typeof customElements !== 'undefined') {
-    const tagName = targetElement.tagName.toLowerCase();
-    if (tagName.includes('-') && !customElements.get(tagName)) {
-      debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
-    }
-  }
+  warnIfUnregistered(targetElement);
 
   const state = getInternalState(targetElement);
   if (!state.injects) state.injects = new Map();

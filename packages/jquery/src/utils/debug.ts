@@ -8,7 +8,7 @@
  * Enables real-time feedback for DOM mutations triggered by reactive state changes.
  */
 
-import { SYSTEM_DEBUG } from '@/constants';
+import { SYSTEM_COMPONENT, SYSTEM_DEBUG } from '@/constants';
 import { getSelector } from '@/utils';
 
 const ATTR_MARKER = 'data-atom-debug';
@@ -100,3 +100,16 @@ export const debug = {
     }
   },
 };
+
+/**
+ * Warns (debug mode only) when a custom-element tag has no registered definition,
+ * preventing silent failures where the element renders as an empty tag.
+ * @internal
+ */
+export function warnIfUnregistered(element: Element): void {
+  if (!debug.enabled || typeof customElements === 'undefined') return;
+  const tagName = element.tagName.toLowerCase();
+  if (tagName.includes('-') && !customElements.get(tagName)) {
+    debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
+  }
+}

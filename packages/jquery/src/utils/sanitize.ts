@@ -15,6 +15,7 @@
  */
 
 import { SYSTEM_SECURITY } from '@/constants';
+import { FIFOCache } from '@/utils';
 
 /**
  * Configuration for the HTML sanitization engine.
@@ -554,29 +555,6 @@ function walkTree(root: Node, policy: SanitizationPolicy): void {
       walkTree(DOM.getTemplateContent(node as HTMLTemplateElement), policy);
     }
     node = nextNode;
-  }
-}
-
-/**
- * @internal
- * Optimization: Bounded cache for sanitized HTML strings using a FIFO eviction policy.
- */
-class FIFOCache<K, V> extends Map<K, V> {
-  readonly #limit: number;
-
-  constructor(limit = 1000) {
-    super();
-    this.#limit = limit;
-  }
-
-  override set(key: K, value: V): this {
-    if (this.size >= this.#limit && !this.has(key)) {
-      const firstKey = this.keys().next().value;
-      if (firstKey !== undefined) {
-        this.delete(firstKey);
-      }
-    }
-    return super.set(key, value);
   }
 }
 

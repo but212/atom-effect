@@ -23,6 +23,7 @@ import {
 import $ from 'jquery';
 import { getOrCreateRootObserver } from '@/core/observer';
 import type { AtomComponentController, WritableAtom } from '@/types';
+import { FIFOCache } from '@/utils';
 
 export interface ProviderEntry {
   value: unknown;
@@ -48,9 +49,7 @@ declare global {
 }
 
 export const nodeStateMap = new WeakMap<Node, NodeInternalState>();
-export const sheetCache = new Map<string, CSSStyleSheet>();
-
-const MAX_SHEET_CACHE_SIZE = 100;
+export const sheetCache = new FIFOCache<string, CSSStyleSheet>(100);
 
 /**
  * Logic: Internal Metadata Tracking
@@ -79,12 +78,6 @@ export const getOrCreateSheet = (source: string | CSSStyleSheet): CSSStyleSheet 
   if (!sheet) {
     sheet = new CSSStyleSheet();
     sheet.replaceSync(source);
-    // Simple FIFO eviction: remove the first added entry if cache exceeds limit.
-    // Note: Map.keys().next().value returns the first inserted key (FIFO order).
-    if (sheetCache.size >= MAX_SHEET_CACHE_SIZE) {
-      const firstKey = sheetCache.keys().next().value;
-      if (firstKey !== undefined) sheetCache.delete(firstKey);
-    }
     sheetCache.set(source, sheet);
   }
   return sheet;
