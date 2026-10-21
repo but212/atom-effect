@@ -547,6 +547,21 @@ describe('Computed', () => {
       expect(errs.some((e) => e.message.includes('upstream_error'))).toBe(true);
       consoleError.mockRestore();
     });
+
+    it('should transition to REJECTED and return defaultValue on circular reference', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let cyclicComputed!: ReturnType<typeof computed<number>>;
+      cyclicComputed = computed(() => cyclicComputed.value + 1, { defaultValue: 42 });
+
+      expect(cyclicComputed.value).toBe(42);
+      expect(cyclicComputed.isRejected).toBe(true);
+      expect(cyclicComputed.isResolved).toBe(false);
+      expect(cyclicComputed.hasError).toBe(true);
+      expect(
+        cyclicComputed.errors.some((e) => e.message.includes('Circular dependency detected'))
+      ).toBe(true);
+      consoleError.mockRestore();
+    });
   });
 
   describe('asynchronous flows', () => {

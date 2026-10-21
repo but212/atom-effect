@@ -12,7 +12,7 @@
  * teardown mechanism for side-effects.
  */
 
-import { Result, SlotBuffer } from '@but212/atom-effect-utils';
+import { Result } from '@but212/atom-effect-utils';
 import {
   BRAND,
   BrandFlags,
@@ -21,66 +21,30 @@ import {
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
   IS_DEV,
-  KIND,
   SCHEDULER_CONFIG,
-  SMI_MAX,
 } from '@/constants';
-import {
-  nodeCommitDeps,
-  nodeHandleError,
-  nodeStartTracking,
-  nodeTrackDependency,
-  runInTrackingContext,
-  trackingContext,
-} from '@/core/base';
+import { runInTrackingContext, trackingContext } from '@/core/base';
 import type {
   Dependency,
-  DependencyId,
-  DependencyLink,
   DependencyTracker,
   EffectFunction,
   EffectObject,
   EffectOptions,
-  ReactiveDependencyTracker,
-  ReactiveNode,
   Subscriber,
-  SubscriberTarget,
 } from '@/types';
-import { debug, EffectError, generateId } from '@/utils';
+import { debug, EffectError, wrapError } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { BUFFER_FLAGS, disposeAll, isBufferDirty, refreshDepFlags } from './buffers';
 import {
   isAggregateExecutionLimitError,
   runInFlushScope,
   scheduler,
   schedulerSchedule,
 } from './scheduler';
+import { ReactiveTracker } from './tracker';
 
 const EMPTY_EFFECT: EffectFunction = () => undefined;
 
-class EffectImpl
-  implements
-    EffectObject,
-    DependencyTracker,
-    Subscriber,
-    ReactiveNode<void>,
-    ReactiveDependencyTracker
-{
-  // Optimization: Engine-exposed state (JS fields)
-  flags: number = 0;
-  version: number = 0;
-  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  _nextEpoch: number | undefined = undefined;
-  _trackEpoch: number = 0;
-  _trackCount: number = 0;
-  _error: Error | null = null;
-  _kind: typeof KIND.Obj = KIND.Obj;
-  readonly id: DependencyId = generateId() & SMI_MAX;
-
-  _subscriberSlots: SlotBuffer<SubscriberTarget<void>> | null = null;
-  _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
-  _depFlags: number = BUFFER_FLAGS.NONE;
-
+class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTracker, Subscriber {
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
@@ -103,6 +67,7 @@ class EffectImpl
   #totalExecutionCount = 0;
 
   constructor(effectCallback: EffectFunction, options: EffectOptions = {}) {
+    super();
     if (typeof effectCallback !== 'function') {
       throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
     }
@@ -131,10 +96,6 @@ class EffectImpl
     if (IS_DEV) debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
 
-  // ReactiveNode Personality Traits (Declarative Data)
-  readonly isComputed = false;
-  readonly isRejected = false;
-
   /** Triggers the effect execution immediately. */
   run(): void {
     if (this.isDisposed) {
@@ -152,7 +113,7 @@ class EffectImpl
     this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
 
     this.#execCleanup();
-    disposeAll(this);
+    this.disposeDeps();
     if (!this.isExecuting) this.#releaseCallbacks();
   }
 
@@ -176,19 +137,28 @@ class EffectImpl
    * Synchronizes the effect state with its captured dependencies.
    */
   execute(force = false): Result<void, Error> {
-    const preparationResult = this.#prepareExecution(force);
-    if (Result.isErr(preparationResult)) return preparationResult;
-    if (!preparationResult.value) return Result.ok(undefined);
+    const flags = this.flags;
+    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) {
+      return Result.ok(undefined);
+    }
 
+    if (!(force || this._depSlots.size === 0 || this.hasDirtyDeps())) {
+      return Result.ok(undefined);
+    }
+
+    const budgetValidationResult = this.#validateBudget();
+    if (Result.isErr(budgetValidationResult)) return budgetValidationResult;
+    if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
+
+    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
     this.#execCleanup();
     const sessionId = ++this.#trackSessionId;
 
-    nodeStartTracking(this);
-    refreshDepFlags(this);
+    this.startTracking();
 
     try {
       const executionResult = runInTrackingContext(trackingContext, this, this.#effectCallback);
-      nodeCommitDeps(this);
+      this.commitDeps();
       this.#handleResult(executionResult, sessionId);
     } catch (executionError) {
       this.#handleExecutionError(executionError);
@@ -200,29 +170,10 @@ class EffectImpl
     return Result.ok(undefined);
   }
 
-  #prepareExecution(force: boolean): Result<boolean, Error> {
-    const flags = this.flags;
-    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0)
-      return Result.ok(false);
-
-    // Logic: Selective Skipping
-    // Execution is skipped if the effect is not 'forced', has no dependencies
-    // yet, and its dependencies haven't changed (dirty check). This minimizes
-    // redundant computations during the flush cycle.
-    if (!(force || this._depSlots.size === 0 || isBufferDirty(this))) return Result.ok(false);
-
-    const budgetValidationResult = this.#validateBudget();
-    if (Result.isErr(budgetValidationResult)) return budgetValidationResult;
-    if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
-
-    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
-    return Result.ok(true);
-  }
-
   /** Registers a dependency during the tracking session. */
   addDependency(dependency: Dependency): void {
     if (!this.isExecuting || this.isDisposed) return;
-    nodeTrackDependency(this, dependency, this.#notifyCallback);
+    this.trackDependency(dependency, this.#notifyCallback);
   }
 
   /**
@@ -349,7 +300,15 @@ class EffectImpl
     executionError: unknown,
     message: string = ERROR_MESSAGES.EFFECT_EXECUTION_FAILED
   ): void {
-    nodeHandleError(this, executionError, EffectError, message, this.#onErrorCallback);
+    const wrappedError = wrapError(executionError, EffectError, message);
+    console.error(wrappedError);
+    if (this.#onErrorCallback) {
+      try {
+        this.#onErrorCallback(wrappedError);
+      } catch (error) {
+        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, error);
+      }
+    }
   }
 }
 

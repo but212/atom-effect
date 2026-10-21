@@ -226,7 +226,9 @@ export interface ReactiveNode<T> extends ReactiveNodeBase {
  * A reactive node that also tracks dependencies.
  * @internal
  */
-export interface ReactiveDependencyTracker extends ReactiveNodeBase {
+export interface ReactiveDependencyTracker extends IdentifiableNode {
+  readonly id: DependencyId;
+  flags: number;
   _depSlots: SlotBuffer<DependencyLink>;
   _depFlags: number;
   _trackEpoch: number;
@@ -330,7 +332,7 @@ export interface SchedulerState {
   nextEpoch(): number;
   startFlush(): boolean;
   endFlush(): void;
-  incrementFlushExecutionCount(job?: SchedulerJob): Result<number, Error>;
+  incrementFlushExecutionCount(job?: SchedulerJob): Result<void, Error>;
   schedule(callback: SchedulerJob): Result<void, Error>;
   flushSync(): void;
   startBatch(): void;

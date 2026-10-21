@@ -49,8 +49,11 @@ describe('Dependency Graph Safety', () => {
       });
       box.c2 = computed(() => computed1.value + 1);
 
-      // No throw — cycle terminates via defaultValue base case
+      // No throw — cycle terminates via defaultValue fallback in REJECTED state
       expect(() => computed1.value).not.toThrow();
+      expect(computed1.value).toBe(0);
+      expect(computed1.isRejected).toBe(true);
+      expect(computed1.isResolved).toBe(false);
       expect(computed1.hasError).toBe(true);
       expect(computed1.errors.some((error) => error.message.includes('Circular'))).toBe(true);
 

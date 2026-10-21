@@ -11,16 +11,27 @@
  * root atom, so it re-runs when any part of the root changes.
  */
 
-import { shallowEqual } from '@but212/atom-effect-utils';
-import { BRAND, BrandFlags, DEFAULT_EQUAL, ERROR_MESSAGES, STATE_FLAGS } from '@/constants';
+import { type SlotBuffer, shallowEqual } from '@but212/atom-effect-utils';
 import {
-  BaseNode,
-  nodeGetSubscriberCount,
-  nodeNotifySubscribers,
-  nodeSubscribe,
-} from '@/core/base';
-import type { MergedDependencyValue, ReactiveNode, SubscriberTarget, WritableAtom } from '@/types';
-import { debug, mergeAtomValues } from '@/utils';
+  BRAND,
+  BrandFlags,
+  DEFAULT_EQUAL,
+  EPOCH_CONSTANTS,
+  ERROR_MESSAGES,
+  KIND,
+  SMI_MAX,
+  STATE_FLAGS,
+} from '@/constants';
+import { nodeGetSubscriberCount, nodeNotifySubscribers, nodeSubscribe } from '@/core/base';
+import type {
+  DependencyId,
+  MergedDependencyValue,
+  ReactiveNode,
+  ReactiveNodeBase,
+  SubscriberTarget,
+  WritableAtom,
+} from '@/types';
+import { debug, generateId, mergeAtomValues } from '@/utils';
 import { getPathValue, type Paths, type PathValue, setDeepValue } from './lens-path';
 import { batch } from './scheduler';
 
@@ -35,12 +46,38 @@ import { batch } from './scheduler';
  *
  * @internal
  */
-abstract class BaseLens<T = unknown> extends BaseNode<T> {
-  _nextEpoch: number | undefined = undefined;
-  _trackEpoch = 0;
-  _trackCount = 0;
-  _error: Error | null = null;
+abstract class BaseLens<T = unknown> implements ReactiveNodeBase {
+  flags: number;
+  version = 0;
+  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
+  _kind: typeof KIND.Obj = KIND.Obj;
+  readonly id: DependencyId = generateId() & SMI_MAX;
+  _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
   #previousValue: T | undefined;
+
+  constructor(initialFlags: number = 0) {
+    this.flags = initialFlags;
+  }
+
+  get isDisposed(): boolean {
+    return (this.flags & STATE_FLAGS.DISPOSED) !== 0;
+  }
+
+  get isComputed(): boolean {
+    return false;
+  }
+
+  get isRejected(): boolean {
+    return false;
+  }
+
+  get hasError(): boolean {
+    return false;
+  }
+
+  subscriberCount(): number {
+    return nodeGetSubscriberCount(this);
+  }
 
   abstract peek(): T;
   protected abstract _equals(nextValue: T, previousValue: T | undefined): boolean;

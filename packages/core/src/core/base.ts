@@ -12,71 +12,23 @@
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import {
-  EPOCH_CONSTANTS,
-  ERROR_MESSAGES,
-  IS_DEV,
-  KIND,
-  LOG_PREFIX,
-  SMI_MAX,
-  STATE_FLAGS,
-} from '@/constants';
+import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, STATE_FLAGS } from '@/constants';
 import type {
   AtomErrorConstructor,
   Dependency,
-  DependencyId,
   DependencySubscriber,
   DependencyTracker,
   Prettify,
   ReactiveDependencyTracker,
   ReactiveNode,
-  ReactiveNodeBase,
   SubscriberTarget,
   TrackingContext,
 } from '@/types';
-import { AtomError, generateId, nextSmi, wrapError } from '@/utils';
+import { AtomError, nextSmi, wrapError } from '@/utils';
 
 import { BUFFER_FLAGS, claimExisting, depBufferTruncateFrom, insertNew } from './buffers';
 
 import { scheduler } from './scheduler';
-
-/** @internal */
-export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
-  flags: number;
-  version: number = 0;
-  _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  _kind: typeof KIND.Obj = KIND.Obj;
-  readonly id: DependencyId = generateId() & SMI_MAX;
-  _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
-
-  constructor(initialFlags: number = 0) {
-    this.flags = initialFlags;
-  }
-
-  get isDisposed(): boolean {
-    return (this.flags & STATE_FLAGS.DISPOSED) !== 0;
-  }
-
-  get isComputed(): boolean {
-    return false;
-  }
-
-  get isRejected(): boolean {
-    return false;
-  }
-
-  get hasError(): boolean {
-    return false;
-  }
-
-  subscribe(listener: SubscriberTarget<T>): () => void {
-    return nodeSubscribe(this, listener);
-  }
-
-  subscriberCount(): number {
-    return nodeGetSubscriberCount(this);
-  }
-}
 
 /** @internal */
 function createTrackingContext(): TrackingContext {
@@ -185,6 +137,18 @@ export function nodeTrackDependency(
   dependency: Dependency,
   notifyCallback: SubscriberTarget<unknown>
 ): void {
+  if (
+    'trackDependency' in tracker &&
+    typeof (tracker as { trackDependency: unknown }).trackDependency === 'function'
+  ) {
+    (
+      tracker as {
+        trackDependency: (dep: Dependency, cb: SubscriberTarget<unknown>) => void;
+      }
+    ).trackDependency(dependency, notifyCallback);
+    return;
+  }
+
   if (!tracker._depSlots) return;
 
   const trackEpoch = tracker._trackEpoch;
@@ -350,6 +314,12 @@ export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown)
 export function nodeStartTracking(
   node: Prettify<DependencyTracker & ReactiveDependencyTracker>
 ): number {
+  if (
+    'startTracking' in node &&
+    typeof (node as { startTracking: unknown }).startTracking === 'function'
+  ) {
+    return (node as { startTracking: () => number }).startTracking();
+  }
   const epoch = scheduler.nextEpoch();
   node._trackEpoch = epoch;
   node._trackCount = 0;
@@ -358,6 +328,10 @@ export function nodeStartTracking(
 
 /** @internal - Finalizes dependencies by truncating unused buffer slots. */
 export function nodeCommitDeps(node: DependencyTracker & ReactiveDependencyTracker): void {
+  if ('commitDeps' in node && typeof (node as { commitDeps: unknown }).commitDeps === 'function') {
+    (node as { commitDeps: () => void }).commitDeps();
+    return;
+  }
   try {
     depBufferTruncateFrom(node, node._trackCount);
   } catch (error) {

@@ -113,7 +113,7 @@ export function renderItems<T>(
   diff: PreparedDiff<T>,
   options: ListOptions<T>,
   isInitial: boolean
-): string[] | null {
+): Node[] | null {
   const { toRender } = diff;
   const renderCount = toRender.length;
   if (renderCount === 0) return null;
@@ -139,7 +139,7 @@ export function renderItems<T>(
       allNodes.length === renderCount &&
       allNodes.every((node) => node.nodeType === 1)
     ) {
-      return sanitized;
+      return allNodes;
     }
   }
 
@@ -187,20 +187,17 @@ export function placeItems<T>(
   diff: PreparedDiff<T>,
   container: Element,
   options: ListOptions<T>,
-  htmlFragments: string[] | null
+  coldStartNodes: Node[] | null
 ): void {
   const { slots } = diff;
   const count = slots.length;
 
-  if (htmlFragments) {
+  if (coldStartNodes) {
     // Fragments are pre-sanitized upstream (sanitizeHtml + injectKeyToHtml in
-    // renderItems); parse inertly instead of assigning innerHTML.
-    const parsedNodes = $.parseHTML(htmlFragments.join(''));
+    // renderItems); coldStartNodes were already parsed in renderItems without a second $.parseHTML pass.
     const parsedFragment = document.createDocumentFragment();
-    if (parsedNodes) {
-      for (const node of parsedNodes) {
-        if (node) parsedFragment.appendChild(node);
-      }
+    for (const node of coldStartNodes) {
+      if (node) parsedFragment.appendChild(node);
     }
     container.replaceChildren(parsedFragment);
     let element = container.firstElementChild;

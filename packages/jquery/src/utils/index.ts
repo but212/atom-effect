@@ -50,35 +50,6 @@ export function getSelector(element: Element): string {
 }
 
 /**
- * Logic: Nested Serialization
- * Recursively flattens an object into a FormData instance using bracket notation
- * (e.g., 'user[profile][name]') for framework compatibility.
- *
- * When to use:
- * - Synchronizing complex reactive state objects with standard HTML form submissions.
- *
- * @internal
- */
-export function flattenToFormData(formData: FormData, prefix: string, sourceObject: unknown): void {
-  if (
-    typeof sourceObject === 'object' &&
-    sourceObject !== null &&
-    !(sourceObject instanceof File) &&
-    !(sourceObject instanceof Blob)
-  ) {
-    for (const [entryKey, entryValue] of Object.entries(sourceObject)) {
-      const key = prefix ? `${prefix}[${entryKey}]` : entryKey;
-      flattenToFormData(formData, key, entryValue);
-    }
-  } else {
-    formData.append(
-      prefix,
-      sourceObject instanceof Blob ? sourceObject : String(sourceObject ?? '')
-    );
-  }
-}
-
-/**
  * Logic: Path Normalization
  * Normalizes an HTML field name (e.g., 'user[profile][name]') into a
  * dot-separated path (e.g., 'user.profile.name') compatible with lens-based

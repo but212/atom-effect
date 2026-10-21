@@ -8,8 +8,8 @@
 
 import {
   BRAND,
+  BrandFlags,
   getPathValue,
-  mergeLenses,
   type Paths,
   type PathValue,
   setDeepValue,
@@ -83,7 +83,7 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
 
 /**
  * Logic: Field Ownership
- * Resolves which source atom owns a field path, mirroring the read precedence of a merged lens
+ * Resolves which source atom owns a field path, mirroring the read precedence of a merged view
  * (later sources win) while keeping writes partitioned to a single source. When no source defines
  * the path yet, the first source takes ownership.
  *
@@ -92,8 +92,7 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
  *
  * @internal
  */
-function resolveOwner(sources: WritableAtom<unknown>[], dotPath: string): WritableAtom<object> {
-  const parts = dotPath.split('.');
+function resolveOwner(sources: WritableAtom<unknown>[], parts: string[]): WritableAtom<object> {
   for (let i = sources.length - 1; i >= 0; i--) {
     const source = sources[i];
     if (source && getPathValue(source.peek(), parts) !== undefined) {
@@ -108,55 +107,107 @@ function resolveOwner(sources: WritableAtom<unknown>[], dotPath: string): Writab
  *
  * Design Intent:
  * Backs one form field when {@link bindForm} is given several source atoms. Reads resolve through
- * the merged view, so a read depends on *every* source and therefore stays correct when ownership
- * moves after mount. Writes resolve the owning source at dispatch time and mutate only that source,
- * so a field never corrupts a sibling source.
- *
- * Constraint:
- * The read path must never be narrowed to a single source: doing so re-attaches the field to a
- * stale owner as soon as a later source defines the path.
+ * direct path evaluation across sources, registering a dependency on every source without shallow-merging
+ * parent objects. Writes resolve the owning source at dispatch time and mutate only that source,
+ * preserving sibling keys in nested objects across sources.
  *
  * @internal
  */
-export class MultiSourceField extends DelegatingAtom {
+export class MultiSourceField implements WritableAtom<unknown> {
   readonly #sources: WritableAtom<unknown>[];
   readonly #parts: string[];
 
   constructor(sources: WritableAtom<unknown>[], dotPath: string) {
-    super(mergeLenses(...(sources as WritableAtom<object>[])) as WritableAtom<object>);
     this.#sources = sources;
     this.#parts = dotPath.split('.');
   }
 
   get value(): unknown {
-    // Tracking happens on the merged node, so every source is a dependency.
-    return getPathValue(this.node.value, this.#parts);
+    let resolved: unknown;
+    for (let i = 0; i < this.#sources.length; i++) {
+      const source = this.#sources[i];
+      if (!source) continue;
+      const val = getPathValue(source.value, this.#parts);
+      if (val !== undefined || i === 0) {
+        resolved = val;
+      }
+    }
+    return resolved;
   }
 
   set value(targetValue: unknown) {
-    const owner = resolveOwner(this.#sources, this.#parts.join('.'));
+    const owner = resolveOwner(this.#sources, this.#parts);
     const current = owner.peek();
     const next = setDeepValue(current, this.#parts as never, 0, targetValue);
     if (next !== current) owner.value = next;
   }
 
   peek(): unknown {
-    return getPathValue(this.node.peek(), this.#parts);
+    for (let i = this.#sources.length - 1; i >= 0; i--) {
+      const source = this.#sources[i];
+      if (source) {
+        const val = getPathValue(source.peek(), this.#parts);
+        if (val !== undefined) return val;
+      }
+    }
+    return getPathValue(this.#sources[0]?.peek(), this.#parts);
   }
 
-  /**
-   * The merged node notifies on any source change, so subscriber notification is filtered to the
-   * cases where this field's own value actually changed.
-   */
   subscribe(listener: (newValue?: unknown, oldValue?: unknown) => void): () => void {
     let previous = this.peek();
-    return this.node.subscribe((newValue?: unknown) => {
-      const current = getPathValue(newValue, this.#parts);
-      if (shallowEqual(current, previous)) return;
-      const old = previous;
-      previous = current;
-      listener(current, old);
-    });
+    const unsubs = this.#sources.map((source) =>
+      source.subscribe(() => {
+        const current = this.peek();
+        if (!shallowEqual(current, previous)) {
+          const old = previous;
+          previous = current;
+          listener(current, old);
+        }
+      })
+    );
+    return () => {
+      for (let i = 0; i < unsubs.length; i++) unsubs[i]?.();
+    };
+  }
+
+  subscriberCount(): number {
+    let total = 0;
+    for (let i = 0; i < this.#sources.length; i++) {
+      total += this.#sources[i]?.subscriberCount() ?? 0;
+    }
+    return total;
+  }
+
+  dispose(): void {}
+
+  get id(): number {
+    return this.#sources[0]?.id ?? 0;
+  }
+  get version(): number {
+    let max = 0;
+    for (let i = 0; i < this.#sources.length; i++) {
+      const v = this.#sources[i]?.version ?? 0;
+      if (v > max) max = v;
+    }
+    return max;
+  }
+  get flags(): number {
+    return this.#sources[0]?.flags ?? 0;
+  }
+  get _lastSeenEpoch(): number {
+    return this.#sources[0]?._lastSeenEpoch ?? 0;
+  }
+  get isComputed(): boolean {
+    return false;
+  }
+  get isRejected(): boolean {
+    return false;
+  }
+  get hasError(): boolean {
+    return false;
+  }
+  get [BRAND](): number {
+    return (BrandFlags.Atom | BrandFlags.Writable) as number;
   }
 }
 

@@ -20,17 +20,12 @@ import type { DependencyLink, ReactiveDependencyTracker } from '@/types';
 
 function createDepBuffer(): ReactiveDependencyTracker {
   return {
+    id: 1,
+    flags: 0,
     _depSlots: new SlotBuffer<DependencyLink>(),
     _depFlags: BUFFER_FLAGS.NONE,
-    flags: 0,
-    version: 0,
-    _lastSeenEpoch: 0,
     _trackCount: 0,
     _trackEpoch: 0,
-    _error: null,
-    isRejected: false,
-    id: 1,
-    _subscriberSlots: null,
   };
 }
 

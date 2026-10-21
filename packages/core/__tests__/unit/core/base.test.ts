@@ -1,8 +1,6 @@
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
-import { STATE_FLAGS } from '@/constants';
 import {
-  BaseNode,
   nodeCommitDeps,
   nodeHasSubscription,
   nodeNotifySubscribers,
@@ -20,33 +18,6 @@ import type {
 } from '@/types';
 
 describe('BaseEngine (base.ts)', () => {
-  describe('BaseNode Class', () => {
-    class TestNode extends BaseNode<number> {}
-
-    describe('Personality Traits', () => {
-      it('should return default values for core reactive characteristics', () => {
-        const node = new TestNode();
-        expect(node.isComputed).toBe(false);
-        expect(node.isRejected).toBe(false);
-        expect(node.hasError).toBe(false);
-      });
-    });
-
-    describe('Subscription Lifecycle', () => {
-      it('should not allocate subscriber slots or register target when subscribing to a disposed node', () => {
-        const node = new TestNode();
-        node.flags |= STATE_FLAGS.DISPOSED;
-
-        const unsubscribeCallback = node.subscribe(() => {});
-
-        expect(node._subscriberSlots).toBeNull();
-        expect(node.subscriberCount()).toBe(0);
-
-        unsubscribeCallback();
-      });
-    });
-  });
-
   describe('Tracking Context Primitives', () => {
     describe('untracked()', () => {
       it('suppresses dependency collection while allowing value access', async () => {

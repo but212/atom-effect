@@ -16,7 +16,7 @@ The spec docs here are the single source of truth for normative content; package
 | Document | Scope | Covers |
 | :--- | :--- | :--- |
 | [core.md](./core.md) | `@but212/atom-effect` | Reactive semantics, node lifecycle, scheduling, async boundary, error handling, composition |
-| [jquery.md](./jquery.md) | `@but212/atom-effect-jquery` | Binding contracts, DOM lifecycle invariants, security/sanitization policy, components, routing |
+| [jquery.md](./jquery.md) | `@but212/atom-effect-jquery` | Binding contracts, DOM lifecycle invariants, security/sanitization policy, components |
 | [utils.md](./utils.md) | `@but212/atom-effect-utils` | `Result`, `SlotBuffer`, type guards, type-level utilities |
 
 ## Change policy

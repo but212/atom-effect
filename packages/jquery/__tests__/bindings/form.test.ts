@@ -270,6 +270,32 @@ describe('Form Binding (atomForm)', () => {
       expect(override.value).toEqual({});
     });
 
+    it('should preserve nested sibling fields across sources without shallow-merge clobbering', async () => {
+      const source1 = $.atom({ user: { name: 'Alice' } });
+      const source2 = $.atom({ user: { role: 'admin' } });
+
+      const $form = appendToBody(`
+        <form>
+          <input name="user.name">
+          <input name="user.role">
+        </form>
+      `);
+
+      $form.atomForm([source1, source2]);
+      await $.nextTick();
+
+      expect($form.find('[name="user.name"]').val()).toBe('Alice');
+      expect($form.find('[name="user.role"]').val()).toBe('admin');
+
+      $form.find('[name="user.name"]').val('Bob').trigger('input');
+      await $.nextTick();
+
+      expect(source1.value).toEqual({ user: { name: 'Bob' } });
+      expect(source2.value).toEqual({ user: { role: 'admin' } });
+      expect($form.find('[name="user.name"]').val()).toBe('Bob');
+      expect($form.find('[name="user.role"]').val()).toBe('admin');
+    });
+
     it('should reject an empty source array with a named error', async () => {
       const withControl = appendToBody('<form><input name="username"></form>');
       const withoutControl = appendToBody('<form></form>');

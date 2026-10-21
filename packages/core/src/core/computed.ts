@@ -12,7 +12,7 @@
  * to ensure high-performance propagation through the dependency graph.
  */
 
-import { SlotBuffer } from '@but212/atom-effect-utils';
+import type { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   BRAND,
@@ -22,18 +22,13 @@ import {
   EMPTY_ERROR_ARRAY,
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
-  KIND,
-  SMI_MAX,
   STATE_MASKS,
 } from '@/constants';
 import {
-  nodeCommitDeps,
   nodeGetSubscriberCount,
   nodeHandleError,
   nodeNotifySubscribers,
-  nodeStartTracking,
   nodeSubscribe,
-  nodeTrackDependency,
   runInTrackingContext,
   trackingContext,
   untracked,
@@ -43,31 +38,17 @@ import type {
   ComputedAtom,
   ComputedOptions,
   Dependency,
-  DependencyId,
-  DependencyLink,
   MergedDependencyValue,
   ReactiveDependencyTracker,
   ReactiveNode,
   Subscriber,
   SubscriberTarget,
 } from '@/types';
-import {
-  ComputedError,
-  debug,
-  generateId,
-  mergeAtomValues,
-  NO_DEFAULT_VALUE,
-  nextSmi,
-} from '@/utils';
+import { ComputedError, debug, mergeAtomValues, NO_DEFAULT_VALUE, nextSmi } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import {
-  BUFFER_FLAGS,
-  disposeAll,
-  isBufferDirty,
-  isBufferShallowDirty,
-  refreshDepFlags,
-} from './buffers';
+import { BUFFER_FLAGS, isBufferDirty, isBufferShallowDirty } from './buffers';
 import { collectErrorsRecursive } from './computed-errors';
+import { ReactiveTracker } from './tracker';
 
 /**
  * Logic: Re-computation Heuristics
@@ -96,7 +77,8 @@ export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracke
  * @internal
  */
 class ComputedAtomImpl<T>
-  implements ComputedAtom<T>, Subscriber, ReactiveNode<T>, ReactiveDependencyTracker
+  extends ReactiveTracker
+  implements ComputedAtom<T>, Subscriber, ReactiveNode<T>
 {
   // Logic: Engine-exposed state (Public fields for monomorphic performance)
   public flags: number =
@@ -104,15 +86,9 @@ class ComputedAtomImpl<T>
   public version: number = 0;
   public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   public _nextEpoch: number | undefined = undefined;
-  public _trackEpoch: number = 0;
-  public _trackCount: number = 0;
   public _error: Error | null = null;
-  public _kind: typeof KIND.Obj = KIND.Obj;
-  public readonly id: DependencyId = generateId() & SMI_MAX;
 
   public _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
-  public _depSlots: SlotBuffer<DependencyLink>;
-  public _depFlags: number = BUFFER_FLAGS.NONE;
 
   /** @internal */
   public readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
@@ -120,7 +96,6 @@ class ComputedAtomImpl<T>
   // Logic: Strictly encapsulated state
   #activeSessionId = 0;
   #sessionCounter = 0;
-  #circularErrorForResolution: Error | null = null;
 
   #value: T;
   #isEqual: (a: T, b: T) => boolean;
@@ -129,7 +104,7 @@ class ComputedAtomImpl<T>
   #onErrorCallback: ((error: Error) => void) | null;
 
   constructor(computation: () => T | Promise<T>, options: ComputedOptions<T> = {}) {
-    this._depSlots = new SlotBuffer<DependencyLink>();
+    super();
 
     this.#value = undefined as T;
 
@@ -198,14 +173,7 @@ class ComputedAtomImpl<T>
     }
 
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
-      const error = new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
-      if (
-        this.#defaultValue !== NO_DEFAULT_VALUE &&
-        (flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0
-      ) {
-        this.#circularErrorForResolution = error;
-      }
-      return this.#getFallbackOrError(error);
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
     }
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
@@ -352,7 +320,7 @@ class ComputedAtomImpl<T>
     const flags = this.flags;
     if ((flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) return;
 
-    disposeAll(this);
+    this.disposeDeps();
 
     this._subscriberSlots?.clear();
     this.#releaseComputationState();
@@ -372,7 +340,7 @@ class ComputedAtomImpl<T>
    */
   addDependency(dependency: Dependency): void {
     if ((this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) return;
-    nodeTrackDependency(this, dependency, this);
+    this.trackDependency(dependency, this);
   }
 
   /**
@@ -386,11 +354,9 @@ class ComputedAtomImpl<T>
 
     this.flags =
       (this.flags & ~COMPUTED_STATE_FLAGS.FORCE_COMPUTE) | COMPUTED_STATE_FLAGS.RECOMPUTING;
-    this.#circularErrorForResolution = null;
 
     try {
-      nodeStartTracking(this);
-      refreshDepFlags(this);
+      this.startTracking();
 
       let computedValue: T | Promise<T>;
       try {
@@ -407,7 +373,7 @@ class ComputedAtomImpl<T>
         return;
       }
 
-      nodeCommitDeps(this);
+      this.commitDeps();
 
       if (isPromise(computedValue)) {
         this.#handleAsyncComputation(computedValue);
@@ -438,7 +404,7 @@ class ComputedAtomImpl<T>
 
         // Logic: Stale Result Suppression
         // If the node became dirty during the wait, defer resolution.
-        if (isBufferDirty(this)) return this.#markDirty();
+        if (this.hasDirtyDeps()) return this.#markDirty();
 
         this.#finalizeResolution(result);
         nodeNotifySubscribers(this, result, undefined);
@@ -451,7 +417,6 @@ class ComputedAtomImpl<T>
   }
 
   #handleError(error: unknown, message: string, shouldThrow = false): void {
-    this.#circularErrorForResolution = null;
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.REJECTED;
@@ -470,14 +435,13 @@ class ComputedAtomImpl<T>
     if (
       asyncState !== COMPUTED_STATE_FLAGS.RESOLVED ||
       !this.#isEqual(this.#value, value) ||
-      this._error !== this.#circularErrorForResolution
+      this._error !== null
     ) {
       this.version = nextSmi(this.version);
     }
 
     this.#value = value;
-    this._error = this.#circularErrorForResolution;
-    this.#circularErrorForResolution = null;
+    this._error = null;
     this.flags =
       (flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.RESOLVED;

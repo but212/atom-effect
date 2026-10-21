@@ -59,6 +59,13 @@ describe('Atom', () => {
         expect(notificationLog).toEqual([[3, 0]]);
       });
 
+      it('does not carry unused consumer tracking or error fields', () => {
+        const testAtom = atom(0);
+        expect('_trackEpoch' in testAtom).toBe(false);
+        expect('_trackCount' in testAtom).toBe(false);
+        expect('_error' in testAtom).toBe(false);
+      });
+
       it('ignores structurally identical updates (Object.is)', async () => {
         const spy = vi.fn();
 

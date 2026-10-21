@@ -83,63 +83,72 @@ describe('SlotBuffer', () => {
       expect(slotBuffer.size).toBe(2);
     });
 
-    it('push() should reuse vacated fast-lane holes correctly', () => {
+    it('push() should append contiguously after unlocked remove compacts immediately', () => {
       const slotBuffer = new SlotBuffer<number>();
       for (const num of [0, 1, 2]) {
         slotBuffer.push(num);
       }
-      slotBuffer.remove(1); // Create a hole in the "fast lane" [0, null, 2]
+      slotBuffer.remove(1); // Unlocked remove compacts immediately [0, 2]
       expect(slotBuffer.size).toBe(2);
-      expect(slotBuffer.length).toBe(3);
-      expect(slotBuffer.at(1)).toBeNull();
+      expect(slotBuffer.length).toBe(2);
+      expect(slotBuffer.at(1)).toBe(2);
 
-      slotBuffer.push(99); // Reuse the hole [0, 99, 2]
-      expect(slotBuffer.at(1)).toBe(99);
+      slotBuffer.push(99); // Appends to tail [0, 2, 99]
+      expect(slotBuffer.at(2)).toBe(99);
       expect(slotBuffer.size).toBe(3);
       expect(slotBuffer.length).toBe(3);
     });
 
-    it('push() should reuse free indices in LIFO order after removals', () => {
+    it('push() should append to contiguous tail after removals', () => {
       const slotBuffer = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) {
         slotBuffer.push(i);
       }
       slotBuffer.remove(8);
       slotBuffer.remove(9);
+      expect(slotBuffer.length).toBe(8);
+      expect(slotBuffer.size).toBe(8);
 
       const firstIndex = slotBuffer.push(99);
       const secondIndex = slotBuffer.push(100);
-      expect(firstIndex).toBe(9);
-      expect(secondIndex).toBe(8);
+      expect(firstIndex).toBe(8);
+      expect(secondIndex).toBe(9);
+      expect(slotBuffer.at(8)).toBe(99);
+      expect(slotBuffer.at(9)).toBe(100);
     });
 
-    it('push() should not reuse holes when buffer is locked', () => {
+    it('push() should append while locked and compact on unlock', () => {
       const slotBuffer = new SlotBuffer<number>();
       slotBuffer.push(10);
       slotBuffer.push(20);
-      slotBuffer.remove(10); // Index 0 is a hole
 
       slotBuffer.lock();
-      const pushedIndex = slotBuffer.push(30); // Pushed while locked
-      expect(pushedIndex).toBe(2); // Should append to tail (index 2) instead of reusing index 0
+      slotBuffer.remove(10); // Locked removal creates hole at index 0
       expect(slotBuffer.at(0)).toBeNull();
+
+      const pushedIndex = slotBuffer.push(30); // Pushed while locked
+      expect(pushedIndex).toBe(2); // Appends to tail (index 2)
       expect(slotBuffer.at(2)).toBe(30);
 
-      slotBuffer.unlock();
-      const secondIndex = slotBuffer.push(40); // Pushed after unlock
-      expect(secondIndex).toBe(0); // Should now reuse index 0
-      expect(slotBuffer.at(0)).toBe(40);
+      slotBuffer.unlock(); // Triggers deferred compact()
+      expect(slotBuffer.length).toBe(2);
+      expect(slotBuffer.size).toBe(2);
+      expect(slotBuffer.at(0)).toBe(20);
+      expect(slotBuffer.at(1)).toBe(30);
     });
   });
 
   describe('Removal (remove)', () => {
-    it('remove() should remove items by identity', () => {
+    it('remove() should remove items by identity and compact when unlocked', () => {
       const slotBuffer = new SlotBuffer<number>();
       slotBuffer.push(10);
       slotBuffer.push(20);
 
       const isSuccess = slotBuffer.remove(20);
       expect(isSuccess).toBe(true);
+      expect(slotBuffer.length).toBe(1);
+      expect(slotBuffer.size).toBe(1);
+      expect(slotBuffer.at(0)).toBe(10);
       expect(slotBuffer.at(1)).toBeNull();
     });
 
@@ -205,15 +214,26 @@ describe('SlotBuffer', () => {
       expect(slotBuffer.at(10)).toBeNull();
     });
 
-    it('setAt() should create and reuse gaps via setAt(index, null)', () => {
+    it('setAt() should create manual gap without compacting until compact() is called', () => {
       const slotBuffer = new SlotBuffer<number>();
       slotBuffer.push(10);
       slotBuffer.push(20);
 
       slotBuffer.setAt(0, null);
+      expect(slotBuffer.at(0)).toBeNull();
+      expect(slotBuffer.size).toBe(1);
+      expect(slotBuffer.length).toBe(2);
 
       const index = slotBuffer.push(30);
-      expect(index).toBe(0);
+      expect(index).toBe(2);
+      expect(slotBuffer.length).toBe(3);
+      expect(slotBuffer.size).toBe(2);
+
+      slotBuffer.compact();
+      expect(slotBuffer.length).toBe(2);
+      expect(slotBuffer.size).toBe(2);
+      expect(slotBuffer.at(0)).toBe(20);
+      expect(slotBuffer.at(1)).toBe(30);
     });
 
     it('setAt() should return early if value is unchanged', () => {
@@ -254,7 +274,7 @@ describe('SlotBuffer', () => {
       const slotBuffer = new SlotBuffer<number>();
       for (let i = 0; i < 10; i++) slotBuffer.push(i);
 
-      slotBuffer.remove(7); // index 7 (in overflow) becomes null
+      slotBuffer.setAt(7, null); // index 7 (in overflow) becomes null
       expect(slotBuffer.size).toBe(9);
       expect(slotBuffer.length).toBe(10);
 
@@ -296,8 +316,8 @@ describe('SlotBuffer', () => {
       const slotBuffer = new SlotBuffer<number>();
       for (let i = 0; i < 5; i++) slotBuffer.push(i); // [0, 1, 2, 3, 4]
 
-      slotBuffer.remove(1); // [0, null, 2, 3, 4]
-      slotBuffer.remove(4); // [0, null, 2, 3, null]
+      slotBuffer.setAt(1, null); // [0, null, 2, 3, 4]
+      slotBuffer.setAt(4, null); // [0, null, 2, 3] (tail trims to 4)
 
       expect(slotBuffer.size).toBe(3);
       expect(slotBuffer.length).toBe(4); // [0, null, 2, 3]
@@ -527,10 +547,11 @@ describe('SlotBuffer', () => {
     it('should defer compaction when locked', () => {
       const slotBuffer = new SlotBuffer<number>();
       for (let i = 0; i < 5; i++) slotBuffer.push(i);
-      slotBuffer.remove(1); // [0, null, 2, 3, 4]
 
       slotBuffer.lock();
       expect(slotBuffer.isLocked).toBe(true);
+
+      slotBuffer.remove(1); // [0, null, 2, 3, 4] while locked
 
       slotBuffer.compact(); // Deferred
       expect(slotBuffer.at(1)).toBeNull();
@@ -596,24 +617,27 @@ describe('SlotBuffer', () => {
       expect(slotBuffer.size).toBe(previousSize);
       expect(slotBuffer.length).toBe(previousLength);
 
-      // Push another element to verify free indices is not corrupted
+      // Push another element to verify contiguous append
       slotBuffer.push('c'); // Should go to index 2
       expect(slotBuffer.at(2)).toBe('c');
     });
 
-    it('should not hand out a freed index again after setAt claims it', () => {
+    it('should maintain contiguous layout when unlocked remove compacts immediately', () => {
       const slotBuffer = new SlotBuffer<string>();
       slotBuffer.push('A');
       slotBuffer.push('B');
       slotBuffer.push('C');
       slotBuffer.remove('B');
 
-      slotBuffer.setAt(1, 'X');
-      slotBuffer.push('Y');
+      expect(slotBuffer.length).toBe(2);
+      expect(slotBuffer.size).toBe(2);
+      expect(slotBuffer.at(0)).toBe('A');
+      expect(slotBuffer.at(1)).toBe('C');
 
-      expect([0, 1, 2, 3].map((index) => slotBuffer.at(index))).toEqual(['A', 'X', 'C', 'Y']);
-      expect(slotBuffer.size).toBe(4);
-      expect(slotBuffer.length).toBe(4);
+      slotBuffer.push('Y');
+      expect([0, 1, 2].map((index) => slotBuffer.at(index))).toEqual(['A', 'C', 'Y']);
+      expect(slotBuffer.size).toBe(3);
+      expect(slotBuffer.length).toBe(3);
     });
   });
 });

@@ -31,7 +31,6 @@ High-performance ordered collection for V8 hidden-class stability, used by the r
 
 - **Fast lane**: `#fastSlot0`–`#fastSlot3` inline slots (indices 0–3) avoid array allocation.
 - **Overflow**: array for indices ≥ 4.
-- **Free list**: LIFO reuse of vacated indices.
 - **`length`** — physical capacity (including null gaps); **`size`** — logical non-null count; **`isLocked`** — true during iteration.
 
 | Member | Contract |
@@ -40,7 +39,7 @@ High-performance ordered collection for V8 hidden-class stability, used by the r
 | `has(item)` | Reference membership; false for `null`/`undefined`. |
 | `forEach(cb)` | Iterates non-null items in order; locks the buffer and defers `compact()`. It is not a snapshot. |
 | `some(pred)` | Early-exit predicate scan; locks during iteration and is not a snapshot. |
-| `push` / `compact` / `lock` / `unlock` | Structural ops; `push`/`remove` remain possible during callbacks, while `compact()` is deferred until the lock count returns to zero. |
+| `push` / `compact` / `lock` / `unlock` | Structural ops; unlocked `remove()` compacts immediately (`length === size`), while locked removals mask slots as `null` and defer compaction until the lock count returns to zero. |
 
 **Iteration safety invariant**: callbacks run while the buffer is locked, so compaction is deferred. Structural mutation is not prohibited and traversal is not snapshot-isolated; callback code must not rely on newly added or removed items being visited in the current pass.
 

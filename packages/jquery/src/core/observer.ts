@@ -23,7 +23,6 @@ export class RootObserver {
   readonly #removalCallbacks = new Set<(node: Node) => void>();
   readonly #additionCallbacks = new Set<NodeAddedCallback>();
   readonly #attributeCallbacks = new Set<AttributeCallback>();
-  readonly #structureCallbacks = new Set<() => void>();
 
   constructor(root: Node) {
     this.#root = root;
@@ -50,10 +49,6 @@ export class RootObserver {
     return this.#subscribe(this.#attributeCallbacks, { attributeName, callback });
   }
 
-  onStructureChanged(callback: () => void): () => void {
-    return this.#subscribe(this.#structureCallbacks, callback);
-  }
-
   #subscribe<T>(callbacks: Set<T>, callback: T): () => void {
     callbacks.add(callback);
     this.#updateObserver();
@@ -68,8 +63,7 @@ export class RootObserver {
     return (
       this.#removalCallbacks.size > 0 ||
       this.#additionCallbacks.size > 0 ||
-      this.#attributeCallbacks.size > 0 ||
-      this.#structureCallbacks.size > 0
+      this.#attributeCallbacks.size > 0
     );
   }
 
@@ -81,13 +75,6 @@ export class RootObserver {
 
     if (!this.#observer) {
       this.#observer = new MutationObserver((mutations) => {
-        if (
-          this.#structureCallbacks.size > 0 &&
-          mutations.some((mutation) => mutation.type === 'childList')
-        ) {
-          for (const callback of this.#structureCallbacks) callback();
-        }
-
         // 1. Process removed nodes
         if (this.#removalCallbacks.size > 0) {
           for (const mutation of mutations) {

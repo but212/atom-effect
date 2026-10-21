@@ -348,10 +348,10 @@ class ReactiveScheduler implements SchedulerState {
   }
 
   /** @internal - Tracks the number of jobs executed in the current cycle. */
-  incrementFlushExecutionCount(job?: SchedulerJob): Result<number, Error> {
-    if (!this.#isSessionActive) return Result.ok(0);
+  incrementFlushExecutionCount(job?: SchedulerJob): Result<void, Error> {
+    if (!this.#isSessionActive) return Result.ok(undefined);
     const count = ++this.#sessionExecutionCount;
-    if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return Result.ok(count);
+    if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return Result.ok(undefined);
 
     const error = new AggregateExecutionLimitError();
     if (job) this.#handleAggregateExecutionOverflow(job);

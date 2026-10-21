@@ -435,6 +435,7 @@ describe('Scheduler Engine', () => {
         for (let i = 0; i < 10000; i++) {
           const res = scheduler.incrementFlushExecutionCount();
           expect(res.ok).toBe(true);
+          expect(Object.is(res, Result.ok(undefined))).toBe(true);
         }
 
         // The 10001st call should exceed the limit and return an error

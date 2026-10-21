@@ -52,6 +52,15 @@ describe('Effect', () => {
 
         effectInstance.dispose();
       });
+
+      it('does not carry reactive node subscriber/version/error fields', () => {
+        const effectInstance = effect(() => {});
+        expect('version' in effectInstance).toBe(false);
+        expect('_lastSeenEpoch' in effectInstance).toBe(false);
+        expect('_error' in effectInstance).toBe(false);
+        expect('_subscriberSlots' in effectInstance).toBe(false);
+        effectInstance.dispose();
+      });
     });
 
     describe('reactivity & dependency tracking', () => {

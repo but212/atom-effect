@@ -4,7 +4,6 @@ import {
   SYSTEM_CORE,
   SYSTEM_LIST,
   SYSTEM_MOUNT,
-  SYSTEM_ROUTE,
   SYSTEM_SECURITY,
 } from '@/constants';
 
@@ -12,7 +11,6 @@ describe('Constants', () => {
   describe('ERROR_MESSAGES', () => {
     it('should interpolate dynamic arguments into the message', () => {
       const cases: [string, string][] = [
-        [SYSTEM_ROUTE.ERRORS.NOT_FOUND('home'), 'home'],
         [SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER('onclick'), 'onclick'],
         [SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL('href'), 'href'],
         [SYSTEM_SECURITY.ERRORS.BLOCKED_PROP('innerHTML'), 'innerHTML'],

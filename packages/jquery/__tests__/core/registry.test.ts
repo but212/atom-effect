@@ -104,6 +104,30 @@ describe('Binding Registry', () => {
       registry.markIgnored(element);
       expect(registry.isIgnored(element)).toBe(true);
     });
+
+    it('synchronously marks detached elements and enables immediate descendant cleanup', async () => {
+      const stateAtom = $.atom('initial');
+      const containerEl = document.createElement('div');
+      const child = document.createElement('span');
+      containerEl.appendChild(child);
+
+      $(child).atomText(stateAtom);
+      // Synchronous marker must be present immediately on detached element
+      expect(child.classList.contains('_aes-bound')).toBe(true);
+
+      // Synchronous descendant cleanup on the detached container in the same tick
+      registry.cleanupTree(containerEl);
+      expect(registry.hasBind(child)).toBe(false);
+      expect(child.classList.contains('_aes-bound')).toBe(false);
+
+      // Wait a microtask to ensure the deferred task did not re-add the class
+      await Promise.resolve();
+      expect(child.classList.contains('_aes-bound')).toBe(false);
+
+      stateAtom.value = 'updated';
+      await $.nextTick();
+      expect($(child).text()).not.toBe('updated');
+    });
   });
 
   describe('Auto-Cleanup System (MutationObserver)', () => {

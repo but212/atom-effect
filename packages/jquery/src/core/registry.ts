@@ -112,12 +112,16 @@ class BindingRegistry {
    * Safely adds a CSS marker to an element, deferring if it's currently being constructed.
    */
   #safeMark(element: Element, className: string): void {
-    if (element.isConnected) {
+    try {
       element.classList.add(className);
-    } else {
+    } catch {
       // Logic: Defer class modification to avoid NotSupportedError/DOMException
       // during Custom Element construction (attributes cannot be set in constructor).
-      queueMicrotask(() => element.classList.add(className));
+      queueMicrotask(() => {
+        if (this.hasBind(element) || this.getShadow(element)) {
+          element.classList.add(className);
+        }
+      });
     }
   }
 

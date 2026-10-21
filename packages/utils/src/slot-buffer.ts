@@ -19,9 +19,6 @@ export class SlotBuffer<T> {
   /** Overflow array for index >= 4 */
   #overflowBuffer: (T | null)[] | null = null;
 
-  /** LIFO queue of vacated slot indices for reuse */
-  #freeIndices: number[] = [];
-
   /**
    * Internal guard to prevent structural changes during iteration.
    * Logic: If > 0, compact() is deferred.
@@ -139,14 +136,14 @@ export class SlotBuffer<T> {
   }
 
   /**
-   * Adds an item to the first available hole or appends it.
+   * Appends an item to the buffer.
    * @returns The index where the item was stored.
    */
   push(item: T): number {
-    const storedIndex = this.#rawAdd(item);
-    if (storedIndex >= this.#physicalCapacity) this.#physicalCapacity = storedIndex + 1;
+    const nextSlotIndex = this.#physicalCapacity++;
+    this.#rawWrite(nextSlotIndex, item);
     this.#activeItemsCount++;
-    return storedIndex;
+    return nextSlotIndex;
   }
 
   /**
@@ -185,13 +182,24 @@ export class SlotBuffer<T> {
     if (previousItem === item) return;
 
     if (item === null) {
-      this.#removeAt(index);
+      this.#rawWrite(index, null);
+      if (previousItem !== null) {
+        this.#activeItemsCount--;
+      }
+      if (!this.isLocked && index === this.#physicalCapacity - 1) {
+        while (this.#physicalCapacity > 0 && this.at(this.#physicalCapacity - 1) === null) {
+          this.#physicalCapacity--;
+        }
+        if (this.#physicalCapacity <= FAST_CAPACITY) {
+          this.#overflowBuffer = null;
+        } else if (this.#overflowBuffer !== null) {
+          this.#overflowBuffer.length = this.#physicalCapacity - FAST_CAPACITY;
+        }
+      }
     } else {
       this.#rawWrite(index, item);
       if (previousItem === null) {
         this.#activeItemsCount++;
-        const freeSlot = this.#freeIndices.indexOf(index);
-        if (freeSlot !== -1) this.#freeIndices.splice(freeSlot, 1);
       }
       if (index >= this.#physicalCapacity) {
         this.#physicalCapacity = index + 1;
@@ -221,7 +229,6 @@ export class SlotBuffer<T> {
     }
 
     this.#physicalCapacity = index;
-    this.#freeIndices = this.#freeIndices.filter((i) => i < index);
   }
 
   /**
@@ -260,7 +267,6 @@ export class SlotBuffer<T> {
       if (writeIndex <= FAST_CAPACITY) this.#overflowBuffer = null;
       else ov.length = writeIndex - FAST_CAPACITY;
     }
-    this.#freeIndices.length = 0;
     this.#hasPendingCompact = false;
   }
 
@@ -283,7 +289,6 @@ export class SlotBuffer<T> {
     this.#physicalCapacity = 0;
     this.#activeItemsCount = 0;
     this.#overflowBuffer = null;
-    this.#freeIndices.length = 0;
     this.#hasPendingCompact = false;
   }
 
@@ -304,42 +309,15 @@ export class SlotBuffer<T> {
     }
   }
 
-  /** Logic: Finds a vacant slot using the free index stack or physical append. */
-  #rawAdd(item: T): number {
-    const reusableIndex = this.isLocked ? undefined : this.#freeIndices.pop();
-    if (reusableIndex !== undefined) {
-      this.#rawWrite(reusableIndex, item);
-      return reusableIndex;
-    }
-    const nextSlotIndex = this.#physicalCapacity;
-    this.#rawWrite(nextSlotIndex, item);
-    return nextSlotIndex;
-  }
-
   /** Helper method to remove item at specific index. */
   #removeAt(index: number): boolean {
     this.#rawWrite(index, null);
     this.#activeItemsCount--;
-    this.#shrinkPhysicalSizeFrom(index);
-    this.#freeIndices.push(index);
+    if (this.#lockCount > 0) {
+      this.#hasPendingCompact = true;
+    } else {
+      this.compact();
+    }
     return true;
-  }
-
-  /**
-   * Optimization: Trims trailing nulls to keep iterations efficient.
-   * Logic: Only triggers if the removed item was at the physical tail of the buffer.
-   */
-  #shrinkPhysicalSizeFrom(index: number): void {
-    if (this.isLocked) return;
-    if (index !== this.#physicalCapacity - 1) return;
-
-    while (this.#physicalCapacity > 0 && this.at(this.#physicalCapacity - 1) === null) {
-      this.#physicalCapacity--;
-    }
-    if (this.#physicalCapacity <= FAST_CAPACITY) {
-      this.#overflowBuffer = null;
-    } else if (this.#overflowBuffer !== null) {
-      this.#overflowBuffer.length = this.#physicalCapacity - FAST_CAPACITY;
-    }
   }
 }

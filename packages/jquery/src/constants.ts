@@ -12,20 +12,6 @@ export const SYSTEM_CORE = {
   },
 } as const;
 
-/** Routing configuration and error templates. @internal */
-export const SYSTEM_ROUTE = {
-  PREFIX: '[atom-route]',
-  DEFAULTS: {
-    mode: 'hash',
-    basePath: '',
-    autoBindLinks: false,
-    activeClass: 'active',
-  },
-  ERRORS: {
-    NOT_FOUND: (routeName: string) => `Route "${routeName}" not found`,
-  },
-} as const;
-
 /** Reactive DOM binding configuration and error templates. @internal */
 export const SYSTEM_BINDING = {
   PREFIX: '[atom-binding]',
