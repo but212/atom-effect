@@ -53,6 +53,39 @@ describe('$.atomList (Integration)', () => {
       expect($container.find('span').text()).toBe('c');
     });
 
+    it('should keep the empty placeholder when an empty list is replaced by a new empty array', async () => {
+      const itemsList = $.atom<string[]>([]);
+
+      $container.atomList(itemsList, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+        empty: '<p>Empty</p>',
+      });
+
+      await $.nextTick();
+      expect($container.find('p').length).toBe(1);
+
+      itemsList.value = [];
+      await $.nextTick();
+      expect($container.find('p').length).toBe(1);
+    });
+
+    it('should keep the empty placeholder on []->[] when onRemove is set', async () => {
+      const itemsList = $.atom<string[]>([]);
+
+      $container.atomList(itemsList, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+        empty: '<p>Empty</p>',
+        onRemove: () => {},
+      });
+
+      await $.nextTick();
+      itemsList.value = [];
+      await $.nextTick();
+      expect($container.find('p').length).toBe(1);
+    });
+
     it('should support items with multiple root elements and correct key mapping', async () => {
       const items = $.atom([{ id: 1 }, { id: 2 }]);
 

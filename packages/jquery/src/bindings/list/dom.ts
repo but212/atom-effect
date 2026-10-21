@@ -79,6 +79,8 @@ export function handleEmpty<T>(
     ctx.$emptyElement = null;
   }
   if (itemCount !== 0) return;
+  // Already empty: the placeholder is showing and there are no item nodes to clear.
+  if (ctx.$emptyElement) return;
 
   const { onRemove, snapshots } = ctx;
 
