@@ -32,6 +32,7 @@
 
 #### Fixed
 
+- **atomList**: `onRemove` is now called once per removed item. Previously the removal pass ran twice for items whose key left the list, so the hook fired twice.
 - **atomForm**: A field write in a multi-atom form now mutates only the source atom that owns the field path (the last source defining it, falling back to the first) instead of broadcasting the write to every source, which previously corrupted sibling state.
 - **atomForm**: Field ownership is resolved per operation, so a field bound to several sources follows the path if a source gains or drops it, instead of staying pinned to whichever source owned it at mount.
 - **atomForm**: An empty source array is now rejected with a named error at the binding boundary, instead of failing with an unrelated `TypeError` deep in field binding.

@@ -167,20 +167,6 @@ export function renderItems<T>(
 }
 
 /**
- * Logic: Removal Trigger
- * Executes the removal lifecycle for items missing in the new data set.
- */
-export function cleanupRemoved<T>(ctx: ListContext<T>): void {
-  const { snapshots, keyToIndex } = ctx;
-  for (let i = 0; i < snapshots.length; i++) {
-    const listSnapshot = snapshots[i];
-    if (listSnapshot?.node && !keyToIndex.has(listSnapshot.key)) {
-      removeNode(ctx, listSnapshot.key, listSnapshot.node);
-    }
-  }
-}
-
-/**
  * Logic: Dual-path Synchronization
  * Positions items in the DOM and executes lifecycle callbacks.
  */

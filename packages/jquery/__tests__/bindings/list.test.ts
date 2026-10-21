@@ -346,6 +346,23 @@ describe('$.atomList (Integration)', () => {
       expect($container.find('.item-1').length).toBe(1);
     });
 
+    it('should call onRemove once per removed item', async () => {
+      const list = $.atom([{ id: 1 }, { id: 2 }, { id: 3 }]);
+      const onRemove = vi.fn();
+      $container.atomList(list, {
+        key: 'id',
+        render: (item) => `<span class="item-${item.id}"></span>`,
+        onRemove,
+      });
+      await $.nextTick();
+
+      list.value = [{ id: 1 }, { id: 3 }];
+      await $.nextTick();
+
+      expect(onRemove).toHaveBeenCalledTimes(1);
+      expect($container.find('.item-2').length).toBe(0);
+    });
+
     it('should clean up child node bindings when list becomes empty without onRemove hook', async () => {
       const list = $.atom(['item1']);
 

@@ -23,7 +23,7 @@ import {
   resolveEventTarget,
 } from './context';
 import { buildIndices } from './diff';
-import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
+import { handleEmpty, placeItems, renderItems } from './dom';
 import type { EventBinding, PlaceCallbacks } from './types';
 
 /**
@@ -135,7 +135,6 @@ export function applyListBinding<T>(
           removeNode(ctx, snapshot.key, snapshot.node);
         }
       }
-      cleanupRemoved(ctx);
       placeItems(ctx, diff, element, callbacks, fragment);
 
       // Snapshot current state for the next O(N) diff cycle.
