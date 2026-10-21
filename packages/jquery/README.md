@@ -64,7 +64,7 @@ $('#warning-msg').atomShow(isWarningVisible);
 ## Documentation
 
 - [**Specification**](../../docs/spec/jquery.md): Authoritative contracts for bindings (`atomBind`, `atomList`, `atomForm`, etc.), lifecycle invariants, and the HTML sanitization policy.
-- [**Common Patterns**](./docs/PATTERNS.md): Standard architectural patterns for UI updates, modals, and routing.
+- [**Common Patterns**](./docs/PATTERNS.md): Standard architectural patterns for UI updates, modals, and forms.
 
 ## License
 

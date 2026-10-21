@@ -23,8 +23,8 @@ import {
   resolveEventTarget,
 } from './context';
 import { buildIndices } from './diff';
-import { cleanupRemoved, handleEmpty, placeItems, renderItems } from './dom';
-import type { EventBinding, PlaceCallbacks } from './types';
+import { handleEmpty, placeItems, renderItems } from './dom';
+import type { EventBinding } from './types';
 
 /**
  * Role: Registry for active list instances.
@@ -36,6 +36,14 @@ const instances = new WeakMap<
   Element,
   { reactiveEffect: EffectObject; ctx: ListContext<unknown> }
 >();
+
+function disposeInstance(instance: {
+  reactiveEffect: EffectObject;
+  ctx: ListContext<unknown>;
+}): void {
+  instance.reactiveEffect.dispose();
+  disposeContext(instance.ctx);
+}
 
 /**
  * Role: List Reconciliation Engine
@@ -52,21 +60,19 @@ export function applyListBinding<T>(
   source: ReadonlyAtom<T[]>,
   options: ListOptions<T>
 ): { reactiveEffect: EffectObject; ctx: ListContext<T> } {
-  const { key, update, isEqual, empty, events, onRemove, bind, onAdd } = options;
+  const { key, update, isEqual, empty, events, onRemove } = options;
   const containerElement = $(element);
 
   // 1. Lifecycle: Enforce single-binding per element by disposing old instances.
   const previousInstance = instances.get(element);
   if (previousInstance) {
-    previousInstance.reactiveEffect.dispose();
-    disposeContext(previousInstance.ctx);
+    disposeInstance(previousInstance);
   } else {
     // Register once per element lifecycle to avoid zombie cleanup accumulation
     registry.onCleanup(element, () => {
       const active = instances.get(element);
       if (active) {
-        active.reactiveEffect.dispose();
-        disposeContext(active.ctx);
+        disposeInstance(active);
         instances.delete(element);
       }
     });
@@ -82,7 +88,6 @@ export function applyListBinding<T>(
             ? rawValue
             : String(rawValue);
         };
-  const callbacks: PlaceCallbacks<T> = { bind, update, onAdd, onRemove, events };
   const eventBindings = normalizeEvents(events);
 
   const ctx = createListContext<T>(containerElement, onRemove);
@@ -135,8 +140,7 @@ export function applyListBinding<T>(
           removeNode(ctx, snapshot.key, snapshot.node);
         }
       }
-      cleanupRemoved(ctx);
-      placeItems(ctx, diff, element, callbacks, fragment);
+      placeItems(ctx, diff, element, options, fragment);
 
       // Snapshot current state for the next O(N) diff cycle.
       ctx.snapshots = [];

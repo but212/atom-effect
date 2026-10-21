@@ -16,22 +16,13 @@ import '@/core/namespace';
 import '@/bindings/chainable';
 import '@/bindings/list';
 import '@/bindings/mount';
-import '@/features/route';
-import '@/features/fetch';
-import '@/features/web-component';
 import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 import type { AEJConfig } from '@/types';
 
 // Ships the `JQuery`/`JQueryStatic` augmentations in the emitted declarations.
 export type {} from './global';
 
-import {
-  autoCleanup as autoCleanupSafetyNet,
-  disableAutoCleanup,
-  enableAutoCleanup,
-  registry,
-  setAutoCleanupAllowed,
-} from './core/registry';
+import { autoCleanup as autoCleanupSafetyNet, disableAutoCleanup, registry } from './core/registry';
 
 /**
  * Role: Library Orchestrator
@@ -72,15 +63,10 @@ export function initAEJ(config: AEJConfig = {}): void {
   // Security: The MutationObserver safety net is the primary defense against memory
   // leaks in long-running Single Page Applications (SPAs).
   disableAutoCleanup();
-  if (autoCleanup === false) {
-    setAutoCleanupAllowed(false);
-  } else {
-    setAutoCleanupAllowed(true);
+  autoCleanupSafetyNet.allow(autoCleanup !== false);
+  if (autoCleanup !== false) {
     const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
-    if (root) {
-      enableAutoCleanup(root);
-      autoCleanupSafetyNet.markScheduled(true);
-    }
+    if (root) autoCleanupSafetyNet.start(root);
   }
 }
 
@@ -131,7 +117,6 @@ export type {
 } from '@but212/atom-effect';
 
 export type {
-  AtomComponentController,
   BindingOptions,
   ComponentFn,
   CssBindings,
@@ -139,16 +124,9 @@ export type {
   EffectCleanup,
   EffectResult,
   EqualFn,
-  FetchError,
-  FetchOptions,
-  JQueryScopedSelector,
   ListOptions,
   PrimitiveValue,
   ReactiveValue,
-  RouteConfig,
-  RouteDefinition,
-  RouteLifecycle,
-  Router,
   ValOptions,
 } from '@/types';
 

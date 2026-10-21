@@ -12,7 +12,7 @@
  * to ensure high-performance propagation through the dependency graph.
  */
 
-import { Result, SlotBuffer } from '@but212/atom-effect-utils';
+import { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   AsyncState,
   BRAND,
@@ -27,12 +27,9 @@ import {
   STATE_MASKS,
 } from '@/constants';
 import {
-  nextVersion,
   nodeCommitDeps,
   nodeGetSubscriberCount,
   nodeHandleError,
-  nodeIsDirty,
-  nodeIsShallowDirty,
   nodeNotifySubscribers,
   nodeStartTracking,
   nodeSubscribe,
@@ -54,9 +51,22 @@ import type {
   Subscriber,
   SubscriberTarget,
 } from '@/types';
-import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
+import {
+  ComputedError,
+  debug,
+  generateId,
+  mergeAtomValues,
+  NO_DEFAULT_VALUE,
+  nextSmi,
+} from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
+import {
+  BUFFER_FLAGS,
+  disposeAll,
+  isBufferDirty,
+  isBufferShallowDirty,
+  refreshDepFlags,
+} from './buffers';
 import { collectErrorsRecursive } from './computed-errors';
 
 /**
@@ -171,12 +181,12 @@ class ComputedAtomImpl<T>
 
     if (this.#isStable()) return this.#value;
 
-    return Result.unwrap(this.#checkValueState());
+    return this.#checkValueState();
   }
 
-  #checkValueState(): Result<T, Error> {
+  #checkValueState(): T {
     if (this.isDisposed) {
-      return Result.err(new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED));
+      throw new ComputedError(ERROR_MESSAGES.COMPUTED_DISPOSED);
     }
 
     const flags = this.flags;
@@ -211,7 +221,7 @@ class ComputedAtomImpl<T>
 
     const nextFlags = this.flags;
     const asyncState = nextFlags & STATE_MASKS.ASYNC_MASK;
-    if (asyncState === COMPUTED_STATE_FLAGS.RESOLVED) return Result.ok(this.#value);
+    if (asyncState === COMPUTED_STATE_FLAGS.RESOLVED) return this.#value;
 
     if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
       return this.#getFallbackOrError(this._error ?? new Error('REJECTED without error'));
@@ -222,11 +232,11 @@ class ComputedAtomImpl<T>
     );
   }
 
-  #getFallbackOrError(error: Error): Result<T, Error> {
+  #getFallbackOrError(error: Error): T {
     if (this.#defaultValue !== NO_DEFAULT_VALUE) {
-      return Result.ok(this.#defaultValue);
+      return this.#defaultValue;
     }
-    return Result.err(error);
+    throw error;
   }
 
   /**
@@ -380,7 +390,7 @@ class ComputedAtomImpl<T>
 
     try {
       nodeStartTracking(this);
-      prepareTracking(this);
+      refreshDepFlags(this);
 
       let computedValue: T | Promise<T>;
       try {
@@ -428,7 +438,7 @@ class ComputedAtomImpl<T>
 
         // Logic: Stale Result Suppression
         // If the node became dirty during the wait, defer resolution.
-        if (this.#isDirty()) return this.#markDirty();
+        if (isBufferDirty(this)) return this.#markDirty();
 
         this.#finalizeResolution(result);
         nodeNotifySubscribers(this, result, undefined);
@@ -462,7 +472,7 @@ class ComputedAtomImpl<T>
       !this.#isEqual(this.#value, value) ||
       this._error !== this.#circularErrorForResolution
     ) {
-      this.version = nextVersion(this.version);
+      this.version = nextSmi(this.version);
     }
 
     this.#value = value;
@@ -491,7 +501,7 @@ class ComputedAtomImpl<T>
 
     if (
       (flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) !== 0 ||
-      (!(flags & COMPUTED_STATE_FLAGS.FORCE_COMPUTE) && !nodeIsShallowDirty(this))
+      (!(flags & COMPUTED_STATE_FLAGS.FORCE_COMPUTE) && !isBufferShallowDirty(this))
     ) {
       return;
     }
@@ -499,10 +509,6 @@ class ComputedAtomImpl<T>
     this.flags = flags | COMPUTED_STATE_FLAGS.DIRTY;
     debug.trackUpdate(this.id, debug.getDebugName(this));
     nodeNotifySubscribers(this, undefined, undefined);
-  }
-
-  #isDirty(): boolean {
-    return nodeIsDirty(this);
   }
 }
 

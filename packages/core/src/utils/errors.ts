@@ -290,26 +290,7 @@ export function getErrorMetadata(error: unknown): ErrorMetadata {
     };
   }
 
-  // Case B: Brand-based objects (tag ending with 'Error')
-  try {
-    const tag = Reflect.get(error, '_tag');
-    if (typeof tag === 'string' && tag.endsWith('Error')) {
-      const errorName = Reflect.get(error, 'name');
-      const errorMessage = Reflect.get(error, 'message');
-      const isRecoverable = Reflect.get(error, 'recoverable');
-      const errorCode = Reflect.get(error, 'code');
-      return {
-        name: toSafeString(errorName, '') ?? '',
-        message: toSafeString(errorMessage, '') ?? '',
-        recoverable: isRecoverable !== false,
-        code: toSafeString(errorCode, undefined),
-      };
-    }
-  } catch {
-    // Fall through if getter execution throws
-  }
-
-  // Case C: Plain object / unexpected fallback
+  // Case B: Plain object / unexpected fallback
   return {
     name: 'Unexpected error',
     message: toSafeString(error, '') ?? '',

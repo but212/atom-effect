@@ -21,7 +21,7 @@ beforeEach(async () => {
   // Restore max iterations and other properties to defaults
   scheduler.onOverflow = null;
   scheduler.maxFlushIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-  scheduler.resetFlushState();
+  scheduler.endFlush();
 });
 
 afterEach(() => {

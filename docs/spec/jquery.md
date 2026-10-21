@@ -1,6 +1,6 @@
 # jQuery Specification — `@but212/atom-effect-jquery`
 
-Normative contracts for DOM bindings, lifecycle invariants, the security/sanitization policy, components, and routing. Guidance (onboarding, patterns) lives in `packages/jquery/docs/`.
+Normative contracts for DOM bindings, lifecycle invariants, the and the security/sanitization policy. Guidance (onboarding, patterns) lives in `packages/jquery/docs/`.
 
 ## 0. Scope & base contract
 
@@ -32,7 +32,7 @@ Implementation invariants:
 | `.atomHtml(atom)` | Updates `innerHTML`, always routed through `sanitizeHtml` (§4). |
 | `.atomClass(name, atom)` / `.atomClass(classMap)` | Toggles classes by truthiness. A class remains applied if any associated condition is true. |
 | `.atomCss(prop, atom, unit?)` / map | Updates inline CSS; optional unit suffix. |
-| `.atomAttr(name, atom)` / map | Updates HTML/SVG attrs. Blocks `on*` and protocol payloads. Boolean attrs removed when `false`; WAI-ARIA booleans coerced to `"true"`/`"false"`. |
+| `.atomAttr(name, atom)` / map | Updates HTML/SVG attrs. Blocks `on*`, `srcdoc` and protocol payloads. Boolean attrs removed when `false`; WAI-ARIA booleans coerced to `"true"`/`"false"`. |
 | `.atomProp(prop, atom)` / map | Sets DOM object properties. Blocks structural properties (`innerHTML`, `outerHTML`) and prototype vectors (`__proto__`, `constructor`, `prototype`). |
 
 ### 1.3 Control flow
@@ -81,9 +81,9 @@ Implementation invariants:
 
 | State | Description | Triggers |
 | :--- | :--- | :--- |
-| ATTACHED | Connected; reactive effects/bindings active. | `setup()`, `.atomMount()`, auto-setup, insertion |
+| ATTACHED | Connected; reactive effects/bindings active. | `.atomMount()`, insertion |
 | DETACHED | Disconnected but retains reactive state. | `.detach()`, synchronous relocation |
-| DESTROYED | Permanently removed; all resources released. | `.remove()`, `.empty()`, `teardown()` |
+| DESTROYED | Permanently removed; all resources released. | `.remove()`, `.empty()`, `.atomUnmount()` |
 
 ### 3.2 Scenario matrix
 
@@ -92,8 +92,6 @@ Implementation invariants:
 | DOM relocation | ATTACHED → DETACHED → ATTACHED | None | `MutationObserver` checks `isConnected` during microtask; synchronous moves preserve bindings. |
 | `.detach()` | ATTACHED → DETACHED | None | `registry.keep()` bypasses auto-cleanup. |
 | Native removal | ATTACHED → DESTROYED | Deferred | Observer runs `cleanupTree()` in a microtask if still disconnected. |
-| Auto-setup | OFFLINE → ATTACHED | Immediate | The component controller runs `setup()` in the same microtask. |
-| `teardown()` | ATTACHED → DESTROYED | Deterministic | Synchronous `ComponentState.dispose()` and provider cleanup, followed by registry cleanup. |
 
 ### 3.3 `BindingRegistry`
 
@@ -113,21 +111,8 @@ Implementation invariants:
 
 ### 3.6 Invariant rules
 
-1. **Idempotent cleanup**: redundant `cleanup()`/`teardown()` calls are side-effect free; once DESTROYED, no re-initialization.
-2. **Context consistency**: Provider registration, replacement, teardown, or relevant DOM structure mutation increments the shared context revision, so late-bound injection proxies re-evaluate providers without ghost references.
-3. **Provider ownership**: Each provider key has one record containing its value and optional CSS synchronization effect. Replacing or tearing down a provider disposes the previous effect before releasing the record.
-4. **Shadow DOM transparency**: Resource discovery and lifecycle manage open and closed shadow roots.
-
-### 3.7 Context subscription lifecycle
-
-`provideAtom` and `injectAtom` use synchronous direct-walk discovery through parent pointers, crossing a shadow boundary via `ShadowRoot.host`.
-
-- A subscribed injection proxy evaluates once before subscribing, so an already-present atom provider is observed immediately.
-- Provider atoms notify through the proxy's temporary computed subscription; static providers notify when the shared context revision changes.
-- Provider registration, replacement, component teardown, and child-list mutations increment the shared revision.
-- Atom-backed CSS synchronization effects, including effects created by direct `provideAtom()` calls, are registered with the `BindingRegistry` for automatic teardown.
-- Each active proxy subscription registers structure callbacks on the relevant document/root `RootObserver` instances. Unsubscribing or disposing the proxy removes those callbacks and the temporary computed.
-- `subscriberCount()` reports active proxy subscriptions; `dispose()` releases all subscriptions and is idempotent.
+1. **Idempotent cleanup**: redundant `cleanup()` calls are side-effect free; once DESTROYED, no re-initialization.
+2. **Shadow DOM transparency**: Resource discovery and lifecycle manage open and closed shadow roots.
 
 ## 4. Security & sanitization policy
 
@@ -160,52 +145,13 @@ Implementation invariants:
 **Sink contracts:**
 
 - `.atomHtml` — always routes through `sanitizeHtml` (primary XSS defense).
-- `.atomAttr(name, atom)` — validates name and value; blocks `on*`; URI values protocol-checked (abort + warning on danger).
+- `.atomAttr(name, atom)` — validates name and value; blocks `on*` and `srcdoc` (case-insensitive); URI values protocol-checked (abort + warning on danger).
 - `.atomProp(name, atom)` — strict sink blacklist (`innerHTML`, `outerHTML`, `srcdoc` blocked; abort + warning on danger).
 - `.atomCss(prop, atom)` — filters declarations; strips comments; blocks `expression()`, `-moz-binding`, dangerous `url()`.
 
 **CSP compliance:** no `eval()`, `new Function()`, or inline event registration.
 
-## 5. Web Components (`$.useAtomComponent`)
-
-`useAtomComponent(element)` returns an `AtomComponentController` for lifecycle/state sync on Custom Elements.
-
-**Controller API:** `host`, `root`, `attrs(name)` (attribute lens, respects `static observedAttributes`), `slots(name)` (`ReadonlyAtom<Node[]>`; `'default'`/`''` for default slot), `internals`, `$(selector)` (scoped), `provideAtom(key, value)`, `injectAtom(key)`, `teardown()` (deterministic sync disposal), `setup(options?)`.
-
-**Static config:** `aejStyles`, `aejBind`, `aejAria`, `aejParts`, `aejDispatch`, `aejValue`, `aejValidation`.
-
-> **State isolation invariant**: static properties are shared across **all** instances. Mutable reactive state (`atom`/`computed`) must be instance properties registered in the constructor or `connectedCallback` via `this.aej.setup(...)`, not static specs.
->
-> `aejValidation`/`validation` string results become custom validity messages. When a `ValidityStateFlags` result contains any true flag, the binding supplies `ElementInternals` with the default message `Invalid value`; an empty flags object clears validity.
-
-### Controller internals
-
-- **`ComponentState`**: centralizes attribute lenses, slot listeners, effects for one instance; `teardown()` releases observers, effects, providers, and registry bindings synchronously. Teardown is re-entrancy-safe; already-returned attribute/slot lenses remain safe to read after teardown.
-- **Context engine** (`provideAtom`/`injectAtom`): direct-walk discovery traverses parent pointers (crossing shadow via `host`) for O(depth) resolution. A shared context revision invalidates subscribed late-bound proxies when providers or DOM topology change; proxy subscriptions own their temporary computed and `RootObserver` callbacks.
-- **Stylesheet caching**: identical style strings parsed once, shared via `adoptedStyleSheets`; FIFO eviction, max 100 entries.
-
-## 6. Routing
-
-### 6.1 `$.route(config)`
-
-SPA router supporting HTML5 History and Hash modes.
-
-- **Tiered matcher**: (1) static `Map` lookup O(1) for exact paths; (2) RegExp-compiled matching for dynamic paths with parameter extraction.
-- **Route lifecycle**: `onEnter` / `onLeave` navigation-guard hooks.
-- **DOM replacement**: the existing route subtree is cleaned through the binding registry before `replaceChildren()`; cleanup does not depend on the asynchronous observer.
-- **Instance interface** (reactive): `currentRoute`, `queryParams`, `params`, `location` (`{ path, query, params }`) as `ReadonlyAtom`; `navigate(to)`, `destroy()`.
-- **Deterministic destroy**: `destroy()` releases router-owned reactive atoms, route scanner effects, and browser listeners; repeated calls are safe.
-- **Best practice**: always call `destroy()` on teardown to prevent listener leaks.
-
-## 7. Data fetching — `$.atomFetch(urlOrFn, options)`
-
-- Reactive URL and AJAX option dependencies are read synchronously before request handling begins. A `.value` read checks for input drift and starts the latest request immediately, even before the scheduled effect flush.
-- **Concurrency**: a changed dependency aborts the previous jQuery `jqXHR`; only the active request may update the exposed state.
-- **Lifecycle**: exposes the `ComputedAtom` state and value surface. `eager: false` starts on the first `.value` read; `invalidate()` schedules a refresh for the next `.value` read. `.peek()` returns the last successful value without starting or refreshing a request; before the first success it returns `undefined`.
-- **Normalization**: converts request and transform failures into native `Error` objects and calls `onError` for non-abort failures.
-- `.abort()` cancels the active `jqXHR`; `.dispose()` aborts the active request and releases reactive resources. After disposal, state is `idle`, lifecycle flags are false, and errors are cleared; `.peek()` retains the last successful value. No `AbortController` is created.
-
-## 8. Effect orchestration invariants (all bindings)
+## 5. Effect orchestration invariants (all bindings)
 
 - **Race protection**: a monotonic `latestId` ensures only the most recent Promise resolution applies to the DOM.
 - **Disposal tracking**: pending async resolutions are linked to the `BindingRegistry`; if the element disconnects before resolution, the update is discarded.

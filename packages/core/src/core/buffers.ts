@@ -7,7 +7,7 @@
 
 import { COMPUTED_STATE_FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type { Dependency, DependencyLink, ReactiveDependencyTracker } from '@/types';
-import { trackEvaluationFailure } from '@/utils/debug';
+import { debug } from '@/utils/debug';
 import { trackingContext, untracked } from './base';
 
 /** @internal */
@@ -17,12 +17,7 @@ export const BUFFER_FLAGS = {
 } as const;
 
 /** @internal */
-export function prepareTracking(state: ReactiveDependencyTracker): void {
-  refreshDepFlags(state);
-}
-
-/** @internal */
-function refreshDepFlags(state: ReactiveDependencyTracker): void {
+export function refreshDepFlags(state: ReactiveDependencyTracker): void {
   let flags = state._depFlags & ~BUFFER_FLAGS.HAS_COMPUTEDS;
   const slots = state._depSlots;
 
@@ -105,17 +100,8 @@ export function insertNew(
   link: DependencyLink
 ): void {
   const occupant = state._depSlots.at(trackIndex);
-  depBufferSetAt(state, trackIndex, link);
+  state._depSlots.setAt(trackIndex, link);
   if (occupant !== null) depBufferPush(state, occupant);
-}
-
-/** @internal */
-function depBufferSetAt(
-  state: ReactiveDependencyTracker,
-  index: number,
-  dependencyLink: DependencyLink | null
-): void {
-  state._depSlots.setAt(index, dependencyLink);
 }
 
 /** @internal */
@@ -169,7 +155,7 @@ function isDirtyInternal(state: ReactiveDependencyTracker, deep: boolean): boole
           dependency.value;
         }
       } catch (error) {
-        trackEvaluationFailure(dependency.id);
+        debug.trackEvaluationFailure(dependency.id);
         if (
           error instanceof RangeError ||
           error instanceof ReferenceError ||

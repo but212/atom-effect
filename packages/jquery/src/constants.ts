@@ -47,22 +47,6 @@ export const SYSTEM_BINDING = {
 /** Security rules, validation vectors, and error templates. @internal */
 export const SYSTEM_SECURITY = {
   DANGEROUS_PROPS: ['innerHTML', 'outerHTML', 'srcdoc', '__proto__', 'constructor', 'prototype'],
-  URL_PROPS: [
-    'src',
-    'href',
-    'action',
-    'formaction',
-    'data',
-    'poster',
-    'background',
-    'cite',
-    'longdesc',
-    'profile',
-    'usemap',
-    'classid',
-    'codebase',
-    'xlink:href',
-  ],
   DANGEROUS_PROTOCOL_PATTERN: '(?:javascript|vbscript)',
   ERRORS: {
     BLOCKED_EVENT_HANDLER: (name: string) => `Blocked handler: "${name}".`,
@@ -86,19 +70,6 @@ export const SYSTEM_MOUNT = {
   ERRORS: {
     CLEANUP_ERROR: (identifier?: string) =>
       identifier ? `Cleanup error in <${identifier}>` : 'Cleanup error',
-  },
-} as const;
-
-/** Web Component patterns configuration and error templates. @internal */
-export const SYSTEM_COMPONENT = {
-  PREFIX: '[atom-component]',
-  ATTRS: {
-    BIND: 'data-aej-bind',
-    PART: 'data-aej-part',
-    LEGACY_BIND: 'data-bind',
-  },
-  ERRORS: {
-    NOT_REGISTERED: (tagName: string) => `Custom Element <${tagName}> is not registered.`,
   },
 } as const;
 

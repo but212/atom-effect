@@ -49,15 +49,6 @@ export function withBatchCollection(callback: () => void): BatchedTask[] {
 }
 
 /**
- * Logic: Monotonic Async Race Protection
- *
- * Strategy:
- * Assigns an incrementing ID to each update. If a promise resolves after a
- * newer update has started, the stale result is discarded to prevent UI flicker.
- *
- * @internal
- */
-/**
  * Resolves the current value of a source (atom, function, or static value).
  * @internal
  */
@@ -67,6 +58,15 @@ const getSourceValue = <T>(source: AsyncReactiveValue<T>): T | Promise<T> => {
   return source;
 };
 
+/**
+ * Logic: Monotonic Async Race Protection
+ *
+ * Strategy:
+ * Assigns an incrementing ID to each update. If a promise resolves after a
+ * newer update has started, the stale result is discarded to prevent UI flicker.
+ *
+ * @internal
+ */
 function createAsyncRunner<T>(
   element: Element,
   debugType: BindingDebugType,
@@ -131,6 +131,18 @@ function createAsyncRunner<T>(
   };
 }
 
+const isReactiveSource = (source: unknown): boolean =>
+  isAtom(source) || typeof source === 'function';
+
+/** Runs `fn` inside a registry-tracked effect when any input is reactive, otherwise once. */
+function trackOrRun(element: Element, hasReactive: boolean, fn: () => void, name: string): void {
+  if (hasReactive) {
+    registry.trackEffect(element, effect(fn, { name }));
+  } else {
+    fn();
+  }
+}
+
 /**
  * Logic: Effect Registration
  * Defers to the active batch collector when one exists; otherwise runs `read` inside a registry-tracked
@@ -158,14 +170,7 @@ function registerEffect<T>(
 
   const runner = createAsyncRunner(element, debugType, updater);
 
-  if (hasReactive) {
-    registry.trackEffect(
-      element,
-      effect(() => runner(read()), { name: debugType })
-    );
-  } else {
-    runner(read());
-  }
+  trackOrRun(element, hasReactive, () => runner(read()), debugType);
 }
 
 /**
@@ -184,7 +189,7 @@ export function registerReactiveEffect<T>(
   updater: (value: T) => void,
   debugType: BindingDebugType
 ): void {
-  const hasReactive = isAtom(source) || typeof source === 'function';
+  const hasReactive = isReactiveSource(source);
 
   registerEffect(element, hasReactive, debugType, updater, () => getSourceValue(source));
 }
@@ -207,14 +212,7 @@ export function registerMapEffect<T>(
 ): void {
   const keys = Object.keys(sourceMap);
 
-  let hasReactive = false;
-  for (const key of keys) {
-    const sourceValue = sourceMap[key];
-    if (isAtom(sourceValue) || typeof sourceValue === 'function') {
-      hasReactive = true;
-      break;
-    }
-  }
+  const hasReactive = keys.some((key) => isReactiveSource(sourceMap[key]));
 
   const collect = () => {
     const resolvedMap: Record<string, T> = {};
@@ -247,14 +245,7 @@ export function registerMapEffect<T>(
 }
 
 export function registerBatchedEffects(element: Element, tasks: BatchedTask[]): void {
-  let hasReactive = false;
-  for (let i = 0; i < tasks.length; i++) {
-    const task = tasks[i];
-    if (task?.isReactive) {
-      hasReactive = true;
-      break;
-    }
-  }
+  const hasReactive = tasks.some((task) => task.isReactive);
 
   const runners = tasks.map((task) => task.run(element));
 
@@ -271,9 +262,5 @@ export function registerBatchedEffects(element: Element, tasks: BatchedTask[]): 
     }
   };
 
-  if (hasReactive) {
-    registry.trackEffect(element, effect(runAll, { name: 'batch' }));
-  } else {
-    runAll();
-  }
+  trackOrRun(element, hasReactive, runAll, 'batch');
 }

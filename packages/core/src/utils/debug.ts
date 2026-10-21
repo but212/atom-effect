@@ -260,7 +260,6 @@ export const debug: DebugConfig = IS_DEV ? new DevDebugEngine() : ProdDebugContr
 /**
  * Direct export for hot-path usage (proxied to the debug singleton).
  */
-export const trackEvaluationFailure = (id: DependencyId) => debug.trackEvaluationFailure(id);
 
 /** @internal */
 let nextNodeId = 1;

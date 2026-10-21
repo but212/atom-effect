@@ -92,15 +92,6 @@ class BindingRegistry {
     return !!nodeStates.get(node)?.isIgnored;
   }
 
-  /**
-   * Removes the 'ignored' flag, re-enabling standard cleanup logic for the node.
-   * @internal
-   */
-  unmarkIgnored(node: Node): void {
-    const state = nodeStates.get(node);
-    if (state) state.isIgnored = false;
-  }
-
   /** @internal */
   isAutoCleanupScheduled(): boolean {
     return autoCleanup.isScheduled();
@@ -356,13 +347,8 @@ export const autoCleanup = new AutoCleanup((element) => {
   registry.cleanupTree(element);
 });
 
-/** @internal */
-export const setAutoCleanupAllowed = (allowed: boolean): void => autoCleanup.allow(allowed);
-
 export const enableAutoCleanup = (root: Element | ShadowRoot | DocumentFragment): void =>
   autoCleanup.enable(root);
 
 /** @internal */
 export const disableAutoCleanup = (): void => autoCleanup.disable();
-
-export const disableAutoCleanupFor = (root: Node): void => autoCleanup.disableFor(root);

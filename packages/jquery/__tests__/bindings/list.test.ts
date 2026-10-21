@@ -53,6 +53,39 @@ describe('$.atomList (Integration)', () => {
       expect($container.find('span').text()).toBe('c');
     });
 
+    it('should keep the empty placeholder when an empty list is replaced by a new empty array', async () => {
+      const itemsList = $.atom<string[]>([]);
+
+      $container.atomList(itemsList, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+        empty: '<p>Empty</p>',
+      });
+
+      await $.nextTick();
+      expect($container.find('p').length).toBe(1);
+
+      itemsList.value = [];
+      await $.nextTick();
+      expect($container.find('p').length).toBe(1);
+    });
+
+    it('should keep the empty placeholder on []->[] when onRemove is set', async () => {
+      const itemsList = $.atom<string[]>([]);
+
+      $container.atomList(itemsList, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+        empty: '<p>Empty</p>',
+        onRemove: () => {},
+      });
+
+      await $.nextTick();
+      itemsList.value = [];
+      await $.nextTick();
+      expect($container.find('p').length).toBe(1);
+    });
+
     it('should support items with multiple root elements and correct key mapping', async () => {
       const items = $.atom([{ id: 1 }, { id: 2 }]);
 
@@ -344,6 +377,23 @@ describe('$.atomList (Integration)', () => {
 
       // The span should STILL be there because we manually set data-atom-key back
       expect($container.find('.item-1').length).toBe(1);
+    });
+
+    it('should call onRemove once per removed item', async () => {
+      const list = $.atom([{ id: 1 }, { id: 2 }, { id: 3 }]);
+      const onRemove = vi.fn();
+      $container.atomList(list, {
+        key: 'id',
+        render: (item) => `<span class="item-${item.id}"></span>`,
+        onRemove,
+      });
+      await $.nextTick();
+
+      list.value = [{ id: 1 }, { id: 3 }];
+      await $.nextTick();
+
+      expect(onRemove).toHaveBeenCalledTimes(1);
+      expect($container.find('.item-2').length).toBe(0);
     });
 
     it('should clean up child node bindings when list becomes empty without onRemove hook', async () => {

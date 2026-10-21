@@ -36,16 +36,9 @@ import type {
 } from '@/types';
 import { AtomError, generateId, nextSmi, wrapError } from '@/utils';
 
-import {
-  BUFFER_FLAGS,
-  claimExisting,
-  depBufferTruncateFrom,
-  insertNew,
-  isBufferDirty,
-  isBufferShallowDirty,
-} from './buffers';
+import { BUFFER_FLAGS, claimExisting, depBufferTruncateFrom, insertNew } from './buffers';
 
-import { nextEpoch } from './scheduler';
+import { scheduler } from './scheduler';
 
 /** @internal */
 export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
@@ -219,14 +212,6 @@ export function nodeTrackDependency(
 }
 
 /**
- * Logic: SMI-safe increment to prevent V8 hidden class de-optimization.
- * @internal
- */
-export function nextVersion(version: number): number {
-  return nextSmi(version);
-}
-
-/**
  * Logic: Listener Registration
  * Attaches a subscriber to a reactive node, supporting both functional
  * and object-based listeners.
@@ -365,7 +350,7 @@ export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown)
 export function nodeStartTracking(
   node: Prettify<DependencyTracker & ReactiveDependencyTracker>
 ): number {
-  const epoch = nextEpoch();
+  const epoch = scheduler.nextEpoch();
   node._trackEpoch = epoch;
   node._trackCount = 0;
   return epoch;
@@ -402,7 +387,7 @@ export function nodeHandleError<T>(
   const wrappedError = wrapError(error, errorConstructor, message);
 
   if (node.isComputed) {
-    node.version = nextVersion(node.version);
+    node.version = nextSmi(node.version);
     node._error = wrappedError;
   } else {
     console.error(wrappedError);
@@ -422,14 +407,4 @@ export function nodeHandleError<T>(
 /** @internal - Returns active listener count. */
 export function nodeGetSubscriberCount<T>(node: ReactiveNode<T>): number {
   return node._subscriberSlots?.size ?? 0;
-}
-
-/** @internal - Deep check for upstream changes. */
-export function nodeIsDirty(node: ReactiveDependencyTracker): boolean {
-  return isBufferDirty(node);
-}
-
-/** @internal - Shallow check for upstream signals. */
-export function nodeIsShallowDirty(node: ReactiveDependencyTracker): boolean {
-  return isBufferShallowDirty(node);
 }

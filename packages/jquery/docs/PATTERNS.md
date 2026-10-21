@@ -9,34 +9,9 @@ This document outlines standard architectural patterns for implementing `@but212
 
 ## 1. Async UI Updates
 
-### Using `$.atomFetch`
+### Using `$.computed`
 
-For HTTP data fetching, `$.atomFetch` handles jqXHR cancellation and reactive URL recalculation automatically.
-
-```javascript
-const userId = $.atom(1);
-
-const userProfile = $.atomFetch(() => `/api/users/${userId.value}`, {
-  defaultValue: null,
-});
-
-// 1. Loading State
-$('#loading').atomShow(userProfile.isPending);
-
-// 2. Error State
-$('#error').atomShow(userProfile.hasError);
-$('#error-msg').atomText(userProfile, u => userProfile.lastError?.message ?? '');
-
-// 3. Data Display
-$('#username').atomText(userProfile, u => u?.name ?? 'Guest');
-
-// Updating userId triggers a new fetch and aborts any pending request
-userId.value = 2;
-```
-
-### Using `$.computed` (Non-HTTP)
-
-For asynchronous operations that do not utilize `$.ajax` (e.g., IndexedDB, Web Workers), `$.computed` provides native Promise resolution.
+For asynchronous operations (`fetch`, IndexedDB, Web Workers), `$.computed` provides native Promise resolution.
 
 ```javascript
 const userId = $.atom(1);
@@ -83,72 +58,7 @@ $.effect(() => {
 
 ---
 
-## 3. SPA Routing
-
-### Hash Mode (Default)
-
-```javascript
-const router = $.route({
-  target: '#app',
-  default: 'home',
-  autoBindLinks: true,
-  routes: {
-    home: { template: '#tmpl-home' },
-    about: { template: '#tmpl-about' },
-  }
-});
-
-// Synchronize document title with route state
-$.effect(() => {
-  document.title = `My App - ${router.currentRoute.value}`;
-});
-```
-
-### History Mode (pushState)
-
-For URLs without a hash fragment (requires appropriate server-side configuration):
-
-```javascript
-const router = $.route({
-  target: '#app',
-  default: 'home',
-  mode: 'history',
-  basePath: '/app',
-  autoBindLinks: true,
-  routes: {
-    home: { template: '#tmpl-home' },
-    settings: { template: '#tmpl-settings' },
-  }
-});
-```
-
-### Navigation Guards
-
-The `onLeave` hook allows for conditional navigation. Return `false` to block the transition.
-
-```javascript
-const hasUnsavedChanges = $.atom(false);
-
-$.route({
-  target: '#app',
-  default: 'editor',
-  routes: {
-    editor: {
-      template: '#tmpl-editor',
-      onLeave: () => {
-        if (hasUnsavedChanges.value) {
-          return confirm('Discard unsaved changes?');
-        }
-      }
-    },
-    home: { template: '#tmpl-home' },
-  }
-});
-```
-
----
-
-## 4. Legacy Plugin Integration
+## 3. Legacy Plugin Integration
 
 Integrating with third-party plugins that do not emit standard `input` events requires a manual synchronization bridge.
 
@@ -171,7 +81,7 @@ $select.on('change', (e) => {
 
 ---
 
-## 5. Execution Batching
+## 4. Execution Batching
 
 Atom notifications are deferred to a microtask by default, coalescing multiple synchronous writes.
 
@@ -209,7 +119,7 @@ const updatedText = $('#name').text();
 
 ---
 
-## 6. Form Implementations
+## 5. Form Implementations
 
 ### Typed Inputs
 
@@ -260,7 +170,7 @@ Passing an empty array throws: a form with no source can never synchronize.
 
 ---
 
-## 7. Reactive Lists
+## 6. Reactive Lists
 
 The `atomList` method utilizes a reconciliation algorithm to synchronize DOM nodes with array state efficiently.
 
@@ -289,13 +199,16 @@ Duplicate keys are logged and rendered as separate nodes; the exact reconciliati
 
 ---
 
-## 8. Functional Components
+## 7. Functional Components
 
 The `atomMount` method encapsulates DOM structure and reactive bindings into isolated units with automatic disposal.
 
 ```javascript
 const UserCard = ($element, { userId }) => {
-  const user = $.atomFetch(() => `/api/users/${userId}`, { defaultValue: null });
+  const user = $.computed(
+    async () => (await fetch(`/api/users/${userId}`)).json(),
+    { defaultValue: null }
+  );
 
   $element.atomBind({
     html: $.computed(() => `<h2>${user.value?.name ?? ''}</h2>`),
@@ -306,138 +219,4 @@ const UserCard = ($element, { userId }) => {
 };
 
 $('#card-root').atomMount(UserCard, { userId: 42 });
-```
-
----
-
-## 9. Web Components (Custom Elements)
-
-> [!WARNING]
-> **Avoid Shared State in Static Properties**:
-> Declaring mutable state (such as `$.atom` or `$.computed`) directly within static properties (e.g., `static aejBind = { count: $.atom(0) }`) causes that state to be shared across **all** instances of the Custom Element class.
-> To ensure each instance has its own isolated reactive state, define atoms as instance properties (e.g., `this.count = $.atom(0)`) and register them via the `setup()` method during connection.
-
-### Declarative Specification
-
-Stylesheets can be defined statically on the class using `aejStyles`. For other reactive bindings (bindings, attributes, slots, etc.), initialize instance properties and register them dynamically.
-
-```javascript
-class MyComponent extends HTMLElement {
-  static aejStyles = [sharedStyles];
-
-  aej = $.useAtomComponent(this);
-  count = $.atom(0);
-  title = $.computed(() => `Theme: ${this.aej.attrs('theme').value}`);
-  status = $.computed(() => (this.count.value % 2 === 0 ? 'even' : 'odd'));
-
-  connectedCallback() {
-    this.attachShadow({ mode: 'open' }).innerHTML = `
-      <div class="card">
-        <h1 data-aej-bind="title"></h1>
-        <slot></slot>
-        <div data-aej-part="status">Status: Active</div>
-        <button class="inc">Count: <span data-aej-bind="count"></span></button>
-      </div>
-    `;
-
-    // Register instance-specific reactive features
-    this.aej.setup({
-      bind: { title: this.title, count: this.count },
-      parts: { status: this.status }
-    });
-  }
-}
-customElements.define('my-component', MyComponent);
-```
-
-### Imperative Setup
-
-Use `aej.setup()` to provide dynamic configuration, such as attaching to a 'closed' ShadowRoot.
-
-```javascript
-class AdvancedComponent extends HTMLElement {
-  aej = $.useAtomComponent(this);
-
-  connectedCallback() {
-    const sr = this.attachShadow({ mode: 'closed' });
-    sr.innerHTML = `<div data-aej-bind="title"></div>`;
-
-    this.aej.setup({
-      shadowRoot: sr,
-      bind: { title: $.atom('Closed Shadow Content') }
-    });
-  }
-}
-customElements.define('advanced-component', AdvancedComponent);
-```
-
----
-
-## 10. Dependency Injection
-
-Share state across the DOM tree, including through Shadow DOM boundaries.
-
-### Providing Context
-
-```javascript
-const theme = $.atom('light');
-
-// Theme is exposed to all descendants
-$.provideAtom(document.body, 'theme', theme);
-
-// Updating the atom updates consumers and CSS variables (--aej-theme)
-theme.value = 'dark';
-```
-
-### Injecting Context
-
-Consumers maintain connections even if relocated within the DOM hierarchy. A subscribed proxy resolves its current provider immediately, follows provider registration/removal and DOM topology changes, and releases its temporary subscription when unsubscribed or disposed. Replacing a provider also disposes its previous CSS synchronization effect.
-
-```javascript
-class DeepChild extends HTMLElement {
-  aej = $.useAtomComponent(this);
-  theme = $.injectAtom(this, 'theme');
-
-  connectedCallback() {
-    this.aej.setup();
-
-    $.effect(() => {
-      console.log('Current theme:', this.theme.value);
-    });
-  }
-}
-customElements.define('deep-child', DeepChild);
-```
-
----
-
-## 11. Form-Associated Custom Elements (FACE)
-
-Integrate custom controls into native `<form>` submission and validation pipelines.
-
-```javascript
-class MyInput extends HTMLElement {
-  static formAssociated = true;
-
-  aej = $.useAtomComponent(this);
-  value = $.atom('');
-  validation = (v) => (typeof v === 'string' && v.includes('@') ? '' : 'Invalid email');
-
-  connectedCallback() {
-    this.attachShadow({ mode: 'open' }).innerHTML = `
-      <input type="text" placeholder="Type here...">
-    `;
-
-    // Register instance-specific form value and validation logic
-    this.aej.setup({
-      value: this.value,
-      validation: this.validation
-    });
-
-    this.aej.$('input').on('input', (e) => {
-      this.value.value = e.target.value;
-    });
-  }
-}
-customElements.define('my-input', MyInput);
 ```

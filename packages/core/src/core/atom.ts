@@ -12,7 +12,6 @@
  */
 
 import type { SlotBuffer } from '@but212/atom-effect-utils';
-import { Result } from '@but212/atom-effect-utils';
 import {
   ATOM_STATE_FLAGS,
   BRAND,
@@ -26,7 +25,6 @@ import {
   SMI_MAX,
 } from '@/constants';
 import {
-  nextVersion,
   nodeGetSubscriberCount,
   nodeNotifyComputedSubscribers,
   nodeNotifySubscribers,
@@ -40,7 +38,7 @@ import type {
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
-import { AtomError, debug, generateId, SchedulerError } from '@/utils';
+import { AtomError, debug, generateId, nextSmi, SchedulerError } from '@/utils';
 import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
 
 /**
@@ -133,7 +131,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 
     // Logic: Versioning
     // Incremented to signal to dependents that the source has changed.
-    this.version = nextVersion(this.version);
+    this.version = nextSmi(this.version);
 
     if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
@@ -289,13 +287,12 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   }
 }
 
-function validateAtomOptions<T>(options: AtomOptions<T>): Result<void, Error> {
+function assertAtomOptions<T>(options: AtomOptions<T>): void {
   if (options != null && typeof options === 'object') {
     if (options.equal !== undefined && typeof options.equal !== 'function') {
-      return Result.err(new AtomError('options.equal must be a function'));
+      throw new AtomError('options.equal must be a function');
     }
   }
-  return Result.ok(undefined);
 }
 
 /**
@@ -322,7 +319,6 @@ function validateAtomOptions<T>(options: AtomOptions<T>): Result<void, Error> {
  * ```
  */
 export function atom<T>(initialValue: T, options: AtomOptions<T> = {}): WritableAtom<T> {
-  const validation = validateAtomOptions(options);
-  Result.unwrap(validation);
+  assertAtomOptions(options);
   return new AtomImpl(initialValue, options);
 }
