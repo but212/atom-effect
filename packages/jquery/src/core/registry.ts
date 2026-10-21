@@ -352,5 +352,3 @@ export const enableAutoCleanup = (root: Element | ShadowRoot | DocumentFragment)
 
 /** @internal */
 export const disableAutoCleanup = (): void => autoCleanup.disable();
-
-export const disableAutoCleanupFor = (root: Node): void => autoCleanup.disableFor(root);

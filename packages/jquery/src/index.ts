@@ -16,9 +16,6 @@ import '@/core/namespace';
 import '@/bindings/chainable';
 import '@/bindings/list';
 import '@/bindings/mount';
-import '@/features/route';
-import '@/features/fetch';
-import '@/features/web-component';
 import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 import type { AEJConfig } from '@/types';
 
@@ -120,7 +117,6 @@ export type {
 } from '@but212/atom-effect';
 
 export type {
-  AtomComponentController,
   BindingOptions,
   ComponentFn,
   CssBindings,
@@ -128,16 +124,9 @@ export type {
   EffectCleanup,
   EffectResult,
   EqualFn,
-  FetchError,
-  FetchOptions,
-  JQueryScopedSelector,
   ListOptions,
   PrimitiveValue,
   ReactiveValue,
-  RouteConfig,
-  RouteDefinition,
-  RouteLifecycle,
-  Router,
   ValOptions,
 } from '@/types';
 

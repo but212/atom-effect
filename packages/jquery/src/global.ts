@@ -22,19 +22,15 @@ import type {
 import type {
   AEJConfig,
   AsyncReactiveValue,
-  AtomComponentController,
   AtomOptions,
   BindingOptions,
   ComponentFn,
   CssBindings,
   CssValue,
   EffectResult,
-  FetchOptions,
   FormOptions,
   ListOptions,
   PrimitiveValue,
-  RouteConfig,
-  Router,
   ValOptions,
 } from './types';
 
@@ -236,145 +232,6 @@ declare global {
       /** Logs a DOM mutation and triggers a visual highlight on the target. */
       domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown): void;
     };
-
-    /**
-     * - Multi-mode support: Modern 'history' or 'hash' for legacy environments.
-     * - Dynamic matching: High-performance parameter extraction via tiered compilers.
-     * - Lifecycle guards: Navigation control via `onEnter` and `onLeave` hooks.
-     * - Accessibility: Built-in focus and scroll management on transitions.
-     *
-     * @example
-     * ```typescript
-     * const router = $.route({
-     *   target: '#app',
-     *   routes: {
-     *     '/': { template: '#home-tmpl' },
-     *     '/users/:id': { render: (element, name, params) => renderUser(element, params.id) }
-     *   }
-     * });
-     * ```
-     */
-    route(config: RouteConfig): Router;
-
-    /**
-     * Creates a computed atom that synchronizes with a network request.
-     *
-     * When to use:
-     * - To fetch data automatically when reactive dependencies (e.g., atoms) change.
-     * - To enforce "latest-only" concurrency where stale requests are cancelled.
-     * - To unify error handling and data transformation for remote resources.
-     *
-     * @example
-     * ```ts
-     * const userId = atom(1);
-     * const userProfile = $.atomFetch(() => `/api/users/${userId.get()}`, {
-     *   transform: (data) => data.profile
-     * });
-     * ```
-     *
-     * Logic: Concurrency Control
-     * Uses jqXHR.abort() to enforce a "latest-only" resolution strategy.
-     * Older requests are canceled to prevent stale data from overwriting newer updates.
-     */
-    atomFetch<T>(
-      source: string | (() => string),
-      options: FetchOptions<T>
-    ): ComputedAtom<T> & {
-      /** Aborts the currently active request. */
-      abort: () => void;
-      /** Releases all reactive resources and aborts pending requests. */
-      dispose(): void;
-    };
-
-    /**
-     * Logic: Dependency Provider
-     * Registers a value or atom to be provided to all descendant elements.
-     *
-     * Logic: CSS Variable Synchronization
-     * Automatically synchronizes the provided value to a CSS variable
-     * `--aej-[key]` on the host element for state-driven styling.
-     *
-     * When to use:
-     * - When you need to share state (like themes or user sessions) across a deep DOM tree.
-     * - When you want to control CSS properties reactively via atoms.
-     *
-     * @param element The host element or collection acting as provider.
-     * @param key Unique identifier for the context.
-     * @param value The reactive atom or static value to share.
-     *
-     * @example
-     * ```typescript
-     * const theme = $.atom('dark');
-     * $.provideAtom('#app', 'theme', theme);
-     *
-     * // In CSS:
-     * // .child { color: var(--aej-theme); }
-     * ```
-     */
-    provideAtom(element: HTMLElement | JQuery | string, key: string | symbol, value: unknown): void;
-
-    /**
-     * Logic: Dependency Injection
-     * Injects a provided value or atom from an ancestor.
-     *
-     * Logic: Late-Bound Proxy
-     * Returns a reactive proxy atom that automatically re-locates providers
-     * if the element is moved within the DOM hierarchy.
-     *
-     * When to use:
-     * - To consume state provided by a `provideAtom` ancestor.
-     * - When components might be moved (drag-and-drop) and need to stay synced with their new context.
-     *
-     * @param element The element requesting the context.
-     * @param key The unique identifier of the context to locate.
-     * @returns A reactive proxy atom representing the injected context.
-     *
-     * @example
-     * ```typescript
-     * class MyChild extends HTMLElement {
-     *   connectedCallback() {
-     *     const theme = $.injectAtom(this, 'theme');
-     *     $.effect(() => {
-     *       this.style.color = theme.value === 'dark' ? 'white' : 'black';
-     *     });
-     *   }
-     * }
-     * ```
-     */
-    injectAtom<T = unknown>(
-      element: HTMLElement | JQuery | string,
-      key: string | symbol
-    ): WritableAtom<T>;
-
-    /**
-     * Logic: Component Lifecycle Controller
-     * Orchestrates reactive features for a specific DOM element, managing
-     * bindings, styles, and resource cleanup.
-     *
-     * When to use:
-     * - Recommended for integrating reactive state into standard Custom Elements.
-     * - Suitable for mapping attributes and slots to reactive atoms.
-     * - When you need automatic cleanup of effects when an element is removed.
-     *
-     * @param element The host element (usually `this` in a Custom Element).
-     * @returns A controller for managing the component's reactive lifecycle.
-     *
-     * @example
-     * ```typescript
-     * class MyToggle extends HTMLElement {
-     *   private aej = $.useAtomComponent(this);
-     *   private active = $.atom(false);
-     *
-     *   connectedCallback() {
-     *     this.aej.setup({
-     *       bind: { label: $.computed(() => this.active.value ? 'ON' : 'OFF') },
-     *       dispatch: { toggle: this.active }
-     *     });
-     *   }
-     * }
-     * ```
-     */
-    useAtomComponent(element: HTMLElement): AtomComponentController;
 
     /**
      * Role: Library Orchestrator

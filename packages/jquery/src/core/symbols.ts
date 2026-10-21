@@ -7,18 +7,6 @@
  */
 
 /**
- * Logic: Hydration State Tracking
- * Marks a DOM element as having been processed by reactive bindings.
- */
-export const HYDRATION_MARKER = Symbol.for('aej:hydrated');
-
-/**
- * Logic: Resource Disposal Orchestration
- * Indicates that an element has an active lifecycle MutationObserver attached.
- */
-export const CLEANUP_MARKER = Symbol.for('aej:cleanup-enabled');
-
-/**
  * Logic: Batch Coalescing Marker
  * Marks event handlers as already wrapped in a reactive batch.
  *

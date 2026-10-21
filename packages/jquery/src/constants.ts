@@ -73,19 +73,6 @@ export const SYSTEM_MOUNT = {
   },
 } as const;
 
-/** Web Component patterns configuration and error templates. @internal */
-export const SYSTEM_COMPONENT = {
-  PREFIX: '[atom-component]',
-  ATTRS: {
-    BIND: 'data-aej-bind',
-    PART: 'data-aej-part',
-    LEGACY_BIND: 'data-bind',
-  },
-  ERRORS: {
-    NOT_REGISTERED: (tagName: string) => `Custom Element <${tagName}> is not registered.`,
-  },
-} as const;
-
 /** Visual instrumentation tuning parameters. @internal */
 export const SYSTEM_DEBUG = {
   DEFAULTS: {
