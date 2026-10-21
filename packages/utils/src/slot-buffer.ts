@@ -190,6 +190,8 @@ export class SlotBuffer<T> {
       this.#rawWrite(index, item);
       if (previousItem === null) {
         this.#activeItemsCount++;
+        const freeSlot = this.#freeIndices.indexOf(index);
+        if (freeSlot !== -1) this.#freeIndices.splice(freeSlot, 1);
       }
       if (index >= this.#physicalCapacity) {
         this.#physicalCapacity = index + 1;
