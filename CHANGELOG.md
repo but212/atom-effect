@@ -15,7 +15,9 @@
 #### Changed
 
 - Invalid listeners passed to `subscribe()` now throw `AtomError` directly instead of passing through an internal `Result` that every caller unwrapped immediately. Observable behavior is unchanged.
+- Option validation in `atom()`, `scheduler.maxFlushIterations`, and `batch()`, and the internal computed value-state check, now throw directly instead of building a `Result` that the caller unwrapped immediately. Observable behavior is unchanged.
 - Lens path helpers moved to their own module and both lens classes share one subscription implementation. Public exports are unchanged.
+- Removed internal pass-through wrappers (`nextVersion`, `nodeIsDirty`, `nodeIsShallowDirty`, `prepareTracking`, `nextEpoch`, `getCurrentFlushEpoch`, `trackEvaluationFailure`) and the unused internal re-exports in `core/index.ts`. Public exports and benchmarks are unchanged.
 
 ### jQuery
 

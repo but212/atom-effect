@@ -89,17 +89,13 @@ class ReactiveScheduler implements SchedulerState {
     return this.#onOverflowCallback;
   }
   set maxFlushIterations(iterationsLimit) {
-    Result.unwrap(this.#validateFlushIterations(iterationsLimit));
-    this.#maxFlushIterations = iterationsLimit;
-  }
-  #validateFlushIterations(iterationsLimit: number): Result<void, Error> {
     if (
       !Number.isInteger(iterationsLimit) ||
       iterationsLimit < SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS
     ) {
-      return Result.err(new SchedulerError('Invalid limit.'));
+      throw new SchedulerError('Invalid limit.');
     }
-    return Result.ok(undefined);
+    this.#maxFlushIterations = iterationsLimit;
   }
   set onOverflow(callback) {
     this.#onOverflowCallback = callback;
@@ -459,10 +455,6 @@ export const schedulerSchedule = (state: SchedulerState, callback: SchedulerJob)
 export const schedulerIsBatching = (state: SchedulerState) =>
   (state.state & SCHEDULER_STATE.BATCHING) !== 0;
 
-/** Returns the next reactive epoch identifier. */
-export const nextEpoch = (): number => scheduler.nextEpoch();
-export const getCurrentFlushEpoch = (): number => scheduler.sessionEpoch;
-
 /**
  * Logic: Atomic Update Batching
  * Groups multiple state updates into a single atomic change cycle.
@@ -490,15 +482,10 @@ export const getCurrentFlushEpoch = (): number => scheduler.sessionEpoch;
  * }); // Effect runs once here.
  * ```
  */
-function validateBatchFunction(callback: unknown): Result<void, Error> {
-  if (IS_DEV && typeof callback !== 'function') {
-    return Result.err(new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION));
-  }
-  return Result.ok(undefined);
-}
-
 export function batch<T>(callback: () => T): T {
-  Result.unwrap(validateBatchFunction(callback));
+  if (IS_DEV && typeof callback !== 'function') {
+    throw new TypeError(ERROR_MESSAGES.BATCH_CALLBACK_MUST_BE_FUNCTION);
+  }
 
   scheduler.startBatch();
   try {

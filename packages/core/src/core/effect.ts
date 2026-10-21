@@ -28,7 +28,6 @@ import {
 import {
   nodeCommitDeps,
   nodeHandleError,
-  nodeIsDirty,
   nodeStartTracking,
   nodeTrackDependency,
   runInTrackingContext,
@@ -49,9 +48,8 @@ import type {
 } from '@/types';
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
+import { BUFFER_FLAGS, disposeAll, isBufferDirty, refreshDepFlags } from './buffers';
 import {
-  getCurrentFlushEpoch,
   isAggregateExecutionLimitError,
   runInFlushScope,
   scheduler,
@@ -186,7 +184,7 @@ class EffectImpl
     const sessionId = ++this.#trackSessionId;
 
     nodeStartTracking(this);
-    prepareTracking(this);
+    refreshDepFlags(this);
 
     try {
       const executionResult = runInTrackingContext(trackingContext, this, this.#effectCallback);
@@ -211,7 +209,7 @@ class EffectImpl
     // Execution is skipped if the effect is not 'forced', has no dependencies
     // yet, and its dependencies haven't changed (dirty check). This minimizes
     // redundant computations during the flush cycle.
-    if (!(force || this._depSlots.size === 0 || nodeIsDirty(this))) return Result.ok(false);
+    if (!(force || this._depSlots.size === 0 || isBufferDirty(this))) return Result.ok(false);
 
     const budgetValidationResult = this.#validateBudget();
     if (Result.isErr(budgetValidationResult)) return budgetValidationResult;
@@ -303,7 +301,7 @@ class EffectImpl
   }
 
   #validateBudget(): Result<void, Error> {
-    const epoch = getCurrentFlushEpoch();
+    const epoch = scheduler.sessionEpoch;
     if (this.#lastFlushEpoch !== epoch) {
       this.#lastFlushEpoch = epoch;
       this.#flushIterationCount = 0;

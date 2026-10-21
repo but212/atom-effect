@@ -34,6 +34,8 @@ describe('Atom', () => {
     it('throws AtomError on initialization if invalid equal option is provided', () => {
       // @ts-expect-error Testing invalid option
       expect(() => atom(0, { equal: 'invalid' })).toThrow(AtomError);
+      // @ts-expect-error Testing invalid option
+      expect(() => atom(0, { equal: 'invalid' })).toThrow('options.equal must be a function');
     });
   });
 
