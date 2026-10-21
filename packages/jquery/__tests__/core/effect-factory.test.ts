@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { registerMapEffect, registerReactiveEffect } from '@/core/effect-factory';
 import $ from '@/index';
+import { debug } from '@/utils/debug';
 
 describe('Effect Factory', () => {
   /**
@@ -179,6 +180,35 @@ describe('Effect Factory', () => {
       } finally {
         registry.registry.cleanup(element);
         registry.registry.cleanup(el2);
+      }
+    });
+
+    it('Isolation: a throwing source in atomBind does not block sibling bindings', async () => {
+      const errorSpy = vi.spyOn(debug, 'error').mockImplementation(() => {});
+      const element = document.createElement('div');
+      const shouldFail = $.atom(true);
+      const title = $.atom('t1');
+      const label = $.computed(() => {
+        if (shouldFail.value) throw new Error('boom');
+        return 'ok';
+      });
+
+      try {
+        $(element).atomBind({ text: label, attr: { title } });
+        await $.nextTick();
+        expect(element.getAttribute('title')).toBe('t1');
+        expect(errorSpy).toHaveBeenCalled();
+
+        title.value = 't2';
+        await $.nextTick();
+        expect(element.getAttribute('title')).toBe('t2');
+
+        shouldFail.value = false;
+        await $.nextTick();
+        expect(element.textContent).toBe('ok');
+      } finally {
+        $(element).atomUnbind();
+        errorSpy.mockRestore();
       }
     });
   });

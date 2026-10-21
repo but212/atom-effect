@@ -11,7 +11,7 @@ This document outlines standard architectural patterns for implementing `@but212
 
 ### Using `$.atomFetch`
 
-For HTTP data fetching, `$.atomFetch` handles request cancellation, abort signals, and reactive URL recalculation automatically.
+For HTTP data fetching, `$.atomFetch` handles jqXHR cancellation and reactive URL recalculation automatically.
 
 ```javascript
 const userId = $.atom(1);

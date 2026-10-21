@@ -1,3 +1,4 @@
+import { isComputed } from '@but212/atom-effect';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import $, { type FetchError } from '@/index';
 import { createMockJqXHR } from '../utils/test-helpers';
@@ -12,6 +13,36 @@ describe('$.atomFetch', () => {
   });
 
   describe('Core Functionality', () => {
+    it('keeps the ComputedAtom lifecycle reactive while requests run outside the formula', async () => {
+      let resolveAjax!: (value: unknown) => void;
+      vi.spyOn($, 'ajax').mockImplementation(() =>
+        createMockJqXHR(
+          new Promise((resolve) => {
+            resolveAjax = resolve;
+          })
+        )
+      );
+
+      const data = $.atomFetch('/api/lifecycle', { defaultValue: null });
+      const states: string[] = [];
+      const dispose = $.effect(() => {
+        states.push(data.state);
+      });
+
+      expect(isComputed(data)).toBe(true);
+      expect(data.isPending).toBe(true);
+
+      resolveAjax({ ready: true });
+      await vi.waitFor(() => expect(data.value).toEqual({ ready: true }));
+      await $.nextTick();
+
+      expect(data.isResolved).toBe(true);
+      expect(data.isValid).toBe(true);
+      expect(states).toContain('pending');
+      expect(states).toContain('resolved');
+      dispose.dispose();
+    });
+
     it('should resolve data from a static URL into the atom', async () => {
       vi.spyOn($, 'ajax').mockResolvedValue({ name: 'Alice' });
 
@@ -80,6 +111,74 @@ describe('$.atomFetch', () => {
       expect(data.value).toEqual({ value: 2 });
       expect($.ajax).toHaveBeenCalledTimes(2);
     });
+
+    it('keeps peek() at the last successful value without starting or tracking a request', async () => {
+      let resolveAjax!: (value: unknown) => void;
+      vi.spyOn($, 'ajax').mockImplementation(() =>
+        createMockJqXHR(
+          new Promise((resolve) => {
+            resolveAjax = resolve;
+          })
+        )
+      );
+
+      const data = $.atomFetch<{ value: number }>('/api/peek', {
+        defaultValue: { value: 0 },
+        eager: false,
+      });
+
+      expect(data.peek()).toBeUndefined();
+      expect($.ajax).not.toHaveBeenCalled();
+      void data.value;
+      expect($.ajax).toHaveBeenCalledTimes(1);
+      resolveAjax({ value: 1 });
+      await vi.waitFor(() => expect(data.value).toEqual({ value: 1 }));
+
+      data.invalidate();
+      void data.value;
+      expect(data.peek()).toEqual({ value: 1 });
+      expect($.ajax).toHaveBeenCalledTimes(2);
+    });
+
+    it('refreshes synchronously when AJAX option dependencies drift before the scheduled effect', async () => {
+      const version = $.atom(1);
+      const abortFirst = vi.fn();
+      vi.spyOn($, 'ajax')
+        .mockReturnValueOnce(createMockJqXHR(new Promise(() => {}), { abort: abortFirst }))
+        .mockReturnValueOnce(createMockJqXHR(new Promise(() => {})));
+
+      const data = $.atomFetch('/api/options', {
+        defaultValue: null,
+        ajaxOptions: () => ({ headers: { 'X-Version': String(version.value) } }),
+      });
+
+      version.value = 2;
+      void data.value;
+
+      expect($.ajax).toHaveBeenCalledTimes(2);
+      expect(vi.mocked($.ajax).mock.calls[1]?.[0]?.headers?.['X-Version']).toBe('2');
+      expect(abortFirst).toHaveBeenCalledTimes(1);
+
+      await $.nextTick();
+      expect($.ajax).toHaveBeenCalledTimes(2);
+    });
+
+    it('consumes invalidate() on the first lazy read', async () => {
+      vi.spyOn($, 'ajax').mockResolvedValue({ value: 1 });
+
+      const data = $.atomFetch('/api/lazy-invalidate', {
+        defaultValue: { value: 0 },
+        eager: false,
+      });
+
+      data.invalidate();
+      void data.value;
+      void data.value;
+
+      expect($.ajax).toHaveBeenCalledTimes(1);
+      await $.nextTick();
+      expect(data.value).toEqual({ value: 1 });
+    });
   });
 
   describe('Option Prioritization', () => {
@@ -137,12 +236,16 @@ describe('$.atomFetch', () => {
 
       expect(data.hasError).toBe(true);
       expect(data.lastError?.message).toContain('Network Error: Internal Server Error (500)');
+      const derived = $.computed(() => data.value);
+      void derived.value;
+      expect(derived.hasError).toBe(true);
 
       // Error is wrapped by ComputedAtom core logic, extracting it from .cause
       const originalError = (data.lastError as { cause: FetchError }).cause;
       expect(originalError).toBeDefined();
       expect(originalError.jqXHR).toBe(jqXhrError);
       expect(onError).toHaveBeenCalledWith(originalError);
+      derived.dispose();
     });
 
     it('should provide a descriptive message even if statusText is missing', async () => {
@@ -257,17 +360,69 @@ describe('$.atomFetch', () => {
       expect(abortSpy).toHaveBeenCalled();
     });
 
-    it('should abort pending requests when the atom is disposed', async () => {
-      const abortSpy = vi.fn();
+    it('resets lifecycle state after disposing a pending request', async () => {
+      let rejectXhr!: (error: Error) => void;
+      const abortSpy = vi.fn(() => rejectXhr(new Error('Request aborted')));
       vi.spyOn($, 'ajax').mockReturnValue(
-        createMockJqXHR(new Promise(() => {}), { abort: abortSpy })
+        createMockJqXHR(
+          new Promise((_, reject) => {
+            rejectXhr = reject;
+          }),
+          { abort: abortSpy }
+        )
       );
 
       const data = $.atomFetch('/api/dispose', { defaultValue: null });
       await $.nextTick();
 
       data.dispose();
-      expect(abortSpy).toHaveBeenCalled();
+      expect(abortSpy).toHaveBeenCalledTimes(1);
+      expect(data.state).toBe('idle');
+      expect(data.isPending).toBe(false);
+      expect(data.isResolved).toBe(false);
+      expect(data.isRejected).toBe(false);
+      expect(data.hasError).toBe(false);
+      expect(data.isValid).toBe(true);
+      expect(data.lastError).toBeNull();
+      expect(data.errors).toEqual([]);
+      expect(data.isDisposed).toBe(true);
+
+      await Promise.resolve();
+      expect(data.state).toBe('idle');
+      expect(data.hasError).toBe(false);
+    });
+
+    it('resets resolved state after disposal while preserving peek()', async () => {
+      vi.spyOn($, 'ajax').mockResolvedValue({ value: 1 });
+
+      const data = $.atomFetch('/api/dispose-resolved', {
+        defaultValue: { value: 0 },
+      });
+      await vi.waitFor(() => expect(data.peek()).toEqual({ value: 1 }));
+
+      data.dispose();
+
+      expect(data.state).toBe('idle');
+      expect(data.isResolved).toBe(false);
+      expect(data.hasError).toBe(false);
+      expect(data.peek()).toEqual({ value: 1 });
+    });
+
+    it('clears rejected state and error after disposal', async () => {
+      vi.spyOn($, 'ajax').mockRejectedValue(new Error('Network fail'));
+
+      const data = $.atomFetch('/api/dispose-rejected', { defaultValue: null });
+      await vi.waitFor(() => expect(data.isRejected).toBe(true));
+      expect(data.lastError).toBeInstanceOf(Error);
+
+      data.dispose();
+
+      expect(data.state).toBe('idle');
+      expect(data.isRejected).toBe(false);
+      expect(data.hasError).toBe(false);
+      expect(data.isValid).toBe(true);
+      expect(data.lastError).toBeNull();
+      expect(data.errors).toEqual([]);
     });
 
     it('Async Tracking Loss: atoms read after await in transform are NOT tracked (Known Limitation)', async () => {

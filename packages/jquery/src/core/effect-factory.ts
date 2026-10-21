@@ -262,21 +262,22 @@ export function registerBatchedEffects(element: Element, tasks: BatchedTask[]): 
 
   const runners = tasks.map((task) => task.run(element));
 
-  if (hasReactive) {
-    registry.trackEffect(
-      element,
-      effect(
-        () => {
-          for (let i = 0; i < runners.length; i++) {
-            runners[i]?.();
-          }
-        },
-        { name: 'batch' }
-      )
-    );
-  } else {
+  // Constraint: Binding Isolation
+  // A source that throws while being read must not stop its siblings, matching
+  // the behavior of chained bindings that each own a separate effect.
+  const runAll = () => {
     for (let i = 0; i < runners.length; i++) {
-      runners[i]?.();
+      try {
+        runners[i]?.();
+      } catch (error) {
+        debug.error(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.UPDATER_ERROR('batch'), error);
+      }
     }
+  };
+
+  if (hasReactive) {
+    registry.trackEffect(element, effect(runAll, { name: 'batch' }));
+  } else {
+    runAll();
   }
 }

@@ -1,6 +1,13 @@
 /**
  * AEJ All Examples
  */
+import {
+  escapeHtml,
+  getSubmissionPresentation,
+  runSubmission,
+  SUBMISSION_RESET_DELAY_MS,
+} from './submission.js';
+
 $(() => {
   const $loader = $("#loader");
   const $pathChip = $("#current-path");
@@ -198,19 +205,8 @@ $(() => {
     });
 
     const formState = $.atom(cloneState());
-    const submitTrigger = $.atom(0);
-
-    const submission = $.computed(
-      async () => {
-        const id = submitTrigger.value;
-        if (id === 0) return null;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        if (Math.random() > 0.7)
-          throw new Error("DATABASE_TIMEOUT: Failed to persist changes.");
-        return { success: true, timestamp: new Date().toISOString() };
-      },
-      { defaultValue: null },
-    );
+    const submission = $.atom({ status: "idle" });
+    let submissionRun = 0;
 
     // Bind form with native constraint validation support
     $("#user-form").atomForm(formState, {
@@ -228,52 +224,61 @@ $(() => {
 
     $("#json-preview").atomText(() => JSON.stringify(formState.value, null, 2));
 
-    $("#submission-status").atomShow(() => {
-      const state = submission.state;
-      return state !== "idle" && (state !== "resolved" || !!submission.value);
-    });
+    $("#submission-status").atomShow(() =>
+      getSubmissionPresentation(submission.value).visible,
+    );
 
     $("#status-content").atomHtml(() => {
-      const state = submission.state;
-      if (state === "pending") {
+      const presentation = getSubmissionPresentation(submission.value);
+      if (presentation.status === "pending") {
         return '<div class="status status-pending">SYNCRONIZING WITH CLOUD...</div>';
       }
-      if (state === "rejected") {
-        const msg = submission.lastError?.message || "Unknown error";
-        const escapedMsg = $("<div>").text(msg).html();
+      if (presentation.status === "rejected") {
+        const escapedMsg = escapeHtml(presentation.errorMessage);
         return `<div class="status status-rejected" style="color:var(--primary-red)">ERROR: ${escapedMsg}</div>`;
       }
-      if (state === "resolved") {
-        const result = submission.value;
-        if (!result) return "";
-        const time = result.timestamp.split("T")[1].split(".")[0];
-        return `<div class="status status-resolved">SUCCESS: Profile updated at ${time}</div>`;
+      if (presentation.status === "resolved") {
+        return `<div class="status status-resolved">SUCCESS: Profile updated at ${presentation.time}</div>`;
       }
       return "";
     });
 
     $("#submitBtn").atomBind({
-      prop: { disabled: () => submission.state === "pending" },
+      prop: { disabled: () => getSubmissionPresentation(submission.value).disabled },
       html: () => {
-        const state = submission.state;
-        if (state === "pending") return '<div class="spinner"></div> SAVING...';
-        if (state === "rejected") return "Retry Save";
-        return "Save Profiles";
+        const presentation = getSubmissionPresentation(submission.value);
+        return presentation.status === "pending"
+          ? '<div class="spinner"></div> SAVING...'
+          : presentation.buttonText;
       },
     });
 
     $("#user-form").atomOn("submit", (e) => {
       e.preventDefault();
-      submitTrigger.value++;
+      const currentRun = ++submissionRun;
+      submission.value = { status: "pending" };
+      void runSubmission()
+        .then((result) => {
+          if (currentRun === submissionRun) submission.value = result;
+        })
+        .catch((error) => {
+          if (currentRun === submissionRun) {
+            submission.value = {
+              status: "rejected",
+              message: error instanceof Error ? error.message : "Unknown error",
+            };
+          }
+        });
     });
 
     const effReset = $.effect(() => {
-      if (submission.state === "resolved" && submission.value) {
+      if (submission.value.status === "resolved") {
         const timer = setTimeout(() => {
-          if (submission.state === "resolved") {
-            submitTrigger.value = 0;
+          if (submission.value.status === "resolved") {
+            submissionRun++;
+            submission.value = { status: "idle" };
           }
-        }, 3000);
+        }, SUBMISSION_RESET_DELAY_MS);
         return () => clearTimeout(timer);
       }
     });
@@ -301,7 +306,8 @@ $(() => {
     $("#resetForm").atomOn("click", () => {
       formState.value = cloneState();
       customFields.value = [];
-      submitTrigger.value = 0;
+      submissionRun++;
+      submission.value = { status: "idle" };
     });
 
     return () => {

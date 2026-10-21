@@ -505,9 +505,8 @@ declare global {
      * ```
      *
      * Logic: Concurrency Control
-     * Uses AbortController and jqXHR.abort() to enforce a "latest-only"
-     * resolution strategy. Older requests are canceled to prevent stale data
-     * from overwriting newer updates.
+     * Uses jqXHR.abort() to enforce a "latest-only" resolution strategy.
+     * Older requests are canceled to prevent stale data from overwriting newer updates.
      */
     atomFetch<T>(
       source: string | (() => string),
