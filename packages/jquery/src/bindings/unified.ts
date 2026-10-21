@@ -40,6 +40,7 @@ function toKebab(inputString: string): string {
 function checkBindingSafety(name: string, isProperty: boolean): string | undefined {
   const lowerCaseName = name.toLowerCase();
   if (lowerCaseName.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
+  if (lowerCaseName === 'srcdoc') return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
   if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
     return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
   }

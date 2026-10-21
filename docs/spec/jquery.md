@@ -32,7 +32,7 @@ Implementation invariants:
 | `.atomHtml(atom)` | Updates `innerHTML`, always routed through `sanitizeHtml` (§4). |
 | `.atomClass(name, atom)` / `.atomClass(classMap)` | Toggles classes by truthiness. A class remains applied if any associated condition is true. |
 | `.atomCss(prop, atom, unit?)` / map | Updates inline CSS; optional unit suffix. |
-| `.atomAttr(name, atom)` / map | Updates HTML/SVG attrs. Blocks `on*` and protocol payloads. Boolean attrs removed when `false`; WAI-ARIA booleans coerced to `"true"`/`"false"`. |
+| `.atomAttr(name, atom)` / map | Updates HTML/SVG attrs. Blocks `on*`, `srcdoc` and protocol payloads. Boolean attrs removed when `false`; WAI-ARIA booleans coerced to `"true"`/`"false"`. |
 | `.atomProp(prop, atom)` / map | Sets DOM object properties. Blocks structural properties (`innerHTML`, `outerHTML`) and prototype vectors (`__proto__`, `constructor`, `prototype`). |
 
 ### 1.3 Control flow
@@ -160,7 +160,7 @@ Implementation invariants:
 **Sink contracts:**
 
 - `.atomHtml` — always routes through `sanitizeHtml` (primary XSS defense).
-- `.atomAttr(name, atom)` — validates name and value; blocks `on*`; URI values protocol-checked (abort + warning on danger).
+- `.atomAttr(name, atom)` — validates name and value; blocks `on*` and `srcdoc` (case-insensitive); URI values protocol-checked (abort + warning on danger).
 - `.atomProp(name, atom)` — strict sink blacklist (`innerHTML`, `outerHTML`, `srcdoc` blocked; abort + warning on danger).
 - `.atomCss(prop, atom)` — filters declarations; strips comments; blocks `expression()`, `-moz-binding`, dangerous `url()`.
 

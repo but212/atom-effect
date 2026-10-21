@@ -429,6 +429,20 @@ describe('Chainable Methods', () => {
       expect(warnSpy).toHaveBeenCalled();
     });
 
+    it('Security: blocks srcdoc attribute regardless of case', async () => {
+      const warnSpy = vi.spyOn(console, 'warn');
+      const $iframe = $('<iframe>');
+
+      $iframe.atomAttr('srcdoc', $.atom('<script>parent.x()</script>'));
+      $iframe.atomAttr('SrcDoc', $.atom('<script>parent.x()</script>'));
+      $iframe.atomAttr('title', $.atom('ok'));
+
+      await $.nextTick();
+      expect($iframe.attr('srcdoc')).toBeUndefined();
+      expect($iframe.attr('title')).toBe('ok');
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
     it('Guards: warns on invalid use cases', () => {
       const warnSpy = vi.spyOn(console, 'warn');
       const $div = $('<div>');
