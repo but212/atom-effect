@@ -12,7 +12,7 @@
  * development with automatic lifecycle management.
  */
 
-import { type EffectObject, isAtom } from '@but212/atom-effect';
+import { atomLens, type EffectObject, isAtom } from '@but212/atom-effect';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { disableAutoCleanupFor, enableAutoCleanup, registry } from '@/core/registry';
@@ -121,7 +121,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         if (!lens) {
           const attrAtom = state.attributeAtom;
           if (attrAtom) {
-            const nextLens = $.atomLens(attrAtom, name);
+            const nextLens = atomLens(attrAtom, name);
             state.attributeLenses.set(name, nextLens);
             lens = nextLens;
           }

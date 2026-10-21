@@ -221,6 +221,14 @@ $('#app-root').atomHtml(page);
 
 - Replace `Result.isOk(r)` with `r.ok`; replace `unwrapOr` / `match` / `map` with an explicit `r.ok ? ... : ...` branch.
 
+### `$` namespace reduction (jQuery)
+
+The jQuery package no longer re-exposes helpers that nobody called through `$`: `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, `$.untracked`. Import them from `@but212/atom-effect` instead (CDN users: load the core UMD bundle and use its global).
+
+```typescript
+import { atomLens, mergeAtoms, untracked } from '@but212/atom-effect';
+```
+
 ---
 
 ## Support

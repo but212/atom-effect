@@ -6,22 +6,7 @@
  * primitives from the core atom-effect library.
  */
 
-import {
-  atom,
-  atomLens,
-  batch,
-  composeLens,
-  computed,
-  effect,
-  isAtom,
-  isComputed,
-  isEffect,
-  lensFor,
-  mergeAtoms,
-  mergeLenses,
-  aeNextTick as nextTick,
-  untracked,
-} from '@but212/atom-effect';
+import { atom, batch, computed, effect, isAtom, aeNextTick as nextTick } from '@but212/atom-effect';
 import { isPromise } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { debug } from '@/utils/debug';
@@ -58,16 +43,8 @@ $.extend({
   computed,
   effect,
   batch,
-  untracked,
   isAtom,
-  isComputed,
-  isEffect,
   isPromise,
   nextTick,
-  atomLens,
-  composeLens,
-  lensFor,
-  mergeAtoms,
-  mergeLenses,
   debug,
 });

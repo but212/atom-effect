@@ -14,12 +14,8 @@
 import type {
   ComputedAtom,
   ComputedOptions,
-  Dependency,
   EffectObject,
   EffectOptions,
-  MergedDependencyValue,
-  Paths,
-  PathValue,
   ReadonlyAtom,
   WritableAtom,
 } from '@but212/atom-effect';
@@ -32,7 +28,6 @@ import type {
   ComponentFn,
   CssBindings,
   CssValue,
-  DisposableWritableAtom,
   EffectResult,
   FetchOptions,
   FormOptions,
@@ -171,28 +166,6 @@ declare global {
      */
     batch<T>(fn: () => T): T;
     /**
-     * Executes a scope where reactive dependencies are suppressed.
-     *
-     * When to use:
-     * - Accessing atoms without creating an automatic subscription.
-     * - Performing side-effects (e.g., logging, DOM analytics) that must not trigger re-runs.
-     * - Breaking circular dependencies by performing silent reads.
-     *
-     * @param fn The non-reactive scope to execute.
-     * @returns The value returned by the provided function.
-     *
-     * @example
-     * ```typescript
-     * const count = $.atom(0);
-     *
-     * $.effect(() => {
-     *   // Re-runs only when 'someOtherAtom' changes, ignoring updates to 'count'
-     *   $.untracked(() => console.log('Current count:', count.value));
-     * });
-     * ```
-     */
-    untracked<T>(fn: () => T): T;
-    /**
      * Determines whether a value is a ReadonlyAtom.
      *
      * When to use:
@@ -207,34 +180,6 @@ declare global {
      * ```
      */
     isAtom(obj: unknown): obj is WritableAtom<unknown> | ReadonlyAtom<unknown>;
-    /**
-     * Determines whether a value is a ComputedAtom.
-     *
-     * When to use:
-     * - To identify derived state containers in debug or optimization logic.
-     *
-     * @example
-     * ```typescript
-     * if ($.isComputed(maybeAtom)) {
-     *   console.log('This node is a derived computation.');
-     * }
-     * ```
-     */
-    isComputed(obj: unknown): obj is ComputedAtom<unknown>;
-    /**
-     * Determines whether a value is an EffectObject.
-     *
-     * When to use:
-     * - To validate handles that manage reactive side-effects.
-     *
-     * @example
-     * ```typescript
-     * if ($.isEffect(maybeEffect)) {
-     *   maybeEffect.dispose();
-     * }
-     * ```
-     */
-    isEffect(obj: unknown): obj is EffectObject;
     /**
      * Determines whether a value is a Promise or a Thenable.
      *
@@ -264,61 +209,6 @@ declare global {
     nextTick(): Promise<void>;
 
     /**
-     * Combines multiple object-based atoms into a single computed atom with a flattened type.
-     *
-     * Logic: Snapshot Aggregation
-     * Merges the value types of all input atoms into a single unified object.
-     *
-     * @param atoms A variadic list of atoms or computed nodes to merge.
-     *
-     * @example
-     * ```typescript
-     * const a = $.atom({ x: 1 });
-     * const b = $.atom({ y: 2 });
-     * const c = $.computed(() => ({ z: 3 }));
-     *
-     * const combined = $.mergeAtoms(a, b, c);
-     * // combined.value is { x: number; y: number; z: number }
-     * ```
-     */
-    mergeAtoms<T extends Dependency<unknown>[]>(
-      ...atoms: T
-    ): ComputedAtom<MergedDependencyValue<T>>;
-
-    /**
-     * Merges multiple writable lenses into a single unified lens.
-     *
-     * When to use:
-     * - To synchronize multiple fields across different state trees.
-     * - To create a single "form" atom from multiple disparate source atoms.
-     *
-     * Constraint: Object-based Nodes Only
-     * Designed for object-based nodes. Merging primitive-valued nodes (e.g. strings, numbers)
-     * will result in a mismatch where the static TypeScript type resolves to the primitive type
-     * (e.g., `string`), but the runtime value returned is an index-keyed object (e.g., `{ '0': val1, '1': val2 }`).
-     *
-     * @param lenses A list of writable atoms/lenses to merge.
-     * @returns A unified writable atom that synchronizes all input lenses.
-     *
-     * @example
-     * ```typescript
-     * const profile = $.atom({ name: 'Alice' });
-     * const preferences = $.atom({ theme: 'dark' });
-     *
-     * const formState = $.mergeLenses(profile, preferences);
-     *
-     * // Reading formState.value returns: { name: 'Alice', theme: 'dark' }
-     * console.log(formState.value);
-     *
-     * // Writing updates both source atoms within a single batch
-     * formState.value = { name: 'Bob', theme: 'light' };
-     * ```
-     */
-    mergeLenses<L extends WritableAtom<unknown>[]>(
-      ...lenses: L
-    ): WritableAtom<MergedDependencyValue<L>>;
-
-    /**
      * Global diagnostic system for inspecting reactive behavior.
      *
      * When to use:
@@ -346,78 +236,6 @@ declare global {
       /** Logs a DOM mutation and triggers a visual highlight on the target. */
       domUpdated(prefix: string, target: Element | JQuery, type: string, value: unknown): void;
     };
-
-    /**
-     * Creates a reactive, two-way Lens into a nested property of an atom.
-     *
-     * When to use:
-     * - To bind UI inputs to specific fields in a large state object.
-     * - To minimize re-renders by subscribing only to a specific sub-path.
-     * - To create "slices" of state that can be passed to components.
-     *
-     * Logic: Path Flattening
-     * If the source atom is already a lens, this factory flattens the path
-     * (e.g., lens(lens(a, 'b'), 'c') -> lens(a, 'b.c')) to reduce proxy overhead.
-     *
-     * @param atom The source atom or lens to derive from.
-     * @param path A dot-separated string representing the path to the property.
-     * @returns A writable atom representing the value at the specified path.
-     *
-     * @example
-     * ```typescript
-     * const user = $.atom({ profile: { name: 'Alice', age: 25 } });
-     *
-     * // Create a two-way lens for the 'name' property
-     * const nameLens = $.atomLens(user, 'profile.name');
-     *
-     * console.log(nameLens.value); // 'Alice'
-     * nameLens.value = 'Bob';      // Updates user.value.profile.name
-     * ```
-     */
-    atomLens<T extends object, P extends Paths<T>>(
-      atom: WritableAtom<T>,
-      path: P
-    ): DisposableWritableAtom<PathValue<T, P>>;
-
-    /**
-     * Composes an existing lens with a new sub-path.
-     *
-     * Logic: Composition
-     * This is a semantic alias for {@link atomLens}. It creates a new lens
-     * starting from the value of the provided lens and navigating down the
-     * specified path.
-     *
-     * @param lens The base lens to compose from.
-     * @param path The sub-path relative to the base lens.
-     * @returns A new lens targeting the nested property.
-     */
-    composeLens<T extends object, P extends Paths<T>>(
-      lens: WritableAtom<T>,
-      path: P
-    ): DisposableWritableAtom<PathValue<T, P>>;
-
-    /**
-     * Creates a lens factory for a specific atom.
-     *
-     * When to use:
-     * - To create multiple lenses from the same root atom without repeating the root.
-     * - To enhance readability when defining many field bindings for a single state object.
-     *
-     * @param atom The root atom to create lenses for.
-     * @returns A function that accepts a path and returns a lens for that path.
-     *
-     * @example
-     * ```typescript
-     * const user = $.atom({ profile: { name: 'Alice', age: 25 } });
-     * const userLens = $.lensFor(user);
-     *
-     * const nameLens = userLens('profile.name');
-     * const ageLens = userLens('profile.age');
-     * ```
-     */
-    lensFor<T extends object>(
-      atom: WritableAtom<T>
-    ): <P extends Paths<T>>(p: P) => DisposableWritableAtom<PathValue<T, P>>;
 
     /**
      * - Multi-mode support: Modern 'history' or 'hash' for legacy environments.

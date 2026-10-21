@@ -23,6 +23,7 @@
 
 #### Removed
 
+- **BREAKING** `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, and `$.untracked`. Import them from `@but212/atom-effect`. See [MIGRATION.md](./MIGRATION.md).
 - **BREAKING** `$.atomNav` (PJAX navigation), its `AtomNav`/`AtomNavOptions` types, and the internal `navCoordinator` that arbitrated between `atomNav` and `$.route`. Use `$.route` for client-side navigation and `$.atomFetch` for fragment loading. See [MIGRATION.md](./MIGRATION.md).
 - The `examples/all` PHP/PJAX demo, which depended on `atomNav`.
 
