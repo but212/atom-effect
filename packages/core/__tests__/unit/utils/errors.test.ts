@@ -172,14 +172,12 @@ describe('Error Handling System', () => {
   });
 
   describe('getErrorMetadata (unified normalization)', () => {
-    it('should not stringify missing name and message properties on brand-based errors to literal "undefined" strings', () => {
-      const customBrandError = { _tag: 'CustomError' };
-      const meta = getErrorMetadata(customBrandError);
+    it('does not special-case _tag-branded plain objects', () => {
+      const meta = getErrorMetadata({ _tag: 'FooError', name: 'Foo', message: 'm', code: 'X' });
 
-      expect(meta.name).not.toBe('undefined');
-      expect(meta.message).not.toBe('undefined');
-      expect(meta.name).toBe('');
-      expect(meta.message).toBe('');
+      expect(meta.name).toBe('Unexpected error');
+      expect(meta.recoverable).toBe(true);
+      expect(meta.code).toBeUndefined();
     });
 
     it('should respect custom recoverable properties on standard Error objects', () => {
@@ -198,62 +196,6 @@ describe('Error Handling System', () => {
       const meta = getErrorMetadata(crossRealmError);
       expect(meta.name).toBe('Error');
       expect(meta.message).toBe('cross-realm');
-    });
-
-    it('should not throw when e._tag property getter throws an error', () => {
-      const throwingObject = {};
-      Object.defineProperty(throwingObject, '_tag', {
-        get() {
-          throw new Error('Getter execution failed');
-        },
-        enumerable: true,
-        configurable: true,
-      });
-
-      expect(() => {
-        const meta = getErrorMetadata(throwingObject);
-        expect(meta.name).toBe('Unexpected error');
-      }).not.toThrow();
-    });
-
-    it('should not throw when e._tag toString throws', () => {
-      const throwingObject = {
-        _tag: {
-          toString() {
-            throw new Error('toString execution failed');
-          },
-        },
-      };
-
-      expect(() => {
-        const meta = getErrorMetadata(throwingObject);
-        expect(meta.name).toBe('Unexpected error');
-      }).not.toThrow();
-    });
-
-    it('should validate and sanitize code property type to avoid type pollution', () => {
-      const customBrandError = { _tag: 'CustomError', code: 500 };
-      const meta = getErrorMetadata(customBrandError);
-
-      expect(typeof meta.code).not.toBe('number');
-      expect(meta.code).toBe('500');
-    });
-
-    it('should tolerate null-prototype metadata values during error extraction', () => {
-      const nullPrototypeValue = Object.create(null);
-      const customBrandError = {
-        _tag: 'CustomError',
-        name: nullPrototypeValue,
-        message: nullPrototypeValue,
-        code: nullPrototypeValue,
-      };
-
-      expect(() => getErrorMetadata(customBrandError)).not.toThrow();
-
-      const meta = getErrorMetadata(customBrandError);
-      expect(meta.name).toBe('');
-      expect(meta.message).toBe('');
-      expect(meta.code).toBeUndefined();
     });
 
     it('handles unexpected inputs (null, undefined, primitives) for getErrorMetadata', () => {
