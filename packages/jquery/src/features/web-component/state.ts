@@ -11,8 +11,7 @@
  * preventing memory leaks even in complex "move" scenarios (DOM re-parenting).
  */
 
-import type { Disposable } from '@but212/atom-effect';
-import { SlotBuffer } from '@but212/atom-effect-utils';
+import { atom, type Disposable } from '@but212/atom-effect';
 import type { WritableAtom } from '@/types';
 
 /**
@@ -32,7 +31,7 @@ export class ComponentState {
    * A buffer for all reactive effects, observers, and event listeners created during setup.
    * Disposed as a single unit in `dispose()`.
    */
-  effects = new SlotBuffer<Disposable>();
+  effects: Disposable[] = [];
 
   /** The root atom containing the full snapshot of attributes. */
   attributeAtom: WritableAtom<Record<string, string | null>> | null = null;
@@ -46,14 +45,49 @@ export class ComponentState {
   /** Tracks whether the slot change listener has been attached to the resolved root. */
   isSlotListenerAttached = false;
 
-  constructor(public host: HTMLElement) {}
+  /**
+   * Logic: Slot Assignment Tracking
+   * Creates the slot snapshot atom on first use and attaches the `slotchange` listener once a
+   * ShadowRoot is available, refreshing the snapshot when the root arrives late.
+   */
+  ensureSlots(root: ShadowRoot | null): void {
+    const snapshot = () => {
+      const next: Record<string, Node[]> = {};
+      if (root) {
+        for (const slotElement of root.querySelectorAll('slot')) {
+          next[slotElement.name || ''] = slotElement.assignedNodes();
+        }
+      }
+      return next;
+    };
+
+    if (!this.slotsAtom) {
+      this.slotsAtom = atom(snapshot());
+    } else if (root && !this.isSlotListenerAttached) {
+      this.slotsAtom.value = snapshot();
+    }
+
+    if (root && !this.isSlotListenerAttached) {
+      const slotsAtom = this.slotsAtom;
+      const listener = (event: Event) => {
+        const target = event.target as HTMLSlotElement;
+        slotsAtom.value = {
+          ...slotsAtom.peek(),
+          [target.name || '']: target.assignedNodes(),
+        };
+      };
+      root.addEventListener('slotchange', listener);
+      this.effects.push({ dispose: () => root.removeEventListener('slotchange', listener) });
+      this.isSlotListenerAttached = true;
+    }
+  }
 
   /**
    * Deterministically releases all reactive resources, observers, and event listeners.
    */
   dispose() {
     this.effects.forEach((effect) => effect.dispose());
-    this.effects.dispose();
+    this.effects.length = 0;
 
     // 2. Attribute Reset
     this.attributeAtom = null;

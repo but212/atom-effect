@@ -55,7 +55,7 @@ function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string
   return Object.entries(map).filter(([name]) => {
     const safetyError = checkBindingSafety(name, isProperty);
     if (safetyError !== undefined) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${safetyError}`);
+      debug.warn(SYSTEM_BINDING.PREFIX, safetyError);
       return false;
     }
     return true;
@@ -260,9 +260,7 @@ export function bindAttr(
 
           // 2. Validate and Apply
           if (attributeValue !== null && isDangerousUrl(name, attributeValue)) {
-            console.warn(
-              `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
-            );
+            debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name));
             continue;
           }
 
@@ -307,9 +305,7 @@ export function bindProp(
           if (previousValues[name] === value) continue;
 
           if (typeof value === 'string' && isDangerousUrl(name, value)) {
-            console.warn(
-              `${SYSTEM_BINDING.PREFIX} ${SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name)}`
-            );
+            debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name));
             continue;
           }
 
@@ -365,9 +361,7 @@ export function bindVal<T>(
     tagName.includes('-'); // Support Custom Elements (FACE)
 
   if (!isValidTag) {
-    console.warn(
-      `${SYSTEM_BINDING.PREFIX} ${SYSTEM_BINDING.ERRORS.INVALID_INPUT_ELEMENT(tagName)}`
-    );
+    debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.INVALID_INPUT_ELEMENT(tagName));
     return;
   }
   const { reactiveEffect, cleanup } = applyInputBinding($(element), atom, options);
@@ -403,7 +397,7 @@ function syncRadios(radioElement: HTMLInputElement): void {
  */
 export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): void {
   if (!(element instanceof HTMLInputElement)) {
-    console.warn(`${SYSTEM_BINDING.PREFIX} atomChecked called on non-input element`);
+    debug.warn(SYSTEM_BINDING.PREFIX, 'atomChecked called on non-input element');
     return;
   }
 

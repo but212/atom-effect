@@ -8,7 +8,7 @@
  */
 
 import { computed, effect, type ReadonlyAtom, untracked } from '@but212/atom-effect';
-import { Result, SlotBuffer } from '@but212/atom-effect-utils';
+import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { registry } from '@/core/registry';
@@ -34,8 +34,7 @@ import type { UrlAdapter } from './types';
 export interface RouteRenderer {
   $target: JQuery<HTMLElement>;
   config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
-  urlAdapter: UrlAdapter;
-  cleanups: SlotBuffer<() => void>;
+  cleanups: (() => void)[];
   previousPath: string;
 }
 
@@ -45,10 +44,9 @@ export interface RouteRenderer {
  */
 export function createRouteRenderer(
   $target: JQuery<HTMLElement>,
-  config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> },
-  urlAdapter: UrlAdapter
+  config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> }
 ): RouteRenderer {
-  return { $target, config, urlAdapter, cleanups: new SlotBuffer(), previousPath: '' };
+  return { $target, config, cleanups: [], previousPath: '' };
 }
 
 /**
@@ -132,7 +130,7 @@ export function renderRoute(
  */
 export function runRendererCleanups(renderer: RouteRenderer) {
   renderer.cleanups.forEach((cleanupCallback) => Result.tryCatch(cleanupCallback));
-  renderer.cleanups.clear();
+  renderer.cleanups.length = 0;
 }
 
 /**
@@ -228,7 +226,6 @@ export function setupRouteScanner(
 
   scan();
   return {
-    scan,
     resolvePath,
     disconnect: () => {
       activeLinkSubscription.dispose();

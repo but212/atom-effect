@@ -13,7 +13,6 @@
  */
 
 import { type Disposable, isAtom } from '@but212/atom-effect';
-import type { SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
 import { getOrCreateRootObserver } from '@/core/observer';
@@ -41,7 +40,7 @@ export const SetupFeatures = {
   dispatch(
     hostElement: HTMLElement,
     mappings: Record<string, ReactiveValue<unknown>>,
-    effects: SlotBuffer<Disposable>
+    effects: Disposable[]
   ) {
     for (const [name, source] of Object.entries(mappings)) {
       effects.push(
@@ -70,7 +69,6 @@ export const SetupFeatures = {
    */
   styles(root: ShadowRoot | Document, sheets: CSSStyleSheet[]) {
     root.adoptedStyleSheets = [...root.adoptedStyleSheets, ...sheets];
-    return sheets;
   },
 
   /**
@@ -84,7 +82,7 @@ export const SetupFeatures = {
   aria(
     internals: ElementInternals,
     aria: Record<string, ReadonlyAtom<unknown>>,
-    effects: SlotBuffer<Disposable>
+    effects: Disposable[]
   ) {
     for (const [prop, atom] of Object.entries(aria)) {
       effects.push(
@@ -110,7 +108,7 @@ export const SetupFeatures = {
   hydrate(
     root: ParentNode,
     bindings: Record<string, ReadonlyAtom<unknown>>,
-    effects: SlotBuffer<Disposable>
+    effects: Disposable[]
   ) {
     const { BIND, LEGACY_BIND } = SYSTEM_COMPONENT.ATTRS;
     const selector = `[${BIND}],[${LEGACY_BIND}]`;
@@ -156,11 +154,7 @@ export const SetupFeatures = {
    * `part` attributes are only functional on elements within a ShadowRoot
    * that are explicitly exposed to the outer document.
    */
-  parts(
-    root: ParentNode,
-    parts: Record<string, ReadonlyAtom<unknown>>,
-    effects: SlotBuffer<Disposable>
-  ) {
+  parts(root: ParentNode, parts: Record<string, ReadonlyAtom<unknown>>, effects: Disposable[]) {
     const attr = SYSTEM_COMPONENT.ATTRS.PART;
     const apply = (node: Element) => {
       const key = node.getAttribute(attr);
@@ -202,7 +196,7 @@ export const SetupFeatures = {
     root: ParentNode,
     selector: string,
     apply: (node: Element) => void,
-    effects: SlotBuffer<Disposable>
+    effects: Disposable[]
   ) {
     // Phase 1: Initial sync for already existing nodes
     if (root instanceof Element && root.matches(selector)) apply(root);
@@ -238,7 +232,7 @@ export const SetupFeatures = {
       | ReadonlyAtom<ValidityStateFlags | string>
       | ((value: unknown) => ValidityStateFlags | string)
       | undefined,
-    effects: SlotBuffer<Disposable>
+    effects: Disposable[]
   ) {
     const isAtomValue = isAtom(value);
     const valueAtom =
@@ -340,42 +334,5 @@ export const SetupFeatures = {
     observer.observe(host, options);
 
     return { atom, observer };
-  },
-
-  /**
-   * Logic: Slot Assignment Tracking
-   * Initializes reactive tracking of `assignedNodes` for every slot in
-   * the ShadowRoot.
-   */
-  slots(root: ShadowRoot | null): {
-    atom: ReadonlyAtom<Record<string, Node[]>>;
-    listener: (event: Event) => void;
-  } {
-    const snapshot = () => {
-      const next: Record<string, Node[]> = {};
-      if (root) {
-        const slots = root.querySelectorAll('slot');
-        for (const slotElement of slots) {
-          next[slotElement.name || ''] = slotElement.assignedNodes();
-        }
-      }
-      return next;
-    };
-
-    const atom = $.atom(snapshot());
-
-    const listener = (event: Event) => {
-      const target = event.target as HTMLSlotElement;
-      atom.value = {
-        ...atom.peek(),
-        [target.name || '']: target.assignedNodes(),
-      };
-    };
-
-    if (root) {
-      root.addEventListener('slotchange', listener);
-    }
-
-    return { atom, listener };
   },
 };

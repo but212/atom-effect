@@ -29,6 +29,8 @@
 
 #### Changed
 
+- Router, route view, and web-component cleanup lists are plain arrays instead of `SlotBuffer`.
+- Internal cleanups with no behavior change: `atomList` item mounting and the effect factory share helpers, web-component slot tracking has one owner (`ComponentState.ensureSlots`), binding warnings consistently use `debug.warn`, and unused route/web-component internals were removed.
 - Internal `normalizePath` for form field names is now `formNameToPath`, distinct from the router's path normalizer.
 - Internal helpers with no consumers outside their module are no longer exported.
 - Structural refactors with no behavior change: navigation helpers live under `features/route`, form field atoms share one delegation base, and the auto-cleanup lifecycle has a single owner.

@@ -39,8 +39,10 @@ export class AutoCleanup {
     return this.#isScheduled;
   }
 
-  markScheduled(scheduled: boolean): void {
-    this.#isScheduled = scheduled;
+  /** Observes `root` and records that the document-level safety net is running. */
+  start(root: CleanupRoot): void {
+    this.#isScheduled = true;
+    this.enable(root);
   }
 
   /**
@@ -52,16 +54,12 @@ export class AutoCleanup {
     if (!this.#isAllowed || this.#isScheduled || typeof document === 'undefined') return;
 
     if (document.body) {
-      this.#isScheduled = true;
-      this.enable(document.body);
+      this.start(document.body);
       return;
     }
 
     const initCleanup = () => {
-      if (document.body && !this.#isScheduled) {
-        this.#isScheduled = true;
-        this.enable(document.body);
-      }
+      if (document.body && !this.#isScheduled) this.start(document.body);
       if (this.#isScheduled) {
         document.removeEventListener('DOMContentLoaded', initCleanup);
       }

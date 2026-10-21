@@ -272,6 +272,9 @@ function atomFetch<T>(
   const disposeProjection = projection.dispose.bind(projection);
   const invalidateProjection = projection.invalidate.bind(projection);
 
+  // After disposal the reactive resource is gone, so reads fall back to the last local snapshot.
+  const snap = (): FetchSnapshot<T> => (disposed ? currentSnapshot : resource.value);
+
   Object.defineProperties(projection, {
     value: {
       configurable: true,
@@ -288,39 +291,36 @@ function atomFetch<T>(
     },
     state: {
       configurable: true,
-      get: () => (disposed ? currentSnapshot.state : resource.value.state),
+      get: () => snap().state,
     },
     isPending: {
       configurable: true,
-      get: () =>
-        disposed ? currentSnapshot.state === 'pending' : resource.value.state === 'pending',
+      get: () => snap().state === 'pending',
     },
     isResolved: {
       configurable: true,
-      get: () =>
-        disposed ? currentSnapshot.state === 'resolved' : resource.value.state === 'resolved',
+      get: () => snap().state === 'resolved',
     },
     isRejected: {
       configurable: true,
-      get: () =>
-        disposed ? currentSnapshot.state === 'rejected' : resource.value.state === 'rejected',
+      get: () => snap().state === 'rejected',
     },
     hasError: {
       configurable: true,
-      get: () => (disposed ? currentSnapshot.error !== null : resource.value.error !== null),
+      get: () => snap().error !== null,
     },
     isValid: {
       configurable: true,
-      get: () => (disposed ? currentSnapshot.error === null : resource.value.error === null),
+      get: () => snap().error === null,
     },
     lastError: {
       configurable: true,
-      get: () => (disposed ? currentSnapshot.error : resource.value.error),
+      get: () => snap().error,
     },
     errors: {
       configurable: true,
       get: () => {
-        const error = disposed ? currentSnapshot.error : resource.value.error;
+        const error = snap().error;
         return error ? Object.freeze([error]) : EMPTY_ERRORS;
       },
     },

@@ -25,13 +25,7 @@ import type { AEJConfig } from '@/types';
 // Ships the `JQuery`/`JQueryStatic` augmentations in the emitted declarations.
 export type {} from './global';
 
-import {
-  autoCleanup as autoCleanupSafetyNet,
-  disableAutoCleanup,
-  enableAutoCleanup,
-  registry,
-  setAutoCleanupAllowed,
-} from './core/registry';
+import { autoCleanup as autoCleanupSafetyNet, disableAutoCleanup, registry } from './core/registry';
 
 /**
  * Role: Library Orchestrator
@@ -72,15 +66,10 @@ export function initAEJ(config: AEJConfig = {}): void {
   // Security: The MutationObserver safety net is the primary defense against memory
   // leaks in long-running Single Page Applications (SPAs).
   disableAutoCleanup();
-  if (autoCleanup === false) {
-    setAutoCleanupAllowed(false);
-  } else {
-    setAutoCleanupAllowed(true);
+  autoCleanupSafetyNet.allow(autoCleanup !== false);
+  if (autoCleanup !== false) {
     const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
-    if (root) {
-      enableAutoCleanup(root);
-      autoCleanupSafetyNet.markScheduled(true);
-    }
+    if (root) autoCleanupSafetyNet.start(root);
   }
 }
 

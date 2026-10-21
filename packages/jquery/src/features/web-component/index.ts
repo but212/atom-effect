@@ -93,7 +93,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
     }
   }
 
-  const state = new ComponentState(element);
+  const state = new ComponentState();
   let isTearingDown = false;
 
   const controller: AtomComponentController = {
@@ -136,17 +136,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
      * `assignedNodes` changes in Shadow DOM.
      */
     get slots() {
-      if (!state.slotsAtom) {
-        const shadowRoot = resolveShadowRoot(element, state.root);
-        const { atom, listener } = SetupFeatures.slots(shadowRoot);
-        state.slotsAtom = atom;
-        if (shadowRoot) {
-          state.isSlotListenerAttached = true;
-          state.effects.push({
-            dispose: () => shadowRoot.removeEventListener('slotchange', listener),
-          });
-        }
-      }
+      if (!state.slotsAtom) state.ensureSlots(resolveShadowRoot(element, state.root));
       return (name: string) => {
         const key = name === 'default' ? '' : name;
         let lens = state.slotLenses.get(key);
@@ -224,38 +214,7 @@ export function useAtomComponent(element: HTMLElement): AtomComponentController 
         });
       }
 
-      if (!state.slotsAtom) {
-        const { atom, listener } = SetupFeatures.slots(shadowRoot);
-        state.slotsAtom = atom;
-        if (shadowRoot) {
-          state.isSlotListenerAttached = true;
-          state.effects.push({
-            dispose: () => shadowRoot.removeEventListener('slotchange', listener),
-          });
-        }
-      } else if (shadowRoot && !state.isSlotListenerAttached) {
-        const listener = (event: Event) => {
-          const target = event.target as HTMLSlotElement;
-          const slotsAtom = state.slotsAtom;
-          if (slotsAtom) {
-            slotsAtom.value = {
-              ...slotsAtom.peek(),
-              [target.name || '']: target.assignedNodes(),
-            };
-          }
-        };
-        shadowRoot.addEventListener('slotchange', listener);
-        state.effects.push({
-          dispose: () => shadowRoot.removeEventListener('slotchange', listener),
-        });
-        state.isSlotListenerAttached = true;
-
-        const next: Record<string, Node[]> = {};
-        for (const slotElement of shadowRoot.querySelectorAll('slot')) {
-          next[slotElement.name || ''] = slotElement.assignedNodes();
-        }
-        state.slotsAtom.value = next;
-      }
+      state.ensureSlots(shadowRoot);
 
       if (config.dispatch) SetupFeatures.dispatch(element, config.dispatch, state.effects);
       if (config.bind) SetupFeatures.hydrate(rootNode as Element, config.bind, state.effects);

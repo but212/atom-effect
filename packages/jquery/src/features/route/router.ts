@@ -14,7 +14,7 @@ import {
   type ReadonlyAtom,
   untracked,
 } from '@but212/atom-effect';
-import { Result, SlotBuffer, shallowEqual } from '@but212/atom-effect-utils';
+import { Result, shallowEqual } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_ROUTE } from '@/constants';
 import { registry } from '@/core/registry';
@@ -69,7 +69,7 @@ export class RouterImpl implements Router {
   #previousUrl = '';
   #currentDef: RouteDefinition | undefined;
 
-  readonly #cleanups = new SlotBuffer<() => void>();
+  readonly #cleanups: (() => void)[] = [];
 
   /**
    * Logic: Manifest Merging & Bootstrapping
@@ -112,7 +112,7 @@ export class RouterImpl implements Router {
     this.#config.default ??= discovery.default ?? '';
 
     this.#matcher = createRouteMatcher(this.#config.routes);
-    this.#renderer = createRouteRenderer(this.#$target, this.#config, this.#urlAdapter);
+    this.#renderer = createRouteRenderer(this.#$target, this.#config);
 
     const initState = this.#urlAdapter.get();
     this.#previousUrl = initState.url;
@@ -134,9 +134,9 @@ export class RouterImpl implements Router {
       : { path: this.#config.default, query: {}, params: {} };
 
     this.#locationAtom = createAtom({
-      path: initial.path ?? this.#config.default,
-      query: initial.query ?? {},
-      params: initial.params ?? {},
+      path: initial.path,
+      query: initial.query,
+      params: initial.params,
     });
 
     this.location = computed(() => this.#locationAtom.value);
@@ -362,6 +362,6 @@ export class RouterImpl implements Router {
     ];
     for (const atom of atoms) atom.dispose?.();
     this.#cleanups.forEach((teardown: () => void) => Result.tryCatch(teardown));
-    this.#cleanups.dispose();
+    this.#cleanups.length = 0;
   }
 }

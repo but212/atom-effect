@@ -356,9 +356,6 @@ export const autoCleanup = new AutoCleanup((element) => {
   registry.cleanupTree(element);
 });
 
-/** @internal */
-export const setAutoCleanupAllowed = (allowed: boolean): void => autoCleanup.allow(allowed);
-
 export const enableAutoCleanup = (root: Element | ShadowRoot | DocumentFragment): void =>
   autoCleanup.enable(root);
 

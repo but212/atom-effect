@@ -95,9 +95,9 @@ export function syncMetaData(window: Window, meta?: Record<string, string>): voi
 /**
  * Logic: Viewport Scroll Orchestration
  * Manages viewport scrolling after a navigation event.
- * Priority: Hash element > Window top (if fallback enabled).
+ * Priority: Hash element > Window top (when no hash is given).
  */
-export function performScroll(window: Window, hash?: string, fallbackToTop = false): void {
+export function performScroll(window: Window, hash?: string): void {
   let id = hash || '';
   try {
     id = decodeURIComponent(id);
@@ -107,7 +107,7 @@ export function performScroll(window: Window, hash?: string, fallbackToTop = fal
   const hashElement = id ? window.document.getElementById(id) : null;
   if (hashElement) {
     hashElement.scrollIntoView({ behavior: 'auto', block: 'start' });
-  } else if (!hash || fallbackToTop) {
+  } else if (!hash) {
     window.scrollTo(0, 0);
   }
 }

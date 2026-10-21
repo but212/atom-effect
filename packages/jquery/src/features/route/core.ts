@@ -12,10 +12,6 @@ import { normalizePath, parseQuery, resolveAnchorPath, splitPath } from './navig
 import type { MatchResult, NavigationResult, UrlAdapter } from './types';
 
 /**
- * Logic: Modern History API Adapter
- * Orchestrates URL synchronization using the standard window.history API.
- */
-/**
  * Logic: URL Adapter Factory
  * Creates a URL adapter based on the application's routing strategy.
  */
@@ -206,11 +202,10 @@ export function resolveRoute(
       routeDefinition: match.route.routeDefinition,
       pattern: match.route.pattern,
       params: match.params,
-      isMatch: true,
     };
   }
   const fallback = notFoundPath ? routes[notFoundPath] : undefined;
-  return { routeDefinition: fallback, pattern: normalized, params: {}, isMatch: false };
+  return { routeDefinition: fallback, pattern: normalized, params: {} };
 }
 
 /**
@@ -232,11 +227,10 @@ export function resolveNavigation(
     routeDefinition,
     pattern: routeName,
     params: matchParams,
-    isMatch,
   } = resolveRoute(matcher, path || config.default, config.routes, config.notFound);
   const params = { ...query, ...matchParams };
 
-  if (!routeDefinition && !isMatch) {
+  if (!routeDefinition) {
     return { success: true, path: routeName, query, params, routeDefinition: undefined };
   }
 

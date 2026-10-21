@@ -16,7 +16,7 @@ import type { ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
 import { sanitizeHtml } from '@/utils/sanitize';
 import { type ListContext, removeNode } from './context';
-import { ItemState, type PlaceCallbacks, type PreparedDiff } from './types';
+import { ItemState, type PreparedDiff } from './types';
 import { injectKeyToHtml, replaceDomNodes } from './utils';
 
 function isJQuery(obj: unknown): obj is JQuery {
@@ -166,6 +166,16 @@ export function renderItems<T>(
   return null;
 }
 
+/** Runs the bind/onAdd lifecycle for a newly mounted item. */
+function mountItem<T>($node: JQuery, item: T, index: number, options: ListOptions<T>): void {
+  const { bind, onAdd } = options;
+  if (bind) bind($node, item, index);
+  if (onAdd) {
+    onAdd($node);
+    debug.domUpdated(SYSTEM_LIST.PREFIX, $node, 'list.add', item);
+  }
+}
+
 /**
  * Logic: Dual-path Synchronization
  * Positions items in the DOM and executes lifecycle callbacks.
@@ -174,7 +184,7 @@ export function placeItems<T>(
   ctx: ListContext<T>,
   diff: PreparedDiff<T>,
   container: Element,
-  callbacks: PlaceCallbacks<T>,
+  options: ListOptions<T>,
   htmlFragments: string[] | null
 ): void {
   const { slots } = diff;
@@ -192,7 +202,7 @@ export function placeItems<T>(
     }
     container.replaceChildren(parsedFragment);
     let element = container.firstElementChild;
-    const { bind, onAdd } = callbacks;
+    const { bind, onAdd } = options;
 
     for (let i = 0; i < count; i++) {
       if (!element) break;
@@ -200,16 +210,11 @@ export function placeItems<T>(
       if (!slot) continue;
       const { item } = slot;
 
-      // Lazy wrapping: JQuery wrapper only allocated if callback exists
-      const $element = bind || onAdd ? $(element as HTMLElement) : null;
       slot.nodes = [element];
       slot.state = ItemState.Existing;
 
-      if (bind && $element) bind($element, item, i);
-      if (onAdd && $element) {
-        onAdd($element);
-        debug.domUpdated(SYSTEM_LIST.PREFIX, $element, 'list.add', item);
-      }
+      // Lazy wrapping: JQuery wrapper only allocated if callback exists
+      if (bind || onAdd) mountItem($(element as HTMLElement), item, i, options);
       element = element.nextElementSibling;
     }
     return;
@@ -257,7 +262,7 @@ export function placeItems<T>(
     }
   }
 
-  const { onAdd, bind, update } = callbacks;
+  const { onAdd, bind, update } = options;
 
   for (let i = 0; i < count; i++) {
     const slot = slots[i];
@@ -272,18 +277,8 @@ export function placeItems<T>(
           if (update) update($node, item, i);
           break;
         case ItemState.New:
-          if (bind) bind($node, item, i);
-          if (onAdd) {
-            onAdd($node);
-            debug.domUpdated(SYSTEM_LIST.PREFIX, $node, 'list.add', item);
-          }
-          break;
         case ItemState.ForceReplace:
-          if (bind) bind($node, item, i);
-          if (onAdd) {
-            onAdd($node);
-            debug.domUpdated(SYSTEM_LIST.PREFIX, $node, 'list.add', item);
-          }
+          mountItem($node, item, i, options);
           break;
       }
     }

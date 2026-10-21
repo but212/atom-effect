@@ -10,9 +10,7 @@
  * providing a unified 'PreparedDiff' schema.
  */
 
-import type { ListKey, ListKeyFn, ListOptions } from '@/types';
-
-export type { ListKey, ListKeyFn };
+import type { ListKey } from '@/types';
 
 /**
  * Enumeration of lifecycle flags representing the reconciliation status of a list item.
@@ -97,24 +95,6 @@ export interface PreparedDiff<T> {
   toRender: DiffSlot<T>[];
   /** The new index map generated during the diff process. */
   keyToIndex: Map<ListKey, number>;
-}
-
-/**
- * A collection of user-provided lifecycle hooks and event configurations.
- *
- * @internal
- */
-export interface PlaceCallbacks<T> {
-  /** Invoked once when an element is first bound to a reactive item. */
-  bind?: (($element: JQuery, item: T, index: number) => void) | undefined;
-  /** Invoked on subsequent updates when item data changes. */
-  update?: (($element: JQuery, item: T, index: number) => void) | undefined;
-  /** Invoked when a new item is physically added to the DOM. */
-  onAdd?: (($element: JQuery) => void) | undefined;
-  /** Invoked to manage the removal of an item, supporting asynchronous transitions. */
-  onRemove?: ListOptions<T>['onRemove'] | undefined;
-  /** Delegated event listeners for the list container. */
-  events?: ListOptions<T>['events'] | undefined;
 }
 
 /**

@@ -131,7 +131,7 @@ function createChainableMethod<V, O = V>(
       transformValue && value !== undefined ? transformValue(value, extra) : (value as O);
     const map = resolveArgs<O>(keyOrMap as string | Record<string, O>, resolvedValue);
     if (!map) {
-      console.warn(`${SYSTEM_BINDING.PREFIX} ${errorMessage}`);
+      debug.warn(SYSTEM_BINDING.PREFIX, errorMessage);
       return this;
     }
     return atomEachElement(this, (element) => binder(element, map));
