@@ -99,12 +99,10 @@ describe('Binding Registry', () => {
       registry.cleanup(element);
     });
 
-    it('should support markIgnored and unmarkIgnored', () => {
+    it('should support markIgnored', () => {
       const element = document.createElement('div');
       registry.markIgnored(element);
       expect(registry.isIgnored(element)).toBe(true);
-      registry.unmarkIgnored(element);
-      expect(registry.isIgnored(element)).toBe(false);
     });
   });
 

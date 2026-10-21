@@ -92,15 +92,6 @@ class BindingRegistry {
     return !!nodeStates.get(node)?.isIgnored;
   }
 
-  /**
-   * Removes the 'ignored' flag, re-enabling standard cleanup logic for the node.
-   * @internal
-   */
-  unmarkIgnored(node: Node): void {
-    const state = nodeStates.get(node);
-    if (state) state.isIgnored = false;
-  }
-
   /** @internal */
   isAutoCleanupScheduled(): boolean {
     return autoCleanup.isScheduled();

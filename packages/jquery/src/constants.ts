@@ -47,22 +47,6 @@ export const SYSTEM_BINDING = {
 /** Security rules, validation vectors, and error templates. @internal */
 export const SYSTEM_SECURITY = {
   DANGEROUS_PROPS: ['innerHTML', 'outerHTML', 'srcdoc', '__proto__', 'constructor', 'prototype'],
-  URL_PROPS: [
-    'src',
-    'href',
-    'action',
-    'formaction',
-    'data',
-    'poster',
-    'background',
-    'cite',
-    'longdesc',
-    'profile',
-    'usemap',
-    'classid',
-    'codebase',
-    'xlink:href',
-  ],
   DANGEROUS_PROTOCOL_PATTERN: '(?:javascript|vbscript)',
   ERRORS: {
     BLOCKED_EVENT_HANDLER: (name: string) => `Blocked handler: "${name}".`,
