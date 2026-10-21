@@ -54,7 +54,6 @@ Located in `__benchmarks__/micro/`, these test individual binding operations in 
 - **Binding**: `atomText`, `atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow/Hide`, `atomBind`.
 - **List**: `atomList` initial render, append, removal, shuffle, and bind callbacks.
 - **Input**: `atomVal`, `atomChecked`, and debounced updates.
-- **Web Component**: Setup/teardown, context injection, and Shadow DOM boundary traversal.
 - **Lens**: Creation, reading, writing, and propagation through lenses.
 
 ### Macro-Benchmarks
@@ -177,16 +176,6 @@ Refer to [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for further deta
 | atomForm update via DOM trigger (10 forms x 50 events) | 27.35 | 36.7930 | 42.0060 |
 | atomForm setup with validation hooks x 10 forms | 20.68 | 49.4620 | 60.4000 |
 
-#### Fetch: Setup & Dependency Pipeline
-
-| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
-| --- | --- | --- | --- |
-| setup eager atomFetch | 76,596.48 | 0.0123 | 0.1000 |
-| setup lazy atomFetch | 7,240,514.78 | 0.0001 | 0.0000 |
-| trigger refetch on dependency update | 16,475.93 | 0.0493 | 0.2000 |
-| trigger fetch with sync transformation pipeline | 35,235.68 | 0.0243 | 0.1000 |
-| rapid dependency updates causing multiple aborts (50 times) | 12,945.77 | 0.0697 | 0.1000 |
-
 #### List Rendering: atomList
 
 | Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
@@ -198,15 +187,6 @@ Refer to [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for further deta
 | Reconciliation: prepend 10 items to 100 | 2,653.00 | 0.3769 | 0.8000 |
 | Reconciliation: full shuffle 100 items | 1,969.36 | 0.5466 | 1.2000 |
 | Reconciliation: remove 50 items | 1,968.03 | 0.5453 | 1.3000 |
-
-#### Web Component
-
-| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
-| --- | --- | --- | --- |
-| Web Component: setup/teardown (100) | 914.39 | 1.0936 | 15.7000 |
-| Web Component: context lookup (depth 5) | 60,115.99 | 0.0166 | 0.1000 |
-| Web Component: context lookup (depth 20) | 35,571.00 | 0.0281 | 0.1000 |
-| Web Component: Shadow DOM context injection (depth 5) | 48,333.00 | 0.0207 | 0.1000 |
 
 #### Mounting: Component Lifecycle
 

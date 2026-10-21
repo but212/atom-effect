@@ -209,12 +209,11 @@ If you were manually dispatching or intercepting the `aej:context-request` custo
 
 ### Migration Steps
 
-- Replace `$.atomNav({ target })` with `$.route` for URL-driven views, and load server fragments with `$.atomFetch`:
+- Replace `$.atomNav({ target })` with `$.computed` and `fetch`, and render the fragment through `atomHtml` (always sanitized):
 
 ```typescript
-const page = $.atomFetch<string>(() => `/fragments/${router.currentRoute.value}`, {
+const page = $.computed(async () => (await fetch(`/fragments/${path.value}`)).text(), {
   defaultValue: '',
-  transform: (raw) => String(raw),
 });
 $('#app-root').atomHtml(page);
 ```
@@ -228,6 +227,25 @@ The jQuery package no longer re-exposes helpers that nobody called through `$`: 
 ```typescript
 import { atomLens, mergeAtoms, untracked } from '@but212/atom-effect';
 ```
+
+---
+
+## 6. `route`, `fetch`, and Web Component Removal (Unreleased, v0.35.0)
+
+### Changes
+
+`@but212/atom-effect-jquery` no longer ships these APIs:
+
+- `$.route` and the `RouteConfig`, `RouteDefinition`, `RouteLifecycle`, `Router` types.
+- `$.atomFetch` and the `FetchOptions`, `FetchError` types.
+- `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` and the `AtomComponentController`, `JQueryScopedSelector` types.
+
+`@but212/atom-effect` `getErrorMetadata` no longer reads `_tag` from plain objects; a thrown `{ _tag: 'FooError', ... }` object reports `name: 'Unexpected error'`. `AtomError` subclasses keep their names.
+
+### Migration Steps
+
+- Remote data: replace `$.atomFetch(url, { defaultValue })` with `$.computed(async () => (await fetch(url)).json(), { defaultValue })`. Dependencies read before the first `await` stay reactive; cancel stale requests with an `AbortController` if needed.
+- Routing, Custom Element lifecycle, and context injection: use a dedicated router or native Custom Element APIs, and share state by importing atoms. Pin `@but212/atom-effect-jquery@0.34.1` if you still depend on the removed features.
 
 ---
 

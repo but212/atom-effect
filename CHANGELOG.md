@@ -16,6 +16,7 @@
 
 - Invalid listeners passed to `subscribe()` now throw `AtomError` directly instead of passing through an internal `Result` that every caller unwrapped immediately. Observable behavior is unchanged.
 - Option validation in `atom()`, `scheduler.maxFlushIterations`, and `batch()`, and the internal computed value-state check, now throw directly instead of building a `Result` that the caller unwrapped immediately. Observable behavior is unchanged.
+- `getErrorMetadata` no longer special-cases plain objects with a `_tag` ending in `Error`; such objects now report `name: 'Unexpected error'`, `recoverable: true`, and no `code`. `AtomError` subclasses are unaffected.
 - Lens path helpers moved to their own module and both lens classes share one subscription implementation. Public exports are unchanged.
 - Removed internal pass-through wrappers (`nextVersion`, `nodeIsDirty`, `nodeIsShallowDirty`, `prepareTracking`, `nextEpoch`, `getCurrentFlushEpoch`, `trackEvaluationFailure`) and the unused internal re-exports in `core/index.ts`. Public exports and benchmarks are unchanged.
 
@@ -24,16 +25,16 @@
 #### Removed
 
 - **BREAKING** `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, and `$.untracked`. Import them from `@but212/atom-effect`. See [MIGRATION.md](./MIGRATION.md).
-- **BREAKING** `$.atomNav` (PJAX navigation), its `AtomNav`/`AtomNavOptions` types, and the internal `navCoordinator` that arbitrated between `atomNav` and `$.route`. Use `$.route` for client-side navigation and `$.atomFetch` for fragment loading. See [MIGRATION.md](./MIGRATION.md).
+- **BREAKING** `$.atomNav` (PJAX navigation), its `AtomNav`/`AtomNavOptions` types, and the internal `navCoordinator` that arbitrated between `atomNav` and `$.route`. See [MIGRATION.md](./MIGRATION.md).
 - The `examples/all` PHP/PJAX demo, which depended on `atomNav`.
+- **BREAKING** `$.route`, `$.atomFetch`, `$.provideAtom`, `$.injectAtom`, and `$.useAtomComponent` with the `route`, `fetch`, and `web-component` features and their types (`RouteConfig`, `RouteDefinition`, `RouteLifecycle`, `Router`, `FetchOptions`, `FetchError`, `AtomComponentController`, `JQueryScopedSelector`). Use `$.computed` with `fetch` for remote data; routing and Custom Element integration are no longer provided. See [MIGRATION.md](./MIGRATION.md).
 
 #### Changed
 
-- Router, route view, and web-component cleanup lists are plain arrays instead of `SlotBuffer`.
-- Internal cleanups with no behavior change: `atomList` item mounting and the effect factory share helpers, web-component slot tracking has one owner (`ComponentState.ensureSlots`), binding warnings consistently use `debug.warn`, and unused route/web-component internals were removed.
-- Internal `normalizePath` for form field names is now `formNameToPath`, distinct from the router's path normalizer.
+- Internal cleanups with no behavior change: `atomList` item mounting and the effect factory share helpers and binding warnings consistently use `debug.warn`.
+- Internal `normalizePath` for form field names is now `formNameToPath`.
 - Internal helpers with no consumers outside their module are no longer exported.
-- Structural refactors with no behavior change: navigation helpers live under `features/route`, form field atoms share one delegation base, and the auto-cleanup lifecycle has a single owner.
+- Structural refactors with no behavior change: form field atoms share one delegation base, and the auto-cleanup lifecycle has a single owner.
 
 #### Fixed
 

@@ -10,7 +10,7 @@ This document provides essential context and operational mandates for AI agents 
 
 - **`packages/core`**: The core reactive engine (Atoms, Computeds, Effects).
 - **`packages/jquery`**: jQuery bindings with automatic lifecycle management and security sanitization.
-- **`packages/utils`**: Functional primitives (Option, Result) and internal type guards.
+- **`packages/utils`**: Functional primitives (`Result`, `SlotBuffer`) and internal type guards.
 - **`packages/configs`**: Shared build and test configurations.
 
 ## 3. Core Commands
