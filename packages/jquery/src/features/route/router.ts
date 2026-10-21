@@ -28,7 +28,7 @@ import {
   resolveRoute,
 } from './core';
 import { normalizePath, parseQuery, splitPath } from './navigation';
-import type { UrlAdapter } from './types';
+import type { ResolvedRouteConfig, UrlAdapter } from './types';
 import {
   createRouteRenderer,
   discoverRoutes,
@@ -51,7 +51,7 @@ export class RouterImpl implements Router {
   public readonly params: ReadonlyAtom<Record<string, string>>;
 
   readonly #matcher: RouteMatcher;
-  readonly #config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
+  readonly #config: ResolvedRouteConfig;
   readonly #urlAdapter: UrlAdapter;
   readonly #$target: JQuery<HTMLElement>;
 
@@ -87,7 +87,7 @@ export class RouterImpl implements Router {
       afterTransition: config.afterTransition ?? (() => {}),
       ...config,
       routes: { ...config.routes },
-    } as Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
+    } as ResolvedRouteConfig;
 
     const targetOption = this.#config.target;
     this.#$target =
@@ -249,23 +249,31 @@ export class RouterImpl implements Router {
     // to the URL change we are about to trigger manually.
     this.#isTransitioning = true;
     try {
-      const nextState = this.#urlAdapter.commit(fullPath);
-      const navigationResult = resolveNavigation(
-        this.#matcher,
-        this.#config,
-        nextState.path,
-        nextState.query,
-        this
-      );
-      if (navigationResult.success) {
-        this.#updateState(navigationResult.path, navigationResult.query, navigationResult.params);
-      } else {
-        // Revert: Navigation rejected by an 'onEnter' guard.
+      // Revert: Navigation rejected by an 'onEnter' guard.
+      if (!this.#adopt(this.#urlAdapter.commit(fullPath))) {
         this.#urlAdapter.revert(this.#previousUrl);
       }
     } finally {
       this.#isTransitioning = false;
     }
+  }
+
+  /**
+   * Logic: Guarded Adoption
+   * Resolves a URL state through the route guards and applies it when accepted.
+   * Returns `false` when an `onEnter` guard rejects the navigation.
+   */
+  #adopt(state: { path: string; query: Record<string, string> }): boolean {
+    const result = resolveNavigation(
+      this.#matcher,
+      this.#config,
+      normalizePath(state.path),
+      state.query,
+      this
+    );
+    if (!result.success) return false;
+    this.#updateState(result.path, result.query, result.params);
+    return true;
   }
 
   #revertUrl(previousUrl: string) {
@@ -295,20 +303,8 @@ export class RouterImpl implements Router {
       return;
     }
 
-    const navigationResult = resolveNavigation(
-      this.#matcher,
-      this.#config,
-      normalizePath(adapterState.path),
-      adapterState.query,
-      this
-    );
-
-    if (navigationResult.success) {
-      this.#updateState(navigationResult.path, navigationResult.query, navigationResult.params);
-    } else {
-      // Guard failure on browser-initiated navigation (Back/Forward).
-      this.#revertUrl(this.#previousUrl);
-    }
+    // Guard failure on browser-initiated navigation (Back/Forward).
+    if (!this.#adopt(adapterState)) this.#revertUrl(this.#previousUrl);
   }
 
   /**

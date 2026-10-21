@@ -9,7 +9,7 @@
 import { untracked } from '@but212/atom-effect';
 import type { RouteDefinition, Router } from '@/types';
 import { normalizePath, parseQuery, resolveAnchorPath, splitPath } from './navigation';
-import type { MatchResult, NavigationResult, UrlAdapter } from './types';
+import type { NavigationResult, UrlAdapter } from './types';
 
 /**
  * Logic: URL Adapter Factory
@@ -84,14 +84,22 @@ export function createAdapter(mode: 'history' | 'hash', basePath?: string): UrlA
   };
 }
 
+interface DynamicRoute {
+  readonly pattern: string;
+  readonly routeDefinition: RouteDefinition;
+  readonly regex: RegExp;
+  readonly paramNames: string[];
+}
+
+interface RouteMatch {
+  readonly pattern: string;
+  readonly routeDefinition: RouteDefinition;
+  readonly params: Record<string, string>;
+}
+
 export interface RouteMatcher {
   readonly exact: Map<string, RouteDefinition>;
-  readonly dynamic: Array<{
-    readonly pattern: string;
-    readonly routeDefinition: RouteDefinition;
-    readonly regex: RegExp;
-    readonly paramNames: string[];
-  }>;
+  readonly dynamic: DynamicRoute[];
 }
 
 /**
@@ -137,10 +145,10 @@ export function createRouteMatcher(routes: Record<string, RouteDefinition>): Rou
  * Logic: Routing Table Matcher
  * Attempts to match a path against the compiled routing table.
  */
-function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
+function matchRoute(matcher: RouteMatcher, path: string): RouteMatch | null {
   const exactRouteDefinition = matcher.exact.get(path);
   if (exactRouteDefinition) {
-    return { route: { pattern: path, routeDefinition: exactRouteDefinition }, params: {} };
+    return { pattern: path, routeDefinition: exactRouteDefinition, params: {} };
   }
   for (let i = 0, dynamicRoutesLength = matcher.dynamic.length; i < dynamicRoutesLength; i++) {
     const dynamicRoute = matcher.dynamic[i];
@@ -167,7 +175,8 @@ function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
         params[name] = matchedValue;
       }
       return {
-        route: { pattern: dynamicRoute.pattern, routeDefinition: dynamicRoute.routeDefinition },
+        pattern: dynamicRoute.pattern,
+        routeDefinition: dynamicRoute.routeDefinition,
         params,
       };
     }
@@ -181,7 +190,7 @@ function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
  */
 export function getRoutePattern(matcher: RouteMatcher, path: string): string {
   const match = matchRoute(matcher, path);
-  return match === null ? '' : match.route.pattern;
+  return match === null ? '' : match.pattern;
 }
 
 /**
@@ -199,8 +208,8 @@ export function resolveRoute(
   const match = matchRoute(matcher, normalized);
   if (match !== null) {
     return {
-      routeDefinition: match.route.routeDefinition,
-      pattern: match.route.pattern,
+      routeDefinition: match.routeDefinition,
+      pattern: match.pattern,
       params: match.params,
     };
   }

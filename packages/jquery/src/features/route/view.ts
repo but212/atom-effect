@@ -10,12 +10,10 @@
 import { computed, effect, type ReadonlyAtom, untracked } from '@but212/atom-effect';
 import { Result } from '@but212/atom-effect-utils';
 import $ from 'jquery';
-import { SYSTEM_COMPONENT } from '@/constants';
 import { registry } from '@/core/registry';
-import type { RouteConfig, RouteDefinition, Router } from '@/types';
-import { debug } from '@/utils/debug';
+import type { RouteDefinition, Router } from '@/types';
+import { debug, warnIfUnregistered } from '@/utils/debug';
 import { getRoutePattern, type RouteMatcher } from './core';
-import { reduceRouteEntries } from './discovery';
 import {
   isInterceptee,
   isNavigationClick,
@@ -26,14 +24,14 @@ import {
   syncMetaData,
   updateActiveState,
 } from './navigation';
-import type { UrlAdapter } from './types';
+import type { ResolvedRouteConfig, UrlAdapter } from './types';
 
 /**
  * State container for a specific routing target.
  */
 export interface RouteRenderer {
   $target: JQuery<HTMLElement>;
-  config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> };
+  config: ResolvedRouteConfig;
   cleanups: (() => void)[];
   previousPath: string;
 }
@@ -44,7 +42,7 @@ export interface RouteRenderer {
  */
 export function createRouteRenderer(
   $target: JQuery<HTMLElement>,
-  config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> }
+  config: ResolvedRouteConfig
 ): RouteRenderer {
   return { $target, config, cleanups: [], previousPath: '' };
 }
@@ -95,13 +93,8 @@ export function renderRoute(
 
   // Security & DX: Validate that all components in the new view are registered.
   // Prevents "silent failures" where custom elements appear as empty tags.
-  if (debug.enabled && typeof customElements !== 'undefined') {
-    for (const element of container.querySelectorAll(':not(:defined)')) {
-      const tagName = element.tagName.toLowerCase();
-      if (tagName.includes('-')) {
-        debug.warn(SYSTEM_COMPONENT.PREFIX, SYSTEM_COMPONENT.ERRORS.NOT_REGISTERED(tagName));
-      }
-    }
+  if (debug.enabled) {
+    for (const element of container.querySelectorAll(':not(:defined)')) warnIfUnregistered(element);
   }
 
   untracked(() => renderer.config.afterTransition(renderer.previousPath, routeName));
@@ -247,34 +240,29 @@ export function discoverRoutes(): {
   routes: Record<string, RouteDefinition>;
   default: string | undefined;
 } {
-  const templates = Array.from(
-    document.querySelectorAll<HTMLTemplateElement>('template[data-path]')
-  );
-  const discovery = reduceRouteEntries(
-    templates.map((templateElement, templateIndex) => {
-      const title =
-        templateElement.getAttribute('title') ?? templateElement.getAttribute('data-title');
-      return {
-        path: normalizePath(templateElement.getAttribute('data-path') ?? ''),
-        templateIndex,
-        ...(title ? { title } : {}),
-        isDefault: templateElement.hasAttribute('data-default'),
-      };
-    })
-  );
   const routes: Record<string, RouteDefinition> = {};
+  let defaultPath: string | undefined;
 
-  for (const [path, route] of Object.entries(discovery.routes)) {
-    const templateElement = templates[route.templateIndex];
-    if (!templateElement) continue;
-    templateElement.id ||= `route-${Math.random().toString(36).slice(2, 11)}`;
-    routes[path] = {
-      template: `#${templateElement.id}`,
-      ...(route.title ? { title: route.title } : {}),
-    };
+  for (const templateElement of document.querySelectorAll<HTMLTemplateElement>(
+    'template[data-path]'
+  )) {
+    const path = normalizePath(templateElement.getAttribute('data-path') ?? '');
+    const title =
+      templateElement.getAttribute('title') ?? templateElement.getAttribute('data-title');
+    const route = routes[path];
+
+    // The first template for a path wins; later ones only contribute a missing title.
+    if (!route) {
+      templateElement.id ||= `route-${Math.random().toString(36).slice(2, 11)}`;
+      routes[path] = { template: `#${templateElement.id}`, ...(title ? { title } : {}) };
+    } else if (title && !route.title) {
+      route.title = title;
+    }
+
+    if (templateElement.hasAttribute('data-default')) defaultPath = path;
   }
 
-  return { routes, default: discovery.defaultPath };
+  return { routes, default: defaultPath };
 }
 
 /**
@@ -288,7 +276,7 @@ export function discoverRoutes(): {
  * 3. File download heuristic (Ignores dots unless a specific route matches).
  */
 export function setupRouteInterceptor(
-  config: Required<RouteConfig> & { routes: Record<string, RouteDefinition> },
+  config: ResolvedRouteConfig,
   matcher: RouteMatcher,
   resolvePath: (element: Element) => string,
   navigate: (path: string) => Promise<void>

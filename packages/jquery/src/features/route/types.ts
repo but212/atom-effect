@@ -6,7 +6,7 @@
  * including URL state snapshots, adapter contracts, and matching results.
  */
 
-import type { RouteDefinition } from '@/types';
+import type { RouteConfig, RouteDefinition } from '@/types';
 
 /**
  * Logic: Immutable Navigation State
@@ -42,25 +42,6 @@ export interface UrlAdapter {
 }
 
 /**
- * Logic: Compiled Route Metadata
- * Internal metadata container for a resolved route pattern and its definition.
- */
-export interface CompiledRoute {
-  readonly pattern: string;
-  readonly routeDefinition: RouteDefinition;
-}
-
-/**
- * Logic: Polymorphic Match Result
- * Outcome of a route matching operation, using explicit null to safely represent
- * misses without wrapper object allocations.
- */
-export type MatchResult = {
-  readonly route: CompiledRoute;
-  readonly params: Record<string, string>;
-} | null;
-
-/**
  * Logic: Strict Navigation Outcome
  * Represents the final state of a navigation attempt. Uses a discriminated union
  * to eliminate impossible states where path exists but success is false.
@@ -74,3 +55,11 @@ export type NavigationResult =
       readonly params: Record<string, string>;
       readonly routeDefinition: RouteDefinition | undefined;
     };
+
+/**
+ * Logic: Resolved Router Configuration
+ * User configuration with defaults applied and declaratively discovered routes merged in.
+ */
+export type ResolvedRouteConfig = Required<RouteConfig> & {
+  routes: Record<string, RouteDefinition>;
+};

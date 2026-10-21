@@ -1,29 +1,41 @@
-import { describe, expect, it } from 'vitest';
-import { reduceRouteEntries } from '@/features/route/discovery';
+import { afterEach, describe, expect, it } from 'vitest';
+import { discoverRoutes } from '@/features/route/view';
 
-describe('reduceRouteEntries', () => {
+const templates = () => Array.from(document.querySelectorAll('template'));
+
+describe('discoverRoutes', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
   it('keeps the first template, fills a missing title, and selects the last default', () => {
-    const entries = [
-      { path: '/', templateIndex: 0, isDefault: false },
-      { path: '/', templateIndex: 1, title: 'Home', isDefault: true },
-      { path: '/', templateIndex: 2, title: 'Ignored', isDefault: false },
-      { path: '/about', templateIndex: 3, title: 'About', isDefault: true },
-    ] as const;
+    document.body.innerHTML = `
+      <template data-path="home"></template>
+      <template data-path="home" title="Home" data-default></template>
+      <template data-path="home" title="Ignored"></template>
+      <template data-path="about" title="About" data-default></template>
+    `;
+    const [first, second, third, fourth] = templates();
 
-    expect(reduceRouteEntries(entries)).toEqual({
+    expect(discoverRoutes()).toEqual({
       routes: {
-        '/': { templateIndex: 0, title: 'Home' },
-        '/about': { templateIndex: 3, title: 'About' },
+        home: { template: `#${first?.id}`, title: 'Home' },
+        about: { template: `#${fourth?.id}`, title: 'About' },
       },
-      defaultPath: '/about',
+      default: 'about',
     });
-    expect(entries[0]).not.toHaveProperty('title');
+    expect(first?.id).toMatch(/^route-/);
+    expect(second?.id).toBe('');
+    expect(third?.id).toBe('');
   });
 
   it('returns no default when no route is marked default', () => {
-    expect(reduceRouteEntries([{ path: '/home', templateIndex: 0, isDefault: false }])).toEqual({
-      routes: { '/home': { templateIndex: 0 } },
-      defaultPath: undefined,
+    document.body.innerHTML = '<template data-path="home"></template>';
+    const [only] = templates();
+
+    expect(discoverRoutes()).toEqual({
+      routes: { home: { template: `#${only?.id}` } },
+      default: undefined,
     });
   });
 });
