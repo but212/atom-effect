@@ -214,12 +214,15 @@ SPA router supporting HTML5 History and Hash modes.
 
 ## 7. Data fetching — `$.atomFetch(urlOrFn, options)`
 
-- **Concurrency**: auto-aborts the underlying jQuery `jqXHR` when reactive dependencies update.
-- **Normalization**: converts `jqXHR` into native `Error` classes.
-- Returns a computed atom exposing `.abort()` for manual cancellation of the active request.
+- Reactive URL and AJAX option dependencies are read synchronously before request handling begins. A `.value` read checks for input drift and starts the latest request immediately, even before the scheduled effect flush.
+- **Concurrency**: a changed dependency aborts the previous jQuery `jqXHR`; only the active request may update the exposed state.
+- **Lifecycle**: exposes the `ComputedAtom` state and value surface. `eager: false` starts on the first `.value` read; `invalidate()` schedules a refresh for the next `.value` read. `.peek()` returns the last successful value without starting or refreshing a request; before the first success it returns `undefined`.
+- **Normalization**: converts request and transform failures into native `Error` objects and calls `onError` for non-abort failures.
+- `.abort()` cancels the active `jqXHR`; `.dispose()` aborts the active request and releases reactive resources. After disposal, state is `idle`, lifecycle flags are false, and errors are cleared; `.peek()` retains the last successful value. No `AbortController` is created.
 
 ## 8. Effect orchestration invariants (all bindings)
 
 - **Race protection**: a monotonic `latestId` ensures only the most recent Promise resolution applies to the DOM.
 - **Disposal tracking**: pending async resolutions are linked to the `BindingRegistry`; if the element disconnects before resolution, the update is discarded.
 - **Execution isolation**: updaters run within `untracked` to avoid capturing secondary dependencies during the DOM write phase.
+- **Binding isolation**: bindings declared together through `atomBind` share one effect, but each source is read and applied independently; a source that throws is reported through `debug.error` and does not prevent sibling bindings from running or tracking their dependencies.
