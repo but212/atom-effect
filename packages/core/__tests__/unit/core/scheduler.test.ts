@@ -434,7 +434,7 @@ describe('Scheduler Engine', () => {
         // Run 10000 times (the MAX_EXECUTIONS_PER_FLUSH threshold)
         for (let i = 0; i < 10000; i++) {
           const res = scheduler.incrementFlushExecutionCount();
-          expect(Result.isOk(res)).toBe(true);
+          expect(res.ok).toBe(true);
         }
 
         // The 10001st call should exceed the limit and return an error
@@ -463,7 +463,7 @@ describe('Scheduler Engine', () => {
         const started = scheduler.startFlush();
         expect(started).toBe(true);
         for (let i = 1; i < SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH; i++) {
-          expect(Result.isOk(scheduler.incrementFlushExecutionCount())).toBe(true);
+          expect(scheduler.incrementFlushExecutionCount().ok).toBe(true);
         }
 
         source.value = 1;

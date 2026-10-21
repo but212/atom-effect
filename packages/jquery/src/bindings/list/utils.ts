@@ -56,7 +56,7 @@ export function cleanupNodes(nodes: Node[]): void {
 /**
  * Escapes special HTML characters to prevent attribute breakout.
  */
-export function escapeHtmlAttr(attributeValue: string): string {
+function escapeHtmlAttr(attributeValue: string): string {
   return attributeValue
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')

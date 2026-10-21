@@ -52,7 +52,7 @@ function getElements(elementSource: unknown): Node[] {
  * Inserts elements before a reference node while avoiding unnecessary array
  * allocations for jQuery collections.
  */
-export function insertOrAppend(
+function insertOrAppend(
   nodes: Node[] | undefined,
   nextNode: Node | null,
   container: Element

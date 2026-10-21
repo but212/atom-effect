@@ -18,11 +18,15 @@ import '@/bindings/list';
 import '@/bindings/mount';
 import '@/features/route';
 import '@/features/fetch';
-import '@/features/nav';
 import '@/features/web-component';
 import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 import type { AEJConfig } from '@/types';
+
+// Ships the `JQuery`/`JQueryStatic` augmentations in the emitted declarations.
+export type {} from './global';
+
 import {
+  autoCleanup as autoCleanupSafetyNet,
   disableAutoCleanup,
   enableAutoCleanup,
   registry,
@@ -75,7 +79,7 @@ export function initAEJ(config: AEJConfig = {}): void {
     const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
     if (root) {
       enableAutoCleanup(root);
-      registry.setAutoCleanupScheduled(true);
+      autoCleanupSafetyNet.markScheduled(true);
     }
   }
 }
@@ -128,8 +132,6 @@ export type {
 
 export type {
   AtomComponentController,
-  AtomNav,
-  AtomNavOptions,
   BindingOptions,
   ComponentFn,
   CssBindings,

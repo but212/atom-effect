@@ -11,7 +11,7 @@
  * tracking and notification logic to ensure architectural purity.
  */
 
-import { Result, SlotBuffer } from '@but212/atom-effect-utils';
+import { SlotBuffer } from '@but212/atom-effect-utils';
 import {
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
@@ -77,7 +77,7 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
   }
 
   subscribe(listener: SubscriberTarget<T>): () => void {
-    return Result.unwrap(nodeSubscribe(this, listener));
+    return nodeSubscribe(this, listener);
   }
 
   subscriberCount(): number {
@@ -86,7 +86,7 @@ export abstract class BaseNode<T = unknown> implements ReactiveNodeBase {
 }
 
 /** @internal */
-export function createTrackingContext(): TrackingContext {
+function createTrackingContext(): TrackingContext {
   return { stack: [], current: null };
 }
 
@@ -237,26 +237,21 @@ export function nextVersion(version: number): number {
  *
  * @internal
  */
-export function nodeSubscribe<T>(
-  node: ReactiveNode<T>,
-  listener: SubscriberTarget<T>
-): Result<() => void, Error> {
+export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): () => void {
   const isFunctionListener = typeof listener === 'function';
   const isObjectListener =
     !isFunctionListener && listener != null && typeof listener.execute === 'function';
 
   if (!isFunctionListener && !isObjectListener) {
-    return Result.err(
-      wrapError(
-        new TypeError('Invalid subscriber'),
-        AtomError,
-        ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
-      )
+    throw wrapError(
+      new TypeError('Invalid subscriber'),
+      AtomError,
+      ERROR_MESSAGES.ATOM_SUBSCRIBER_MUST_BE_FUNCTION
     );
   }
 
   if ((node.flags & STATE_FLAGS.DISPOSED) !== 0) {
-    return Result.ok(() => {});
+    return () => {};
   }
 
   node._subscriberSlots ??= new SlotBuffer<SubscriberTarget<T>>();
@@ -264,19 +259,19 @@ export function nodeSubscribe<T>(
 
   if (nodeHasSubscription(node, listener)) {
     if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
-    return Result.ok(() => {});
+    return () => {};
   }
 
   slots.push(listener);
   let targetNode: ReactiveNode<T> | undefined = node;
   let subscriberListener: SubscriberTarget<T> | undefined = listener;
-  return Result.ok(() => {
+  return () => {
     if (targetNode && subscriberListener) {
       nodeUnsubscribe(targetNode, subscriberListener);
       targetNode = undefined;
       subscriberListener = undefined;
     }
-  });
+  };
 }
 
 /** @internal */

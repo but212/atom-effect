@@ -110,7 +110,7 @@ export function insertNew(
 }
 
 /** @internal */
-export function depBufferSetAt(
+function depBufferSetAt(
   state: ReactiveDependencyTracker,
   index: number,
   dependencyLink: DependencyLink | null

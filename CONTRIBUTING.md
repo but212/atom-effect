@@ -100,7 +100,7 @@ Performance is critical. If you make a change, please verify there are no regres
 
 ## Coding Standards
 
-- **Performance Awareness**: V8 characteristics (hidden classes, Smi packing) are considered carefully in core logic. Please read [ARCHITECTURE.md](./packages/core/docs/ARCHITECTURE.md) before making structural changes.
+- **Performance Awareness**: V8 characteristics (hidden classes, Smi packing) are considered carefully in core logic. Please read the [core specification](./docs/spec/core.md) before making structural changes.
 - **Tests Required**: Every feature or bug fix should include a regression test.
 - **API Stability**: If you change the public API, please discuss it in an issue first.
 

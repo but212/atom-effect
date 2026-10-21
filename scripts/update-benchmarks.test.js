@@ -20,11 +20,8 @@ const rawResultFiles = [
 
 const documentationFiles = [
   'packages/core/docs/BENCHMARKS.md',
-  'packages/core/docs/BENCHMARKS_DETAILED.md',
   'packages/jquery/docs/BENCHMARKS.md',
-  'packages/jquery/docs/BENCHMARKS_DETAILED.md',
   'packages/utils/docs/BENCHMARKS.md',
-  'packages/utils/docs/BENCHMARKS_DETAILED.md',
 ];
 
 const sampleBenchmarkOutput =
@@ -68,7 +65,7 @@ test('updates documentation from a separate raw-results directory', async (t) =>
   assert.match(overview, /\| \*\*Atom\*\* \| Read \(untracked\) \| 1\.2K ops\/sec \|/);
 
   const detailed = await readFile(
-    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS_DETAILED.md'),
+    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
     'utf8'
   );
   assert.match(detailed, /\| untracked read: active \| 1,234\.00 \| 0\.8100 \| 1\.2000 \|/);
@@ -119,7 +116,7 @@ test('updates documentation from Vitest 5 table output format', async (t) => {
   assert.match(overview, /\| \*\*Atom\*\* \| Read \(untracked\) \| 1\.2K ops\/sec \|/);
 
   const detailed = await readFile(
-    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS_DETAILED.md'),
+    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
     'utf8'
   );
   assert.match(detailed, /\| untracked read: active \| 1,234\.00 \| 0\.8100 \| 1\.2000 \|/);
@@ -164,7 +161,7 @@ test('parses Vitest 5 benchmark when case name contains "ops/sec"', async (t) =>
   main(['node', 'update-benchmarks.js', temporaryResultsDirectory]);
 
   const detailed = await readFile(
-    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS_DETAILED.md'),
+    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
     'utf8'
   );
   // normalizeName removes punctuation and "x\d+", keeping "untracked read active 500 ops sec"

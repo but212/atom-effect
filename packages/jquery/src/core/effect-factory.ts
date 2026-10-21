@@ -7,11 +7,10 @@
  * and ensures deterministic resource cleanup via the registry.
  */
 
-import { effect, isAtom, untracked } from '@but212/atom-effect';
+import { effect, isAtom, isPromise, untracked } from '@but212/atom-effect';
 import { SYSTEM_BINDING } from '@/constants';
 import { registry } from '@/core/registry';
 import type { AsyncReactiveValue } from '@/types';
-import { isPromise } from '@/utils';
 import { debug } from '@/utils/debug';
 
 /**
@@ -133,6 +132,43 @@ function createAsyncRunner<T>(
 }
 
 /**
+ * Logic: Effect Registration
+ * Defers to the active batch collector when one exists; otherwise runs `read` inside a registry-tracked
+ * effect for reactive inputs, or applies it once for static inputs.
+ *
+ * @internal
+ */
+function registerEffect<T>(
+  element: Element,
+  hasReactive: boolean,
+  debugType: BindingDebugType,
+  updater: (value: T) => void,
+  read: () => T | Promise<T>
+): void {
+  if (activeBatchCollector) {
+    activeBatchCollector.push({
+      isReactive: hasReactive,
+      run: (element) => {
+        const runner = createAsyncRunner(element, debugType, updater);
+        return () => runner(read());
+      },
+    });
+    return;
+  }
+
+  const runner = createAsyncRunner(element, debugType, updater);
+
+  if (hasReactive) {
+    registry.trackEffect(
+      element,
+      effect(() => runner(read()), { name: debugType })
+    );
+  } else {
+    runner(read());
+  }
+}
+
+/**
  * Logic: Reactive Value Binding
  * Establishes a reactive effect between a single source and a DOM element.
  *
@@ -150,27 +186,7 @@ export function registerReactiveEffect<T>(
 ): void {
   const hasReactive = isAtom(source) || typeof source === 'function';
 
-  if (activeBatchCollector) {
-    activeBatchCollector.push({
-      isReactive: hasReactive,
-      run: (element) => {
-        const runner = createAsyncRunner(element, debugType, updater);
-        return () => runner(getSourceValue(source));
-      },
-    });
-    return;
-  }
-
-  const runner = createAsyncRunner(element, debugType, updater);
-
-  if (hasReactive) {
-    registry.trackEffect(
-      element,
-      effect(() => runner(getSourceValue(source)), { name: debugType })
-    );
-  } else {
-    runner(source);
-  }
+  registerEffect(element, hasReactive, debugType, updater, () => getSourceValue(source));
 }
 
 /**
@@ -227,27 +243,7 @@ export function registerMapEffect<T>(
     return resolvedMap;
   };
 
-  if (activeBatchCollector) {
-    activeBatchCollector.push({
-      isReactive: hasReactive,
-      run: (element) => {
-        const runner = createAsyncRunner(element, debugType, updater);
-        return () => runner(collect());
-      },
-    });
-    return;
-  }
-
-  const runner = createAsyncRunner(element, debugType, updater);
-
-  if (hasReactive) {
-    registry.trackEffect(
-      element,
-      effect(() => runner(collect()), { name: debugType })
-    );
-  } else {
-    runner(collect());
-  }
+  registerEffect(element, hasReactive, debugType, updater, collect);
 }
 
 export function registerBatchedEffects(element: Element, tasks: BatchedTask[]): void {

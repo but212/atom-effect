@@ -371,47 +371,6 @@ export interface Router {
   destroy: () => void;
 }
 
-/** Options for AJAX-based fragment navigation. */
-export interface AtomNavOptions {
-  /** The target container for injected content. */
-  target: string | JQuery<HTMLElement> | HTMLElement;
-  /** The CSS selector for link elements whose clicks should be intercepted (default: 'a[data-nav]'). */
-  selector?: string;
-  /** Custom HTTP headers for navigation requests. */
-  headers?: Record<string, string>;
-  /** Hook triggered before a navigation request is initiated. */
-  onBeforeLoad?: (
-    url: string,
-    signal: AbortSignal
-  ) => boolean | undefined | Promise<boolean | undefined>;
-  /** Callback triggered after the content has been injected. */
-  onMount?: ($container: JQuery, url: string) => void;
-  /** Callback triggered before content is replaced. */
-  onUnmount?: ($container: JQuery, oldUrl: string) => void;
-  /** Callback for handling navigation errors. */
-  onError?: (error: unknown, url: string) => boolean | undefined;
-  /** Whether to reset scroll position to the top after navigation. */
-  scrollToTop?: boolean;
-  /** Whether to synchronize the document title with the loaded page. */
-  syncTitle?: boolean;
-  /** Optional window context for cross-origin navigation. */
-  window?: Window & typeof globalThis;
-}
-
-/** Interface for managing AJAX fragment navigation. */
-export interface AtomNav {
-  /** Reactive atom containing the currently loaded URL. */
-  currentUrl: ReadonlyAtom<string>;
-  /** Reactive atom indicating whether a navigation request is in progress. */
-  isPending: ReadonlyAtom<boolean>;
-  /** Reactive atom indicating whether the last navigation failed. */
-  hasError: ReadonlyAtom<boolean>;
-  /** Navigates to a specific URL and replaces the container content. */
-  navigate(url: string, options?: { replace?: boolean }): Promise<void>;
-  /** Disposes of the navigation manager and observers. */
-  destroy: () => void;
-}
-
 /**
  * Options for customizing jQuery core method overrides.
  *

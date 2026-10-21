@@ -3,20 +3,9 @@ import { Result } from '../dist';
 import { keep, REPEATS } from './setup';
 
 describe('Result', () => {
-  const okValue = Result.ok(1);
   const errorObject = new Error('test');
-  const errorValue = Result.err(errorObject);
 
-  // Pre-generate data structures to minimize runtime overhead inside benchmark loops.
-  const mixedResults = Array.from({ length: REPEATS }, (_, i) =>
-    i % 2 === 0 ? okValue : errorValue
-  );
   const mixedFlags = Array.from({ length: REPEATS }, (_, i) => i % 2 === 0);
-
-  const resultMatcher = {
-    ok: (value: number) => value,
-    err: (_error: Error) => -1,
-  };
 
   const okCallback = () => 1;
   const errorCallback = () => {
@@ -26,11 +15,9 @@ describe('Result', () => {
     i % 2 === 0 ? okCallback : errorCallback
   );
 
-  const mapCallback = (value: number) => value + 1;
-
   const repeats = REPEATS;
   const _keep = keep;
-  const { ok, err, isOk, unwrapOr, map, match, tryCatch } = Result;
+  const { ok, err, tryCatch } = Result;
 
   test('Result Operations', async ({ bench }) => {
     await bench.compare(
@@ -42,26 +29,6 @@ describe('Result', () => {
       bench(`Result.err creation (x${repeats})`, () => {
         for (let i = 0; i < repeats; i++) {
           _keep(err(errorObject));
-        }
-      }),
-      bench(`isOk (x${repeats})`, () => {
-        for (let i = 0; i < repeats; i++) {
-          _keep(isOk(okValue));
-        }
-      }),
-      bench(`unwrapOr (mixed, x${repeats})`, () => {
-        for (let i = 0; i < repeats; i++) {
-          _keep(unwrapOr(mixedResults[i], 0));
-        }
-      }),
-      bench(`map (x${repeats})`, () => {
-        for (let i = 0; i < repeats; i++) {
-          _keep(map(okValue, mapCallback));
-        }
-      }),
-      bench(`Result.match (mixed, x${repeats})`, () => {
-        for (let i = 0; i < repeats; i++) {
-          _keep(match(mixedResults[i], resultMatcher));
         }
       }),
       bench(`Result.tryCatch (mixed, x${repeats})`, () => {

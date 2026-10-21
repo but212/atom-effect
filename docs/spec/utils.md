@@ -1,6 +1,6 @@
 # Utils Specification — `@but212/atom-effect-utils`
 
-Normative contracts for the functional primitives and internal data structures. Benchmarks stay in `packages/utils/docs/BENCHMARKS*.md`; this document covers behavior only.
+Normative contracts for the functional primitives and internal data structures. Benchmarks stay in `packages/utils/docs/BENCHMARKS.md`; this document covers behavior only.
 
 ## 1. `Result<T, E>`
 
@@ -9,7 +9,7 @@ A discriminated union `Ok<T> | Err<E>` for functional error handling without thr
 - `Ok<T>`: `{ ok: true; value: T; error: undefined }`
 - `Err<E>`: `{ ok: false; value: undefined; error: E }`
 - Default error type `E = Error` when unspecified.
-- Consumers must check `result.ok` before accessing `value`/`error` (compile-time enforced). `isResult(value)` verifies both the Result brands and the complete Ok/Err field invariants at runtime; malformed or throwing objects return `false`.
+- Consumers must check `result.ok` before accessing `value`/`error` (compile-time enforced).
 
 ### Factory & helper contracts
 
@@ -17,29 +17,13 @@ A discriminated union `Ok<T> | Err<E>` for functional error handling without thr
 | :--- | :--- |
 | `ok(v)` | Ok wrapping `v`. `undefined` reuses a pre-allocated frozen `voidSuccessResult` singleton (no allocation). |
 | `err(e)` | Err wrapping `e`. |
-| `isOk(r)` / `isErr(r)` | Type guards. |
-| `match(r, { ok, err })` | Exhaustive both-branch handling. |
+| `isErr(r)` | Type guard. |
 | `unwrap(r)` | Returns value if Ok; **throws the wrapped error** if Err. |
-| `expect(r, msg)` | Returns value if Ok; throws `Error(msg, { cause: err })` if Err. |
-| `unwrapOr(r, fallback)` | Value if Ok, else fallback. |
-| `unwrapOrElse(r, fn)` | Value if Ok, else `fn(error)`. |
-| `map(r, fn)` | Value if Ok. **Identity optimization**: if `fn` returns the identical value (`Object.is`) and the value is a primitive/`null`/frozen object, returns the original Result instance; otherwise a new Ok. |
-| `mapErr(r, fn)` | Error if Err, else original Ok. |
-| `andThen(r, fn)` | Chains an Ok-return function; asserts the callback returns a valid Result. |
 | `tryCatch(fn)` | Runs sync fn; on throw wraps via `ensureError` into `Err`. |
-| `tryAsync(fn)` | Runs async fn; captures rejections/throws into `Err`. |
-| `equals(a, b)` | Structural/value equality via `Object.is`; false if either is not a valid Result. |
-| `all(results)` | Fail-fast: first `Err` or `Ok(values[])`. |
-| `fromPredicate(value, pred, errFactory?)` | Ok(value) if pred true, else `Err(errFactory?.() ?? Error('Predicate failed'))`. |
-| `fromThrowable(fn)` | Alias for `tryCatch`. |
 
 ### Error normalization
 
 - `ensureError(value)`: passthrough if already `Error`; otherwise wraps any thrown value (strings, `null`, objects) into a standard `Error` with the original as `cause`.
-
-### Identity optimization guard
-
-`map` reuses the original Result only when `Object.is(mapped, value)` **and** the mapped value is `null`, a non-object primitive, or a frozen object. Mutable object results always allocate a new Ok — this avoids aliasing bugs where a later mutation would corrupt a shared cached instance.
 
 ## 2. `SlotBuffer<T>`
 

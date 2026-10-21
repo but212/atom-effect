@@ -11,22 +11,21 @@ import { computed, effect, type ReadonlyAtom, untracked } from '@but212/atom-eff
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
-import {
-  isInterceptee,
-  isNavigationClick,
-  NAV_SPEC,
-  navCoordinator,
-  normalizePath,
-  performScroll,
-  splitPath,
-  syncMetaData,
-  updateActiveState,
-} from '@/core/navigation';
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, Router } from '@/types';
 import { debug } from '@/utils/debug';
 import { getRoutePattern, type RouteMatcher } from './core';
 import { reduceRouteEntries } from './discovery';
+import {
+  isInterceptee,
+  isNavigationClick,
+  NAV_SPEC,
+  normalizePath,
+  performScroll,
+  splitPath,
+  syncMetaData,
+  updateActiveState,
+} from './navigation';
 import type { UrlAdapter } from './types';
 
 /**
@@ -115,27 +114,16 @@ export function renderRoute(
     })
   );
 
-  // Constraint: Scroll/Focus Ownership
-  // If this renderer is nested within a higher-level navigation component (like atomNav),
-  // the parent owns the initial page-load transition concerns.
-  const isInitialRender = renderer.previousPath === '';
-  const skipScrollAndFocus = isInitialRender && navCoordinator.isNestedIn(container, 'nav');
-
-  if (!skipScrollAndFocus) {
-    // Constraint: Accessibility (A11y)
-    // Moves focus to the new content to ensure Screen Readers start reading the updated view.
-    const focusTarget =
-      (container.querySelector('h1, [role="heading"]') as HTMLElement) || container;
-    focusTarget.tabIndex = -1;
-    focusTarget.focus();
-  }
+  // Constraint: Accessibility (A11y)
+  // Moves focus to the new content to ensure Screen Readers start reading the updated view.
+  const focusTarget = (container.querySelector('h1, [role="heading"]') as HTMLElement) || container;
+  focusTarget.tabIndex = -1;
+  focusTarget.focus();
 
   renderer.previousPath = routeName;
 
-  if (!skipScrollAndFocus) {
-    if (location.hash) performScroll(window, location.hash.substring(1));
-    else window.scrollTo(0, 0);
-  }
+  if (location.hash) performScroll(window, location.hash.substring(1));
+  else window.scrollTo(0, 0);
 }
 
 /**

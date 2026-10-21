@@ -63,7 +63,7 @@ Async computeds are treated as state machines with sessions.
 
 The engine uses a hybrid model to keep the core pure and avoid `try-catch` overhead in hot paths.
 
-1. **Internal monadic propagation**: Internal checks (argument validation, loop budgets, disposed access, circularity) return a `Result<T, Error>`; they do not throw directly.
+1. **Internal monadic propagation**: Internal checks (argument validation, loop budgets, disposed access, circularity) return a `Result<T, Error>`; they do not throw directly. Subscription (`.subscribe()`) is the exception: an invalid listener throws `AtomError` immediately.
 2. **Synchronous boundary unwrapping**: Public boundaries (`.value` getters, factories, public scheduler wrappers) call `Result.unwrap`, throwing a standard `Error` (`ComputedError`, `EffectError`, `SchedulerError`) for compatibility with throwing consumer code.
 3. **Asynchronous scheduler isolation**: During flush, a failed job `Result` is wrapped in a `SchedulerError` and logged — never an unhandled rejection.
 4. **`defaultValue` swallowing**: With `defaultValue`, ordinary computation failures and circular-reference failures are caught internally, the `defaultValue` is returned instead of throwing, and the error is recorded on `errors`/`hasError`. The recorded error remains visible while the fallback is returned and clears after a later successful recomputation. `RangeError`, `ReferenceError`, and `SyntaxError` escape unchanged.

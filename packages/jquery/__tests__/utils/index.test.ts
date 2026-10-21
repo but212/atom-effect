@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import $ from '@/index';
-import { getSelector, isPromise } from '@/utils';
+import { getSelector } from '@/utils';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 describe('Utils', () => {
@@ -41,12 +41,12 @@ describe('Utils', () => {
     });
 
     it('isPromise identifies thenables including functions', () => {
-      expect(isPromise(Promise.resolve())).toBe(true);
-      expect(isPromise({ then: () => {} })).toBe(true);
+      expect($.isPromise(Promise.resolve())).toBe(true);
+      expect($.isPromise({ then: () => {} })).toBe(true);
 
       const thenableFn = () => {};
       thenableFn.then = () => {};
-      expect(isPromise(thenableFn)).toBe(true);
+      expect($.isPromise(thenableFn)).toBe(true);
     });
   });
 

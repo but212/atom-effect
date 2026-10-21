@@ -12,13 +12,46 @@
 - Bounded the synchronous notification cascade of a `{ sync: true }` atom, so a subscriber that writes back to its own atom reports a `SchedulerError` and drops the pending notification instead of cycling forever. The round counter is frame-local and adds no per-atom state.
 - A lens rooted at a merged lens now throws on write while still reading normally, instead of silently broadcasting a sub-path assignment to every source. A whole-value write to the merged lens itself is unchanged.
 
+#### Changed
+
+- Invalid listeners passed to `subscribe()` now throw `AtomError` directly instead of passing through an internal `Result` that every caller unwrapped immediately. Observable behavior is unchanged.
+- Lens path helpers moved to their own module and both lens classes share one subscription implementation. Public exports are unchanged.
+
 ### jQuery
+
+#### Removed
+
+- **BREAKING** `$.atomNav` (PJAX navigation), its `AtomNav`/`AtomNavOptions` types, and the internal `navCoordinator` that arbitrated between `atomNav` and `$.route`. Use `$.route` for client-side navigation and `$.atomFetch` for fragment loading. See [MIGRATION.md](./MIGRATION.md).
+- The `examples/all` PHP/PJAX demo, which depended on `atomNav`.
+
+#### Changed
+
+- Internal `normalizePath` for form field names is now `formNameToPath`, distinct from the router's path normalizer.
+- Internal helpers with no consumers outside their module are no longer exported.
+- Structural refactors with no behavior change: navigation helpers live under `features/route`, form field atoms share one delegation base, and the auto-cleanup lifecycle has a single owner.
 
 #### Fixed
 
 - **atomForm**: A field write in a multi-atom form now mutates only the source atom that owns the field path (the last source defining it, falling back to the first) instead of broadcasting the write to every source, which previously corrupted sibling state.
 - **atomForm**: Field ownership is resolved per operation, so a field bound to several sources follows the path if a source gains or drops it, instead of staying pinned to whichever source owned it at mount.
 - **atomForm**: An empty source array is now rejected with a named error at the binding boundary, instead of failing with an unrelated `TypeError` deep in field binding.
+- The `JQuery`/`JQueryStatic` type augmentations (`$.atom`, `.atomText`, …) were never emitted to `dist`, so consumers saw none of them. They now ship with the package declarations, and `atomCss` is typed against `CssValue` instead of an unresolved name.
+
+### Utils
+
+#### Removed
+
+- **BREAKING** `Result.isOk`, `match`, `expect`, `unwrapOr`, `unwrapOrElse`, `map`, `mapErr`, `andThen`, `tryAsync`, `equals`, `all`, `fromPredicate`, `fromThrowable`, and the `isResult()` guard together with its runtime brand symbols. The engine only uses `ok`, `err`, `isErr`, `unwrap`, and `tryCatch`. Check `result.ok` instead of `isOk()`.
+
+#### Fixed
+
+- The package now publishes `dist` only (`"files": ["dist"]`); previously sources and tests were included.
+
+### Documentation
+
+- Removed the pointer-only `API.md`, `ARCHITECTURE.md`, `LIFECYCLE.md`, and `SECURITY.md` package pages; `docs/spec/` is the single normative source.
+- Merged each package's `BENCHMARKS_DETAILED.md` into `BENCHMARKS.md`; `scripts/update-benchmarks.js` updates the single file.
+- `packages/configs` no longer has a build step; it ships plain ESM JavaScript.
 
 ## [0.34.1]
 

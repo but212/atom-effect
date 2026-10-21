@@ -200,6 +200,29 @@ If you were manually dispatching or intercepting the `aej:context-request` custo
 
 ---
 
+## 4. `$.atomNav` Removal & Utils `Result` Reduction (Unreleased)
+
+### Changes
+
+- `$.atomNav` (PJAX fragment navigation) was removed together with `AtomNav` / `AtomNavOptions` and `navCoordinator`.
+- `@but212/atom-effect-utils` `Result` now exposes only `ok`, `err`, `isErr`, `unwrap`, and `tryCatch`; `isResult()` was removed.
+
+### Migration Steps
+
+- Replace `$.atomNav({ target })` with `$.route` for URL-driven views, and load server fragments with `$.atomFetch`:
+
+```typescript
+const page = $.atomFetch<string>(() => `/fragments/${router.currentRoute.value}`, {
+  defaultValue: '',
+  transform: (raw) => String(raw),
+});
+$('#app-root').atomHtml(page);
+```
+
+- Replace `Result.isOk(r)` with `r.ok`; replace `unwrapOr` / `match` / `map` with an explicit `r.ok ? ... : ...` branch.
+
+---
+
 ## Support
 
 If you encounter any issues during migration, please open an issue on our [GitHub Issues](https://github.com/but212/atom-effect/issues) page.

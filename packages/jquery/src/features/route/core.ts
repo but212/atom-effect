@@ -7,8 +7,8 @@
  */
 
 import { untracked } from '@but212/atom-effect';
-import { normalizePath, parseQuery, resolveAnchorPath, splitPath } from '@/core/navigation';
 import type { RouteDefinition, Router } from '@/types';
+import { normalizePath, parseQuery, resolveAnchorPath, splitPath } from './navigation';
 import type { MatchResult, NavigationResult, UrlAdapter } from './types';
 
 /**
@@ -141,7 +141,7 @@ export function createRouteMatcher(routes: Record<string, RouteDefinition>): Rou
  * Logic: Routing Table Matcher
  * Attempts to match a path against the compiled routing table.
  */
-export function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
+function matchRoute(matcher: RouteMatcher, path: string): MatchResult {
   const exactRouteDefinition = matcher.exact.get(path);
   if (exactRouteDefinition) {
     return { route: { pattern: path, routeDefinition: exactRouteDefinition }, params: {} };

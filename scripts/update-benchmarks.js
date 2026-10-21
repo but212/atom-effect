@@ -292,15 +292,10 @@ function processTableLines(lines, schema, benchmarkDb) {
   });
 }
 
-const DETAILED_DOCS = [
-  'packages/core/docs/BENCHMARKS_DETAILED.md',
-  'packages/jquery/docs/BENCHMARKS_DETAILED.md',
-  'packages/utils/docs/BENCHMARKS_DETAILED.md',
-];
-
 function processDetailedTableLines(lines, benchmarkDb) {
   let headerIndexes = null;
   return lines.map((line) => {
+    if (!line.trim().startsWith('|')) headerIndexes = null;
     if (line.trim().startsWith('|') && line.includes('|')) {
       const lowerLine = line.toLowerCase();
       const isHeader = lowerLine.includes('ops/sec (hz)') && lowerLine.includes('mean (ms)');
@@ -363,7 +358,7 @@ function updateOverviewDocs(workspaceRoot, benchmarkDb) {
 }
 
 function updateDetailedDocs(workspaceRoot, benchmarkDb) {
-  for (const filePath of DETAILED_DOCS) {
+  for (const filePath of new Set(OVERVIEW_SCHEMAS.map((schema) => schema.filePath))) {
     updateMarkdownFile(workspaceRoot, filePath, (lines) =>
       processDetailedTableLines(lines, benchmarkDb)
     );

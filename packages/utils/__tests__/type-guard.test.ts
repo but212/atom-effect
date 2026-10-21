@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPromise, isResult, Result } from '@/index';
-import { RESULT_SYMBOL } from '../src/symbols';
+import { isPromise } from '@/index';
 
 describe('Type Guards', () => {
   describe('isPromise', () => {
@@ -144,32 +143,6 @@ describe('Type Guards', () => {
           expect(isPromise(new Error('error'))).toBe(false);
         });
       });
-    });
-  });
-
-  describe('isResult', () => {
-    it('should return true for Ok and Err Result instances', () => {
-      expect(isResult(Result.ok(42))).toBe(true);
-      expect(isResult(Result.err('error'))).toBe(true);
-    });
-
-    it('should return false for non-Result values', () => {
-      expect(isResult(null)).toBe(false);
-      expect(isResult(undefined)).toBe(false);
-      expect(isResult(42)).toBe(false);
-      expect(isResult('result')).toBe(false);
-      expect(isResult({})).toBe(false);
-      expect(isResult({ ok: true, value: 42, error: undefined })).toBe(false);
-    });
-
-    it('should reject fake Result objects', () => {
-      const fakeResult = {
-        ok: true,
-        value: 42,
-        error: undefined,
-        [RESULT_SYMBOL]: true,
-      };
-      expect(isResult(fakeResult)).toBe(false);
     });
   });
 });

@@ -9,109 +9,76 @@
  * Standardizes building, testing, and benchmarking setups while allowing packages to
  * override settings as needed. Supports programmatic overrides for testing build configurations.
  */
-
-import type { PluginOptions } from 'unplugin-dts';
 import dts from 'unplugin-dts/vite';
-import {
-  defineConfig as defineVite,
-  type LibraryFormats,
-  mergeConfig,
-  type UserConfig,
-} from 'vite';
-import { defineConfig as defineVitest, type ViteUserConfig } from 'vitest/config';
+import { defineConfig as defineVite, mergeConfig } from 'vite';
+import { defineConfig as defineVitest } from 'vitest/config';
 
+/**
+ * @typedef {object} BaseViteConfigOptions
+ * @property {string} packageDir Absolute path of the package directory.
+ * @property {string} name UMD global name; also derives the bundle file name.
+ * @property {string} [entry] Library entry (default: `<packageDir>/src/index.ts`).
+ * @property {Record<string, string>} [libFileNames] Per-format output file name overrides.
+ * @property {import('unplugin-dts').PluginOptions} [dtsOptions] Extra options for the dts plugin.
+ * @property {import('vite').LibraryFormats[]} [formats] Output formats (default depends on target).
+ * @property {boolean} [emptyOutDir] Whether to empty `dist` before building.
+ * @property {boolean} [skipDts] Whether to skip declaration generation.
+ * @property {string} [buildTarget] `types` | `lib` | `bundle`; falls back to `BUILD_TARGET`.
+ */
+
+/**
+ * @typedef {object} BuildEnv
+ * @property {boolean} isBundle
+ * @property {boolean} isLib
+ * @property {boolean} isTypes
+ */
+
+/** @typedef {import('vite').UserConfig} UserConfig */
+/** @typedef {import('vitest/config').ViteUserConfig} ViteUserConfig */
 /**
  * Converts a PascalCase or camelCase string to kebab-case.
  *
  * When to use:
  * - Recommended for mapping library package names to standardized minified bundle filenames.
  *
- * @param targetString The target string to convert.
- * @returns The converted kebab-case string.
+ * @param {string} targetString The target string to convert.
+ * @returns {string} The converted kebab-case string.
  *
  * @example
  * const kebab = toKebabCase('AtomEffectJQuery');
  * // => 'atom-effect-jquery'
  */
-export const toKebabCase = (targetString: string): string =>
+export const toKebabCase = (targetString) =>
   targetString
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .replace(/([A-Z]{2,})([A-Z][a-z])/g, '$1-$2')
     .toLowerCase();
-
 /**
  * Generates resolve-alias configuration for a package directory.
  *
  * When to use:
  * - Recommended for aligning absolute path aliases (`@/`) to the target package's source directory.
  *
- * @param packageDir The absolute path of the package directory.
- * @returns The resolver alias configuration object.
+ * @param {string} packageDir The absolute path of the package directory.
+ * @returns {{ alias: Record<string, string> }} The resolver alias configuration object.
  *
  * @example
  * const resolve = getResolveConfig('/absolute/path/to/package');
  * // => { alias: { '@': '/absolute/path/to/package/src' } }
  */
-export const getResolveConfig = (packageDir: string) => ({
+export const getResolveConfig = (packageDir) => ({
   alias: {
     '@': `${packageDir.replace(/\\/g, '/')}/src`,
   },
 });
-
-/**
- * Base Vite configuration options for building libraries and bundles.
- */
-export interface BaseViteConfigOptions {
-  /** The directory of the package being built. */
-  packageDir: string;
-  /** The global variable name for UMD builds. */
-  name: string;
-  /**
-   * The entry file for the library.
-   * @defaultValue `${packageDir}/src/index.ts`
-   */
-  entry?: string;
-  /** Custom file names for different formats (e.g., { es: 'index.mjs', cjs: 'index.cjs' }). */
-  libFileNames?: Record<string, string>;
-  /** Options for the unplugin-dts plugin. */
-  dtsOptions?: PluginOptions;
-  /**
-   * Library formats to build.
-   * @defaultValue derived from build target
-   */
-  formats?: LibraryFormats[];
-  /**
-   * Whether to empty the output directory before building.
-   * @defaultValue derived from build target
-   */
-  emptyOutDir?: boolean;
-  /**
-   * Whether to skip generating TypeScript declaration files.
-   * @defaultValue derived from build target
-   */
-  skipDts?: boolean;
-  /**
-   * Build target override.
-   * @defaultValue `process.env.BUILD_TARGET`
-   * @remarks
-   * Setting this option allows configuring build targets programmatically, bypassing global env variables.
-   */
-  buildTarget?: string;
-}
-
-/**
- * Tracks if the build target is 'bundle' (bundled UMD builds).
- */
-export const isBundleBuild = process.env.BUILD_TARGET === 'bundle';
-
 /**
  * Generates a base Vite configuration for building libraries and bundles.
  *
  * When to use:
  * - Recommended for initializing standard library building settings for ES, CJS, and UMD formats.
  *
- * @param options Configuration options containing packageDir, name, and target overrides.
- * @returns A Vite UserConfig object configured for library builds.
+ * @param {BaseViteConfigOptions} options Configuration options containing packageDir, name, and target overrides.
+ * @returns {UserConfig} A Vite UserConfig object configured for library builds.
  *
  * @example
  * const config = getBaseViteConfig({
@@ -119,12 +86,11 @@ export const isBundleBuild = process.env.BUILD_TARGET === 'bundle';
  *   name: 'MyPackage',
  * });
  */
-export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig => {
+export const getBaseViteConfig = (options) => {
   const activeTarget = options.buildTarget ?? process.env.BUILD_TARGET;
   const isTargetTypes = activeTarget === 'types';
   const isTargetBundle = activeTarget === 'bundle';
   const isTargetLibrary = activeTarget === 'lib';
-
   const {
     packageDir,
     name,
@@ -135,9 +101,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
     emptyOutDir = isTargetTypes,
     skipDts = !isTargetTypes,
   } = options;
-
   const kebabCaseName = toKebabCase(name);
-
   return {
     resolve: getResolveConfig(packageDir),
     build: {
@@ -150,7 +114,7 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         entry,
         name,
         formats,
-        fileName: (format: string) =>
+        fileName: (format) =>
           libFileNames?.[format] ??
           (format === 'umd'
             ? `${kebabCaseName}.min.js`
@@ -175,24 +139,14 @@ export const getBaseViteConfig = (options: BaseViteConfigOptions): UserConfig =>
         ],
   };
 };
-
-/**
- * Environment flags passed to dynamic Vite configuration factories.
- */
-export interface BuildEnv {
-  readonly isBundle: boolean;
-  readonly isLib: boolean;
-  readonly isTypes: boolean;
-}
-
 /**
  * Defines a Vite configuration by merging a base configuration with user-provided overrides.
  *
  * When to use:
  * - Recommended for creating customized package-level `vite.config.ts` files in the monorepo.
  *
- * @param baseOptions Options for creating the base Vite configuration.
- * @param overrides Partial Vite configuration overrides or an override factory function to apply.
+ * @param {BaseViteConfigOptions} baseOptions Options for creating the base Vite configuration.
+ * @param {Partial<UserConfig> | ((env: BuildEnv) => Partial<UserConfig>)} [overrides] Partial Vite configuration overrides or an override factory function to apply.
  * @returns A Vite UserConfig configuration function/object.
  *
  * @example
@@ -201,13 +155,10 @@ export interface BuildEnv {
  *   { build: { sourcemap: false } }
  * );
  */
-export const defineViteConfig = (
-  baseOptions: BaseViteConfigOptions,
-  overrides: Partial<UserConfig> | ((env: BuildEnv) => Partial<UserConfig>) = {}
-) =>
+export const defineViteConfig = (baseOptions, overrides = {}) =>
   defineVite(() => {
     const activeTarget = baseOptions.buildTarget ?? process.env.BUILD_TARGET;
-    const env: BuildEnv = {
+    const env = {
       isBundle: activeTarget === 'bundle',
       isLib: activeTarget === 'lib',
       isTypes: activeTarget === 'types',
@@ -215,7 +166,6 @@ export const defineViteConfig = (
     const resolvedOverrides = typeof overrides === 'function' ? overrides(env) : overrides;
     return mergeConfig(getBaseViteConfig(baseOptions), resolvedOverrides);
   });
-
 /**
  * Base coverage exclusion patterns for Vitest.
  */
@@ -230,20 +180,19 @@ export const baseCoverageExclusionPatterns = [
   'src/types.ts',
   'scripts/**',
 ];
-
 /**
  * Generates a base Vitest configuration with standard coverage and alias settings.
  *
  * When to use:
  * - Recommended for establishing basic test environments and coverage settings in a package.
  *
- * @param packageDir The absolute path of the package directory.
- * @returns A Vitest config configuration object.
+ * @param {string} packageDir The absolute path of the package directory.
+ * @returns {ViteUserConfig} A Vitest config configuration object.
  *
  * @example
  * const config = getBaseVitestConfig(import.meta.dirname);
  */
-export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => ({
+export const getBaseVitestConfig = (packageDir) => ({
   resolve: getResolveConfig(packageDir),
   test: {
     globals: true,
@@ -254,15 +203,14 @@ export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => ({
     },
   },
 });
-
 /**
  * Defines a Vitest configuration by merging a base configuration with user-provided overrides.
  *
  * When to use:
  * - Recommended for package-level `vitest.config.ts` files in the monorepo.
  *
- * @param packageDir The absolute path of the package directory.
- * @param overrides Partial Vitest configuration overrides to apply.
+ * @param {string} packageDir The absolute path of the package directory.
+ * @param {ViteUserConfig} [overrides] Partial Vitest configuration overrides to apply.
  * @returns A Vitest config configuration function/object.
  *
  * @example
@@ -270,22 +218,21 @@ export const getBaseVitestConfig = (packageDir: string): ViteUserConfig => ({
  *   test: { environment: 'jsdom' }
  * });
  */
-export const defineVitestConfig = (packageDir: string, overrides: ViteUserConfig = {}) =>
+export const defineVitestConfig = (packageDir, overrides = {}) =>
   defineVitest(() => mergeConfig(getBaseVitestConfig(packageDir), overrides));
-
 /**
  * Generates a base Vitest benchmark configuration.
  *
  * When to use:
  * - Recommended for setting up standard benchmarking targets in a package.
  *
- * @param packageDir The absolute path of the package directory.
- * @returns A Vitest benchmark configuration object.
+ * @param {string} packageDir The absolute path of the package directory.
+ * @returns {ViteUserConfig} A Vitest benchmark configuration object.
  *
  * @example
  * const config = getBaseVitestBenchmarkConfig(import.meta.dirname);
  */
-export const getBaseVitestBenchmarkConfig = (packageDir: string): ViteUserConfig => ({
+export const getBaseVitestBenchmarkConfig = (packageDir) => ({
   resolve: getResolveConfig(packageDir),
   test: {
     benchmark: {
@@ -294,15 +241,14 @@ export const getBaseVitestBenchmarkConfig = (packageDir: string): ViteUserConfig
     },
   },
 });
-
 /**
  * Defines a Vitest benchmark configuration by merging a base configuration with user-provided overrides.
  *
  * When to use:
  * - Recommended for package-level `vitest.bench.config.ts` files in the monorepo.
  *
- * @param packageDir The absolute path of the package directory.
- * @param overrides Partial Vitest benchmark configuration overrides to apply.
+ * @param {string} packageDir The absolute path of the package directory.
+ * @param {ViteUserConfig} [overrides] Partial Vitest benchmark configuration overrides to apply.
  * @returns A Vitest benchmark config configuration function/object.
  *
  * @example
@@ -310,16 +256,14 @@ export const getBaseVitestBenchmarkConfig = (packageDir: string): ViteUserConfig
  *   test: { benchmark: { include: ['tests/*.bench.ts'] } }
  * });
  */
-export const defineVitestBenchConfig = (packageDir: string, overrides: ViteUserConfig = {}) =>
+export const defineVitestBenchConfig = (packageDir, overrides = {}) =>
   defineVitest(() => {
     const mergedConfig = mergeConfig(getBaseVitestBenchmarkConfig(packageDir), overrides);
-
     // Reason: Vite's mergeConfig automatically concatenates arrays. We must explicitly override
     // the benchmark include array if the user provided customized patterns to avoid array union duplicates.
     const customIncludePatterns = overrides.test?.benchmark?.include;
     if (customIncludePatterns && mergedConfig.test?.benchmark) {
       mergedConfig.test.benchmark.include = customIncludePatterns;
     }
-
     return mergedConfig;
   });

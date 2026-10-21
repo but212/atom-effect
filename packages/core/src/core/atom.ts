@@ -147,7 +147,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * @returns A disposal function to unsubscribe the listener.
    */
   subscribe(listener: SubscriberTarget<T>): () => void {
-    return Result.unwrap(nodeSubscribe(this, listener));
+    return nodeSubscribe(this, listener);
   }
 
   /**

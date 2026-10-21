@@ -184,7 +184,7 @@ Implementation invariants:
 - **Context engine** (`provideAtom`/`injectAtom`): direct-walk discovery traverses parent pointers (crossing shadow via `host`) for O(depth) resolution. A shared context revision invalidates subscribed late-bound proxies when providers or DOM topology change; proxy subscriptions own their temporary computed and `RootObserver` callbacks.
 - **Stylesheet caching**: identical style strings parsed once, shared via `adoptedStyleSheets`; FIFO eviction, max 100 entries.
 
-## 6. Routing & navigation
+## 6. Routing
 
 ### 6.1 `$.route(config)`
 
@@ -194,23 +194,8 @@ SPA router supporting HTML5 History and Hash modes.
 - **Route lifecycle**: `onEnter` / `onLeave` navigation-guard hooks.
 - **DOM replacement**: the existing route subtree is cleaned through the binding registry before `replaceChildren()`; cleanup does not depend on the asynchronous observer.
 - **Instance interface** (reactive): `currentRoute`, `queryParams`, `params`, `location` (`{ path, query, params }`) as `ReadonlyAtom`; `navigate(to)`, `destroy()`.
-- **Deterministic destroy**: `destroy()` releases router-owned reactive atoms, route scanner effects, browser listeners, and navigation-coordinator registration; repeated calls are safe.
+- **Deterministic destroy**: `destroy()` releases router-owned reactive atoms, route scanner effects, and browser listeners; repeated calls are safe.
 - **Best practice**: always call `destroy()` on teardown to prevent listener leaks.
-
-### 6.2 `$.atomNav(options)` (PJAX)
-
-- **Concurrency**: "last navigation wins" — `AbortController` cancels a pending fetch on a newer navigation.
-- **Header coordination**: sends `X-PJAX-Container`; processes `X-PJAX-Title` / `X-PJAX-URL` to sync title/meta.
-- **DOM reconciliation**: cleans up existing DOM nodes before injecting new content. The navigation sanitization policy includes the default blacklist, so fetched `<form>` elements are neutralized to `<span>` wrappers rather than preserved as live forms.
-- **Scroll management**: `#hash` targeting vs reset-to-top by transition type.
-- **Instance interface** (reactive): `currentUrl`, `isPending`, `hasError` as `ReadonlyAtom`; `navigate(url, { replace? })`, `destroy()`.
-
-### 6.3 Navigation interop (`navCoordinator`)
-
-- Manages collisions when `atomNav` and `$.route` run together.
-- **Hierarchical guarding**: resolves `onLeave` guards across all registered routers before committing.
-- Coordinator registrations have an internal idempotent unregister path and are identity-checked so stale cleanup cannot delete a newer registration.
-- Nested routers skip initial scroll/focus, deferring to the parent `atomNav` container.
 
 ## 7. Data fetching — `$.atomFetch(urlOrFn, options)`
 

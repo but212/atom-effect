@@ -257,7 +257,7 @@ describe('Effect', () => {
               const executionResult = (
                 effectInstance as { execute: () => Result<void, Error> }
               ).execute();
-              expect(Result.isOk(executionResult)).toBe(true);
+              expect(executionResult.ok).toBe(true);
             }
           },
           { sync: true }

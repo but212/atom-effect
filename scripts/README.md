@@ -44,15 +44,9 @@ node --test scripts/update-benchmarks.test.js
 
 ### Affected Documentation Files
 
-- **Core Package**:
-  - `packages/core/docs/BENCHMARKS.md` (Overview table)
-  - `packages/core/docs/BENCHMARKS_DETAILED.md` (Detailed tables)
-- **jQuery Binding Package**:
-  - `packages/jquery/docs/BENCHMARKS.md` (Overview and Highlights tables)
-  - `packages/jquery/docs/BENCHMARKS_DETAILED.md` (Detailed tables)
-- **Utility Package**:
-  - `packages/utils/docs/BENCHMARKS.md` (Overview table)
-  - `packages/utils/docs/BENCHMARKS_DETAILED.md` (Detailed tables)
+- `packages/core/docs/BENCHMARKS.md` (Overview and detailed tables)
+- `packages/jquery/docs/BENCHMARKS.md` (Overview, highlights, and detailed tables)
+- `packages/utils/docs/BENCHMARKS.md` (Overview and detailed tables)
 
 ## Release Helper (`release-helper.js`)
 

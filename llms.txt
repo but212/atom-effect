@@ -62,10 +62,7 @@ $('#reset').on('click', () => timer.value = 0);
 ## Documentation
 
 - **Core**:
-  - [API Reference](packages/core/docs/API.md)
-  - [Architecture](packages/core/docs/ARCHITECTURE.md)
+  - [Specification](docs/spec/core.md)
   - [Onboarding](packages/core/docs/ONBOARDING.md)
 - **jQuery**:
-  - [API Reference](packages/jquery/docs/API.md)
-  - [Architecture](packages/jquery/docs/ARCHITECTURE.md)
-  - [Security Guide](packages/jquery/docs/SECURITY.md)
+  - [Specification](docs/spec/jquery.md)

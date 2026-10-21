@@ -91,7 +91,7 @@ export function isNodeRemoving(
 /**
  * Retrieves the index of a key, handling string-to-number normalization.
  */
-export function getIndex<T>(listContext: ListContext<T>, key: string): number | undefined {
+function getIndex<T>(listContext: ListContext<T>, key: string): number | undefined {
   const index = listContext.keyToIndex.get(key);
   if (index !== undefined) return index;
   const numericKey = Number(key);
@@ -115,11 +115,7 @@ export function removeNode<T>(listContext: ListContext<T>, itemKey: ListKey, nod
 /**
  * Initiates the physical removal of an element.
  */
-export function scheduleRemoval<T>(
-  listContext: ListContext<T>,
-  itemKey: ListKey,
-  nodes: Node[]
-): void {
+function scheduleRemoval<T>(listContext: ListContext<T>, itemKey: ListKey, nodes: Node[]): void {
   const $element = $(nodes as HTMLElement[]);
   const removalResult = listContext.onRemove?.($element);
 

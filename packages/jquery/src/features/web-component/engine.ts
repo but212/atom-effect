@@ -50,7 +50,7 @@ declare global {
 export const nodeStateMap = new WeakMap<Node, NodeInternalState>();
 export const sheetCache = new Map<string, CSSStyleSheet>();
 
-export const MAX_SHEET_CACHE_SIZE = 100;
+const MAX_SHEET_CACHE_SIZE = 100;
 
 /**
  * Logic: Internal Metadata Tracking
@@ -129,7 +129,7 @@ export const discoverProvider = (target: Node, key: string | symbol): unknown | 
  */
 const contextRevision = atom(0, { sync: true });
 
-export function invalidateContext(): void {
+function invalidateContext(): void {
   contextRevision.value++;
 }
 
