@@ -85,10 +85,6 @@ interface FetchSnapshot<T> {
   error: Error | null;
 }
 
-interface FetchRequestInputs {
-  settings: JQuery.AjaxSettings;
-}
-
 const EMPTY_ERRORS: readonly Error[] = Object.freeze([]);
 
 /**
@@ -118,8 +114,7 @@ function atomFetch<T>(
   const getUrl = typeof source === 'string' ? () => source : source;
   let activeSession: FetchSession | null = null;
   let effectHandle: ReturnType<typeof effect> | null = null;
-  let projectedAtom: ComputedAtom<T> | null = null;
-  let lastRequestedInputs: FetchRequestInputs | undefined;
+  let lastRequestedSettings: JQuery.AjaxSettings | undefined;
   let lastSuccessfulValue: T | undefined;
   let disposed = false;
   let refreshOnRead = false;
@@ -143,7 +138,7 @@ function atomFetch<T>(
 
   const setSnapshot = (snapshot: FetchSnapshot<T>) => {
     currentSnapshot = snapshot;
-    if (projectedAtom) projectedAtom._error = snapshot.error;
+    projection._error = snapshot.error;
     if (!disposed) resource.value = snapshot;
   };
 
@@ -193,15 +188,9 @@ function atomFetch<T>(
     }
   };
 
-  const requestInputs = computed<FetchRequestInputs>(
-    () => {
-      const url = getUrl();
-      return { settings: toSettings(url, options) };
-    },
-    {
-      ...(options.name === undefined ? {} : { name: `${options.name}:inputs` }),
-    }
-  );
+  const requestSettings = computed<JQuery.AjaxSettings>(() => toSettings(getUrl(), options), {
+    ...(options.name === undefined ? {} : { name: `${options.name}:inputs` }),
+  });
 
   const execute = () => {
     // Why: Abort the previous request if a new execution cycle starts to prevent race conditions.
@@ -212,9 +201,9 @@ function atomFetch<T>(
 
     try {
       // Constraint: Dependency tracking must occur synchronously before the first 'await'.
-      const inputs = requestInputs.value;
-      lastRequestedInputs = inputs;
-      const xmlHttpRequest = $.ajax(inputs.settings);
+      const settings = requestSettings.value;
+      lastRequestedSettings = settings;
+      const xmlHttpRequest = $.ajax(settings);
       session.xmlHttpRequest = xmlHttpRequest;
 
       if (session.isAborted) {
@@ -230,7 +219,6 @@ function atomFetch<T>(
     defaultValue: options.defaultValue,
     ...(options.name === undefined ? {} : { name: options.name }),
   });
-  projectedAtom = projection;
 
   const start = () => {
     if (disposed) return;
@@ -248,8 +236,8 @@ function atomFetch<T>(
       return;
     }
     try {
-      const currentInputs = untracked(() => requestInputs.value);
-      if (currentInputs !== lastRequestedInputs) effectHandle.run();
+      const currentSettings = untracked(() => requestSettings.value);
+      if (currentSettings !== lastRequestedSettings) effectHandle.run();
     } catch {
       if (currentSnapshot.state !== 'rejected') effectHandle.run();
     }
@@ -366,7 +354,7 @@ function atomFetch<T>(
         activeSession = null;
         effectHandle?.dispose();
         disposeProjection();
-        requestInputs.dispose();
+        requestSettings.dispose();
         resource.dispose();
         currentSnapshot = { state: 'idle', value: options.defaultValue, error: null };
         projection._error = null;
