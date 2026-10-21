@@ -258,24 +258,9 @@ const ProdDebugController: DebugConfig = {
 export const debug: DebugConfig = IS_DEV ? new DevDebugEngine() : ProdDebugController;
 
 /**
- * Individual exports for direct usage (proxied to the debug singleton).
+ * Direct export for hot-path usage (proxied to the debug singleton).
  */
-export const isWarningCondition = (condition: boolean, message: string) =>
-  debug.isWarningCondition(condition, message);
-export const registerNode = (node: IdentifiableNode) => debug.registerNode(node);
-export const attachDebugInfo = (
-  targetObject: IdentifiableNode,
-  type: string,
-  id: DependencyId,
-  customName?: string
-) => debug.attachDebugInfo(targetObject, type, id, customName);
-export const trackUpdate = (id: DependencyId, name?: string) => debug.trackUpdate(id, name);
 export const trackEvaluationFailure = (id: DependencyId) => debug.trackEvaluationFailure(id);
-export const getDebugName = (targetObject: object | null | undefined) =>
-  debug.getDebugName(targetObject);
-export const getDebugType = (targetObject: object | null | undefined) =>
-  debug.getDebugType(targetObject);
-export const dumpGraph = () => debug.dumpGraph();
 
 /** @internal */
 let nextNodeId = 1;

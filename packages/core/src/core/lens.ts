@@ -46,6 +46,14 @@ import { debug, mergeAtomValues } from '@/utils';
  */
 export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
 
+/** Symbol protocol for cloning class instances updated through a lens. */
+export const LENS_CLONE: unique symbol = Symbol.for('atom-effect/lens-clone') as never;
+
+/** Implement this protocol when lens updates need to preserve private state or internal slots. */
+export interface LensCloneable<T extends object = object> {
+  [LENS_CLONE](): T;
+}
+
 /**
  * Logic: Broad Index Detection
  * Detects if a type contains a broad string indexer (e.g., Record<string, any>).
@@ -165,7 +173,22 @@ function cloneAndSet(container: CloneContainer, key: string, value: unknown): ob
   if (objectPrototype === Object.prototype || objectPrototype === null) {
     return { ...container, [key]: value };
   }
-  const clonedObject = Object.assign(Object.create(objectPrototype), container);
+  const cloneMethod = Reflect.get(container, LENS_CLONE);
+  let clonedObject: Record<string, unknown>;
+  if (typeof cloneMethod === 'function') {
+    const cloneResult: unknown = Reflect.apply(cloneMethod, container, []);
+    if (
+      cloneResult === container ||
+      cloneResult === null ||
+      typeof cloneResult !== 'object' ||
+      Object.getPrototypeOf(cloneResult) !== objectPrototype
+    ) {
+      throw new TypeError('Lens clone hook must return a fresh object with the same prototype.');
+    }
+    clonedObject = cloneResult as Record<string, unknown>;
+  } else {
+    clonedObject = Object.assign(Object.create(objectPrototype), container);
+  }
   clonedObject[key] = value;
   return clonedObject;
 }

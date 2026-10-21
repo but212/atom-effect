@@ -30,6 +30,33 @@ console.log(themeLens.value); // 'dark'
 themeLens.value = 'light';
 ```
 
+### Cloning Class Instances with Private State
+
+The default lens clone preserves a class prototype and enumerable properties. Add `LENS_CLONE` when an updated instance must retain private fields or internal slots:
+
+```typescript
+import { atom, atomLens, LENS_CLONE } from '@but212/atom-effect';
+
+class Counter {
+  #count: number;
+  label: string;
+
+  constructor(count: number, label: string) {
+    this.#count = count;
+    this.label = label;
+  }
+
+  [LENS_CLONE]() {
+    return new Counter(this.#count, this.label);
+  }
+}
+
+const state = atom({ counter: new Counter(0, 'items') });
+atomLens(state, 'counter.label').value = 'records';
+```
+
+The hook must return a fresh instance with the same prototype. Without a hook, lens updates preserve the prototype but cannot copy private fields or built-in internal slots.
+
 ---
 
 ## 2. Asynchronous Data Fetching

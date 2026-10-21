@@ -167,15 +167,18 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const slots = this._subscriberSlots;
 
-    // Optimization: Avoid redundant scheduling if already queued or no subscribers exist.
-    if ((flags & SCHED) !== 0 || !slots || slots.length === 0) return;
+    if (!slots || slots.length === 0) return;
+
+    // Computed nodes must become dirty on every write, not only the first of a
+    // pending notification, so pull reads observe the latest source value even
+    // while ordinary notifications remain batched.
+    nodeNotifyComputedSubscribers(this);
+
+    // Optimization: Avoid redundant scheduling if already queued.
+    if ((flags & SCHED) !== 0) return;
 
     this.#pendingPreviousValue = oldValue;
     this.flags |= SCHED;
-
-    // Computed nodes must become dirty synchronously so pull reads observe the
-    // latest source value even while ordinary notifications remain batched.
-    nodeNotifyComputedSubscribers(this);
 
     if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
       if (!slots.isLocked) this.#flushNotifications();
@@ -187,6 +190,12 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   /** @internal - Entry point for the global scheduler. */
   execute(): void {
     this.#flushNotifications();
+  }
+
+  /** @internal - The scheduler discarded this atom's queued notification; allow re-arming. */
+  _onDrop(): void {
+    this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.#pendingPreviousValue = NO_VALUE;
   }
 
   /**

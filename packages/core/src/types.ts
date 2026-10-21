@@ -278,6 +278,11 @@ export interface SchedulerJobObject {
   _nextEpoch?: number | undefined;
   /** Discriminator used for low-overhead dispatching. */
   _kind?: typeof KIND.Obj | undefined;
+  /**
+   * Called when the scheduler discards this job for good (overflow with no retry left),
+   * so the owner can release any "already queued" state it keeps.
+   */
+  _onDrop?(): void;
 }
 
 /**

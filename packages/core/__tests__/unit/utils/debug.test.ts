@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atom, computed, runtimeDebug as debug, effect } from '@/index';
 import type { DependencyId } from '@/types';
-import { attachDebugInfo as wrapperAttachDebugInfo } from '@/utils/debug';
 
 type DebugNode = Parameters<typeof debug.registerNode>[0];
 
@@ -226,13 +225,6 @@ describe('Debug System', () => {
       debug.attachDebugInfo(node2, 'atom', 1002);
       debug.attachDebugInfo(node2, 'atom', 1002, 'custom-name');
       expect(debug.getDebugName(node2)).toBe('custom-name');
-    });
-
-    it('wrapper functions call underlying methods', () => {
-      const spy = vi.spyOn(debug, 'attachDebugInfo');
-      wrapperAttachDebugInfo(null as unknown as DebugNode, 'atom', 1);
-      expect(spy).toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     it('ProdDebugController behaves as expected when dev mode is production', async () => {

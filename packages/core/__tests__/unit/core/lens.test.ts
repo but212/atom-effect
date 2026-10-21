@@ -7,6 +7,7 @@ import {
   BrandFlags,
   composeLens,
   getPathValue,
+  LENS_CLONE,
   lensFor,
   mergeLenses,
   type WritableAtom,
@@ -106,6 +107,70 @@ describe('Lens System', () => {
 
   describe('atomLens()', () => {
     describe('basic & deep nesting', () => {
+      it('should use the class clone hook to preserve private fields during deep updates', () => {
+        class Counter {
+          #count: number;
+          label: string;
+
+          constructor(count: number, label: string) {
+            this.#count = count;
+            this.label = label;
+          }
+
+          increment() {
+            this.#count++;
+          }
+
+          get count() {
+            return this.#count;
+          }
+
+          [LENS_CLONE]() {
+            return new Counter(this.#count, this.label);
+          }
+        }
+
+        const original = new Counter(3, 'before');
+        const store = atom({ counter: original });
+        const labelLens = atomLens(store, 'counter.label');
+
+        labelLens.value = 'after';
+
+        expect(store.value.counter).not.toBe(original);
+        expect(store.value.counter).toBeInstanceOf(Counter);
+        expect(store.value.counter.label).toBe('after');
+        store.value.counter.increment();
+        expect(store.value.counter.count).toBe(4);
+        expect(original.count).toBe(3);
+      });
+
+      it.each([
+        ['same object', (source: object) => source],
+        ['non-object', () => null],
+        ['different prototype', () => ({})],
+      ])(
+        'should reject an invalid class clone result (%s) without updating the root atom',
+        (_, clone) => {
+          class InvalidClone {
+            value = 'before';
+
+            [LENS_CLONE](): unknown {
+              return clone(this);
+            }
+          }
+
+          const original = new InvalidClone();
+          const store = atom({ model: original });
+          const valueLens = atomLens(store, 'model.value');
+
+          expect(() => {
+            valueLens.value = 'after';
+          }).toThrow(TypeError);
+          expect(store.value.model).toBe(original);
+          expect(store.value.model.value).toBe('before');
+        }
+      );
+
       it('should handle single-level property access', () => {
         const store = atom({ count: 0 });
         const lens = atomLens(store, 'count');

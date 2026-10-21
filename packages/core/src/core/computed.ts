@@ -407,6 +407,7 @@ class ComputedAtomImpl<T>
    * @internal
    */
   addDependency(dependency: Dependency): void {
+    if ((this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) return;
     nodeTrackDependency(this, dependency, this);
   }
 

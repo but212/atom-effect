@@ -25,7 +25,6 @@ import type {
   AtomErrorConstructor,
   Dependency,
   DependencyId,
-  DependencyLink,
   DependencySubscriber,
   DependencyTracker,
   Prettify,
@@ -176,15 +175,6 @@ export function untracked<T>(callback: () => T): T {
   } finally {
     popTrackingSubscriber(ctx);
   }
-}
-
-/** @internal */
-export function createDependencyLink(
-  node: Dependency,
-  version: number,
-  unsubscribeCallback: (() => void) | undefined = undefined
-): DependencyLink {
-  return { node, version, unsubscribeCallback };
 }
 
 /**
@@ -408,7 +398,7 @@ export function nodeCommitDeps(node: DependencyTracker & ReactiveDependencyTrack
  * @internal
  */
 export function nodeHandleError<T>(
-  node: ReactiveNode<T> & { isComputed?: boolean; isRejected?: boolean; version: number },
+  node: ReactiveNode<T> & { isComputed?: boolean; version: number },
   error: unknown,
   errorConstructor: AtomErrorConstructor,
   message: string,
@@ -417,9 +407,7 @@ export function nodeHandleError<T>(
   const wrappedError = wrapError(error, errorConstructor, message);
 
   if (node.isComputed) {
-    if (!node.isRejected || node._error !== wrappedError) {
-      node.version = nextVersion(node.version);
-    }
+    node.version = nextVersion(node.version);
     node._error = wrappedError;
   } else {
     console.error(wrappedError);

@@ -16,11 +16,12 @@ export { atom } from './atom';
 export { nextVersion, runInTrackingContext, trackingContext, untracked } from './base';
 export { computed, mergeAtoms } from './computed';
 export { effect } from './effect';
-export type { Paths, PathValue } from './lens';
+export type { LensCloneable, Paths, PathValue } from './lens';
 export {
   atomLens,
   composeLens,
   getPathValue,
+  LENS_CLONE,
   lensFor,
   mergeLenses,
   setDeepValue,

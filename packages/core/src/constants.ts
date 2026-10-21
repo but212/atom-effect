@@ -244,7 +244,6 @@ const FLAGS = {
  */
 export const STATE_MASKS = {
   ASYNC_MASK: FLAGS.ASYNC_MASK,
-  COMPUTED_DIRTY_MASK: FLAGS.DIRTY | FLAGS.RECOMPUTING | FLAGS.FORCE_COMPUTE,
   CYCLIC_OR_RECOMPUTING_MASK: FLAGS.RECOMPUTING | FLAGS.CHECKING_DIRTY,
   LIFECYCLE_MASK: FLAGS.ASYNC_MASK | FLAGS.DIRTY,
   ERROR_MASK: FLAGS.REJECTED,
@@ -345,7 +344,6 @@ export const ERROR_MESSAGES = {
   COMPUTED_DISPOSED: 'Attempted to access disposed computed',
 
   ATOM_SUBSCRIBER_MUST_BE_FUNCTION: 'Subscriber must be a function or Subscriber object',
-  ATOM_INDIVIDUAL_SUBSCRIBER_FAILED: 'Subscriber execution failed',
 
   EFFECT_MUST_BE_FUNCTION: 'Effect target must be a function',
   EFFECT_EXECUTION_FAILED: 'Effect execution failed',
