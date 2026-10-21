@@ -67,9 +67,6 @@ class ReactiveScheduler implements SchedulerState {
   get state() {
     return this.#state;
   }
-  get batchDepth() {
-    return this.#batchDepth;
-  }
   get maxFlushIterations() {
     return this.#maxFlushIterations;
   }
@@ -78,9 +75,6 @@ class ReactiveScheduler implements SchedulerState {
   }
   get sessionEpoch() {
     return this.#sessionEpoch;
-  }
-  get sessionExecutionCount() {
-    return this.#sessionExecutionCount;
   }
   get queueSize() {
     return this.#activeJobBuffer.size;
@@ -362,12 +356,6 @@ class ReactiveScheduler implements SchedulerState {
     const error = new AggregateExecutionLimitError();
     if (job) this.#handleAggregateExecutionOverflow(job);
     return Result.err(error);
-  }
-
-  resetFlushState(): void {
-    this.#sessionEpoch = 0;
-    this.#sessionExecutionCount = 0;
-    this.#isSessionActive = false;
   }
 
   flushQueues(): void {

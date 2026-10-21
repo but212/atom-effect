@@ -322,18 +322,15 @@ export interface JobBuffer {
 export interface SchedulerState {
   epoch: number;
   state: (typeof SCHEDULER_STATE)[keyof typeof SCHEDULER_STATE];
-  batchDepth: number;
   maxFlushIterations: number;
   isSessionActive: boolean;
   sessionEpoch: number;
-  sessionExecutionCount: number;
   queueSize: number;
   onOverflow: ((droppedCount: number, droppedJobs: SchedulerJob[]) => void) | null;
   nextEpoch(): number;
   startFlush(): boolean;
   endFlush(): void;
   incrementFlushExecutionCount(job?: SchedulerJob): Result<number, Error>;
-  resetFlushState(): void;
   schedule(callback: SchedulerJob): Result<void, Error>;
   flushSync(): void;
   startBatch(): void;
