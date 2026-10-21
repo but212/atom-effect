@@ -26,6 +26,13 @@ import { nextSmi, SchedulerError } from '@/utils';
 
 import { resetTrackingContext, trackingContext } from './base';
 
+class AggregateExecutionLimitError extends Error {
+  constructor() {
+    super(`${LOG_PREFIX} Infinite loop detected: limit exceeded.`);
+    this.name = 'AggregateExecutionLimitError';
+  }
+}
+
 /**
  * Role: Central orchestrator for the reactive task lifecycle.
  *
@@ -37,7 +44,7 @@ class ReactiveScheduler implements SchedulerState {
   #epoch = 0;
   #state = SCHEDULER_STATE.IDLE;
   #batchDepth = 0;
-  #maxFlushIterations = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+  #maxFlushIterations: number = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
   #isSessionActive = false;
   #sessionEpoch = 0;
   #sessionExecutionCount = 0;
@@ -47,6 +54,11 @@ class ReactiveScheduler implements SchedulerState {
 
   #onOverflowCallback: ((droppedCount: number, droppedJobs: SchedulerJob[]) => void) | null = null;
   #overflowRetryUsed = false;
+  /** Jobs discarded by the aggregate overflow of the current flush session; null until one occurs. */
+  #aggregateOverflow: Set<SchedulerJob> | null = null;
+  #processingJobs: (SchedulerJob | undefined)[] | null = null;
+  #processingIndex = -1;
+  #abortCurrentQueue = false;
 
   // Standard Getters/Setters for SchedulerState compliance
   get epoch() {
@@ -112,6 +124,7 @@ class ReactiveScheduler implements SchedulerState {
       }
 
       this.#processQueue();
+      if (this.#abortCurrentQueue) return;
     }
 
     // Logic: Recovery Rearm
@@ -136,8 +149,10 @@ class ReactiveScheduler implements SchedulerState {
 
     this.nextEpoch();
     const functionKind = KIND.Fn;
+    this.#processingJobs = activeJobs;
 
     for (let i = 0; i < activeJobsCount; i++) {
+      this.#processingIndex = i;
       const job = activeJobs[i];
       if (job === undefined) continue;
       activeJobs[i] = undefined;
@@ -152,14 +167,16 @@ class ReactiveScheduler implements SchedulerState {
           > | void;
           if (executionResult !== undefined && Result.isErr(executionResult)) {
             const executionError = executionResult.error;
-            console.error(
-              new SchedulerError(
-                `Error occurred during scheduler execution: ${executionError?.message || String(executionError)}`,
-                {
-                  cause: executionError,
-                }
-              )
-            );
+            if (!(executionError instanceof AggregateExecutionLimitError)) {
+              console.error(
+                new SchedulerError(
+                  `Error occurred during scheduler execution: ${executionError?.message || String(executionError)}`,
+                  {
+                    cause: executionError,
+                  }
+                )
+              );
+            }
           }
         }
       } catch (unknownError) {
@@ -170,7 +187,12 @@ class ReactiveScheduler implements SchedulerState {
           )
         );
       }
+
+      if (this.#abortCurrentQueue) break;
     }
+
+    this.#processingJobs = null;
+    this.#processingIndex = -1;
   }
 
   /**
@@ -199,20 +221,37 @@ class ReactiveScheduler implements SchedulerState {
     });
   }
 
-  #handleFlushOverflow(): void {
-    const droppedCount = this.#activeJobBuffer.size;
-    const droppedJobs: SchedulerJob[] = [];
-    const activeItems = this.#activeJobBuffer.items;
-    for (let i = 0; i < this.#activeJobBuffer.size; i++) {
-      const job = activeItems[i];
-      if (job !== undefined) droppedJobs.push(job);
+  /**
+   * Logic: Terminal Drop
+   * Clears the per-epoch dedupe mark (the epoch does not advance without a
+   * processed queue, so a stale mark would reject every future schedule) and
+   * tells job owners the job will not run.
+   */
+  #dropJobs(jobs: Iterable<SchedulerJob>): void {
+    for (const job of jobs) {
+      job._nextEpoch = undefined;
+      if (typeof job !== 'function') job._onDrop?.();
     }
+  }
 
-    console.error(
-      new SchedulerError(
-        ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(this.#maxFlushIterations, droppedCount)
-      )
-    );
+  #requeue(job: SchedulerJob): void {
+    job._nextEpoch = undefined;
+    this.schedule(job);
+  }
+
+  /**
+   * Logic: Overflow Settlement
+   * Shared tail of every overflow: reports the error, empties both queues,
+   * notifies `onOverflow`, then either retries the dropped jobs or discards them.
+   *
+   * One-shot Overflow Recovery:
+   * Re-queue the dropped jobs exactly once so transient overload (e.g. a burst
+   * that tripped a guard) still converges instead of leaving effects
+   * permanently stale. If the loop persists, the next overflow is terminal
+   * until a clean drain re-arms recovery.
+   */
+  #settleOverflow(dropped: readonly SchedulerJob[], error: SchedulerError): void {
+    console.error(error);
 
     this.#activeJobBuffer.size = 0;
     this.#activeJobBuffer.items.length = 0;
@@ -221,27 +260,77 @@ class ReactiveScheduler implements SchedulerState {
 
     if (this.#onOverflowCallback) {
       try {
-        this.#onOverflowCallback(droppedCount, droppedJobs);
+        this.#onOverflowCallback(dropped.length, dropped.slice());
       } catch {
         /* Suppress */
       }
     }
 
-    // Logic: One-shot Overflow Recovery
-    // Re-queue the dropped jobs exactly once so transient overload (e.g. a burst
-    // that tripped the iteration guard) still converges instead of leaving
-    // effects permanently stale. If the loop persists, the next overflow is
-    // terminal until a clean drain re-arms recovery.
-    if (!this.#overflowRetryUsed && droppedJobs.length > 0) {
+    if (!this.#overflowRetryUsed && dropped.length > 0) {
       this.#overflowRetryUsed = true;
-      for (const job of droppedJobs) {
-        job._nextEpoch = undefined;
-        this.schedule(job);
-      }
+      for (const job of dropped) this.#requeue(job);
       // PROCESSING is still set here, so armFlush() no-ops; the owning flush
       // microtask's finally re-arms once it clears PROCESSING.
       this.#armFlush();
+    } else {
+      this.#dropJobs(dropped);
     }
+  }
+
+  #handleFlushOverflow(): void {
+    const dropped: SchedulerJob[] = [];
+    const activeItems = this.#activeJobBuffer.items;
+    for (let i = 0; i < this.#activeJobBuffer.size; i++) {
+      const job = activeItems[i];
+      if (job !== undefined) dropped.push(job);
+    }
+
+    this.#settleOverflow(
+      dropped,
+      new SchedulerError(
+        ERROR_MESSAGES.SCHEDULER_FLUSH_OVERFLOW(this.#maxFlushIterations, dropped.length)
+      )
+    );
+  }
+
+  #handleAggregateExecutionOverflow(job: SchedulerJob): void {
+    const handled = this.#aggregateOverflow;
+    if (handled !== null) {
+      if (handled.has(job)) return;
+      handled.add(job);
+      if (this.#overflowRetryUsed) {
+        this.#dropJobs([job]);
+      } else {
+        this.#requeue(job);
+      }
+      return;
+    }
+
+    const droppedJobs = new Set<SchedulerJob>([job]);
+    this.#aggregateOverflow = droppedJobs;
+
+    const processingJobs = this.#processingJobs;
+    if (processingJobs) {
+      for (let i = this.#processingIndex + 1; i < processingJobs.length; i++) {
+        const pendingJob = processingJobs[i];
+        if (pendingJob !== undefined) droppedJobs.add(pendingJob);
+      }
+      this.#abortCurrentQueue = true;
+    }
+
+    const activeJobs = this.#activeJobBuffer.items;
+    for (let i = 0; i < this.#activeJobBuffer.size; i++) {
+      const pendingJob = activeJobs[i];
+      if (pendingJob !== undefined) droppedJobs.add(pendingJob);
+    }
+
+    this.#settleOverflow(
+      [...droppedJobs],
+      new SchedulerError(
+        `Aggregate scheduler execution exceeded ${SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH} effects.`,
+        { cause: new AggregateExecutionLimitError() }
+      )
+    );
   }
 
   nextEpoch(): number {
@@ -258,6 +347,8 @@ class ReactiveScheduler implements SchedulerState {
     this.#isSessionActive = true;
     this.#sessionEpoch = nextSmi(this.#sessionEpoch);
     this.#sessionExecutionCount = 0;
+    this.#aggregateOverflow = null;
+    this.#abortCurrentQueue = false;
     return true;
   }
 
@@ -267,12 +358,14 @@ class ReactiveScheduler implements SchedulerState {
   }
 
   /** @internal - Tracks the number of jobs executed in the current cycle. */
-  incrementFlushExecutionCount(): Result<number, Error> {
+  incrementFlushExecutionCount(job?: SchedulerJob): Result<number, Error> {
     if (!this.#isSessionActive) return Result.ok(0);
     const count = ++this.#sessionExecutionCount;
     if (count <= SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH) return Result.ok(count);
 
-    return Result.err(new Error(`${LOG_PREFIX} Infinite loop detected: limit exceeded.`));
+    const error = new AggregateExecutionLimitError();
+    if (job) this.#handleAggregateExecutionOverflow(job);
+    return Result.err(error);
   }
 
   resetFlushState(): void {
@@ -355,22 +448,16 @@ class ReactiveScheduler implements SchedulerState {
 export const scheduler = new ReactiveScheduler();
 
 /** @internal */
+export function isAggregateExecutionLimitError(error: Error): boolean {
+  return error instanceof AggregateExecutionLimitError;
+}
+
+/** @internal */
 export const schedulerSchedule = (state: SchedulerState, callback: SchedulerJob) =>
   Result.unwrap(state.schedule(callback));
 /** @internal */
-export const schedulerEndBatch = (state: SchedulerState) => state.endBatch();
-/** @internal */
-export const schedulerSetMaxFlushIterations = (
-  state: SchedulerState,
-  maxIterationsLimit: number
-) => {
-  state.maxFlushIterations = maxIterationsLimit;
-};
-/** @internal */
 export const schedulerIsBatching = (state: SchedulerState) =>
   (state.state & SCHEDULER_STATE.BATCHING) !== 0;
-/** @internal */
-export const schedulerGetQueueSize = (state: SchedulerState) => state.queueSize;
 
 /** Returns the next reactive epoch identifier. */
 export const nextEpoch = (): number => scheduler.nextEpoch();

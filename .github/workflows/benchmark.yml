@@ -15,14 +15,19 @@ jobs:
         include:
           - package: core
             type: micro
+            playwright: "false"
           - package: core
             type: macro
+            playwright: "false"
           - package: core
             type: state
+            playwright: "false"
           - package: core
             type: realistic
+            playwright: "false"
           - package: utils
             type: all
+            playwright: "false"
           - package: jquery
             type: micro
             playwright: "true"
@@ -81,35 +86,23 @@ jobs:
         run: |
           git diff --check -- \
             packages/core/docs/BENCHMARKS.md \
-            packages/core/docs/BENCHMARKS_DETAILED.md \
             packages/jquery/docs/BENCHMARKS.md \
-            packages/jquery/docs/BENCHMARKS_DETAILED.md \
-            packages/utils/docs/BENCHMARKS.md \
-            packages/utils/docs/BENCHMARKS_DETAILED.md
+            packages/utils/docs/BENCHMARKS.md
           test -s packages/core/docs/BENCHMARKS.md
-          test -s packages/core/docs/BENCHMARKS_DETAILED.md
           test -s packages/jquery/docs/BENCHMARKS.md
-          test -s packages/jquery/docs/BENCHMARKS_DETAILED.md
           test -s packages/utils/docs/BENCHMARKS.md
-          test -s packages/utils/docs/BENCHMARKS_DETAILED.md
 
       - name: Create commit-ready benchmark documentation patch
         shell: bash
         run: |
           git diff --binary -- \
             packages/core/docs/BENCHMARKS.md \
-            packages/core/docs/BENCHMARKS_DETAILED.md \
             packages/jquery/docs/BENCHMARKS.md \
-            packages/jquery/docs/BENCHMARKS_DETAILED.md \
-            packages/utils/docs/BENCHMARKS.md \
-            packages/utils/docs/BENCHMARKS_DETAILED.md > benchmark-docs.patch
+            packages/utils/docs/BENCHMARKS.md > benchmark-docs.patch
           git diff --stat -- \
             packages/core/docs/BENCHMARKS.md \
-            packages/core/docs/BENCHMARKS_DETAILED.md \
             packages/jquery/docs/BENCHMARKS.md \
-            packages/jquery/docs/BENCHMARKS_DETAILED.md \
-            packages/utils/docs/BENCHMARKS.md \
-            packages/utils/docs/BENCHMARKS_DETAILED.md > benchmark-docs-summary.txt
+            packages/utils/docs/BENCHMARKS.md > benchmark-docs-summary.txt
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v7
@@ -117,11 +110,8 @@ jobs:
           name: benchmark-results
           path: |
             packages/core/docs/BENCHMARKS.md
-            packages/core/docs/BENCHMARKS_DETAILED.md
             packages/jquery/docs/BENCHMARKS.md
-            packages/jquery/docs/BENCHMARKS_DETAILED.md
             packages/utils/docs/BENCHMARKS.md
-            packages/utils/docs/BENCHMARKS_DETAILED.md
             benchmark-docs.patch
             benchmark-docs-summary.txt
 

@@ -27,12 +27,11 @@ import type {
   AEJConfig,
   AsyncReactiveValue,
   AtomComponentController,
-  AtomNav,
-  AtomNavOptions,
   AtomOptions,
   BindingOptions,
   ComponentFn,
   CssBindings,
+  CssValue,
   DisposableWritableAtom,
   EffectResult,
   FetchOptions,
@@ -45,58 +44,9 @@ import type {
 } from './types';
 
 declare global {
-  var $: JQueryStatic;
-  var jQuery: JQueryStatic;
-
   interface Window {
     $: JQueryStatic;
     jQuery: JQueryStatic;
-  }
-
-  interface Document {
-    /**
-     * Set of constructable stylesheets to be applied to the document.
-     * @see https://developer.mozilla.org/en-US/docs/Web/API/Document/adoptedStyleSheets
-     */
-    adoptedStyleSheets: CSSStyleSheet[];
-  }
-
-  interface ShadowRoot {
-    /**
-     * Set of constructable stylesheets to be applied to this shadow root.
-     * @see https://developer.mozilla.org/en-US/docs/Web/API/ShadowRoot/adoptedStyleSheets
-     */
-    adoptedStyleSheets: CSSStyleSheet[];
-  }
-
-  interface HTMLElement {
-    /**
-     * Returns an ElementInternals object that allows the element to participate in form submission,
-     * accessibility, and states.
-     * @see https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/attachInternals
-     */
-    attachInternals(): ElementInternals;
-  }
-
-  interface ElementInternals extends ARIAMixin {
-    /** The ShadowRoot associated with the element. */
-    readonly shadowRoot: ShadowRoot | null;
-    /** Sets the form value, state, and validity for the element. */
-    setFormValue(value: string | FormData | null, state?: string | FormData | null): void;
-    /** Sets the validity state of the element. */
-    setValidity(flags?: ValidityStateFlags, message?: string, anchor?: HTMLElement): void;
-    /** The validation message for the element. */
-    readonly validationMessage: string;
-    /** The validity state of the element. */
-    readonly validity: ValidityState;
-    /** Whether the element will be validated. */
-    readonly willValidate: boolean;
-    /** Checks the validity of the element. */
-    checkValidity(): boolean;
-    /** Reports the validity of the element. */
-    reportValidity(): boolean;
-    /** The labels associated with the element. */
-    readonly labels: NodeList;
   }
 
   /**
@@ -505,9 +455,8 @@ declare global {
      * ```
      *
      * Logic: Concurrency Control
-     * Uses AbortController and jqXHR.abort() to enforce a "latest-only"
-     * resolution strategy. Older requests are canceled to prevent stale data
-     * from overwriting newer updates.
+     * Uses jqXHR.abort() to enforce a "latest-only" resolution strategy.
+     * Older requests are canceled to prevent stale data from overwriting newer updates.
      */
     atomFetch<T>(
       source: string | (() => string),
@@ -518,37 +467,6 @@ declare global {
       /** Releases all reactive resources and aborts pending requests. */
       dispose(): void;
     };
-
-    /**
-     * Logic: Reactive Navigation Orchestrator
-     * Provides a PJAX-style manager that synchronizes the URL with server-fetched fragments.
-     *
-     * When to use:
-     * - When building a "Single Page" experience within a JQuery environment.
-     * - When specific DOM containers need to reflect the current URL state.
-     *
-     * Performance Characteristics:
-     * - Implements hash-only transition optimization to avoid redundant network requests.
-     * - Uses batched reactive updates to minimize layout thrashing during navigation.
-     *
-     * @example
-     * ```typescript
-     * const nav = $.atomNav({
-     *   target: '#main-content',
-     *   onMount: ($element) => console.log('Swapped!'),
-     * });
-     *
-     * // Monitor navigation status
-     * $.effect(() => {
-     *   if (nav.isPending.value) showSpinner();
-     *   else hideSpinner();
-     * });
-     *
-     * // Programmatic navigation
-     * $('#link').on('click', () => nav.navigate('/settings'));
-     * ```
-     */
-    atomNav(options: AtomNavOptions): AtomNav;
 
     /**
      * Logic: Dependency Provider

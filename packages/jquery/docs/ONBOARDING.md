@@ -176,4 +176,3 @@ The library extends the global `jQuery` (or `$`) object — methods like `$.atom
 
 - Check out [PATTERNS.md](./PATTERNS.md) for architectural strategies like routing and data fetching.
 - Read the authoritative [jQuery Specification](../../../docs/spec/jquery.md) for contracts, lifecycle invariants, and the security policy.
-- Browse [API.md](./API.md) for the walkthrough reference (contracts live in the [spec](../../../docs/spec/jquery.md)).

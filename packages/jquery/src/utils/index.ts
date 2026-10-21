@@ -10,8 +10,6 @@
  * inconsistencies (e.g. SVG classNames) and normalize data for reactive state access.
  */
 
-export { isPromise } from '@but212/atom-effect';
-
 /**
  * Generates a concise, human-readable CSS selector for a DOM element.
  *
@@ -91,6 +89,6 @@ export function flattenToFormData(formData: FormData, prefix: string, sourceObje
  *
  * @internal
  */
-export function normalizePath(name: string): string {
+export function formNameToPath(name: string): string {
   return name.replace(/\[(\w+)\]/g, '.$1').replace(/^\./, '');
 }

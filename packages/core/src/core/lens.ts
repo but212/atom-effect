@@ -9,237 +9,29 @@
  * Push-based subscriptions to a lens notify only when the sub-path value actually changes.
  * A pull-based read of `lens.value` inside a tracked scope registers a dependency on the
  * root atom, so it re-runs when any part of the root changes.
- *
- * Security: Prototype Pollution Guard
- * Prevents unauthorized modifications to object prototypes during deep updates
- * by blacklisting sensitive keys like `__proto__`.
  */
 
-import { Result, shallowEqual } from '@but212/atom-effect-utils';
-import {
-  BRAND,
-  BrandFlags,
-  DEFAULT_EQUAL,
-  ERROR_MESSAGES,
-  type LENS_CONFIG,
-  STATE_FLAGS,
-} from '@/constants';
+import { shallowEqual } from '@but212/atom-effect-utils';
+import { BRAND, BrandFlags, DEFAULT_EQUAL, ERROR_MESSAGES, STATE_FLAGS } from '@/constants';
 import {
   BaseNode,
   nodeGetSubscriberCount,
   nodeNotifySubscribers,
   nodeSubscribe,
 } from '@/core/base';
-import { batch } from '@/index';
-import type {
-  Equal,
-  MergedDependencyValue,
-  ReactiveNode,
-  SubscriberTarget,
-  WritableAtom,
-} from '@/types';
+import type { MergedDependencyValue, ReactiveNode, SubscriberTarget, WritableAtom } from '@/types';
 import { debug, mergeAtomValues } from '@/utils';
+import { getPathValue, type Paths, type PathValue, setDeepValue } from './lens-path';
+import { batch } from './scheduler';
 
-/**
- * Logic: Numeric Key Conversion
- * Casts numeric string literals to numbers to ensure correct array index typing.
- */
-export type StringKeyToNumber<S extends string> = S extends `${infer N extends number}` ? N : S;
-
-/**
- * Logic: Broad Index Detection
- * Detects if a type contains a broad string indexer (e.g., Record<string, any>).
- */
-export type HasBroadStringKey<T> = string extends keyof T ? true : false;
-
-/** @public */
-export type StringIndexValue<T> = T extends Record<string, infer V> ? V : never;
-
-/** @public */
-export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never;
-
-/**
- * Logic: Recursion Termination
- * Defines primitive and built-in types that terminate recursive path exploration.
- */
-export type TerminalTypes =
-  | Date
-  | RegExp
-  | Map<unknown, unknown>
-  | Set<unknown>
-  | Promise<unknown>
-  | ((...args: never[]) => unknown);
-
-/**
- * Logic: Path Generation
- * Computes a union of all valid dot-separated paths for type T.
- *
- * Constraint: Depth Limit
- * Recursion is capped by `LENS_CONFIG.MAX_PATH_DEPTH` to prevent infinite
- * type instantiation for circular or deeply nested structures.
- */
-export type Paths<T, D extends unknown[] = []> =
-  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required to prevent infinite recursion in paths
-  Equal<T, any> extends true
-    ? string
-    : D['length'] extends typeof LENS_CONFIG.MAX_PATH_DEPTH
-      ? never
-      : T extends TerminalTypes
-        ? never
-        : T extends readonly unknown[]
-          ? NonNullable<ArrayElement<T>> extends object
-            ? `${number}` | `${number}.${Paths<NonNullable<ArrayElement<T>>, [...D, 1]>}`
-            : `${number}`
-          : T extends object
-            ? HasBroadStringKey<T> extends true
-              ? string
-              : {
-                  [K in keyof T & (string | number)]: T[K] extends (...args: never[]) => unknown
-                    ? never
-                    : NonNullable<T[K]> extends object
-                      ? `${K}` | `${K}.${Paths<NonNullable<T[K]>, [...D, 1]>}`
-                      : `${K}`;
-                }[keyof T & (string | number)]
-            : never;
-
-/**
- * Logic: Path Resolution
- * Resolves the type of the value located at a specific dot-path string.
- * Supports array indices, record keys, and nested objects.
- */
-export type PathValue<T, P extends string> =
-  // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required for correct path resolution
-  Equal<T, any> extends true
-    ? // biome-ignore lint/suspicious/noExplicitAny: 'any' check is required for correct path resolution
-      any
-    : P extends `${infer K}.${infer Rest}`
-      ? NonNullable<T> extends readonly unknown[]
-        ? K extends `${number}`
-          ? PathValue<NonNullable<ArrayElement<NonNullable<T>>>, Rest>
-          : never
-        : HasBroadStringKey<NonNullable<T>> extends true
-          ? PathValue<NonNullable<StringIndexValue<NonNullable<T>>>, Rest>
-          : StringKeyToNumber<K> extends keyof NonNullable<T>
-            ? PathValue<
-                NonNullable<NonNullable<T>[StringKeyToNumber<K> & keyof NonNullable<T>]>,
-                Rest
-              >
-            : never
-      : NonNullable<T> extends readonly unknown[]
-        ? P extends `${number}`
-          ? NonNullable<ArrayElement<NonNullable<T>>>
-          : never
-        : HasBroadStringKey<NonNullable<T>> extends true
-          ? NonNullable<StringIndexValue<NonNullable<T>>>
-          : StringKeyToNumber<P> extends keyof NonNullable<T>
-            ? NonNullable<T>[StringKeyToNumber<P> & keyof NonNullable<T>]
-            : never;
-
-/**
- * Security: Prototype Pollution Guard
- * Blacklists keys that could be exploited to modify object prototypes.
- */
-const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-/** @internal */
-const isForbiddenKey = (key: string) => FORBIDDEN_KEYS.has(key);
-
-/**
- * Optimization: Structural Sharing
- * Creates a shallow copy of the container and applies the update.
- * Supports Arrays, Maps, and plain Objects while preserving prototypes.
- * @internal
- */
-type CloneContainer = Record<string, unknown> | unknown[] | Map<string, unknown>;
-
-function cloneAndSet(container: CloneContainer, key: string, value: unknown): object {
-  if (Array.isArray(container)) {
-    const clonedArray = [...container];
-    Reflect.set(clonedArray, key, value);
-    return clonedArray;
-  }
-  if (container instanceof Map) {
-    return new Map(container).set(key, value);
-  }
-  const objectPrototype = Object.getPrototypeOf(container);
-  if (objectPrototype === Object.prototype || objectPrototype === null) {
-    return { ...container, [key]: value };
-  }
-  const clonedObject = Object.assign(Object.create(objectPrototype), container);
-  clonedObject[key] = value;
-  return clonedObject;
-}
-
-/**
- * Logic: Immutable Deep Update
- * @internal
- */
-export function setDeepValue(
-  targetObject: unknown,
-  keys: string[],
-  index: number,
-  value: unknown
-  // biome-ignore lint/suspicious/noExplicitAny: returns type-erased dynamic value
-): any {
-  if (index === keys.length) return value;
-  const key = keys[index];
-  if (
-    key === undefined ||
-    targetObject == null ||
-    typeof targetObject !== 'object' ||
-    isForbiddenKey(key)
-  )
-    return targetObject;
-
-  const previousValue =
-    targetObject instanceof Map
-      ? targetObject.get(key)
-      : (targetObject as Record<string, unknown>)[key];
-  const newValue = setDeepValue(previousValue, keys, index + 1, value);
-
-  return DEFAULT_EQUAL(previousValue, newValue)
-    ? targetObject
-    : cloneAndSet(targetObject as CloneContainer, key, newValue);
-}
-
-/**
- * Logic: Deep Read
- * @internal
- */
-// biome-ignore lint/suspicious/noExplicitAny: returns type-erased dynamic path value
-export function getPathValue(sourceObject: unknown, parts: string[]): any {
-  let resolvedValue = sourceObject;
-  for (const part of parts) {
-    if (resolvedValue == null || isForbiddenKey(part)) return undefined;
-    resolvedValue =
-      resolvedValue instanceof Map
-        ? resolvedValue.get(part)
-        : typeof resolvedValue === 'object' || typeof resolvedValue === 'function'
-          ? (resolvedValue as Record<string, unknown>)[part]
-          : Object(resolvedValue)[part as keyof object];
-  }
-  return resolvedValue;
-}
-
-/**
- * Role: Orchestrator for a Single-Property Reactive Lens.
- *
- * Optimization: Monomorphic Access
- * Uses public fields for engine compatibility to ensure consistent V8 hidden
- * class shapes in the reactive hot-path.
- *
- * Logic: Shared Subscription
- * Only subscribes to the root atom when the lens itself has active listeners,
- * preventing memory leaks and unnecessary computations for unused lenses.
- * `subscribe()` is granular: it re-notifies only when the sub-path value changes.
- * A pull-based read of `value`/`peek()` tracks the root atom instead, so a tracked
- * scope re-runs on any root write, even one that leaves this path unchanged.
- *
- * @internal
- */
 /**
  * Base class providing common engine properties for reactive nodes to guarantee consistent
  * hidden class shapes and monomorphic hot-path access in V8.
+ *
+ * Logic: Shared Subscription
+ * Only attaches to the upstream source(s) while the lens itself has active listeners,
+ * preventing memory leaks and unnecessary computations for unused lenses.
+ * `subscribe()` is granular: it re-notifies only when the lens value changes under `_equals`.
  *
  * @internal
  */
@@ -248,8 +40,55 @@ abstract class BaseLens<T = unknown> extends BaseNode<T> {
   _trackEpoch = 0;
   _trackCount = 0;
   _error: Error | null = null;
+  #previousValue: T | undefined;
+
+  abstract peek(): T;
+  protected abstract _equals(nextValue: T, previousValue: T | undefined): boolean;
+  /** Subscribes to the upstream source(s); invoked when the first listener arrives. */
+  protected abstract _attach(onSourceChange: () => void): void;
+  /** Releases every upstream subscription; must be safe to call repeatedly. */
+  protected abstract _detach(): void;
+
+  subscribe(listener: SubscriberTarget<T>): () => void {
+    const wasEmpty = nodeGetSubscriberCount(this) === 0;
+    const innerUnsubscribe = nodeSubscribe(this, listener);
+    if (this.isDisposed) {
+      return innerUnsubscribe;
+    }
+    if (wasEmpty && nodeGetSubscriberCount(this) === 1) {
+      this.#previousValue = this.peek();
+      this._attach(() => this.#notify());
+    }
+    return () => {
+      innerUnsubscribe();
+      if (nodeGetSubscriberCount(this) === 0) this._detach();
+    };
+  }
+
+  dispose(): void {
+    this.flags |= STATE_FLAGS.DISPOSED;
+    this._detach();
+    this._subscriberSlots?.clear();
+  }
+
+  #notify(): void {
+    const nextValue = this.peek();
+    if (!this._equals(nextValue, this.#previousValue)) {
+      const oldValue = this.#previousValue;
+      this.#previousValue = nextValue;
+      nodeNotifySubscribers(this, nextValue, oldValue);
+    }
+  }
 }
 
+/**
+ * Role: Orchestrator for a Single-Property Reactive Lens.
+ *
+ * A pull-based read of `value`/`peek()` tracks the root atom instead, so a tracked
+ * scope re-runs on any root write, even one that leaves this path unchanged.
+ *
+ * @internal
+ */
 class LensImpl<T extends object, P extends string>
   extends BaseLens<PathValue<T, P>>
   implements WritableAtom<PathValue<T, P>>, ReactiveNode<PathValue<T, P>>
@@ -258,7 +97,6 @@ class LensImpl<T extends object, P extends string>
   #path: P;
   #parts: string[];
   #sharedUnsubscribeCallback: (() => void) | null = null;
-  #previousValue: PathValue<T, P> | undefined;
 
   constructor(root: WritableAtom<T>, path: P) {
     super();
@@ -288,48 +126,25 @@ class LensImpl<T extends object, P extends string>
     return this.#getValue(this.#root.peek());
   }
 
-  subscribe(listener: SubscriberTarget<PathValue<T, P>>): () => void {
-    const wasEmpty = nodeGetSubscriberCount(this) === 0;
-    const innerUnsubscribeCallback = Result.unwrap(nodeSubscribe(this, listener));
-    if (this.isDisposed) {
-      return innerUnsubscribeCallback;
-    }
-    if (wasEmpty && nodeGetSubscriberCount(this) === 1) {
-      this.#previousValue = this.peek();
-      this.#sharedUnsubscribeCallback = this.#root.subscribe(() => this.#notify());
-    }
-    return () => {
-      innerUnsubscribeCallback();
-      if (nodeGetSubscriberCount(this) === 0 && this.#sharedUnsubscribeCallback) {
-        const unsubscribeCallback = this.#sharedUnsubscribeCallback;
-        this.#sharedUnsubscribeCallback = null;
-        unsubscribeCallback();
-      }
-    };
+  protected _equals(
+    nextValue: PathValue<T, P>,
+    previousValue: PathValue<T, P> | undefined
+  ): boolean {
+    return DEFAULT_EQUAL(nextValue, previousValue);
   }
 
-  subscriberCount(): number {
-    return nodeGetSubscriberCount(this);
+  protected _attach(onSourceChange: () => void): void {
+    this.#sharedUnsubscribeCallback = this.#root.subscribe(onSourceChange);
   }
 
-  dispose(): void {
-    this.flags |= STATE_FLAGS.DISPOSED;
-    this.#sharedUnsubscribeCallback?.();
+  protected _detach(): void {
+    const unsubscribeCallback = this.#sharedUnsubscribeCallback;
     this.#sharedUnsubscribeCallback = null;
-    this._subscriberSlots?.clear();
+    unsubscribeCallback?.();
   }
 
   #getValue(source: T): PathValue<T, P> {
     return getPathValue(source, this.#parts);
-  }
-
-  #notify(): void {
-    const nextValue = this.peek();
-    if (!DEFAULT_EQUAL(nextValue, this.#previousValue)) {
-      const oldValue = this.#previousValue;
-      this.#previousValue = nextValue;
-      nodeNotifySubscribers(this, nextValue, oldValue);
-    }
   }
 
   get _root() {
@@ -410,7 +225,6 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
 {
   #lenses: L;
   #unsubscribeCallbacks: (() => void)[] = [];
-  #previousValue: MergedDependencyValue<L> | undefined;
 
   constructor(lenses: L) {
     super();
@@ -433,47 +247,23 @@ class MergedLensImpl<L extends WritableAtom<unknown>[]>
     return mergeAtomValues(this.#lenses, true);
   }
 
-  subscribe(listener: SubscriberTarget<MergedDependencyValue<L>>): () => void {
-    const wasEmpty = nodeGetSubscriberCount(this) === 0;
-    const innerUnsub = Result.unwrap(nodeSubscribe(this, listener));
-    if (this.isDisposed) {
-      return innerUnsub;
-    }
-    if (wasEmpty && nodeGetSubscriberCount(this) === 1) {
-      this.#previousValue = this.peek();
-      const notifyCallback = () => this.#notify();
-      for (const lens of this.#lenses) {
-        this.#unsubscribeCallbacks.push(lens.subscribe(notifyCallback));
-      }
-    }
-    return () => {
-      innerUnsub();
-      if (nodeGetSubscriberCount(this) === 0) {
-        const unsubscribeCallbacks = this.#unsubscribeCallbacks;
-        this.#unsubscribeCallbacks = [];
-        for (const unsubscribeCallback of unsubscribeCallbacks) unsubscribeCallback();
-      }
-    };
+  protected _equals(
+    nextValue: MergedDependencyValue<L>,
+    previousValue: MergedDependencyValue<L> | undefined
+  ): boolean {
+    return shallowEqual(nextValue, previousValue);
   }
 
-  subscriberCount(): number {
-    return nodeGetSubscriberCount(this);
-  }
-
-  dispose(): void {
-    this.flags |= STATE_FLAGS.DISPOSED;
-    for (const unsubscribeCallback of this.#unsubscribeCallbacks) unsubscribeCallback();
-    this.#unsubscribeCallbacks.length = 0;
-    this._subscriberSlots?.clear();
-  }
-
-  #notify(): void {
-    const nextValue = this.peek();
-    if (!shallowEqual(nextValue, this.#previousValue)) {
-      const oldValue = this.#previousValue;
-      this.#previousValue = nextValue;
-      nodeNotifySubscribers(this, nextValue, oldValue);
+  protected _attach(onSourceChange: () => void): void {
+    for (const lens of this.#lenses) {
+      this.#unsubscribeCallbacks.push(lens.subscribe(onSourceChange));
     }
+  }
+
+  protected _detach(): void {
+    const unsubscribeCallbacks = this.#unsubscribeCallbacks;
+    this.#unsubscribeCallbacks = [];
+    for (const unsubscribeCallback of unsubscribeCallbacks) unsubscribeCallback();
   }
 
   get [BRAND]() {

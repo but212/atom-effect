@@ -3,29 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    },
+    ".": "./src/index.js",
     "./tsconfig": "./tsconfig.base.json"
   },
   "scripts": {
-    "build": "node scripts/build.js",
-    "dev": "tsc -p tsconfig.build.json --watch",
-    "clean:build": "rimraf dist",
     "test": "vitest run",
     "test:run": "vitest run",
     "test:coverage": "vitest --coverage",
     "typecheck": "tsc --noEmit"
   },
-  "devDependencies": {
-    "rimraf": "catalog:"
-  },
+  "devDependencies": {},
   "dependencies": {
     "unplugin-dts": "catalog:build",
     "vite": "catalog:build",

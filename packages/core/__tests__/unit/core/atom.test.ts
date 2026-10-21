@@ -240,6 +240,27 @@ describe('Atom', () => {
     });
   });
 
+  describe('computed dirty propagation', () => {
+    it.each([
+      ['without a subscriber', false],
+      ['with a subscriber', true],
+    ])('recomputes after consecutive writes %s', (_label, withSubscriber) => {
+      const source = atom(0);
+      const doubled = computed(() => source.value * 10);
+      const unsubscribe = withSubscriber ? doubled.subscribe(() => {}) : undefined;
+
+      expect(doubled.value).toBe(0);
+      source.value = 1;
+      expect(doubled.value).toBe(10);
+      source.value = 2;
+      expect(doubled.value).toBe(20);
+
+      unsubscribe?.();
+      doubled.dispose();
+      source.dispose();
+    });
+  });
+
   describe('peek()', () => {
     it('returns current value synchronously without side-effects', () => {
       const someAtom = atom(7);

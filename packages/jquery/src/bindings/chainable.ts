@@ -336,6 +336,59 @@ function unpack<T, O>(unpackedValue: T | [T, O]): [T, O?] {
 }
 
 /**
+ * Logic: Binding Order
+ * Single source of truth for which `atomBind` option keys exist and the deterministic order in
+ * which they are applied.
+ *
+ * @internal
+ */
+const BINDERS: readonly (readonly [
+  keyof BindingOptions,
+  (element: HTMLElement, options: BindingOptions) => void,
+])[] = [
+  [
+    'text',
+    (element, options) => {
+      const [source, formatter] = unpack(options.text as unknown) as [
+        AsyncReactiveValue<unknown>,
+        (((v: unknown) => string) | null)?,
+      ];
+      bindText(element, source, formatter || undefined);
+    },
+  ],
+  ['html', (element, options) => bindHtml(element, options.html as never)],
+  ['class', (element, options) => bindClass(element, options.class as never)],
+  ['css', (element, options) => bindCss(element, options.css as never)],
+  ['attr', (element, options) => bindAttr(element, options.attr as never)],
+  ['prop', (element, options) => bindProp(element, options.prop as never)],
+  ['show', (element, options) => bindVisibility(element, options.show as never, false)],
+  ['hide', (element, options) => bindVisibility(element, options.hide as never, true)],
+  [
+    'val',
+    (element, options) => {
+      const [atom, valueOptions] = unpack(options.val as unknown) as [
+        WritableAtom<unknown>,
+        ValOptions<unknown>?,
+      ];
+      bindVal(element, atom, valueOptions);
+    },
+  ],
+  ['checked', (element, options) => bindChecked(element, options.checked as never)],
+  [
+    'form',
+    (element, options) => {
+      if (!(element instanceof HTMLFormElement)) return;
+      const [atomOrArr, formOptions] = unpack(options.form as unknown) as [
+        WritableAtom<object> | WritableAtom<unknown>[],
+        FormOptions<unknown>?,
+      ];
+      bindForm(element, atomOrArr, formOptions);
+    },
+  ],
+  ['on', (element, options) => bindEvents(element, options.on as never)],
+];
+
+/**
  * A unified entry point for declaring multiple reactive bindings in a single call.
  *
  * When to use:
@@ -358,73 +411,14 @@ function unpack<T, O>(unpackedValue: T | [T, O]): [T, O?] {
  * ```
  */
 $.fn.atomBind = function <T, TText>(this: JQuery, options: BindingOptions<T, TText>): JQuery {
-  const bindingOptions = options;
+  const bindingOptions = options as BindingOptions<unknown, unknown>;
 
-  const hasActive =
-    bindingOptions.text !== undefined ||
-    bindingOptions.html !== undefined ||
-    bindingOptions.class !== undefined ||
-    bindingOptions.css !== undefined ||
-    bindingOptions.attr !== undefined ||
-    bindingOptions.prop !== undefined ||
-    bindingOptions.show !== undefined ||
-    bindingOptions.hide !== undefined ||
-    bindingOptions.val !== undefined ||
-    bindingOptions.checked !== undefined ||
-    bindingOptions.form !== undefined ||
-    bindingOptions.on !== undefined;
-
-  if (!hasActive) return this;
+  if (!BINDERS.some(([key]) => bindingOptions[key] !== undefined)) return this;
 
   return atomEachElement(this, (element) => {
     const tasks = withBatchCollection(() => {
-      if (bindingOptions.text !== undefined) {
-        const [source, formatter] = unpack(bindingOptions.text as unknown) as [
-          AsyncReactiveValue<unknown>,
-          (((v: unknown) => string) | null)?,
-        ];
-        bindText(element, source, formatter || undefined);
-      }
-      if (bindingOptions.html !== undefined) {
-        bindHtml(element, bindingOptions.html);
-      }
-      if (bindingOptions.class !== undefined) {
-        bindClass(element, bindingOptions.class);
-      }
-      if (bindingOptions.css !== undefined) {
-        bindCss(element, bindingOptions.css);
-      }
-      if (bindingOptions.attr !== undefined) {
-        bindAttr(element, bindingOptions.attr);
-      }
-      if (bindingOptions.prop !== undefined) {
-        bindProp(element, bindingOptions.prop);
-      }
-      if (bindingOptions.show !== undefined) {
-        bindVisibility(element, bindingOptions.show, false);
-      }
-      if (bindingOptions.hide !== undefined) {
-        bindVisibility(element, bindingOptions.hide, true);
-      }
-      if (bindingOptions.val !== undefined) {
-        const [atom, valueOptions] = unpack(bindingOptions.val as unknown) as [
-          WritableAtom<unknown>,
-          ValOptions<unknown>?,
-        ];
-        bindVal(element, atom, valueOptions);
-      }
-      if (bindingOptions.checked !== undefined) {
-        bindChecked(element, bindingOptions.checked);
-      }
-      if (bindingOptions.form !== undefined && element instanceof HTMLFormElement) {
-        const [atomOrArr, formOptions] = unpack(bindingOptions.form as unknown) as [
-          WritableAtom<object> | WritableAtom<unknown>[],
-          FormOptions<unknown>?,
-        ];
-        bindForm(element, atomOrArr, formOptions);
-      }
-      if (bindingOptions.on !== undefined) {
-        bindEvents(element, bindingOptions.on);
+      for (const [key, bind] of BINDERS) {
+        if (bindingOptions[key] !== undefined) bind(element, bindingOptions);
       }
     });
 

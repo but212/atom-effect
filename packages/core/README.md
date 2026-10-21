@@ -48,8 +48,7 @@ handle.dispose();
 ## Documentation
 
 - [**Onboarding Guide**](./docs/ONBOARDING.md): Core concepts, mental model, and best practices.
-- [**API Reference**](./docs/API.md): Specification for `atom`, `computed`, `effect`, `batch`, and `lenses`.
-- [**Architecture & Design**](./docs/ARCHITECTURE.md): Deep dive into the internal engine, scheduler, and performance optimizations.
+- [**Specification**](../../docs/spec/core.md): Authoritative contracts for `atom`, `computed`, `effect`, `batch`, lenses, and the scheduler.
 
 ## License
 

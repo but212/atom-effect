@@ -1,7 +1,7 @@
 # Common Patterns
 
 > [!TIP]
-> **See also**: [API Reference](./API.md) · [Architecture](./ARCHITECTURE.md) · [Security Guide](./SECURITY.md)
+> **See also**: [jQuery Specification](../../../docs/spec/jquery.md)
 
 This document outlines standard architectural patterns for implementing `@but212/atom-effect-jquery` within applications.
 
@@ -11,7 +11,7 @@ This document outlines standard architectural patterns for implementing `@but212
 
 ### Using `$.atomFetch`
 
-For HTTP data fetching, `$.atomFetch` handles request cancellation, abort signals, and reactive URL recalculation automatically.
+For HTTP data fetching, `$.atomFetch` handles jqXHR cancellation and reactive URL recalculation automatically.
 
 ```javascript
 const userId = $.atom(1);
@@ -283,11 +283,7 @@ $('ul').atomList(users, {
 
 ### Duplicate Keys
 
-If two items produce the same `key`, the reconciler logs a duplicate-key warning and renders **both** items as fresh DOM nodes — no data is silently dropped. When the duplicates later resolve to unique keys, superseded nodes are torn down through the normal `onRemove` lifecycle.
-
-Pending removals are tracked by node identity, not by key: while a superseded duplicate's async `onRemove` is pending, any live item sharing that key keeps its DOM node and is patched in place on subsequent updates instead of being re-rendered.
-
-> Node-identity removal tracking applies when `render` returns `Element`/`jQuery`/`DocumentFragment` (nodes persist across cycles). With **string** `render`, the container is rebuilt via `replaceChildren` each cycle, so nodes are recreated and identity cannot span a pending removal — treat string renders as un-optimized for this duplicate-key race.
+Duplicate keys are logged and rendered as separate nodes; the exact reconciliation and async-removal rules are in the [jQuery Specification](../../../docs/spec/jquery.md#2-atomlist-reconciliation).
 
 > Prefer keys that are unique and stable (e.g. database IDs). Duplicate keys defeat node reuse and force full re-renders of the affected items.
 

@@ -136,4 +136,47 @@ describe('Async Drift Constraint & Recovery', () => {
     expect(computedInstance.state).toBe(AsyncState.RESOLVED);
     expect(computedInstance.value).toBe(3);
   });
+
+  it('discards a pending async result after a subscriber changes a dependency', async () => {
+    const source = atom(0, { sync: true });
+    const requests: Array<ReturnType<typeof deferred<void>>> = [];
+    const computedInstance = computed(
+      async () => {
+        const value = source.value;
+        const request = deferred<void>();
+        requests.push(request);
+        await request.promise;
+        return value;
+      },
+      { defaultValue: -1 }
+    );
+    let reentered = false;
+    computedInstance.subscribe(() => {
+      if (!reentered && requests.length === 1 && computedInstance.isPending) {
+        reentered = true;
+        source.value = 1;
+        expect(computedInstance.value).toBe(-1);
+      }
+    });
+
+    expect(computedInstance.value).toBe(-1);
+    expect(requests).toHaveLength(1);
+
+    const firstRequest = requests[0];
+    if (!firstRequest) throw new Error('The first request was not created');
+
+    firstRequest.resolve(undefined);
+    await flushPromiseHandlers();
+    expect(computedInstance.state).toBe(AsyncState.PENDING);
+    expect(computedInstance.value).toBe(-1);
+    expect(requests).toHaveLength(2);
+
+    const secondRequest = requests[1];
+    if (!secondRequest) throw new Error('The second request was not created');
+
+    secondRequest.resolve(undefined);
+    await flushPromiseHandlers();
+    expect(computedInstance.state).toBe(AsyncState.RESOLVED);
+    expect(computedInstance.value).toBe(1);
+  });
 });

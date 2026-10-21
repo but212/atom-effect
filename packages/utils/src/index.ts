@@ -1,6 +1,5 @@
 export {
   type Err,
-  isResult,
   type Ok,
   Result,
 } from '@/result';

@@ -63,11 +63,8 @@ $('#warning-msg').atomShow(isWarningVisible);
 
 ## Documentation
 
-- [**API Reference**](./docs/API.md): Detailed specification of reactive methods (`atomBind`, `atomList`, `atomForm`, etc.).
+- [**Specification**](../../docs/spec/jquery.md): Authoritative contracts for bindings (`atomBind`, `atomList`, `atomForm`, etc.), lifecycle invariants, and the HTML sanitization policy.
 - [**Common Patterns**](./docs/PATTERNS.md): Standard architectural patterns for UI updates, modals, and routing.
-- [**Architecture & Design**](./docs/ARCHITECTURE.md): Implementation details of the binding pipeline and memory management.
-- [**Security Guide**](./docs/SECURITY.md): Protocols for HTML sanitization and safe data flow.
-- [**Lifecycle Invariants**](./docs/LIFECYCLE.md): Timing and behavior of reactive teardown.
 
 ## License
 

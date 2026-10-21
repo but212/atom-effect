@@ -16,15 +16,9 @@ export { atom } from './atom';
 export { nextVersion, runInTrackingContext, trackingContext, untracked } from './base';
 export { computed, mergeAtoms } from './computed';
 export { effect } from './effect';
-export type { Paths, PathValue } from './lens';
-export {
-  atomLens,
-  composeLens,
-  getPathValue,
-  lensFor,
-  mergeLenses,
-  setDeepValue,
-} from './lens';
+export { atomLens, composeLens, lensFor, mergeLenses } from './lens';
+export type { LensCloneable, Paths, PathValue } from './lens-path';
+export { getPathValue, LENS_CLONE, setDeepValue } from './lens-path';
 export {
   aeNextTick,
   batch,

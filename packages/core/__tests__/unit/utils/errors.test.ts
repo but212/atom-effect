@@ -118,6 +118,33 @@ describe('Error Handling System', () => {
       expect(mid.cause?.stack).toBeDefined();
     });
 
+    it('normalizes circular object graphs nested in an Error cause', () => {
+      const cause: Record<string, unknown> = {};
+      const shared = { value: 1 };
+      const circularArray: unknown[] = [cause];
+      cause.self = cause;
+      cause.first = shared;
+      cause.second = shared;
+      cause.items = circularArray;
+
+      const error = new Error('outer', { cause });
+      const serialized = serializeError(error) as {
+        cause: {
+          self: { message: string };
+          first: { value: number };
+          second: { message: string };
+          items: { message: string }[];
+        };
+      };
+
+      expect(serialized.cause.first).toEqual({ value: 1 });
+      expect(serialized.cause.first).not.toBe(shared);
+      expect(serialized.cause.self.message).toBe('[Circular Reference]');
+      expect(serialized.cause.second.message).toBe('[Circular Reference]');
+      expect(serialized.cause.items[0]?.message).toBe('[Circular Reference]');
+      expect(() => JSON.stringify(serialized)).not.toThrow();
+    });
+
     it('serializeError returns non-Error objects as is', () => {
       const testObject = { x: 1 };
       expect(serializeError(testObject)).toBe(testObject);

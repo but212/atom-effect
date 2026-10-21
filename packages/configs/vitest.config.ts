@@ -1,4 +1,4 @@
-import { defineVitestConfig } from './src/index';
+import { defineVitestConfig } from './src/index.js';
 
 export default defineVitestConfig(import.meta.dirname, {
   test: {

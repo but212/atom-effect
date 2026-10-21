@@ -5,7 +5,7 @@
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { COMPUTED_STATE_FLAGS } from '@/constants';
-import { createDependencyLink, trackingContext } from '@/core/base';
+import { trackingContext } from '@/core/base';
 import {
   BUFFER_FLAGS,
   claimExisting,
@@ -38,7 +38,7 @@ const createLink = (
   node: Dependency,
   version: number,
   unsubscribeCallback?: () => void
-): DependencyLink => createDependencyLink(node, version, unsubscribeCallback);
+): DependencyLink => ({ node, version, unsubscribeCallback });
 
 describe('DepBuffer', () => {
   const createMockDep = (id: number): Dependency => {

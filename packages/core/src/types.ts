@@ -278,6 +278,11 @@ export interface SchedulerJobObject {
   _nextEpoch?: number | undefined;
   /** Discriminator used for low-overhead dispatching. */
   _kind?: typeof KIND.Obj | undefined;
+  /**
+   * Called when the scheduler discards this job for good (overflow with no retry left),
+   * so the owner can release any "already queued" state it keeps.
+   */
+  _onDrop?(): void;
 }
 
 /**
@@ -327,7 +332,7 @@ export interface SchedulerState {
   nextEpoch(): number;
   startFlush(): boolean;
   endFlush(): void;
-  incrementFlushExecutionCount(): Result<number, Error>;
+  incrementFlushExecutionCount(job?: SchedulerJob): Result<number, Error>;
   resetFlushState(): void;
   schedule(callback: SchedulerJob): Result<void, Error>;
   flushSync(): void;

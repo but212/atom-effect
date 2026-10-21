@@ -184,7 +184,7 @@ Implementation invariants:
 - **Context engine** (`provideAtom`/`injectAtom`): direct-walk discovery traverses parent pointers (crossing shadow via `host`) for O(depth) resolution. A shared context revision invalidates subscribed late-bound proxies when providers or DOM topology change; proxy subscriptions own their temporary computed and `RootObserver` callbacks.
 - **Stylesheet caching**: identical style strings parsed once, shared via `adoptedStyleSheets`; FIFO eviction, max 100 entries.
 
-## 6. Routing & navigation
+## 6. Routing
 
 ### 6.1 `$.route(config)`
 
@@ -194,32 +194,20 @@ SPA router supporting HTML5 History and Hash modes.
 - **Route lifecycle**: `onEnter` / `onLeave` navigation-guard hooks.
 - **DOM replacement**: the existing route subtree is cleaned through the binding registry before `replaceChildren()`; cleanup does not depend on the asynchronous observer.
 - **Instance interface** (reactive): `currentRoute`, `queryParams`, `params`, `location` (`{ path, query, params }`) as `ReadonlyAtom`; `navigate(to)`, `destroy()`.
-- **Deterministic destroy**: `destroy()` releases router-owned reactive atoms, route scanner effects, browser listeners, and navigation-coordinator registration; repeated calls are safe.
+- **Deterministic destroy**: `destroy()` releases router-owned reactive atoms, route scanner effects, and browser listeners; repeated calls are safe.
 - **Best practice**: always call `destroy()` on teardown to prevent listener leaks.
-
-### 6.2 `$.atomNav(options)` (PJAX)
-
-- **Concurrency**: "last navigation wins" — `AbortController` cancels a pending fetch on a newer navigation.
-- **Header coordination**: sends `X-PJAX-Container`; processes `X-PJAX-Title` / `X-PJAX-URL` to sync title/meta.
-- **DOM reconciliation**: cleans up existing DOM nodes before injecting new content. The navigation sanitization policy includes the default blacklist, so fetched `<form>` elements are neutralized to `<span>` wrappers rather than preserved as live forms.
-- **Scroll management**: `#hash` targeting vs reset-to-top by transition type.
-- **Instance interface** (reactive): `currentUrl`, `isPending`, `hasError` as `ReadonlyAtom`; `navigate(url, { replace? })`, `destroy()`.
-
-### 6.3 Navigation interop (`navCoordinator`)
-
-- Manages collisions when `atomNav` and `$.route` run together.
-- **Hierarchical guarding**: resolves `onLeave` guards across all registered routers before committing.
-- Coordinator registrations have an internal idempotent unregister path and are identity-checked so stale cleanup cannot delete a newer registration.
-- Nested routers skip initial scroll/focus, deferring to the parent `atomNav` container.
 
 ## 7. Data fetching — `$.atomFetch(urlOrFn, options)`
 
-- **Concurrency**: auto-aborts the underlying jQuery `jqXHR` when reactive dependencies update.
-- **Normalization**: converts `jqXHR` into native `Error` classes.
-- Returns a computed atom exposing `.abort()` for manual cancellation of the active request.
+- Reactive URL and AJAX option dependencies are read synchronously before request handling begins. A `.value` read checks for input drift and starts the latest request immediately, even before the scheduled effect flush.
+- **Concurrency**: a changed dependency aborts the previous jQuery `jqXHR`; only the active request may update the exposed state.
+- **Lifecycle**: exposes the `ComputedAtom` state and value surface. `eager: false` starts on the first `.value` read; `invalidate()` schedules a refresh for the next `.value` read. `.peek()` returns the last successful value without starting or refreshing a request; before the first success it returns `undefined`.
+- **Normalization**: converts request and transform failures into native `Error` objects and calls `onError` for non-abort failures.
+- `.abort()` cancels the active `jqXHR`; `.dispose()` aborts the active request and releases reactive resources. After disposal, state is `idle`, lifecycle flags are false, and errors are cleared; `.peek()` retains the last successful value. No `AbortController` is created.
 
 ## 8. Effect orchestration invariants (all bindings)
 
 - **Race protection**: a monotonic `latestId` ensures only the most recent Promise resolution applies to the DOM.
 - **Disposal tracking**: pending async resolutions are linked to the `BindingRegistry`; if the element disconnects before resolution, the update is discarded.
 - **Execution isolation**: updaters run within `untracked` to avoid capturing secondary dependencies during the DOM write phase.
+- **Binding isolation**: bindings declared together through `atomBind` share one effect, but each source is read and applied independently; a source that throws is reported through `debug.error` and does not prevent sibling bindings from running or tracking their dependencies.

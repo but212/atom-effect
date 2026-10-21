@@ -257,7 +257,7 @@ describe('Effect', () => {
               const executionResult = (
                 effectInstance as { execute: () => Result<void, Error> }
               ).execute();
-              expect(Result.isOk(executionResult)).toBe(true);
+              expect(executionResult.ok).toBe(true);
             }
           },
           { sync: true }
@@ -305,6 +305,31 @@ describe('Effect', () => {
 
         expect(order).toEqual(['run', 'cleanup', 'run', 'cleanup']);
         expect(effectInstance.isDisposed).toBe(true);
+      });
+
+      it('runs cleanup returned after self-disposal and does not track later reads', () => {
+        const source = atom(0);
+        const cleanup = vi.fn();
+        let disposeOnRun = false;
+        const effectInstance = effect(() => {
+          source.value;
+
+          if (!disposeOnRun) return;
+          effectInstance.dispose();
+          source.value;
+          return cleanup;
+        });
+
+        disposeOnRun = true;
+        effectInstance.run();
+
+        expect(effectInstance.isDisposed).toBe(true);
+        expect(source.subscriberCount()).toBe(0);
+        expect(cleanup).toHaveBeenCalledTimes(1);
+
+        source.value = 1;
+        effectInstance.dispose();
+        expect(cleanup).toHaveBeenCalledTimes(1);
       });
 
       it('gracefully handles missing or invalid cleanup returns', async () => {

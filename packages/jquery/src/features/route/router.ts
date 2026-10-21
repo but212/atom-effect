@@ -17,7 +17,6 @@ import {
 import { Result, SlotBuffer, shallowEqual } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_ROUTE } from '@/constants';
-import { navCoordinator, normalizePath, parseQuery, splitPath } from '@/core/navigation';
 import { registry } from '@/core/registry';
 import type { RouteConfig, RouteDefinition, RouteLocation, Router, WritableAtom } from '@/types';
 import { debug } from '@/utils/debug';
@@ -28,6 +27,7 @@ import {
   resolveNavigation,
   resolveRoute,
 } from './core';
+import { normalizePath, parseQuery, splitPath } from './navigation';
 import type { UrlAdapter } from './types';
 import {
   createRouteRenderer,
@@ -187,9 +187,6 @@ export class RouterImpl implements Router {
     // Constraint: Automatic Teardown
     // Binds the router lifecycle to the target element's DOM presence.
     if (this.#$target[0]) {
-      this.#cleanups.push(
-        navCoordinator.register(this.#$target[0], 'router', () => this.#canLeave())
-      );
       this.#cleanups.push(registry.onCleanup(this.#$target[0], () => this.destroy()));
     }
   }

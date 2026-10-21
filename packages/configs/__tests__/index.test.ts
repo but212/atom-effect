@@ -20,7 +20,7 @@ import {
   getBaseVitestConfig,
   getResolveConfig,
   toKebabCase,
-} from '../src/index';
+} from '../src/index.js';
 
 type ConfigFactory<T> = () => T | Promise<T>;
 

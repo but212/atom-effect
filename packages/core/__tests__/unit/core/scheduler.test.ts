@@ -8,11 +8,8 @@ import {
   batch,
   runInFlushScope,
   scheduler,
-  schedulerEndBatch,
-  schedulerGetQueueSize,
   schedulerIsBatching,
   schedulerSchedule,
-  schedulerSetMaxFlushIterations,
 } from '@/core/scheduler';
 import { atom, computed, effect, SCHEDULER_CONFIG, SchedulerError } from '@/index';
 
@@ -26,14 +23,14 @@ describe('Scheduler Engine', () => {
       schedulerSchedule(scheduler, job1);
       schedulerSchedule(scheduler, job2);
 
-      expect(schedulerGetQueueSize(scheduler)).toBe(2);
+      expect(scheduler.queueSize).toBe(2);
       expect(job1).not.toHaveBeenCalled();
 
       await sleep(10);
 
       expect(job1).toHaveBeenCalledTimes(1);
       expect(job2).toHaveBeenCalledTimes(1);
-      expect(schedulerGetQueueSize(scheduler)).toBe(0);
+      expect(scheduler.queueSize).toBe(0);
     });
 
     it('ensures nested schedules are deferred to the next iteration (double buffering)', async () => {
@@ -42,7 +39,7 @@ describe('Scheduler Engine', () => {
       const initialJob = vi.fn(() => {
         log.push('initial');
         schedulerSchedule(scheduler, nestedJob);
-        expect(schedulerGetQueueSize(scheduler)).toBe(1);
+        expect(scheduler.queueSize).toBe(1);
       });
 
       schedulerSchedule(scheduler, initialJob);
@@ -136,7 +133,7 @@ describe('Scheduler Engine', () => {
 
     it('warns on unbalanced endBatch calls', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      schedulerEndBatch(scheduler);
+      scheduler.endBatch();
       expect(consoleWarn).toHaveBeenCalled();
       consoleWarn.mockRestore();
     });
@@ -199,7 +196,7 @@ describe('Scheduler Engine', () => {
       expect(scheduler.onOverflow).toBe(onOverflow);
 
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-      schedulerSetMaxFlushIterations(scheduler, 10);
+      scheduler.maxFlushIterations = 10;
 
       const loop = () => schedulerSchedule(scheduler, loop);
       schedulerSchedule(scheduler, loop);
@@ -210,11 +207,11 @@ describe('Scheduler Engine', () => {
 
       expect(onOverflow).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalledWith(expect.any(SchedulerError));
-      expect(schedulerGetQueueSize(scheduler)).toBe(0);
+      expect(scheduler.queueSize).toBe(0);
 
       scheduler.onOverflow = null;
       expect(scheduler.onOverflow).toBeNull();
-      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      scheduler.maxFlushIterations = originalMax;
       consoleError.mockRestore();
     });
 
@@ -224,7 +221,7 @@ describe('Scheduler Engine', () => {
       scheduler.onOverflow = onOverflow;
 
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-      schedulerSetMaxFlushIterations(scheduler, 10);
+      scheduler.maxFlushIterations = 10;
 
       const loop = () => schedulerSchedule(scheduler, loop);
       schedulerSchedule(scheduler, loop);
@@ -238,14 +235,14 @@ describe('Scheduler Engine', () => {
       expect(droppedJobs.length).toBeGreaterThan(0);
 
       scheduler.onOverflow = null;
-      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      scheduler.maxFlushIterations = originalMax;
       consoleError.mockRestore();
     });
 
     it('retries dropped jobs once so transient overload still converges', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-      schedulerSetMaxFlushIterations(scheduler, 10);
+      scheduler.maxFlushIterations = 10;
 
       let executions = 0;
       const convergingJob = () => {
@@ -260,14 +257,14 @@ describe('Scheduler Engine', () => {
       // The retry must carry it well past a single flush budget.
       expect(executions).toBeGreaterThanOrEqual(8);
 
-      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      scheduler.maxFlushIterations = originalMax;
       consoleError.mockRestore();
     });
 
     it('flushes jobs scheduled from the onOverflow callback after a terminal overflow', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
-      schedulerSetMaxFlushIterations(scheduler, 10);
+      scheduler.maxFlushIterations = 10;
 
       let overflows = 0;
       const probe = vi.fn();
@@ -288,7 +285,43 @@ describe('Scheduler Engine', () => {
       expect(overflows).toBeGreaterThanOrEqual(2);
       expect(probe).toHaveBeenCalledTimes(1);
 
-      schedulerSetMaxFlushIterations(scheduler, originalMax);
+      scheduler.maxFlushIterations = originalMax;
+      consoleError.mockRestore();
+    });
+
+    it('notifies atoms again after a terminal overflow dropped their pending notification', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
+      scheduler.maxFlushIterations = 10;
+
+      const a = atom(0);
+      const b = atom(0);
+      const unsubscribeA = a.subscribe(() => {
+        b.value = a.peek() + 1;
+      });
+      const unsubscribeB = b.subscribe(() => {
+        a.value = b.peek() + 1;
+      });
+
+      a.value = 1;
+      await sleep(50);
+      unsubscribeA();
+      unsubscribeB();
+
+      const seenA: number[] = [];
+      const seenB: number[] = [];
+      a.subscribe(() => seenA.push(a.peek()));
+      b.subscribe(() => seenB.push(b.peek()));
+      a.value = -1;
+      b.value = -2;
+      await sleep(20);
+
+      expect(seenA).toEqual([-1]);
+      expect(seenB).toEqual([-2]);
+
+      a.dispose();
+      b.dispose();
+      scheduler.maxFlushIterations = originalMax;
       consoleError.mockRestore();
     });
   });
@@ -316,18 +349,24 @@ describe('Scheduler Engine', () => {
 
     describe('maxFlushIterations boundaries', () => {
       it('rejects values below MIN_FLUSH_ITERATIONS', () => {
-        expect(() => schedulerSetMaxFlushIterations(scheduler, 0)).toThrow();
-        expect(() =>
-          schedulerSetMaxFlushIterations(scheduler, SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS - 1)
-        ).toThrow();
+        expect(() => {
+          scheduler.maxFlushIterations = 0;
+        }).toThrow();
+        expect(() => {
+          scheduler.maxFlushIterations = SCHEDULER_CONFIG.MIN_FLUSH_ITERATIONS - 1;
+        }).toThrow();
       });
 
       it('rejects NaN values', () => {
-        expect(() => schedulerSetMaxFlushIterations(scheduler, Number.NaN)).toThrow();
+        expect(() => {
+          scheduler.maxFlushIterations = Number.NaN;
+        }).toThrow();
       });
 
       it('rejects non-integer decimal values', () => {
-        expect(() => schedulerSetMaxFlushIterations(scheduler, 10.5)).toThrow();
+        expect(() => {
+          scheduler.maxFlushIterations = 10.5;
+        }).toThrow();
       });
     });
 
@@ -395,7 +434,7 @@ describe('Scheduler Engine', () => {
         // Run 10000 times (the MAX_EXECUTIONS_PER_FLUSH threshold)
         for (let i = 0; i < 10000; i++) {
           const res = scheduler.incrementFlushExecutionCount();
-          expect(Result.isOk(res)).toBe(true);
+          expect(res.ok).toBe(true);
         }
 
         // The 10001st call should exceed the limit and return an error
@@ -404,6 +443,122 @@ describe('Scheduler Engine', () => {
         expect(overflowRes.error?.message).toContain('Infinite loop detected: limit exceeded');
 
         scheduler.endFlush();
+      });
+
+      it('keeps sync effects alive and retries once after aggregate execution overflow', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const originalOnOverflow = scheduler.onOverflow;
+        const onOverflow = vi.fn();
+        scheduler.onOverflow = onOverflow;
+
+        const source = atom(0, { sync: true });
+        const observed: number[] = [];
+        const effectInstance = effect(
+          () => {
+            observed.push(source.value);
+          },
+          { sync: true }
+        );
+
+        const started = scheduler.startFlush();
+        expect(started).toBe(true);
+        for (let i = 1; i < SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH; i++) {
+          expect(scheduler.incrementFlushExecutionCount().ok).toBe(true);
+        }
+
+        source.value = 1;
+        source.value = 2;
+        expect(observed).toEqual([0, 1]);
+        expect(effectInstance.isDisposed).toBe(false);
+        expect(onOverflow).toHaveBeenCalledTimes(1);
+        expect(onOverflow.mock.calls[0]?.[1]).toContain(effectInstance);
+        scheduler.endFlush();
+
+        await aeNextTick();
+        expect(observed).toEqual([0, 1, 2]);
+        expect(effectInstance.isDisposed).toBe(false);
+
+        effectInstance.dispose();
+        source.dispose();
+        scheduler.onOverflow = originalOnOverflow;
+        consoleError.mockRestore();
+      });
+
+      describe('aggregate overflow settlement', () => {
+        const makeJob = () => ({ execute: vi.fn(), _onDrop: vi.fn() });
+        const exhaustSessionBudget = () => {
+          for (let i = 0; i < SCHEDULER_CONFIG.MAX_EXECUTIONS_PER_FLUSH; i++) {
+            scheduler.incrementFlushExecutionCount();
+          }
+        };
+
+        it('reports the overflow once, retries the failing job, and drops late arrivals', async () => {
+          const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+          const onOverflow = vi.fn();
+          scheduler.onOverflow = onOverflow;
+          await aeNextTick(); // clean drain re-arms the one-shot recovery
+
+          const failingJob = makeJob();
+          const lateJob = makeJob();
+
+          expect(scheduler.startFlush()).toBe(true);
+          exhaustSessionBudget();
+          expect(Result.isErr(scheduler.incrementFlushExecutionCount(failingJob))).toBe(true);
+
+          expect(onOverflow).toHaveBeenCalledTimes(1);
+          expect(onOverflow).toHaveBeenCalledWith(1, [failingJob]);
+          const reported = consoleError.mock.calls[0]?.[0] as SchedulerError;
+          expect(reported).toBeInstanceOf(SchedulerError);
+          expect((reported.cause as Error).name).toBe('AggregateExecutionLimitError');
+          expect(scheduler.queueSize).toBe(1);
+
+          // Same session, recovery already spent: a later job is dropped, not retried.
+          expect(Result.isErr(scheduler.incrementFlushExecutionCount(lateJob))).toBe(true);
+          expect(lateJob._onDrop).toHaveBeenCalledTimes(1);
+          expect(failingJob._onDrop).not.toHaveBeenCalled();
+          expect(onOverflow).toHaveBeenCalledTimes(1);
+          expect(scheduler.queueSize).toBe(1);
+          scheduler.endFlush();
+
+          await aeNextTick();
+          expect(failingJob.execute).toHaveBeenCalledTimes(1);
+          expect(lateJob.execute).not.toHaveBeenCalled();
+
+          consoleError.mockRestore();
+        });
+
+        it('notifies atoms again after a terminal aggregate overflow', async () => {
+          const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+          await aeNextTick(); // clean drain re-arms the one-shot recovery
+
+          const source = atom(0);
+          const seen: number[] = [];
+          source.subscribe(() => seen.push(source.peek()));
+
+          // Session 1 spends the one-shot recovery; its flush microtask has not run yet.
+          expect(scheduler.startFlush()).toBe(true);
+          exhaustSessionBudget();
+          scheduler.incrementFlushExecutionCount(makeJob());
+          scheduler.endFlush();
+
+          // Session 2 overflows with no recovery left and drops the atom's queued notification.
+          source.value = 1;
+          expect(scheduler.startFlush()).toBe(true);
+          exhaustSessionBudget();
+          scheduler.incrementFlushExecutionCount(makeJob());
+          scheduler.endFlush();
+          expect(scheduler.queueSize).toBe(0);
+
+          await sleep(10);
+          expect(seen).toEqual([]);
+
+          source.value = 2;
+          await sleep(10);
+          expect(seen).toEqual([2]);
+
+          source.dispose();
+          consoleError.mockRestore();
+        });
       });
     });
   });

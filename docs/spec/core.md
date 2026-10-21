@@ -40,22 +40,22 @@ Async computeds are treated as state machines with sessions.
 - **Synchronous tracking boundary**: Only dependencies accessed **before the first `await`** are tracked. Dependencies after an `await` return their current value but do not trigger re-evaluation. This keeps tracking deterministic and avoids long-lived tracking contexts.
 - **AsyncState**: `'idle'`, `'pending'`, `'resolved'`, `'rejected'`.
 - **Pending read**: Accessing `.value` while a promise is pending throws `ComputedError` unless a `defaultValue` is configured; with `defaultValue`, that value is returned during pending.
-- **Effect cleanup sessions**: When an effect execution begins, all earlier asynchronous cleanup sessions become stale. A cleanup resolved by an older session cannot be installed as the current cleanup after a newer execution. Async results that settle after disposal are ignored.
+- **Effect cleanup sessions**: When an effect execution begins, all earlier asynchronous cleanup sessions become stale. A cleanup resolved by an older session cannot be installed as the current cleanup after a newer execution. A cleanup returned by a stale or disposed execution runs immediately and is discarded; async rejections after disposal are ignored.
 
 ## 4. Scheduling & batching
 
 - **Default**: Computed invalidation is synchronous, while atom subscriber notifications and default effect executions defer to a microtask flush; multiple synchronous writes still coalesce into one downstream pass.
 - **`batch(fn)`**: Groups updates into one notification cycle. Supports nesting (outermost batch flushes last) and commits state even if `fn` throws.
 - **`sync: true`**: Option on `atom` and `effect` to deliver synchronously, bypassing the microtask batching.
-- **Execution budget**: Each effect enforces `maxExecutionsPerFlush` (default 100) independently; exceeding that per-effect limit disposes the effect. The scheduler separately enforces its aggregate per-flush limit; aggregate overflow is reported via `scheduler.onOverflow(droppedCount, droppedJobs)` and dropped jobs are re-queued exactly once. These limits and failure paths are distinct.
+- **Execution budget**: Each effect enforces `maxExecutionsPerFlush` (default 100) independently; exceeding that per-effect limit disposes the effect. The scheduler separately enforces its aggregate per-flush limit; aggregate overflow is reported via `scheduler.onOverflow(droppedCount, droppedJobs)` without disposing the affected effects, and dropped jobs receive one retry. If that retry also overflows, recovery remains disabled until a clean drain, and jobs dropped without a retry are released through the optional `_onDrop()` hook (an atom clears its queued-notification state), so later writes schedule normally. These limits and failure paths are distinct.
 - **Flush-session isolation**: Flush-session identity is tracked independently from the queue's deduplication epoch, so entering a synchronous effect scope cannot invalidate same-cycle scheduling.
 - **Synchronous notification budget**: a `{ sync: true }` atom whose subscriber writes back to that same atom would otherwise cycle forever inside a single assignment. The notification cascade is capped at `SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS` rounds (1000 by default), mirroring the batched flush limit; on overflow the pending notification is dropped and the overflow is reported as a `SchedulerError`.
 
 ## 5. Lifecycle
 
 - **Identity**: Each node receives a process-local numeric `DependencyId`. IDs are monotonic within the 31-bit SMI range; masking and rollover mean lifetime uniqueness and monotonicity are not guaranteed after rollover.
-- **Disposal**: All nodes implement `.dispose()` severing graph references (subscriber slot buffers, dep maps) for immediate collection. Atoms release their stored value; computeds release executable computation, equality, default-value, and error-handler state while retaining only the last cached value required by `.peek()` compatibility.
-- **Effect cleanup**: The previous cleanup handle runs before each effect re-run and on disposal. A cleanup returned by a stale asynchronous execution is discarded and cannot overwrite a newer session.
+- **Disposal**: All nodes implement `.dispose()` severing graph references (subscriber slot buffers, dep maps) for immediate collection. Atoms release their stored value; computeds release executable computation, equality, default-value, and error-handler state while retaining only the last cached value required by `.peek()` compatibility. A computed disposed during its own execution does not register dependencies read later in that execution.
+- **Effect cleanup**: The previous cleanup handle runs before each effect re-run and on disposal. A synchronous cleanup returned after an effect disposes itself runs immediately. Reads after disposal do not subscribe the effect to dependencies. A cleanup returned by a stale asynchronous execution runs immediately and cannot overwrite a newer session. Disposal releases the effect and error-handler callbacks after any active execution finishes.
 - **Post-disposal atom reads**: `value`/`peek()` return `undefined`; writes are no-ops. Check `isDisposed` before relying on reads.
 - **Post-disposal computed reads**: `.value` remains an invalid operation, while `.peek()` preserves the last cached value for compatibility without retaining executable computation state.
 
@@ -63,10 +63,10 @@ Async computeds are treated as state machines with sessions.
 
 The engine uses a hybrid model to keep the core pure and avoid `try-catch` overhead in hot paths.
 
-1. **Internal monadic propagation**: Internal checks (argument validation, loop budgets, disposed access, circularity) return a `Result<T, Error>`; they do not throw directly.
+1. **Internal monadic propagation**: Internal checks (argument validation, loop budgets, disposed access, circularity) return a `Result<T, Error>`; they do not throw directly. Subscription (`.subscribe()`) is the exception: an invalid listener throws `AtomError` immediately.
 2. **Synchronous boundary unwrapping**: Public boundaries (`.value` getters, factories, public scheduler wrappers) call `Result.unwrap`, throwing a standard `Error` (`ComputedError`, `EffectError`, `SchedulerError`) for compatibility with throwing consumer code.
 3. **Asynchronous scheduler isolation**: During flush, a failed job `Result` is wrapped in a `SchedulerError` and logged — never an unhandled rejection.
-4. **`defaultValue` swallowing**: With `defaultValue`, ordinary computation failures and circular-reference failures are caught internally, the `defaultValue` is returned instead of throwing, and the error is recorded on `errors`/`hasError`. `RangeError`, `ReferenceError`, and `SyntaxError` escape unchanged.
+4. **`defaultValue` swallowing**: With `defaultValue`, ordinary computation failures and circular-reference failures are caught internally, the `defaultValue` is returned instead of throwing, and the error is recorded on `errors`/`hasError`. The recorded error remains visible while the fallback is returned and clears after a later successful recomputation. `RangeError`, `ReferenceError`, and `SyntaxError` escape unchanged.
 
 **Circularity**: The `RECOMPUTING` flag identifies a node accessed during its own derivation, throwing `ComputedError`.
 
@@ -75,7 +75,7 @@ The engine uses a hybrid model to keep the core pure and avoid `try-catch` overh
 - `AtomError` — base: `message`, `cause`, `code` (e.g. `ERR_CIRCULAR_DEP`), `recoverable`.
 - `ComputedError`, `EffectError`, `SchedulerError` — specializations.
 - `getErrorChain(error)` — reconstructs the `.cause` chain.
-- `serializeError(error)` — JSON-serializable form, handling circular references.
+- `serializeError(error)` — serializes `Error` values and recursively copies object/array causes, replacing repeated object references with a circular-reference marker. Top-level non-`Error` inputs are returned unchanged, and primitive cause values are preserved.
 
 ## 7. Node API contracts
 
@@ -132,7 +132,7 @@ Options: `name`, `sync`, `onError`, `maxExecutionsPerFlush` (default 100), `maxE
 
 - **Structural sharing**: only objects along the modified path are cloned; unrelated branches keep reference identity, suppressing redundant recomputes.
 - **Paths**: dot-notation, array indices (`users.0.name`), and `Map` keys. `Set` is a terminal value (no nested traversal).
-- **Prototype preservation**: updates to class instances preserve the original prototype and methods (`instanceof` intact).
+- **Prototype preservation**: updates to class instances preserve the original prototype and methods (`instanceof` intact). The `LENS_CLONE` symbol protocol lets a class provide a fresh clone when it has private fields or internal slots; a hook result must be a fresh object with the same prototype or the lens write throws `TypeError`. Classes without a hook retain the `Object.create`/`Object.assign` fallback, which cannot preserve private state or internal slots.
 - `lensFor(atom)` — factory for multiple lenses bound to one source.
 - `composeLens(lens, path)` — sub-lens from an existing lens.
 - **Notification granularity**: `.subscribe()` re-notifies only when the sub-path value actually changes. A pull-based read of `lens.value` inside a tracked scope registers the **root atom** as its dependency, so the scope re-runs on any root write, even one that leaves this path unchanged.

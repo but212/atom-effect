@@ -600,5 +600,20 @@ describe('SlotBuffer', () => {
       slotBuffer.push('c'); // Should go to index 2
       expect(slotBuffer.at(2)).toBe('c');
     });
+
+    it('should not hand out a freed index again after setAt claims it', () => {
+      const slotBuffer = new SlotBuffer<string>();
+      slotBuffer.push('A');
+      slotBuffer.push('B');
+      slotBuffer.push('C');
+      slotBuffer.remove('B');
+
+      slotBuffer.setAt(1, 'X');
+      slotBuffer.push('Y');
+
+      expect([0, 1, 2, 3].map((index) => slotBuffer.at(index))).toEqual(['A', 'X', 'C', 'Y']);
+      expect(slotBuffer.size).toBe(4);
+      expect(slotBuffer.length).toBe(4);
+    });
   });
 });

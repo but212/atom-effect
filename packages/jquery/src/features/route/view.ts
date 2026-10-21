@@ -11,21 +11,21 @@ import { computed, effect, type ReadonlyAtom, untracked } from '@but212/atom-eff
 import { Result, SlotBuffer } from '@but212/atom-effect-utils';
 import $ from 'jquery';
 import { SYSTEM_COMPONENT } from '@/constants';
+import { registry } from '@/core/registry';
+import type { RouteConfig, RouteDefinition, Router } from '@/types';
+import { debug } from '@/utils/debug';
+import { getRoutePattern, type RouteMatcher } from './core';
+import { reduceRouteEntries } from './discovery';
 import {
   isInterceptee,
   isNavigationClick,
   NAV_SPEC,
-  navCoordinator,
   normalizePath,
   performScroll,
   splitPath,
   syncMetaData,
   updateActiveState,
-} from '@/core/navigation';
-import { registry } from '@/core/registry';
-import type { RouteConfig, RouteDefinition, Router } from '@/types';
-import { debug } from '@/utils/debug';
-import { getRoutePattern, type RouteMatcher } from './core';
+} from './navigation';
 import type { UrlAdapter } from './types';
 
 /**
@@ -114,27 +114,16 @@ export function renderRoute(
     })
   );
 
-  // Constraint: Scroll/Focus Ownership
-  // If this renderer is nested within a higher-level navigation component (like atomNav),
-  // the parent owns the initial page-load transition concerns.
-  const isInitialRender = renderer.previousPath === '';
-  const skipScrollAndFocus = isInitialRender && navCoordinator.isNestedIn(container, 'nav');
-
-  if (!skipScrollAndFocus) {
-    // Constraint: Accessibility (A11y)
-    // Moves focus to the new content to ensure Screen Readers start reading the updated view.
-    const focusTarget =
-      (container.querySelector('h1, [role="heading"]') as HTMLElement) || container;
-    focusTarget.tabIndex = -1;
-    focusTarget.focus();
-  }
+  // Constraint: Accessibility (A11y)
+  // Moves focus to the new content to ensure Screen Readers start reading the updated view.
+  const focusTarget = (container.querySelector('h1, [role="heading"]') as HTMLElement) || container;
+  focusTarget.tabIndex = -1;
+  focusTarget.focus();
 
   renderer.previousPath = routeName;
 
-  if (!skipScrollAndFocus) {
-    if (location.hash) performScroll(window, location.hash.substring(1));
-    else window.scrollTo(0, 0);
-  }
+  if (location.hash) performScroll(window, location.hash.substring(1));
+  else window.scrollTo(0, 0);
 }
 
 /**
@@ -261,28 +250,34 @@ export function discoverRoutes(): {
   routes: Record<string, RouteDefinition>;
   default: string | undefined;
 } {
+  const templates = Array.from(
+    document.querySelectorAll<HTMLTemplateElement>('template[data-path]')
+  );
+  const discovery = reduceRouteEntries(
+    templates.map((templateElement, templateIndex) => {
+      const title =
+        templateElement.getAttribute('title') ?? templateElement.getAttribute('data-title');
+      return {
+        path: normalizePath(templateElement.getAttribute('data-path') ?? ''),
+        templateIndex,
+        ...(title ? { title } : {}),
+        isDefault: templateElement.hasAttribute('data-default'),
+      };
+    })
+  );
   const routes: Record<string, RouteDefinition> = {};
-  let defaultPath: string | undefined;
 
-  for (const templateElement of document.querySelectorAll<HTMLTemplateElement>(
-    'template[data-path]'
-  )) {
-    const path = normalizePath(templateElement.getAttribute('data-path') ?? '');
-    const title =
-      templateElement.getAttribute('title') ?? templateElement.getAttribute('data-title');
-    if (!routes[path]) {
-      templateElement.id ||= `route-${Math.random().toString(36).slice(2, 11)}`;
-      routes[path] = { template: `#${templateElement.id}`, ...(title ? { title } : {}) };
-    } else if (title && !routes[path].title) {
-      routes[path].title = title;
-    }
-
-    if (templateElement.hasAttribute('data-default')) {
-      defaultPath = path;
-    }
+  for (const [path, route] of Object.entries(discovery.routes)) {
+    const templateElement = templates[route.templateIndex];
+    if (!templateElement) continue;
+    templateElement.id ||= `route-${Math.random().toString(36).slice(2, 11)}`;
+    routes[path] = {
+      template: `#${templateElement.id}`,
+      ...(route.title ? { title: route.title } : {}),
+    };
   }
 
-  return { routes, default: defaultPath };
+  return { routes, default: discovery.defaultPath };
 }
 
 /**

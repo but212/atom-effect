@@ -160,11 +160,16 @@ export function serializeError(
   error: unknown,
   seen: Set<unknown> = new Set()
 ): AtomErrorJSON | unknown {
-  if (error == null || typeof error !== 'object') return error;
-  if (seen.has(error)) {
-    const name = 'name' in error ? Reflect.get(error, 'name') : undefined;
-    const recoverable = 'recoverable' in error ? Reflect.get(error, 'recoverable') : undefined;
-    const code = 'code' in error ? Reflect.get(error, 'code') : undefined;
+  if (!isError(error)) return error;
+  return serializeCause(error, seen) as AtomErrorJSON;
+}
+
+function serializeCause(value: unknown, seen: Set<unknown>): unknown {
+  if (value == null || typeof value !== 'object') return value;
+  if (seen.has(value)) {
+    const name = 'name' in value ? Reflect.get(value, 'name') : undefined;
+    const recoverable = 'recoverable' in value ? Reflect.get(value, 'recoverable') : undefined;
+    const code = 'code' in value ? Reflect.get(value, 'code') : undefined;
     return {
       name: typeof name === 'string' ? name : 'Object',
       message: '[Circular Reference]',
@@ -173,23 +178,29 @@ export function serializeError(
     };
   }
 
-  seen.add(error);
+  seen.add(value);
 
-  if (isError(error)) {
-    const cause = 'cause' in error ? Reflect.get(error, 'cause') : undefined;
-    const recoverable = 'recoverable' in error ? Reflect.get(error, 'recoverable') : undefined;
-    const code = 'code' in error ? Reflect.get(error, 'code') : undefined;
+  if (isError(value)) {
+    const cause = 'cause' in value ? Reflect.get(value, 'cause') : undefined;
+    const recoverable = 'recoverable' in value ? Reflect.get(value, 'recoverable') : undefined;
+    const code = 'code' in value ? Reflect.get(value, 'code') : undefined;
     return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      cause: serializeError(cause, seen),
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      cause: serializeCause(cause, seen),
       recoverable: typeof recoverable === 'boolean' ? recoverable : true,
       code: typeof code === 'string' ? code : undefined,
     };
   }
 
-  return error;
+  if (Array.isArray(value)) return value.map((item) => serializeCause(item, seen));
+
+  const serialized: Record<string, unknown> = {};
+  for (const key of Object.keys(value)) {
+    serialized[key] = serializeCause(Reflect.get(value, key), seen);
+  }
+  return serialized;
 }
 
 /**

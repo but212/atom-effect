@@ -51,13 +51,13 @@ import type {
   MergedDependencyValue,
   ReactiveDependencyTracker,
   ReactiveNode,
-  ReactiveNodeBase,
   Subscriber,
   SubscriberTarget,
 } from '@/types';
 import { ComputedError, debug, generateId, mergeAtomValues, NO_DEFAULT_VALUE } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, isBufferDirty, prepareTracking } from './buffers';
+import { collectErrorsRecursive } from './computed-errors';
 
 /**
  * Logic: Re-computation Heuristics
@@ -73,52 +73,6 @@ export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracke
     isBufferDirty(tracker) ||
     (asyncState === COMPUTED_STATE_FLAGS.RESOLVED && tracker._depSlots.size === 0)
   );
-}
-
-/**
- * Logic: Error Collection (Graph Traversal)
- * Iteratively crawls the dependency graph to collect errors while maintaining
- * a visited set to handle potential cycles or diamonds.
- * @internal
- */
-function isDependencyTracker(node: unknown): node is ReactiveDependencyTracker {
-  return node != null && typeof node === 'object' && '_depSlots' in node;
-}
-
-export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst: boolean): Error[] {
-  const collected: Error[] = [];
-  const seen = new Set<number>();
-
-  const walk = (node: ReactiveNodeBase | Dependency): boolean => {
-    if (seen.has(node.id)) return false;
-    seen.add(node.id);
-
-    if ((node.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) {
-      collected.push(
-        node._error ?? new Error('Internal Inconsistency: REJECTED flag set but error is null')
-      );
-      if (stopOnFirst) return true;
-    }
-
-    if (isDependencyTracker(node) && (node._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
-      const slots = node._depSlots;
-      const slotsLength = slots.length;
-      for (let i = 0; i < slotsLength; i++) {
-        const dependencyLink = slots.at(i);
-        if (
-          dependencyLink &&
-          (dependencyLink.node.flags & COMPUTED_STATE_FLAGS.IS_COMPUTED) !== 0 &&
-          walk(dependencyLink.node)
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
-  walk(startNode);
-  return collected;
 }
 
 /**
@@ -156,6 +110,7 @@ class ComputedAtomImpl<T>
   // Logic: Strictly encapsulated state
   #activeSessionId = 0;
   #sessionCounter = 0;
+  #circularErrorForResolution: Error | null = null;
 
   #value: T;
   #isEqual: (a: T, b: T) => boolean;
@@ -233,9 +188,14 @@ class ComputedAtomImpl<T>
     }
 
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
-      return this.#getFallbackOrError(
-        new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY)
-      );
+      const error = new ComputedError(ERROR_MESSAGES.COMPUTED_CIRCULAR_DEPENDENCY);
+      if (
+        this.#defaultValue !== NO_DEFAULT_VALUE &&
+        (flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0
+      ) {
+        this.#circularErrorForResolution = error;
+      }
+      return this.#getFallbackOrError(error);
     }
 
     this.flags = flags | COMPUTED_STATE_FLAGS.CHECKING_DIRTY;
@@ -310,6 +270,7 @@ class ComputedAtomImpl<T>
   get hasError(): boolean {
     trackingContext.current?.addDependency(this);
 
+    if (this._error) return true;
     if ((this.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) return true;
     if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
 
@@ -349,7 +310,7 @@ class ComputedAtomImpl<T>
   }
 
   subscribe(listener: SubscriberTarget<T>): () => void {
-    return Result.unwrap(nodeSubscribe(this, listener));
+    return nodeSubscribe(this, listener);
   }
 
   subscriberCount(): number {
@@ -400,6 +361,7 @@ class ComputedAtomImpl<T>
    * @internal
    */
   addDependency(dependency: Dependency): void {
+    if ((this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0) return;
     nodeTrackDependency(this, dependency, this);
   }
 
@@ -414,6 +376,7 @@ class ComputedAtomImpl<T>
 
     this.flags =
       (this.flags & ~COMPUTED_STATE_FLAGS.FORCE_COMPUTE) | COMPUTED_STATE_FLAGS.RECOMPUTING;
+    this.#circularErrorForResolution = null;
 
     try {
       nodeStartTracking(this);
@@ -452,13 +415,12 @@ class ComputedAtomImpl<T>
    * to discard results from computation cycles that are no longer valid.
    */
   #handleAsyncComputation(promise: Promise<T>): void {
+    const flushSessionId = ++this.#sessionCounter;
+    this.#activeSessionId = flushSessionId;
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.PENDING;
     nodeNotifySubscribers(this, undefined, undefined);
-
-    const flushSessionId = ++this.#sessionCounter;
-    this.#activeSessionId = flushSessionId;
 
     promise.then(
       (result) => {
@@ -479,6 +441,7 @@ class ComputedAtomImpl<T>
   }
 
   #handleError(error: unknown, message: string, shouldThrow = false): void {
+    this.#circularErrorForResolution = null;
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.REJECTED;
@@ -494,12 +457,17 @@ class ComputedAtomImpl<T>
   #finalizeResolution(value: T): void {
     const flags = this.flags;
     const asyncState = flags & STATE_MASKS.ASYNC_MASK;
-    if (asyncState !== COMPUTED_STATE_FLAGS.RESOLVED || !this.#isEqual(this.#value, value)) {
+    if (
+      asyncState !== COMPUTED_STATE_FLAGS.RESOLVED ||
+      !this.#isEqual(this.#value, value) ||
+      this._error !== this.#circularErrorForResolution
+    ) {
       this.version = nextVersion(this.version);
     }
 
     this.#value = value;
-    this._error = null;
+    this._error = this.#circularErrorForResolution;
+    this.#circularErrorForResolution = null;
     this.flags =
       (flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.RESOLVED;

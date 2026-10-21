@@ -12,24 +12,7 @@ import { SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
 import { getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
-import { getOrCreateRootObserver } from './observer';
-
-/** Global flag determining if the automated MutationObserver safety net is active. */
-let isAutoCleanupEnabled = true;
-
-/**
- * Configures whether the automated MutationObserver cleanup system is allowed to run.
- *
- * Logic: This provides explicit control over the global 'safety-net' observer,
- * allowing it to be disabled in environments or scenarios where manual
- * lifecycle management is strictly enforced.
- *
- * @param allowed True to allow auto-cleanup, false to disable it.
- * @internal
- */
-export function setAutoCleanupAllowed(allowed: boolean): void {
-  isAutoCleanupEnabled = allowed;
-}
+import { AutoCleanup } from './auto-cleanup';
 
 /** Marker class used to identify elements with active reactive bindings. @internal */
 const MARK_BOUND = '_aes-bound';
@@ -68,14 +51,12 @@ interface NodeState {
  *
  * Logic: Memory Management
  * - WeakMap Storage: Avoids holding strong references to DOM elements.
- * - Flag System: Uses WeakSet for efficient state tracking without leaks.
+ * - Flag System: Keeps per-node flags in the same WeakMap, so state never outlives the node.
  * - Scoped Traversal: Employs CSS markers for high-speed tree disposal.
  *
  * @internal
  */
 class BindingRegistry {
-  #autoCleanupScheduled = false;
-
   #getState(node: Node): NodeState {
     let state = nodeStates.get(node);
     if (!state) {
@@ -122,12 +103,7 @@ class BindingRegistry {
 
   /** @internal */
   isAutoCleanupScheduled(): boolean {
-    return this.#autoCleanupScheduled;
-  }
-
-  /** @internal */
-  setAutoCleanupScheduled(scheduled: boolean): void {
-    this.#autoCleanupScheduled = scheduled;
+    return autoCleanup.isScheduled();
   }
 
   /**
@@ -181,24 +157,7 @@ class BindingRegistry {
    * the auto-cleanup safety net is active before the first binding is applied.
    */
   #getOrCreateRecord(element: Element): BindingRecord {
-    if (isAutoCleanupEnabled && !this.#autoCleanupScheduled && typeof document !== 'undefined') {
-      if (document.body) {
-        this.#autoCleanupScheduled = true;
-        enableAutoCleanup(document.body);
-      } else {
-        const initCleanup = () => {
-          if (document.body && !this.#autoCleanupScheduled) {
-            this.#autoCleanupScheduled = true;
-            enableAutoCleanup(document.body);
-          }
-          if (this.#autoCleanupScheduled) {
-            document.removeEventListener('DOMContentLoaded', initCleanup);
-          }
-        };
-        document.addEventListener('DOMContentLoaded', initCleanup);
-        queueMicrotask(initCleanup);
-      }
-    }
+    autoCleanup.ensureScheduled();
 
     const state = this.#getState(element);
     let record = state.record;
@@ -280,7 +239,7 @@ class BindingRegistry {
       state.isKept = undefined;
       state.isIgnored = undefined;
     }
-    disableAutoCleanupFor(node);
+    autoCleanup.disableFor(node);
 
     if (node.nodeType !== 1) {
       if (state && !state.shadowRoot) {
@@ -391,57 +350,19 @@ class BindingRegistry {
 /** The global instance of the BindingRegistry. */
 export const registry = new BindingRegistry();
 
-/** Registration record mapping roots to their cleanup function un-subscriptions. */
-const cleanupUnsubsMap = new Map<Node, () => void>();
+/** Observer safety net; removed elements are cleaned unless explicitly kept or ignored. */
+export const autoCleanup = new AutoCleanup((element) => {
+  if (registry.isKept(element) || registry.isIgnored(element)) return;
+  registry.cleanupTree(element);
+});
 
-/**
- * Logic: DOM Safety Net
- * Automated fallback for standard DOM operations (like innerHTML = '')
- * that bypass jQuery's internal hooks.
- */
-export function enableAutoCleanup(root: Element | ShadowRoot | DocumentFragment): void {
-  if (cleanupUnsubsMap.has(root)) return;
+/** @internal */
+export const setAutoCleanupAllowed = (allowed: boolean): void => autoCleanup.allow(allowed);
 
-  const observer = getOrCreateRootObserver(root);
-  const unsubscribeCallback = observer.onNodeRemoved((node) => {
-    // Condition: Clean up only elements that are genuinely disconnected
-    // from the document and are not marked for preservation.
-    if (node.nodeType !== 1 || (node as Element).isConnected) {
-      return;
-    }
+export const enableAutoCleanup = (root: Element | ShadowRoot | DocumentFragment): void =>
+  autoCleanup.enable(root);
 
-    const element = node as Element;
-    if (registry.isKept(element) || registry.isIgnored(element)) {
-      return;
-    }
+/** @internal */
+export const disableAutoCleanup = (): void => autoCleanup.disable();
 
-    registry.cleanupTree(element);
-  });
-
-  cleanupUnsubsMap.set(root, unsubscribeCallback);
-}
-
-/**
- * Disconnects and destroys all registered auto-cleanup observers.
- * @internal
- */
-export function disableAutoCleanup(): void {
-  for (const unsubscribeCallback of cleanupUnsubsMap.values()) {
-    unsubscribeCallback();
-  }
-  cleanupUnsubsMap.clear();
-  registry.setAutoCleanupScheduled(false);
-}
-
-/**
- * Logic: Boundary Leak Prevention
- * Releases strong references to specific roots (e.g., ShadowRoots) to
- * prevent memory leaks when components are permanently removed.
- */
-export function disableAutoCleanupFor(root: Node): void {
-  const unsubscribeCallback = cleanupUnsubsMap.get(root);
-  if (unsubscribeCallback) {
-    unsubscribeCallback();
-    cleanupUnsubsMap.delete(root);
-  }
-}
+export const disableAutoCleanupFor = (root: Node): void => autoCleanup.disableFor(root);

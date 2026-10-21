@@ -698,6 +698,19 @@ describe('Computed', () => {
   });
 
   describe('dispose()', () => {
+    it('should not reattach dependencies when disposed during computation', () => {
+      const source = atom(1);
+      let computedInstance: ReturnType<typeof computed<number>>;
+
+      computedInstance = computed(() => {
+        computedInstance.dispose();
+        return source.value;
+      });
+
+      expect(computedInstance.value).toBe(1);
+      expect(source.subscriberCount()).toBe(0);
+    });
+
     it('should maintain chain reactivity and cleanup on dispose', async () => {
       const someAtom = atom(1);
       const computedB = computed(() => someAtom.value + 1);

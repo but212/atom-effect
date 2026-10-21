@@ -50,7 +50,15 @@ import type {
 import { debug, EffectError, generateId } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, disposeAll, prepareTracking } from './buffers';
-import { getCurrentFlushEpoch, runInFlushScope, scheduler, schedulerSchedule } from './scheduler';
+import {
+  getCurrentFlushEpoch,
+  isAggregateExecutionLimitError,
+  runInFlushScope,
+  scheduler,
+  schedulerSchedule,
+} from './scheduler';
+
+const EMPTY_EFFECT: EffectFunction = () => undefined;
 
 class EffectImpl
   implements
@@ -112,7 +120,11 @@ class EffectImpl
       (options.sync ?? false)
         ? () => {
             const executionResult = runInFlushScope(() => this.execute());
-            if (executionResult && Result.isErr(executionResult)) {
+            if (
+              executionResult &&
+              Result.isErr(executionResult) &&
+              !isAggregateExecutionLimitError(executionResult.error)
+            ) {
               console.error(executionResult.error);
             }
           }
@@ -143,6 +155,7 @@ class EffectImpl
 
     this.#execCleanup();
     disposeAll(this);
+    if (!this.isExecuting) this.#releaseCallbacks();
   }
 
   /** Total executions since initialization. */
@@ -183,6 +196,7 @@ class EffectImpl
       this.#handleExecutionError(executionError);
     } finally {
       this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+      if (this.isDisposed) this.#releaseCallbacks();
     }
 
     return Result.ok(undefined);
@@ -209,7 +223,7 @@ class EffectImpl
 
   /** Registers a dependency during the tracking session. */
   addDependency(dependency: Dependency): void {
-    if (!this.isExecuting) return;
+    if (!this.isExecuting || this.isDisposed) return;
     nodeTrackDependency(this, dependency, this.#notifyCallback);
   }
 
@@ -225,6 +239,7 @@ class EffectImpl
 
     if (typeof executionResult === 'function') {
       this.#cleanupCallback = executionResult;
+      if (this.isDisposed) this.#execCleanup();
     } else if (isPromise(executionResult)) {
       this.#handleAsyncResult(executionResult, sessionId);
     } else {
@@ -282,6 +297,11 @@ class EffectImpl
     }
   }
 
+  #releaseCallbacks(): void {
+    this.#effectCallback = EMPTY_EFFECT;
+    this.#onErrorCallback = null;
+  }
+
   #validateBudget(): Result<void, Error> {
     const epoch = getCurrentFlushEpoch();
     if (this.#lastFlushEpoch !== epoch) {
@@ -298,9 +318,8 @@ class EffectImpl
     }
 
     // Constraint: Global safeguard against aggregate scheduler instability.
-    const globalExecutionCountResult = scheduler.incrementFlushExecutionCount();
+    const globalExecutionCountResult = scheduler.incrementFlushExecutionCount(this);
     if (Result.isErr(globalExecutionCountResult)) {
-      this.dispose();
       return globalExecutionCountResult;
     }
 

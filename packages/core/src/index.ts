@@ -11,7 +11,7 @@
  */
 
 export { AsyncState, BRAND, BrandFlags, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
-export type { Paths, PathValue } from '@/core';
+export type { LensCloneable, Paths, PathValue } from '@/core';
 export {
   aeNextTick,
   atom,
@@ -21,6 +21,7 @@ export {
   computed,
   effect,
   getPathValue,
+  LENS_CLONE,
   lensFor,
   mergeAtoms,
   mergeLenses,

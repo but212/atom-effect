@@ -66,10 +66,10 @@ Avoid using traditional bolded blockquotes like `> **Note**: ...` when an alert 
 
 When referencing other files or documentation in the repository, follow these conventions:
 
-- **Relative Paths**: Always use relative paths (e.g., `[ARCHITECTURE.md](../core/docs/ARCHITECTURE.md)`) for internal repository links instead of absolute GitHub URLs. This enables offline navigation in IDEs (like VS Code) and keeps links working when browsing branches or forks.
+- **Relative Paths**: Always use relative paths (e.g., `[ONBOARDING.md](../../packages/core/docs/ONBOARDING.md)`) for internal repository links instead of absolute GitHub URLs. This enables offline navigation in IDEs (like VS Code) and keeps links working when browsing branches or forks.
 - **Descriptive Link Text**: Provide clear, descriptive text for the link. Do not surround link text with backticks as it breaks link formatting in some renderers.
-  - **Correct**: Read the [Architecture Guide](../core/docs/ARCHITECTURE.md) for details.
-  - **Incorrect**: Read the [`ARCHITECTURE.md`](../core/docs/ARCHITECTURE.md) for details.
+  - **Correct**: Read the [Onboarding Guide](../../packages/core/docs/ONBOARDING.md) for details.
+  - **Incorrect**: Read the [`ONBOARDING.md`](../../packages/core/docs/ONBOARDING.md) for details.
 
 ---
 

@@ -20,15 +20,16 @@ const rawResultFiles = [
 
 const documentationFiles = [
   'packages/core/docs/BENCHMARKS.md',
-  'packages/core/docs/BENCHMARKS_DETAILED.md',
   'packages/jquery/docs/BENCHMARKS.md',
-  'packages/jquery/docs/BENCHMARKS_DETAILED.md',
   'packages/utils/docs/BENCHMARKS.md',
-  'packages/utils/docs/BENCHMARKS_DETAILED.md',
 ];
 
 const sampleBenchmarkOutput =
   '\u001b[32m· untracked read: active 1,234.00 ops/sec (mean: 0.8100 ms) (p99: 1.2000 ms)\u001b[39m\n';
+
+async function loadUpdater(temporaryScriptsDirectory) {
+  return import(pathToFileURL(path.join(temporaryScriptsDirectory, 'update-benchmarks.js')).href);
+}
 
 test('updates documentation from a separate raw-results directory', async (t) => {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'atom-effect-benchmarks-'));
@@ -43,6 +44,7 @@ test('updates documentation from a separate raw-results directory', async (t) =>
     path.join(scriptsDirectory, 'update-benchmarks.js'),
     path.join(temporaryScriptsDirectory, 'update-benchmarks.js')
   );
+  const { main } = await loadUpdater(temporaryScriptsDirectory);
 
   for (const relativePath of documentationFiles) {
     const destination = path.join(temporaryRoot, relativePath);
@@ -54,13 +56,7 @@ test('updates documentation from a separate raw-results directory', async (t) =>
     await writeFile(path.join(temporaryResultsDirectory, fileName), sampleBenchmarkOutput);
   }
 
-  const originalArguments = process.argv;
-  process.argv = [...originalArguments.slice(0, 2), temporaryResultsDirectory];
-  try {
-    await import(pathToFileURL(path.join(temporaryScriptsDirectory, 'update-benchmarks.js')).href);
-  } finally {
-    process.argv = originalArguments;
-  }
+  main(['node', 'update-benchmarks.js', temporaryResultsDirectory]);
 
   const overview = await readFile(
     path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
@@ -69,7 +65,7 @@ test('updates documentation from a separate raw-results directory', async (t) =>
   assert.match(overview, /\| \*\*Atom\*\* \| Read \(untracked\) \| 1\.2K ops\/sec \|/);
 
   const detailed = await readFile(
-    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS_DETAILED.md'),
+    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
     'utf8'
   );
   assert.match(detailed, /\| untracked read: active \| 1,234\.00 \| 0\.8100 \| 1\.2000 \|/);
@@ -93,6 +89,7 @@ test('updates documentation from Vitest 5 table output format', async (t) => {
     path.join(scriptsDirectory, 'update-benchmarks.js'),
     path.join(temporaryScriptsDirectory, 'update-benchmarks.js')
   );
+  const { main } = await loadUpdater(temporaryScriptsDirectory);
 
   for (const relativePath of documentationFiles) {
     const destination = path.join(temporaryRoot, relativePath);
@@ -110,16 +107,7 @@ test('updates documentation from Vitest 5 table output format', async (t) => {
     await writeFile(path.join(temporaryResultsDirectory, fileName), sampleVitest5BenchmarkOutput);
   }
 
-  const originalArguments = process.argv;
-  process.argv = [...originalArguments.slice(0, 2), temporaryResultsDirectory];
-  try {
-    await import(
-      pathToFileURL(path.join(temporaryScriptsDirectory, 'update-benchmarks.js')).href +
-        `?v5=${Date.now()}`
-    );
-  } finally {
-    process.argv = originalArguments;
-  }
+  main(['node', 'update-benchmarks.js', temporaryResultsDirectory]);
 
   const overview = await readFile(
     path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
@@ -128,7 +116,7 @@ test('updates documentation from Vitest 5 table output format', async (t) => {
   assert.match(overview, /\| \*\*Atom\*\* \| Read \(untracked\) \| 1\.2K ops\/sec \|/);
 
   const detailed = await readFile(
-    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS_DETAILED.md'),
+    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
     'utf8'
   );
   assert.match(detailed, /\| untracked read: active \| 1,234\.00 \| 0\.8100 \| 1\.2000 \|/);
@@ -147,6 +135,7 @@ test('parses Vitest 5 benchmark when case name contains "ops/sec"', async (t) =>
     path.join(scriptsDirectory, 'update-benchmarks.js'),
     path.join(temporaryScriptsDirectory, 'update-benchmarks.js')
   );
+  const { main } = await loadUpdater(temporaryScriptsDirectory);
 
   for (const relativePath of documentationFiles) {
     const destination = path.join(temporaryRoot, relativePath);
@@ -169,22 +158,48 @@ test('parses Vitest 5 benchmark when case name contains "ops/sec"', async (t) =>
     await writeFile(path.join(temporaryResultsDirectory, fileName), vitest5OpsSecOutput);
   }
 
-  const originalArguments = process.argv;
-  process.argv = [...originalArguments.slice(0, 2), temporaryResultsDirectory];
-  try {
-    await import(
-      pathToFileURL(path.join(temporaryScriptsDirectory, 'update-benchmarks.js')).href +
-        `?ops_sec=${Date.now()}`
-    );
-  } finally {
-    process.argv = originalArguments;
-  }
+  main(['node', 'update-benchmarks.js', temporaryResultsDirectory]);
 
   const detailed = await readFile(
-    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS_DETAILED.md'),
+    path.join(temporaryRoot, 'packages/core/docs/BENCHMARKS.md'),
     'utf8'
   );
   // normalizeName removes punctuation and "x\d+", keeping "untracked read active 500 ops sec"
   // Even if not matching the exact detailed table key, the parser must successfully parse it into benchmarkDb without throwing
   assert.ok(detailed.length > 0);
+});
+
+test('fails when no benchmark results parse', async (t) => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'atom-effect-benchmarks-empty-'));
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
+
+  const temporaryScriptsDirectory = path.join(temporaryRoot, 'scripts');
+  const temporaryResultsDirectory = path.join(temporaryRoot, 'results-merged');
+  await mkdir(temporaryScriptsDirectory, { recursive: true });
+  await mkdir(temporaryResultsDirectory, { recursive: true });
+
+  await cp(
+    path.join(scriptsDirectory, 'update-benchmarks.js'),
+    path.join(temporaryScriptsDirectory, 'update-benchmarks.js')
+  );
+  const { main } = await loadUpdater(temporaryScriptsDirectory);
+
+  for (const relativePath of documentationFiles) {
+    const destination = path.join(temporaryRoot, relativePath);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await cp(path.join(repositoryRoot, relativePath), destination);
+  }
+
+  for (const fileName of rawResultFiles) {
+    await writeFile(
+      path.join(temporaryResultsDirectory, fileName),
+      'vitest failed: no benchmark output\n',
+      'utf8'
+    );
+  }
+
+  assert.throws(
+    () => main(['node', 'update-benchmarks.js', temporaryResultsDirectory]),
+    /No benchmark results parsed/
+  );
 });

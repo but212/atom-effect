@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '@/constants';
 import { resetTrackingContext, trackingContext } from '@/core/base';
-import { aeNextTick, scheduler, schedulerEndBatch, schedulerIsBatching } from '@/core/scheduler';
+import { aeNextTick, scheduler, schedulerIsBatching } from '@/core/scheduler';
 
 beforeEach(async () => {
   // Ensure we start with real timers
@@ -15,7 +15,7 @@ beforeEach(async () => {
 
   // Terminate any unbalanced batch depths
   while (schedulerIsBatching(scheduler)) {
-    schedulerEndBatch(scheduler);
+    scheduler.endBatch();
   }
 
   // Restore max iterations and other properties to defaults
