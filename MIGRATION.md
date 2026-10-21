@@ -1,34 +1,120 @@
-# Migration Guide: Atom-Effect v0.33.0 & v0.34.0
+# Migration Guide
 
-This guide provides instructions for migrating your codebase to the latest versions of `atom-effect`. Several breaking changes and deprecations have been introduced to improve performance, bundle size (tree-shaking), and development experience.
+Breaking changes and upgrade steps for `@but212/atom-effect`, `@but212/atom-effect-jquery`, and `@but212/atom-effect-utils`, newest first. Every section mirrors the matching entry in [CHANGELOG.md](./CHANGELOG.md).
 
----
-
-## 1. ES2022 Migration (v0.33.0)
-
-### Changes
-
-Starting with version **v0.33.0**, the library targets **ES2022**. The internal engine has been refactored to utilize modern JavaScript features, most notably **private class fields (`#`)**.
-
-### Motivation
-
-ES2022 private fields provide native encapsulation, preventing accidental access to internal reactive state. This shift also stabilizes V8 hidden classes, leading to better runtime performance.
-
-### Migration Steps
-
-Ensure your environment (Node.js or Browser) supports ES2022. Most modern environments (Node 16.11+, Chrome 91+, Safari 15+) already support these features. If you are using a transpiler (like Babel or SWC), ensure your target is set to ES2022 or higher to avoid unnecessary polyfills.
+| Version | Package | Breaking change |
+| --- | --- | --- |
+| Unreleased | jQuery | `$.route`, `$.atomFetch`, `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` and their types removed |
+| Unreleased | jQuery | `$.atomNav` removed |
+| Unreleased | jQuery | `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, `$.untracked` removed |
+| Unreleased | Utils | Most `Result` helpers and `isResult()` removed |
+| v0.34.0 | Core | `AtomError.getChain()` and `AtomError.toJSON()` removed |
+| v0.34.0 | jQuery | Web Component setup and dependency injection reworked |
+| v0.33.0 | Core | Build output partitioned; `AtomErrorConstructor` and `AtomErrorJSON` relocated |
+| v0.33.0 | jQuery | Core externalized in library builds; CDN entry point changed |
 
 ---
 
-## 2. Error Handling & Types (v0.33.0 & v0.34.0)
+## 1. Unreleased
 
-### Deprecation of Instance Methods
+### 1.1 jQuery: `route`, `fetch`, and Web Component features removed
 
-The `AtomError` class and its subclasses no longer prioritize instance methods for diagnostic tasks. Methods `getChain()` and `toJSON()` are **deprecated in v0.33.0** and will be **removed in v0.34.0**.
+`@but212/atom-effect-jquery` no longer ships these APIs or their types:
+
+- `$.route` with `RouteConfig`, `RouteDefinition`, `RouteLifecycle`, `Router`.
+- `$.atomFetch` with `FetchOptions`, `FetchError`.
+- `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` with `AtomComponentController`, `JQueryScopedSelector`.
 
 #### Migration Steps
 
-Replace instance method calls with standalone functions imported from the core package.
+- **Remote data:** replace `$.atomFetch` with `$.computed` over `fetch`. Dependencies read before the first `await` stay reactive.
+
+**Before:**
+
+```typescript
+const user = $.atomFetch(() => `/api/users/${userId.value}`, { defaultValue: null });
+```
+
+**After:**
+
+```typescript
+const user = $.computed(
+  async () => (await fetch(`/api/users/${userId.value}`)).json(),
+  { defaultValue: null }
+);
+```
+
+- **Routing, Custom Elements, context injection:** use a dedicated router or native Custom Element APIs, and share state by importing atoms.
+- **Staying on the old behavior:** pin `@but212/atom-effect-jquery@0.34.1`.
+
+### 1.2 jQuery: `$.atomNav` removed
+
+`$.atomNav` (PJAX navigation), its `AtomNav` / `AtomNavOptions` types, and the internal `navCoordinator` are removed.
+
+#### Migration Steps
+
+Load the fragment with `$.computed` and `fetch`, then render it through `atomHtml` (always sanitized):
+
+```typescript
+const page = $.computed(async () => (await fetch(`/fragments/${path.value}`)).text(), {
+  defaultValue: '',
+});
+$('#app-root').atomHtml(page);
+```
+
+### 1.3 jQuery: `$` namespace reduction
+
+`$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, and `$.untracked` are no longer exposed on `$`.
+
+#### Migration Steps
+
+Import them from `@but212/atom-effect`. CDN users load the core UMD bundle and read them from the global `AtomEffect`.
+
+```typescript
+import { atomLens, mergeAtoms, untracked } from '@but212/atom-effect';
+```
+
+### 1.4 Utils: `Result` reduction
+
+`Result` now exposes only `ok`, `err`, `isErr`, `unwrap`, and `tryCatch`. Removed: `isOk`, `match`, `expect`, `unwrapOr`, `unwrapOrElse`, `map`, `mapErr`, `andThen`, `tryAsync`, `equals`, `all`, `fromPredicate`, `fromThrowable`, and `isResult()` with its runtime brand symbols.
+
+#### Migration Steps
+
+Branch on `result.ok` instead.
+
+**Before:**
+
+```typescript
+if (Result.isOk(r)) use(r.value);
+const value = Result.unwrapOr(r, fallback);
+```
+
+**After:**
+
+```typescript
+if (r.ok) use(r.value);
+const value = r.ok ? r.value : fallback;
+```
+
+`@but212/atom-effect-utils` now publishes `dist` only; import from the package entry point, not from source paths.
+
+### 1.5 Behavior changes without API removal
+
+- **Core `getErrorMetadata`:** plain objects with a `_tag` ending in `Error` are no longer special-cased. They report `name: 'Unexpected error'`, `recoverable: true`, and no `code`. `AtomError` subclasses are unaffected.
+- **Core `{ sync: true }` atoms:** a subscriber that writes back to its own atom now reports a `SchedulerError` and drops the pending notification instead of cycling forever.
+- **Core lenses:** a sub-path write through a lens rooted at a merged lens now throws (reads are unchanged). Write the whole value to the merged lens, or write to the owning source atom.
+- **jQuery `atomList`:** `onRemove` runs once per removed item. It previously ran twice for items whose key left the list.
+- **jQuery `atomForm`:** a field write in a multi-atom form mutates only the source atom that owns the path (the last source defining it, falling back to the first). An empty source array is rejected with a named error at the binding boundary.
+
+---
+
+## 2. v0.34.0
+
+### 2.1 Core: `AtomError` instance methods removed
+
+`AtomError.getChain()` and `AtomError.toJSON()` (deprecated in v0.33.0) are removed.
+
+#### Migration Steps
 
 **Before:**
 
@@ -46,117 +132,25 @@ const chain = getErrorChain(error);
 const json = serializeError(error);
 ```
 
-### Type Relocation (v0.33.0)
+### 2.2 jQuery: Web Component setup and dependency injection
 
-`AtomErrorConstructor` and `AtomErrorJSON` types have been relocated to the core types module.
+> [!NOTE]
+> These APIs were themselves removed in the unreleased changes (see [1.1](#11-jquery-route-fetch-and-web-component-features-removed)). This section applies only if you stay on v0.34.x.
 
-#### Migration Steps
-
-Update your imports if you were referencing these types from internal paths or specific error modules.
-
-```typescript
-// Correct import
-import type { AtomErrorConstructor, AtomErrorJSON } from '@but212/atom-effect';
-```
-
----
-
-## 3. Build System & Distribution (v0.33.0)
-
-### Partitioned Build Process
-
-The build process is now partitioned into specialized targets: `types`, `lib` (ESM/CJS), and `bundle` (UMD).
-
-#### Migration Steps
-
-Always use the documented entry points. Avoid importing from internal paths like `@but212/atom-effect/dist/core/base`.
-
-**Correct usage:**
-
-```typescript
-import { atom, computed } from '@but212/atom-effect';
-```
-
-### jQuery Externalization
-
-In the jQuery package (`@but212/atom-effect-jquery`), the core `@but212/atom-effect` package is now externalized in ESM and CJS builds.
-
-#### Migration Steps
-
-You must ensure `@but212/atom-effect` is installed as a peer dependency in your project.
-
-### CDN Path Changes
-
-The default entry point for CDNs has changed to favor explicit bundle paths.
-
-#### Migration Steps
-
-Update your `<script>` tags to use the explicit UMD bundle:
-
-```html
-<!-- Before -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/index.js"></script>
-
-<!-- After (Recommended) -->
-<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/dist/atom-effect-jquery.min.js"></script>
-```
-
----
-
-## 4. Debug System (v0.33.0)
-
-### Changes
-
-The debug system has been decoupled from the core reactive graph. The main bundle no longer contains tracing wrappers, formatting helpers, or logging hooks. Instead, debug utilities reside in a dedicated export `@but212/atom-effect/debug`.
-
-### Migration Steps
-
-In jQuery, access the debug controller via the jQuery namespace.
-
-```typescript
-import $ from '@but212/atom-effect-jquery';
-
-// Enable visual debugging
-$.debug.enabled = true;
-```
-
----
-
-## 5. Web Component Architecture & DI (v0.34.0)
-
-### Changes
-
-The Web Component integration package (`@but212/atom-effect-jquery`) has shifted to a stateless, explicit lifecycle approach for DOM elements.
-
-### Motivation
-
-Automatic tracking via nested mutation observers created significant performance degradation and memory overhead in deep DOM structures. Explicit dependency registration reduces overhead and simplifies tracking across shadow roots.
-
-### Migration Steps
-
-1. **Explicit Setup Required:** The engine no longer secretly watches the DOM to automatically trigger `setup()` for components with static properties (`aejStyles`, `aejBind`, etc.).
-2. **Stateless DI (DOM Traversal):** Dependency Injection (`injectAtom`, `provideAtom`) no longer relies on custom event bubbling (`aej:context-request`). It now uses synchronous DOM traversal (`parentNode` and `ShadowRoot.host`).
-3. **Strict Type Safety for Proxies:** `injectAtom` and the underlying `createContextProxy` now explicitly return `WritableAtom<T | null> | null` (previously `WritableAtom<T> | null`).
-
-### Why?
-
-- Eliminating global `MutationObserver` instances drastically reduces memory overhead, prevents memory leaks, and fixes unpredictable initialization timing.
-- Synchronous DOM traversal is faster, fully deterministic, and avoids event-loop desync issues inherent to custom events.
-- Strict null-checking prevents silent runtime errors when a dependency provider is not found.
-
-### How to Migrate?
-
-#### 1. Explicitly Call `setup()` in `connectedCallback`
-
-If your Web Components relied on static properties (`static aejStyles`, `static aejBind`, etc.) without an explicit `setup()` call, they will no longer initialize automatically. You **must** call `this.aej.setup()` inside `connectedCallback`.
+- **Explicit setup:** the engine no longer triggers `setup()` for components with static properties (`aejStyles`, `aejBind`, ...). Call `this.aej.setup()` in `connectedCallback()`.
+- **Stateless DI:** `injectAtom` and `provideAtom` resolve contexts by walking `parentNode` and `ShadowRoot.host` instead of `aej:context-request` events. Consumers must be structural DOM descendants of their providers.
+- **Nullable proxies:** `injectAtom` and `createContextProxy` now return `WritableAtom<T | null> | null` (previously `WritableAtom<T> | null`).
 
 **Before:**
 
 ```typescript
 class MyComponent extends HTMLElement {
   static aejStyles = [':host { color: red; }'];
-  // Engine magically called setup() when appended to DOM
+  // setup() ran automatically when appended to the DOM
 }
+
+const themeProxy = $.injectAtom<string>(this, 'theme');
+console.log(themeProxy.value.toUpperCase());
 ```
 
 **After:**
@@ -168,84 +162,75 @@ class MyComponent extends HTMLElement {
 
   connectedCallback() {
     this.attachShadow({ mode: 'open' }); // if needed
-    this.aej.setup(); // EXPLICIT CALL REQUIRED
+    this.aej.setup(); // explicit call required
   }
 }
-```
 
-#### 2. Handle Nullable Injected Atoms
-
-If you use `$.injectAtom()`, you must now explicitly handle the case where the returned atom's value is `null`.
-
-**Before:**
-
-```typescript
-const themeProxy = $.injectAtom<string>(this, 'theme');
-// Falsely assumed string. If 'theme' provider didn't exist, this crashed at runtime.
-console.log(themeProxy.value.toUpperCase());
-```
-
-**After:**
-
-```typescript
 const themeProxy = $.injectAtom<string>(this, 'theme');
 if (themeProxy && themeProxy.value !== null) {
   console.log(themeProxy.value.toUpperCase());
 }
 ```
 
-#### 3. Stop Relying on `aej:context-request` Events
-
-If you were manually dispatching or intercepting the `aej:context-request` custom event to hack the DI system, this will no longer work. The DI system strictly resolves by crawling up the DOM tree structurally. Ensure all your consumers are actual DOM descendants of your providers.
-
 ---
 
-## 4. `$.atomNav` Removal & Utils `Result` Reduction (Unreleased)
+## 3. v0.33.0
 
-### Changes
+### 3.1 Core: ES2022 target
 
-- `$.atomNav` (PJAX fragment navigation) was removed together with `AtomNav` / `AtomNavOptions` and `navCoordinator`.
-- `@but212/atom-effect-utils` `Result` now exposes only `ok`, `err`, `isErr`, `unwrap`, and `tryCatch`; `isResult()` was removed.
+The library targets **ES2022** and uses private class fields (`#`).
 
-### Migration Steps
+#### Migration Steps
 
-- Replace `$.atomNav({ target })` with `$.computed` and `fetch`, and render the fragment through `atomHtml` (always sanitized):
+Run on an ES2022-capable environment (Node 16.11+, Chrome 91+, Safari 15+). If you transpile with Babel or SWC, set the target to ES2022 or higher.
 
-```typescript
-const page = $.computed(async () => (await fetch(`/fragments/${path.value}`)).text(), {
-  defaultValue: '',
-});
-$('#app-root').atomHtml(page);
-```
+### 3.2 Core: error types and deprecations
 
-- Replace `Result.isOk(r)` with `r.ok`; replace `unwrapOr` / `match` / `map` with an explicit `r.ok ? ... : ...` branch.
-
-### `$` namespace reduction (jQuery)
-
-The jQuery package no longer re-exposes helpers that nobody called through `$`: `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, `$.untracked`. Import them from `@but212/atom-effect` instead (CDN users: load the core UMD bundle and use its global).
+- `AtomErrorConstructor` and `AtomErrorJSON` moved to the core types module. `AtomErrorJSON` is exported from the package entry point. `AtomErrorConstructor` is not re-exported there; do not import it from the entry point.
 
 ```typescript
-import { atomLens, mergeAtoms, untracked } from '@but212/atom-effect';
+import type { AtomErrorJSON } from '@but212/atom-effect';
 ```
 
----
+- `AtomError.getChain()` and `AtomError.toJSON()` were deprecated here and removed in [v0.34.0](#21-core-atomerror-instance-methods-removed). Migrate to `getErrorChain()` and `serializeError()` now.
 
-## 6. `route`, `fetch`, and Web Component Removal (Unreleased, v0.35.0)
+### 3.3 Build output partitioned
 
-### Changes
+The build is split into `types`, `lib` (ESM/CJS), and `bundle` (UMD) targets. Direct `dist/` file references may break.
 
-`@but212/atom-effect-jquery` no longer ships these APIs:
+#### Migration Steps
 
-- `$.route` and the `RouteConfig`, `RouteDefinition`, `RouteLifecycle`, `Router` types.
-- `$.atomFetch` and the `FetchOptions`, `FetchError` types.
-- `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` and the `AtomComponentController`, `JQueryScopedSelector` types.
+Use the documented entry points only. Do not import from internal paths such as `@but212/atom-effect/dist/core/base`.
 
-`@but212/atom-effect` `getErrorMetadata` no longer reads `_tag` from plain objects; a thrown `{ _tag: 'FooError', ... }` object reports `name: 'Unexpected error'`. `AtomError` subclasses keep their names.
+```typescript
+import { atom, computed } from '@but212/atom-effect';
+```
 
-### Migration Steps
+### 3.4 jQuery: core externalized
 
-- Remote data: replace `$.atomFetch(url, { defaultValue })` with `$.computed(async () => (await fetch(url)).json(), { defaultValue })`. Dependencies read before the first `await` stay reactive; cancel stale requests with an `AbortController` if needed.
-- Routing, Custom Element lifecycle, and context injection: use a dedicated router or native Custom Element APIs, and share state by importing atoms. Pin `@but212/atom-effect-jquery@0.34.1` if you still depend on the removed features.
+`@but212/atom-effect` is externalized in the ESM and CJS builds of `@but212/atom-effect-jquery`.
+
+#### Migration Steps
+
+Make sure `@but212/atom-effect` is installed in your project.
+
+### 3.5 jQuery: CDN entry point
+
+The CDN entry point is now the explicit UMD bundle path.
+
+#### Migration Steps
+
+**Before:**
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/index.js"></script>
+```
+
+**After:**
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@but212/atom-effect-jquery@0.33.0/dist/atom-effect-jquery.min.js"></script>
+```
 
 ---
 
