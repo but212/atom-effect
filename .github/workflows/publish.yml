@@ -21,7 +21,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           registry-url: "https://registry.npmjs.org"
-          install-playwright: "false"
+          install-playwright: "true"
 
       - name: Verify Version and Extract Changelog
         run: node scripts/release-helper.js
