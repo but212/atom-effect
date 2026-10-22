@@ -3,7 +3,7 @@
 > [!NOTE]
 > Releases 0.1.0 – 0.29.0 are archived in [docs/archive/changelog](./docs/archive/changelog/).
 
-## [Unreleased]
+## [0.35.0]
 
 ### Core
 
