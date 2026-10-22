@@ -1,0 +1,2 @@
+# Default line ending handling (normalize to LF on commit)
+* text=auto eol=lf
