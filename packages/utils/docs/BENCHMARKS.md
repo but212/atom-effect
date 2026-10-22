@@ -6,10 +6,10 @@ Benchmarking suite for `@but212/atom-effect-utils` to quantify the performance o
 
 | Category | Key Metric | Value | Technical Context |
 | :--- | :--- | :--- | :--- |
-| **SlotBuffer** | push (small) | 972.5K ops/sec | Internal high-performance buffer (x100) |
+| **SlotBuffer** | push (small) | 947.4K ops/sec | Internal high-performance buffer (x100) |
 | **Option** | isSome check | 2.04M ops/sec | Reactive-compatible Option type (x100) |
-| **Result** | ok creation | 929.7K ops/sec | Error handling primitive (x100) |
-| **Type Guard** | isPromise | 1.71M ops/sec | Fast async primitive detection (x100) |
+| **Result** | ok creation | 934.9K ops/sec | Error handling primitive (x100) |
+| **Type Guard** | isPromise | 1.70M ops/sec | Fast async primitive detection (x100) |
 
 ---
 
@@ -61,7 +61,7 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Literal assignment | 1,701,336.78 | 0.0006 | 0.0006 |
+| Literal assignment | 1,704,225.67 | 0.0006 | 0.0006 |
 | Null check | 2,632,515.04 | 0.0004 | 0.0004 |
 | Nullish coalescing (mixed) | 2,528,804.14 | 0.0004 | 0.0004 |
 | Inline ternary map | 2,617,729.87 | 0.0004 | 0.0007 |
@@ -86,18 +86,18 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Literal assignment | 1,701,336.78 | 0.0006 | 0.0006 |
-| Boolean flag check | 1,704,604.40 | 0.0006 | 0.0006 |
-| Ternary error fallback (mixed) | 1,460,502.12 | 0.0007 | 0.0007 |
-| Native try/catch (mixed) | 76,350.02 | 0.0132 | 0.0196 |
+| Literal assignment | 1,704,225.67 | 0.0006 | 0.0006 |
+| Boolean flag check | 1,700,752.11 | 0.0006 | 0.0006 |
+| Ternary error fallback (mixed) | 1,460,396.39 | 0.0007 | 0.0007 |
+| Native try/catch (mixed) | 76,192.05 | 0.0132 | 0.0195 |
 
 #### Result Operations (x100)
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| Result.ok creation | 929,678.88 | 0.0012 | 0.0020 |
-| Result.err creation | 931,751.89 | 0.0011 | 0.0018 |
-| Result.tryCatch (mixed) | 60,000.35 | 0.0169 | 0.0241 |
+| Result.ok creation | 934,922.43 | 0.0011 | 0.0016 |
+| Result.err creation | 935,267.74 | 0.0011 | 0.0015 |
+| Result.tryCatch (mixed) | 60,095.73 | 0.0168 | 0.0236 |
 
 ---
 
@@ -105,13 +105,13 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| push (small, x100) | 972,505.18 | 0.0010 | 0.0016 |
-| push (large, x10) | 79,232.71 | 0.0134 | 0.0220 |
-| has (x100) | 292,438.16 | 0.0035 | 0.0066 |
-| forEach (x100) | 47,858.35 | 0.0211 | 0.0335 |
-| compact (x100) | 49,426.59 | 0.0233 | 0.1266 |
-| some (early exit, x100) | 723,989.97 | 0.0014 | 0.0026 |
-| some (full scan, x100) | 66,202.19 | 0.0154 | 0.0282 |
+| push (small, x100) | 947,363.91 | 0.0011 | 0.0020 |
+| push (large, x10) | 84,030.50 | 0.0123 | 0.0203 |
+| has (x100) | 294,604.53 | 0.0034 | 0.0035 |
+| forEach (x100) | 48,214.19 | 0.0208 | 0.0278 |
+| compact (x100) | 27,037.68 | 0.0375 | 0.0466 |
+| some (early exit, x100) | 708,758.72 | 0.0014 | 0.0027 |
+| some (full scan, x100) | 67,166.40 | 0.0149 | 0.0216 |
 
 ---
 
@@ -119,9 +119,9 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :--- | :--- | :--- | :--- |
-| isPromise: native promise | 1,705,170.75 | 0.0006 | 0.0006 |
-| isPromise: thenable | 1,702,206.36 | 0.0006 | 0.0006 |
-| isPromise: object | 1,331,009.43 | 0.0008 | 0.0008 |
+| isPromise: native promise | 1,699,498.42 | 0.0006 | 0.0006 |
+| isPromise: thenable | 1,706,251.14 | 0.0006 | 0.0006 |
+| isPromise: object | 1,332,333.89 | 0.0008 | 0.0008 |
 | isOption: true | 2,107,975.23 | 0.0005 | 0.0005 |
 | isOption: false | 2,093,706.04 | 0.0005 | 0.0005 |
-| isPromise: mixed data | 1,192,093.92 | 0.0008 | 0.0009 |
+| isPromise: mixed data | 1,184,140.27 | 0.0009 | 0.0016 |
