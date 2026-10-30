@@ -15,20 +15,12 @@ import { SlotBuffer } from '@but212/atom-effect-utils';
 import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, STATE_FLAGS } from '@/constants';
 import type {
   AtomErrorConstructor,
-  Dependency,
   DependencySubscriber,
-  DependencyTracker,
-  Prettify,
-  ReactiveDependencyTracker,
   ReactiveNode,
   SubscriberTarget,
   TrackingContext,
 } from '@/types';
 import { AtomError, nextSmi, wrapError } from '@/utils';
-
-import { BUFFER_FLAGS, claimExisting, depBufferTruncateFrom, insertNew } from './buffers';
-
-import { scheduler } from './scheduler';
 
 /** @internal */
 function createTrackingContext(): TrackingContext {
@@ -119,59 +111,6 @@ export function untracked<T>(callback: () => T): T {
     return callback();
   } finally {
     popTrackingSubscriber(ctx);
-  }
-}
-
-/**
- * Logic: Dependency Registration
- * Registers a dependency for the current tracker during a reactive session.
- *
- * Optimization: Session Deduplication
- * Uses session-level versioning via `_lastSeenEpoch` to skip redundant
- * buffer lookups for dependencies already visited in the current tick.
- *
- * @internal
- */
-export function nodeTrackDependency(
-  tracker: DependencyTracker & ReactiveDependencyTracker,
-  dependency: Dependency,
-  notifyCallback: SubscriberTarget<unknown>
-): void {
-  if (
-    'trackDependency' in tracker &&
-    typeof (tracker as { trackDependency: unknown }).trackDependency === 'function'
-  ) {
-    (
-      tracker as {
-        trackDependency: (dep: Dependency, cb: SubscriberTarget<unknown>) => void;
-      }
-    ).trackDependency(dependency, notifyCallback);
-    return;
-  }
-
-  if (!tracker._depSlots) return;
-
-  const trackEpoch = tracker._trackEpoch;
-
-  if (dependency._lastSeenEpoch === trackEpoch) return;
-  dependency._lastSeenEpoch = trackEpoch;
-
-  const trackIndex = tracker._trackCount++;
-
-  // Logic: Subscription Reconciliation
-  // Attempts to reuse an existing subscription from a previous run to minimize
-  // listener attachment overhead.
-  if (!claimExisting(tracker, dependency, trackIndex)) {
-    const unsubscribe = dependency.subscribe(notifyCallback);
-    insertNew(tracker, trackIndex, {
-      node: dependency,
-      version: dependency.version,
-      unsubscribeCallback: unsubscribe,
-    });
-  }
-
-  if (!(tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) && dependency.isComputed) {
-    tracker._depFlags |= BUFFER_FLAGS.HAS_COMPUTEDS;
   }
 }
 
@@ -308,37 +247,6 @@ export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown)
     }
   }
   return false;
-}
-
-/** @internal - Advanced tracking epoch for a new session. */
-export function nodeStartTracking(
-  node: Prettify<DependencyTracker & ReactiveDependencyTracker>
-): number {
-  if (
-    'startTracking' in node &&
-    typeof (node as { startTracking: unknown }).startTracking === 'function'
-  ) {
-    return (node as { startTracking: () => number }).startTracking();
-  }
-  const epoch = scheduler.nextEpoch();
-  node._trackEpoch = epoch;
-  node._trackCount = 0;
-  return epoch;
-}
-
-/** @internal - Finalizes dependencies by truncating unused buffer slots. */
-export function nodeCommitDeps(node: DependencyTracker & ReactiveDependencyTracker): void {
-  if ('commitDeps' in node && typeof (node as { commitDeps: unknown }).commitDeps === 'function') {
-    (node as { commitDeps: () => void }).commitDeps();
-    return;
-  }
-  try {
-    depBufferTruncateFrom(node, node._trackCount);
-  } catch (error) {
-    if (IS_DEV) {
-      console.warn(`${LOG_PREFIX} nodeCommitDeps failed for node ${node.id}:`, error);
-    }
-  }
 }
 
 /**

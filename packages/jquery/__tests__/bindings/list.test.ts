@@ -913,6 +913,49 @@ describe('$.atomList (Integration)', () => {
         .get();
       expect(text).toEqual(['1', '3', '4', '2']);
     });
+
+    it('should not clobber head item event routing when duplicate keys are present at boundary during reconciliation', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const handler = vi.fn();
+      const items = $.atom([
+        { id: 'a', val: 'head' },
+        { id: 'b', val: 'mid' },
+        { id: 'a', val: 'tail' },
+      ]);
+
+      $container.atomList(items, {
+        key: 'id',
+        render: (item) => `<button class="btn" data-val="${item.val}">${item.val}</button>`,
+        events: {
+          'click .btn': handler,
+        },
+      });
+      await $.nextTick();
+
+      // Trigger re-render with same boundary-duplicate items to exercise PASS 1 and PASS 2 fast-forwarding
+      items.value = [
+        { id: 'a', val: 'head' },
+        { id: 'b', val: 'mid' },
+        { id: 'a', val: 'tail' },
+      ];
+      await $.nextTick();
+
+      const $buttons = $container.find('.btn');
+      const firstBtn = $buttons[0];
+      if (!firstBtn) throw new Error('Expected first button to exist');
+
+      click(firstBtn);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      // Handler signature: (item, index, event)
+      // Must receive item 0 (head) with index 0, NOT item 2 (tail) with index 2
+      expect(handler.mock.calls[0]?.[0]).toEqual({ id: 'a', val: 'head' });
+      expect(handler.mock.calls[0]?.[1]).toBe(0);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate key "a" at index 2'));
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('Reconciliation Invariants', () => {

@@ -60,6 +60,7 @@ export function buildIndices<T>(
     const item = items[startIndex];
     if (item === undefined) break;
     const itemKey = getKey(item, startIndex);
+    if (newIndexMap.has(itemKey)) break;
     const previousSnapshot = snapshots[startIndex];
     if (
       !previousSnapshot ||
@@ -85,6 +86,7 @@ export function buildIndices<T>(
     const item = items[newEndIndex];
     if (item === undefined) break;
     const itemKey = getKey(item, newEndIndex);
+    if (newIndexMap.has(itemKey)) break;
     const previousSnapshot = snapshots[oldEndIndex];
     if (
       !previousSnapshot ||

@@ -12,11 +12,11 @@ This document outlines the conventions for naming variables, functions, classes,
 2. **Appropriate & Balanced Length**:
    - **Avoid Over-Abbreviation**: Do not use non-standard or cryptic abbreviations (e.g., `usr`, `cfg`, `msg`, `arr`, `fn`). However, widely accepted industry-standard acronyms/short names are encouraged to keep code clean (e.g., `id`, `url`, `uri`, `env`, `cli`, `err` in catch blocks, `ref` for references).
    - **Avoid Over-Verbosity**: Do not chain redundant nouns or excessively long qualifiers. Keep names concise if the context already makes the meaning clear.
-     - *Bad (Overly Verbose)*: `baseCoverageExclusionPatterns`, `defineVitestBenchmarkConfiguration`, `newTargetBuildEnvironment`
-     - *Good*: `baseCoverageExclude` (or `coverageExclude`), `defineVitestBenchConfig`, `newBuildTarget`
+     - _Bad (Overly Verbose)_: `baseCoverageExclusionPatterns`, `defineVitestBenchmarkConfiguration`, `newTargetBuildEnvironment`
+     - _Good_: `baseCoverageExclude` (or `coverageExclude`), `defineVitestBenchConfig`, `newBuildTarget`
    - **Scope-Based Precision**:
-     - *Global/Exported API*: Should be descriptive and precise (e.g., `defineVitestBenchConfig` is preferred over `defineConfig` to avoid name collisions).
-     - *Local/Internal Scope*: Within short functions or loop blocks, simple, standard names are preferred (e.g., `value`, `item`, `index`, `i` are perfectly fine instead of `activeIterationValue`).
+     - _Global/Exported API_: Should be descriptive and precise (e.g., `defineVitestBenchConfig` is preferred over `defineConfig` to avoid name collisions).
+     - _Local/Internal Scope_: Within short functions or loop blocks, simple, standard names are preferred (e.g., `value`, `item`, `index`, `i` are perfectly fine instead of `activeIterationValue`).
 3. **Reflect Types & Roles**:
    - Use plural names for collections and singular names for single values.
    - Append structural suffixes (e.g., `Buffer`, `Set`, `Map`, `Count`, `Index`, `Limit`) when the underlying collection type or numeric role is critical to correctness.
@@ -31,27 +31,26 @@ This document outlines the conventions for naming variables, functions, classes,
 
 Always prefix boolean variables, class properties, and functions returning booleans with a state-revealing verb (`is`, `has`, `can`, `should`) so they read as true/false statements.
 
-| Pattern | Context | Examples |
-| :--- | :--- | :--- |
-| `is[State]` | Indicates a current status or condition. | `isSessionActive`, `isFlushStarted`, `isDisposed` |
-| `has[Property]` | Indicates ownership of a value or resource. | `hasError`, `hasActiveListeners` |
-| `can[Action]` | Indicates permission or capability. | `canSchedule`, `canRetry` |
-| `should[Action]` | Indicates a requirement or conditional execution. | `shouldFlushSync`, `shouldDispose` |
+| Pattern          | Context                                           | Examples                                          |
+| :--------------- | :------------------------------------------------ | :------------------------------------------------ |
+| `is[State]`      | Indicates a current status or condition.          | `isSessionActive`, `isFlushStarted`, `isDisposed` |
+| `has[Property]`  | Indicates ownership of a value or resource.       | `hasError`, `hasActiveListeners`                  |
+| `can[Action]`    | Indicates permission or capability.               | `canSchedule`, `canRetry`                         |
+| `should[Action]` | Indicates a requirement or conditional execution. | `shouldFlushSync`, `shouldDispose`                |
 
 ### 2. Numbers & Metrics
 
 Specify units and domain boundaries directly in the variable name when the numeric value represents a unit of measurement.
 
-| Domain / Unit | Suffix | Example |
-| :--- | :--- | :--- |
-| Time | `_ms`, `_seconds` | `timeoutMs`, `delaySeconds` |
-| Size / Capacity | `Count`, `Limit`, `Size` | `activeJobsCount`, `iterationsLimit`, `queueSize` |
-| Monotonic Progress | `Epoch`, `Depth` | `currentEpoch`, `batchDepth` |
+| Domain / Unit      | Suffix                   | Example                                           |
+| :----------------- | :----------------------- | :------------------------------------------------ |
+| Time               | `_ms`, `_seconds`        | `timeoutMs`, `delaySeconds`                       |
+| Size / Capacity    | `Count`, `Limit`, `Size` | `activeJobsCount`, `iterationsLimit`, `queueSize` |
+| Monotonic Progress | `Epoch`, `Depth`         | `currentEpoch`, `batchDepth`                      |
 
 ### 3. Collections & Buffers
 
 Clearly differentiate between a single item, a list of items, and a structured buffer memory space.
-
 - **Single Item**: `job`, `listener`, `subscriber`
 - **Array / Iterable**: `activeJobs`, `listeners`, `subscribers`
 - **Buffer / Queue Structure**: `activeJobBuffer`, `standbyJobBuffer`
@@ -59,7 +58,6 @@ Clearly differentiate between a single item, a list of items, and a structured b
 ### 4. Data Processing & Conversions
 
 When data passes through stages of mapping, filtration, or normalization, include the processing state in the variable name.
-
 - **Raw Input**: `rawOptions`, `rawCallback`
 - **Processed / Sanitized**: `sanitizedHtml`, `normalizedPath`
 - **Computed / Derived**: `filteredItems`, `sortedJobs`
@@ -68,14 +66,14 @@ When data passes through stages of mapping, filtration, or normalization, includ
 
 Functions and methods must use verbs or verb phrases that clearly describe their action, side-effects, and return value expectations.
 
-| Pattern / Prefix | Context | Examples |
-| :--- | :--- | :--- |
-| **Verb/Verb Phrase** | Standard operations, actions, or transformations. | `computed()`, `batch()`, `peek()`, `dispose()`, `execute()` |
-| `is[State]`/`has[State]` | Type guards, capability checks, or status probes returning a boolean. | `isAtom()`, `isWritable()`, `nodeIsDirty()` |
-| `node[Action]` | Internal engine functions operating directly on `ReactiveNode` instances. | `nodeSubscribe()`, `nodeNotifySubscribers()`, `nodeTrackDependency()` |
-| `depBuffer[Action]` | Internal engine functions operating directly on dependency buffers. | `depBufferTruncateFrom()`, `depBufferPush()` |
-| `[Action]Callback` | Suffix for variables or parameters holding executable callbacks. | `effectCallback`, `onErrorCallback`, `onOverflowCallback` |
-| `#` Private Methods | Class-private helper methods. | `#drainQueue()`, `#execCleanup()`, `#recompute()` |
+| Pattern / Prefix         | Context                                                                   | Examples                                                                        |
+| :----------------------- | :------------------------------------------------------------------------ | :------------------------------------------------------------------------------ |
+| **Verb/Verb Phrase**     | Standard operations, actions, or transformations.                         | `computed()`, `batch()`, `peek()`, `dispose()`, `execute()`                     |
+| `is[State]`/`has[State]` | Type guards, capability checks, or status probes returning a boolean.     | `isAtom()`, `isWritable()`, `nodeIsDirty()`                                     |
+| `node[Action]`           | Internal engine functions operating directly on `ReactiveNode` instances. | `nodeSubscribe()`, `nodeNotifySubscribers()`, `nodeNotifyComputedSubscribers()` |
+| `depBuffer[Action]`      | Internal engine functions operating directly on dependency buffers.       | `depBufferTruncateFrom()`, `depBufferPush()`                                    |
+| `[Action]Callback`       | Suffix for variables or parameters holding executable callbacks.          | `effectCallback`, `onErrorCallback`, `onOverflowCallback`                       |
+| `#` Private Methods      | Class-private helper methods.                                             | `#drainQueue()`, `#execCleanup()`, `#recompute()`                               |
 
 ---
 
@@ -83,12 +81,12 @@ Functions and methods must use verbs or verb phrases that clearly describe their
 
 Avoid the following patterns unless there is an exceptional and well-justified reason:
 
-| Category | Prohibited Pattern | Bad Example | Good Example |
-| :--- | :--- | :--- | :--- |
-| **Meaningless Names** | Generics with no context | `data`, `value`, `item`, `obj`, `temp`, `tmp`, `result` | `schedulerJob`, `executionResult` |
-| **Ambiguous Actions** | Generic verbs | `doThing()`, `handleStuff()`, `processData()` | `drainQueue()`, `processQueue()` |
-| **Abstract Roles** | Vague class/utility names | `flag`, `check`, `manager`, `util` | `isSyncFlushing`, `trackingContext` |
-| **Unclear Abbreviations** | Non-standard abbreviations | `usr`, `cfg`, `msg`, `arr`, `fn` | `user`, `config`, `message`, `array`, `callback` |
+| Category                  | Prohibited Pattern         | Bad Example                                             | Good Example                                     |
+| :------------------------ | :------------------------- | :------------------------------------------------------ | :----------------------------------------------- |
+| **Meaningless Names**     | Generics with no context   | `data`, `value`, `item`, `obj`, `temp`, `tmp`, `result` | `schedulerJob`, `executionResult`                |
+| **Ambiguous Actions**     | Generic verbs              | `doThing()`, `handleStuff()`, `processData()`           | `drainQueue()`, `processQueue()`                 |
+| **Abstract Roles**        | Vague class/utility names  | `flag`, `check`, `manager`, `util`                      | `isSyncFlushing`, `trackingContext`              |
+| **Unclear Abbreviations** | Non-standard abbreviations | `usr`, `cfg`, `msg`, `arr`, `fn`                        | `user`, `config`, `message`, `array`, `callback` |
 
 ---
 
@@ -96,15 +94,15 @@ Avoid the following patterns unless there is an exceptional and well-justified r
 
 Here is a summary of the improvements applied to the reactive scheduler to serve as a guide:
 
-| Category | Bad / Legacy Name | Improved Name | Naming Principle Applied |
-| :--- | :--- | :--- | :--- |
-| **Private Field** | `#sessionActive` | `#isSessionActive` | Boolean prefixing (`is`) |
-| **Private Buffer** | `#active`, `#standby` | `#activeJobBuffer`, `#standbyJobBuffer` | Reflecting role and data structure (`Buffer`) |
-| **Callback** | `#onOverflow` | `#onOverflowCallback` | Clarifying execution role |
-| **Helper Params** | `v: number` | `iterations: number`, `iterationsLimit` | Intention clarification |
-| **Local Count** | `iterations` | `flushIterationCount` | Context and type specificity |
-| **Generic Items** | `jobs` | `activeJobs` | Specific context addition |
-| **Abbreviations** | `fn`, `res`, `err`, `e` | `callback`/`functionKind`, `result`, `error` | Eliminating generic/unclear abbreviations |
+| Category           | Bad / Legacy Name       | Improved Name                                | Naming Principle Applied                      |
+| :----------------- | :---------------------- | :------------------------------------------- | :-------------------------------------------- |
+| **Private Field**  | `#sessionActive`        | `#isSessionActive`                           | Boolean prefixing (`is`)                      |
+| **Private Buffer** | `#active`, `#standby`   | `#activeJobBuffer`, `#standbyJobBuffer`      | Reflecting role and data structure (`Buffer`) |
+| **Callback**       | `#onOverflow`           | `#onOverflowCallback`                        | Clarifying execution role                     |
+| **Helper Params**  | `v: number`             | `iterations: number`, `iterationsLimit`      | Intention clarification                       |
+| **Local Count**    | `iterations`            | `flushIterationCount`                        | Context and type specificity                  |
+| **Generic Items**  | `jobs`                  | `activeJobs`                                 | Specific context addition                     |
+| **Abbreviations**  | `fn`, `res`, `err`, `e` | `callback`/`functionKind`, `result`, `error` | Eliminating generic/unclear abbreviations     |
 
 ---
 
@@ -123,6 +121,6 @@ Here is a summary of the improvements applied to the reactive scheduler to serve
 
 ### For Reviewers (During PR)
 
-- [ ] Does the name of every variable or function clearly explain *what* it is or *what* it does without reading its implementation?
+- [ ] Does the name of every variable or function clearly explain _what_ it is or _what_ it does without reading its implementation?
 - [ ] Are there any prohibited generic words like `data`, `value`, `tmp` in use?
 - [ ] If a variable holds processed data, is the transition stage (e.g., `normalized`, `sanitized`) reflected?

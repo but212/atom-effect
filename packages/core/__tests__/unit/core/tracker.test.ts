@@ -20,6 +20,8 @@ describe('ReactiveTracker (tracker.ts)', () => {
     expect(tracker._depFlags).toBe(BUFFER_FLAGS.NONE);
     expect(tracker._trackEpoch).toBe(0);
     expect(tracker._trackCount).toBe(0);
+    expect(tracker._nextEpoch).toBeUndefined();
+    expect('_nextEpoch' in tracker).toBe(true);
     expect(tracker._depSlots.size).toBe(0);
   });
 

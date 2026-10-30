@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MultiSourceField } from '@/bindings/form-field-atoms';
 import $ from '@/index';
 import { castTo, setupDOMCleanup } from '../utils/test-helpers';
 
@@ -564,6 +565,33 @@ describe('Form Binding (atomForm)', () => {
 
       expect(data.value).not.toHaveProperty('null');
       expect(data.value).not.toHaveProperty('undefined');
+    });
+  });
+
+  describe('MultiSourceField Lifecycle & Disposal', () => {
+    it('should track its own disposed state and become a write no-op after disposal', () => {
+      const source1 = $.atom({ profile: { name: 'Alice' } });
+      const source2 = $.atom({ profile: { age: 30 } });
+      const field = new MultiSourceField([source1, source2], 'profile.name');
+
+      expect(field.value).toBe('Alice');
+      expect((field as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
+
+      // Mutate via field
+      field.value = 'Bob';
+      expect(source1.value.profile.name).toBe('Bob');
+
+      // Dispose field
+      field.dispose();
+      expect((field as unknown as { isDisposed: boolean }).isDisposed).toBe(true);
+
+      // Writes after disposal must be suppressed (no-op)
+      field.value = 'Charlie';
+      expect(source1.value.profile.name).toBe('Bob');
+
+      // Underlying sources must NOT be marked as disposed
+      expect((source1 as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
+      expect((source2 as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
     });
   });
 });

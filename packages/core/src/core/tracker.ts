@@ -41,6 +41,7 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
   _depFlags: number = BUFFER_FLAGS.NONE;
   _trackEpoch: number = 0;
   _trackCount: number = 0;
+  _nextEpoch: number | undefined = undefined;
 
   abstract addDependency(dependency: Dependency): void;
 

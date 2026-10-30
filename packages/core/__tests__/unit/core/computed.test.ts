@@ -457,7 +457,7 @@ describe('Computed', () => {
       scheduler.flushSync();
       expect(() => computedInstance.value).toThrow(ReferenceError);
 
-      // 3. Since a ReferenceError was thrown, nodeCommitDeps was bypassed.
+      // 3. Since a ReferenceError was thrown, commitDeps was bypassed.
       // Therefore, the dependency to `secondAtom` should be preserved on the error path.
       expect(secondAtom.subscriberCount()).toBe(1);
     });
