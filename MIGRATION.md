@@ -4,10 +4,10 @@ Breaking changes and upgrade steps for `@but212/atom-effect`, `@but212/atom-effe
 
 | Version | Package | Breaking change |
 | --- | --- | --- |
-| Unreleased | jQuery | `$.route`, `$.atomFetch`, `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` and their types removed |
-| Unreleased | jQuery | `$.atomNav` removed |
-| Unreleased | jQuery | `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, `$.untracked` removed |
-| Unreleased | Utils | Most `Result` helpers and `isResult()` removed |
+| v0.35.0 | jQuery | `$.route`, `$.atomFetch`, `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` and their types removed |
+| v0.35.0 | jQuery | `$.atomNav` removed |
+| v0.35.0 | jQuery | `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, `$.untracked` removed |
+| v0.35.0 | Utils | Most `Result` helpers and `isResult()` removed |
 | v0.34.0 | Core | `AtomError.getChain()` and `AtomError.toJSON()` removed |
 | v0.34.0 | jQuery | Web Component setup and dependency injection reworked |
 | v0.33.0 | Core | Build output partitioned; `AtomErrorConstructor` and `AtomErrorJSON` relocated |
@@ -15,7 +15,7 @@ Breaking changes and upgrade steps for `@but212/atom-effect`, `@but212/atom-effe
 
 ---
 
-## 1. Unreleased
+## 1. v0.35.0
 
 ### 1.1 jQuery: `route`, `fetch`, and Web Component features removed
 
@@ -135,7 +135,7 @@ const json = serializeError(error);
 ### 2.2 jQuery: Web Component setup and dependency injection
 
 > [!NOTE]
-> These APIs were themselves removed in the unreleased changes (see [1.1](#11-jquery-route-fetch-and-web-component-features-removed)). This section applies only if you stay on v0.34.x.
+> These APIs were themselves removed in the v0.35.0 changes (see [1.1](#11-jquery-route-fetch-and-web-component-features-removed)). This section applies only if you stay on v0.34.x.
 
 - **Explicit setup:** the engine no longer triggers `setup()` for components with static properties (`aejStyles`, `aejBind`, ...). Call `this.aej.setup()` in `connectedCallback()`.
 - **Stateless DI:** `injectAtom` and `provideAtom` resolve contexts by walking `parentNode` and `ShadowRoot.host` instead of `aej:context-request` events. Consumers must be structural DOM descendants of their providers.
