@@ -242,7 +242,6 @@ const OVERVIEW_SCHEMAS = [
     matchRow: (row) => `${row.Category} | ${row['Key Metric']}`,
     mappings: {
       '**SlotBuffer** | push (small)': { key: 'push (small)', format: 'hz' },
-      '**Option** | isSome check': { key: 'isSome', format: 'hz' },
       '**Result** | ok creation': { key: 'Result.ok creation', format: 'hz' },
       '**Type Guard** | isPromise': { key: 'isPromise: native promise', format: 'hz' },
     },

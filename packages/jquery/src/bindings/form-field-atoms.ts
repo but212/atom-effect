@@ -12,6 +12,7 @@ import {
   getPathValue,
   type Paths,
   type PathValue,
+  type SubscriberTarget,
   setDeepValue,
   untracked,
   type WritableAtom,
@@ -41,7 +42,7 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
     return this.node.peek();
   }
 
-  subscribe(listener: (newValue?: unknown, oldValue?: unknown) => void): () => void {
+  subscribe(listener: SubscriberTarget<unknown>): () => void {
     return this.node.subscribe(listener);
   }
 
@@ -51,6 +52,10 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
 
   dispose(): void {
     this.node.dispose();
+  }
+
+  get isDisposed(): boolean {
+    return (this.node as unknown as { isDisposed?: boolean }).isDisposed ?? false;
   }
 
   get id(): number {
@@ -102,6 +107,11 @@ function resolveOwner(sources: WritableAtom<unknown>[], parts: string[]): Writab
   return sources[0] as WritableAtom<object>;
 }
 
+/** Bitwise flag indicating disposed state across all reactive nodes. @internal */
+const DISPOSED_FLAG = 1 << 0;
+
+let nextMultiSourceFieldId = 1;
+
 /**
  * Role: Multi-Source Field Atom
  *
@@ -116,10 +126,28 @@ function resolveOwner(sources: WritableAtom<unknown>[], parts: string[]): Writab
 export class MultiSourceField implements WritableAtom<unknown> {
   readonly #sources: WritableAtom<unknown>[];
   readonly #parts: string[];
+  readonly #activeUnsubs = new Set<() => void>();
+  readonly id: number = ++nextMultiSourceFieldId;
+  flags: number = 0;
+  _lastSeenEpoch: number = -1;
 
   constructor(sources: WritableAtom<unknown>[], dotPath: string) {
     this.#sources = sources;
     this.#parts = dotPath.split('.');
+  }
+
+  get isDisposed(): boolean {
+    return (this.flags & DISPOSED_FLAG) !== 0;
+  }
+
+  dispose(): void {
+    if (this.isDisposed) return;
+    this.flags |= DISPOSED_FLAG;
+    const active = Array.from(this.#activeUnsubs);
+    this.#activeUnsubs.clear();
+    for (let i = 0; i < active.length; i++) {
+      active[i]?.();
+    }
   }
 
   get value(): unknown {
@@ -136,6 +164,7 @@ export class MultiSourceField implements WritableAtom<unknown> {
   }
 
   set value(targetValue: unknown) {
+    if (this.isDisposed) return;
     const owner = resolveOwner(this.#sources, this.#parts);
     const current = owner.peek();
     const next = setDeepValue(current, this.#parts as never, 0, targetValue);
@@ -153,36 +182,37 @@ export class MultiSourceField implements WritableAtom<unknown> {
     return getPathValue(this.#sources[0]?.peek(), this.#parts);
   }
 
-  subscribe(listener: (newValue?: unknown, oldValue?: unknown) => void): () => void {
+  subscribe(listener: SubscriberTarget<unknown>): () => void {
+    if (this.isDisposed) return () => {};
     let previous = this.peek();
+    const isFn = typeof listener === 'function';
     const unsubs = this.#sources.map((source) =>
       source.subscribe(() => {
+        if (this.isDisposed) return;
         const current = this.peek();
         if (!shallowEqual(current, previous)) {
           const old = previous;
           previous = current;
-          listener(current, old);
+          if (isFn) {
+            listener(current, old);
+          } else {
+            listener.execute();
+          }
         }
       })
     );
-    return () => {
+    const unsub = () => {
+      this.#activeUnsubs.delete(unsub);
       for (let i = 0; i < unsubs.length; i++) unsubs[i]?.();
     };
+    this.#activeUnsubs.add(unsub);
+    return unsub;
   }
 
   subscriberCount(): number {
-    let total = 0;
-    for (let i = 0; i < this.#sources.length; i++) {
-      total += this.#sources[i]?.subscriberCount() ?? 0;
-    }
-    return total;
+    return this.#activeUnsubs.size;
   }
 
-  dispose(): void {}
-
-  get id(): number {
-    return this.#sources[0]?.id ?? 0;
-  }
   get version(): number {
     let max = 0;
     for (let i = 0; i < this.#sources.length; i++) {
@@ -190,12 +220,6 @@ export class MultiSourceField implements WritableAtom<unknown> {
       if (v > max) max = v;
     }
     return max;
-  }
-  get flags(): number {
-    return this.#sources[0]?.flags ?? 0;
-  }
-  get _lastSeenEpoch(): number {
-    return this.#sources[0]?._lastSeenEpoch ?? 0;
   }
   get isComputed(): boolean {
     return false;

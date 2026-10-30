@@ -158,7 +158,6 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * or defer to the global scheduler (batched mode).
    */
   #scheduleNotification(oldValue: T): void {
-    const flags = this.flags;
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const slots = this._subscriberSlots;
 
@@ -170,12 +169,12 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     nodeNotifyComputedSubscribers(this);
 
     // Optimization: Avoid redundant scheduling if already queued.
-    if ((flags & SCHED) !== 0) return;
+    if ((this.flags & SCHED) !== 0) return;
 
     this.#pendingPreviousValue = oldValue;
     this.flags |= SCHED;
 
-    if ((flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
+    if ((this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
       if (!slots.isLocked) this.#flushNotifications();
     } else {
       schedulerSchedule(scheduler, this);

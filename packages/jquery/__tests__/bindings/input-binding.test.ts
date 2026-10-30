@@ -120,6 +120,18 @@ describe('Input Bindings (Two-way)', () => {
       expect($sel.val()).toEqual(['A', 'C']);
     });
 
+    it('should register exactly one change event handler for atomChecked', async () => {
+      const isChecked = $.atom(false);
+      const $cb = appendToBody('<input type="checkbox">');
+      $cb.atomChecked(isChecked);
+      await $.nextTick();
+
+      const events = (
+        $ as unknown as { _data: (elem: unknown, key: string) => Record<string, unknown[]> }
+      )._data($cb[0], 'events');
+      expect(events?.change?.length).toBe(1);
+    });
+
     it('should dispose all effects and remove event listeners on unbind', async () => {
       const val = $.atom('initial');
       const $element = appendToBody('<input>');

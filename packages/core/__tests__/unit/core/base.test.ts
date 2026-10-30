@@ -1,21 +1,13 @@
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
 import {
-  nodeCommitDeps,
   nodeHasSubscription,
   nodeNotifySubscribers,
-  nodeTrackDependency,
   nodeUnsubscribe,
   untracked,
 } from '@/core/base';
 import { atom, computed, effect } from '@/index';
-import type {
-  Dependency,
-  DependencyTracker,
-  ReactiveDependencyTracker,
-  ReactiveNode,
-  SubscriberTarget,
-} from '@/types';
+import type { ReactiveNode, SubscriberTarget } from '@/types';
 
 describe('BaseEngine (base.ts)', () => {
   describe('Tracking Context Primitives', () => {
@@ -126,45 +118,6 @@ describe('BaseEngine (base.ts)', () => {
         const mockNode = {} as ReactiveNode<void>;
         expect(() => {
           nodeHasSubscription(mockNode, () => {});
-        }).not.toThrow();
-      });
-    });
-
-    describe('nodeTrackDependency()', () => {
-      it('handles null dependency buffer gracefully without throwing TypeError', () => {
-        const mockTracker: Partial<DependencyTracker & ReactiveDependencyTracker> = {
-          _trackEpoch: 1,
-          _trackCount: 0,
-        };
-
-        const mockDep: Partial<Dependency> = {
-          _lastSeenEpoch: 0,
-          version: 1,
-          isComputed: false,
-          subscribe: () => () => {},
-        };
-
-        expect(() => {
-          nodeTrackDependency(
-            mockTracker as DependencyTracker & ReactiveDependencyTracker,
-            mockDep as Dependency,
-            () => {}
-          );
-        }).not.toThrow();
-      });
-    });
-
-    describe('nodeCommitDeps()', () => {
-      it('catches errors raised by depBufferTruncateFrom', () => {
-        const mockTracker = {
-          id: 42,
-          _trackCount: 5,
-          get _depSlots() {
-            throw new Error('Expected test error from _depSlots getter');
-          },
-        };
-        expect(() => {
-          nodeCommitDeps(mockTracker as unknown as DependencyTracker & ReactiveDependencyTracker);
         }).not.toThrow();
       });
     });

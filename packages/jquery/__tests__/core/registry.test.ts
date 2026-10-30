@@ -341,5 +341,39 @@ describe('Binding Registry', () => {
       expect(rootObserversMap.has(shadow)).toBe(false);
       $host.remove();
     });
+
+    it('does not wipe new bindings attached to removed element in the same tick', async () => {
+      const $el = $('<div>').appendTo(document.body);
+      const atom1 = $.atom('first');
+      $el.atomText(atom1);
+      await $.nextTick();
+      expect($el.text()).toBe('first');
+
+      // Remove element from DOM via $.fn.remove (which cleans up immediately)
+      $el.remove();
+
+      // Immediately re-bind in same tick before MutationObserver microtask runs
+      const atom2 = $.atom('second');
+      $el.atomText(atom2);
+      await $.nextTick();
+
+      expect($el.text()).toBe('second');
+      atom2.value = 'second-updated';
+      await $.nextTick();
+      expect($el.text()).toBe('second-updated');
+    });
+
+    it('cleans up non-HTML Elements like SVGElement via exported cleanup function', () => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      svg.appendChild(rect);
+      document.body.appendChild(svg);
+
+      const cleanupSpy = vi.spyOn(registry, 'cleanupTree');
+      cleanup(svg as unknown as HTMLElement);
+      expect(cleanupSpy).toHaveBeenCalledWith(svg);
+      cleanupSpy.mockRestore();
+      svg.remove();
+    });
   });
 });

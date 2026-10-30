@@ -457,7 +457,7 @@ describe('Computed', () => {
       scheduler.flushSync();
       expect(() => computedInstance.value).toThrow(ReferenceError);
 
-      // 3. Since a ReferenceError was thrown, nodeCommitDeps was bypassed.
+      // 3. Since a ReferenceError was thrown, commitDeps was bypassed.
       // Therefore, the dependency to `secondAtom` should be preserved on the error path.
       expect(secondAtom.subscriberCount()).toBe(1);
     });
@@ -811,6 +811,92 @@ describe('Computed', () => {
 
       const mergedResult = merged.value;
       expect(Object.keys(mergedResult).length).toBeGreaterThan(0);
+    });
+
+    it('handles diamond interleaved dependencies without dropping subscription or duplicate slots', async () => {
+      const a = atom(1);
+      const b = computed(() => a.value * 2);
+      // c reads a.value, then b.value (which evaluates and updates a._lastSeenEpoch), then a.value again
+      const c = computed(() => {
+        const v1 = a.value;
+        const v2 = b.value;
+        const v3 = a.value;
+        return v1 + v2 + v3;
+      });
+
+      const spy = vi.fn();
+      c.subscribe(spy);
+
+      expect(c.value).toBe(4); // 1 + 2 + 1
+      expect((c as unknown as { _trackCount: number })._trackCount).toBe(2);
+
+      a.value = 5;
+      await aeNextTick();
+      expect(c.value).toBe(20); // 5 + 10 + 5
+      expect(spy).toHaveBeenCalled();
+    });
+
+    it('should ignore stale async rejection when dirty or dependencies changed', async () => {
+      const source = atom(1);
+      let rejectPromise!: (err: unknown) => void;
+      const c = computed(async () => {
+        const val = source.value;
+        if (val === 1) {
+          return new Promise((_, reject) => {
+            rejectPromise = reject;
+          });
+        }
+        return val * 10;
+      });
+
+      // Trigger first computation (pending)
+      expect(() => c.value).toThrow(ComputedError);
+      expect(c.state).toBe('pending');
+
+      // Now source changes before rejection arrives
+      source.value = 2;
+      const internalC = c as unknown as { isDirty: boolean; hasDirtyDeps(): boolean };
+      expect(internalC.isDirty || internalC.hasDirtyDeps()).toBe(true);
+
+      // Late rejection from cycle 1
+      rejectPromise(new Error('Stale failure'));
+      await aeNextTick();
+
+      // Trigger computation for source=2
+      expect(() => c.value).toThrow(ComputedError);
+      expect(c.state).toBe('pending');
+
+      await sleep(10);
+      expect(c.value).toBe(20);
+      expect(c.state).toBe('resolved');
+    });
+
+    it('should recompute after invalidate() called while PENDING', async () => {
+      let resolvePromise!: (val: number) => void;
+      let count = 0;
+      const c = computed(async () => {
+        count++;
+        return new Promise<number>((resolve) => {
+          resolvePromise = resolve;
+        });
+      });
+
+      // Start pending computation
+      expect(() => c.value).toThrow(ComputedError);
+      expect(c.state).toBe('pending');
+      expect(count).toBe(1);
+
+      // Invalidate while pending
+      c.invalidate();
+      expect((c as unknown as { isDirty: boolean }).isDirty).toBe(true);
+
+      // Resolve the original promise
+      resolvePromise(42);
+      await aeNextTick();
+
+      // Invalidation marked it dirty; reading value triggers recompute (starts pending run 2)
+      expect(() => c.value).toThrow(ComputedError);
+      expect(count).toBe(2);
     });
   });
 });

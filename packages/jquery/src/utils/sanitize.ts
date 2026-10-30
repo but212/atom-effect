@@ -340,10 +340,19 @@ const Guard = {
    */
   isDangerousCss(value: string): boolean {
     const clean = this.normalize(value).replace(REGEX.CSS_CLEAN, '').toLowerCase();
-    if (['javascript:', 'expression(', '-moz-binding'].some((pattern) => clean.includes(pattern)))
+    if (
+      clean.includes('javascript:') ||
+      clean.includes('-moz-binding') ||
+      /expression\s*\(/i.test(clean)
+    ) {
       return true;
-    const cssUrl = clean.match(/url\s*\(\s*["']?([^"')]*)["']?\s*\)/i)?.[1];
-    return !!cssUrl && this.isDangerousUri(cssUrl);
+    }
+    const urlMatches = clean.matchAll(/url\s*\(\s*["']?([^"')]*)["']?\s*\)/gi);
+    for (const match of urlMatches) {
+      const url = match[1];
+      if (url && this.isDangerousUri(url)) return true;
+    }
+    return false;
   },
 };
 
@@ -412,9 +421,11 @@ const SPECIAL_ATTRIBUTES: Record<
 const isClobbered = (key: string, lowerCaseValue: string) =>
   CLOBBER_ATTRS.has(key) && CLOBBER_VALUES.has(lowerCaseValue);
 
-const isSensitiveSvg = (key: string, attributeValue: string) =>
-  SENSITIVE_ATTRS.has(key) &&
-  (attributeValue.startsWith('on') || Guard.isDangerousUri(attributeValue));
+const isSensitiveSvg = (key: string, attributeValue: string) => {
+  if (!SENSITIVE_ATTRS.has(key)) return false;
+  const normalizedVal = attributeValue.trim().toLowerCase();
+  return normalizedVal.startsWith('on') || Guard.isDangerousUri(normalizedVal);
+};
 
 const isDangerousContent = (key: string, value: string, lowerCaseValue: string) =>
   key.includes('javascript') ||

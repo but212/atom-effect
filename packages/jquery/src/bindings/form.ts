@@ -196,7 +196,11 @@ export function bindForm<T extends object, U = unknown>(
   const entries = new Map<string, FieldEntry>();
   const names = new WeakMap<Element, string>();
 
+  const boundControls = new Set<Element>();
+
   const unbindField = (element: Element, name: string): void => {
+    boundControls.delete(element);
+    names.delete(element);
     const entry = entries.get(name);
     if (entry && --entry.refCount <= 0) {
       const disposableAtom = entry.atom;
@@ -271,7 +275,6 @@ export function bindForm<T extends object, U = unknown>(
   const bindField = (element: Element): void => {
     if (!(element instanceof HTMLElement)) return;
     const name = element.getAttribute('name') || getElementNameProperty(element);
-    if (!name) return;
 
     const control = element as HTMLElement & {
       name?: string;
@@ -280,6 +283,15 @@ export function bindForm<T extends object, U = unknown>(
     };
 
     const oldName = names.get(control);
+
+    if (!name) {
+      if (oldName !== undefined) {
+        names.delete(control);
+        registry.cleanup(control);
+      }
+      return;
+    }
+
     if (oldName === name) return;
 
     if (oldName !== undefined) {
@@ -288,6 +300,7 @@ export function bindForm<T extends object, U = unknown>(
 
     const entry = ensureField(name);
     names.set(control, name);
+    boundControls.add(control);
 
     registry.onCleanup(control, () => unbindField(control, name));
 
@@ -343,5 +356,8 @@ export function bindForm<T extends object, U = unknown>(
   registry.onCleanup(form, () => {
     unsubscribeNodeAdded();
     unsubscribeAttributeChanged();
+    for (const control of Array.from(boundControls)) {
+      unbindField(control, names.get(control) ?? '');
+    }
   });
 }

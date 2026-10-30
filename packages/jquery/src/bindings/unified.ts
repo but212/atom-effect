@@ -412,9 +412,9 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
   };
   markInternal(onChange);
 
-  $element.on('change change.atomRadioSync', onChange);
+  $element.on('change.atomRadioSync', onChange);
   registry.onCleanup(element, () => {
-    $element.off('change change.atomRadioSync', onChange);
+    $element.off('change.atomRadioSync', onChange);
   });
 
   registry.trackEffect(

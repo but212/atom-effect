@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createListContext, removeNode, resolveEventTarget } from '@/bindings/list/context';
+import {
+  commitRemoval,
+  createListContext,
+  isNodeRemoving,
+  removeNode,
+  resolveEventTarget,
+} from '@/bindings/list/context';
 import { applyListBinding } from '@/bindings/list/index';
 import { injectKeyToHtml } from '@/bindings/list/utils';
 import { registry } from '@/core/registry';
@@ -68,6 +74,51 @@ describe('$.atomList (Integration)', () => {
       itemsList.value = [];
       await $.nextTick();
       expect($container.find('p').length).toBe(1);
+    });
+
+    it('should correctly handle empty DocumentFragment across [] -> [a] -> [] cycles', async () => {
+      const itemsList = $.atom<string[]>([]);
+      const frag = document.createDocumentFragment();
+      const p = document.createElement('p');
+      p.className = 'empty-doc-frag';
+      p.textContent = 'Empty Fragment';
+      frag.appendChild(p);
+
+      $container.atomList(itemsList, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+        empty: frag,
+      });
+
+      await $.nextTick();
+      expect($container.find('.empty-doc-frag').length).toBe(1);
+
+      // Transition to non-empty: empty placeholder should be removed
+      itemsList.value = ['item1'];
+      await $.nextTick();
+      expect($container.find('.empty-doc-frag').length).toBe(0);
+      expect($container.find('span').text()).toBe('item1');
+
+      // Transition back to empty: empty placeholder should be restored
+      itemsList.value = [];
+      await $.nextTick();
+      expect($container.find('span').length).toBe(0);
+      expect($container.find('.empty-doc-frag').length).toBe(1);
+      expect($container.find('.empty-doc-frag').text()).toBe('Empty Fragment');
+    });
+
+    it('should safely ignore non-element nodes in collection when calling atomList', () => {
+      const textNode = document.createTextNode('text');
+      const elementNode = document.createElement('div');
+      const mixed = $([textNode, elementNode] as unknown as HTMLElement[]);
+
+      const items = $.atom(['hello']);
+      expect(() => {
+        mixed.atomList(items, {
+          key: (item) => item,
+          render: (item) => `<span>${item}</span>`,
+        });
+      }).not.toThrow();
     });
 
     it('should keep the empty placeholder on []->[] when onRemove is set', async () => {
@@ -913,6 +964,49 @@ describe('$.atomList (Integration)', () => {
         .get();
       expect(text).toEqual(['1', '3', '4', '2']);
     });
+
+    it('should not clobber head item event routing when duplicate keys are present at boundary during reconciliation', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const handler = vi.fn();
+      const items = $.atom([
+        { id: 'a', val: 'head' },
+        { id: 'b', val: 'mid' },
+        { id: 'a', val: 'tail' },
+      ]);
+
+      $container.atomList(items, {
+        key: 'id',
+        render: (item) => `<button class="btn" data-val="${item.val}">${item.val}</button>`,
+        events: {
+          'click .btn': handler,
+        },
+      });
+      await $.nextTick();
+
+      // Trigger re-render with same boundary-duplicate items to exercise PASS 1 and PASS 2 fast-forwarding
+      items.value = [
+        { id: 'a', val: 'head' },
+        { id: 'b', val: 'mid' },
+        { id: 'a', val: 'tail' },
+      ];
+      await $.nextTick();
+
+      const $buttons = $container.find('.btn');
+      const firstBtn = $buttons[0];
+      if (!firstBtn) throw new Error('Expected first button to exist');
+
+      click(firstBtn);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      // Handler signature: (item, index, event)
+      // Must receive item 0 (head) with index 0, NOT item 2 (tail) with index 2
+      expect(handler.mock.calls[0]?.[0]).toEqual({ id: 'a', val: 'head' });
+      expect(handler.mock.calls[0]?.[1]).toBe(0);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate key "a" at index 2'));
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('Reconciliation Invariants', () => {
@@ -1108,6 +1202,22 @@ describe('$.atomList (Integration)', () => {
 
       expect($container.find('.item').length).toBe(0);
       expect(registry.hasBind(itemEl)).toBe(false);
+    });
+
+    it('should delete nodes from removingKeys in commitRemoval even when re-bound backstop triggers', () => {
+      const ctx = createListContext($container, undefined);
+      const el = document.createElement('div');
+      el.setAttribute('data-atom-key', '1');
+      const nodes = [el];
+      const pending = new Set<Node[]>([nodes]);
+      ctx.removingKeys.set(1, pending);
+
+      expect(isNodeRemoving(ctx.removingKeys, 1, nodes)).toBe(true);
+
+      commitRemoval(ctx, 1, nodes);
+
+      expect(isNodeRemoving(ctx.removingKeys, 1, nodes)).toBe(false);
+      expect(ctx.removingKeys.has(1)).toBe(false);
     });
   });
 });

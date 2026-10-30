@@ -399,12 +399,11 @@ class ReactiveScheduler implements SchedulerState {
   flushSync(): void {
     if (this.#activeJobBuffer.size === 0) return;
 
-    const prevState = this.#state;
     this.#state |= SCHEDULER_STATE.FLUSHING_SYNC;
     try {
       this.flushQueues();
     } finally {
-      this.#state = prevState;
+      this.#state &= ~SCHEDULER_STATE.FLUSHING_SYNC;
     }
   }
 

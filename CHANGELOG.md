@@ -3,6 +3,48 @@
 > [!NOTE]
 > Releases 0.1.0 – 0.29.0 are archived in [docs/archive/changelog](./docs/archive/changelog/).
 
+## [0.35.1]
+
+### Core
+
+#### Fixed
+
+- **Computed**: Stale async rejections are suppressed; pending invalidations during async evaluation trigger immediate recomputation.
+- **Tracker**: Session epochs are decoupled from scheduler deduplication; active dependencies are deduplicated if an epoch is clobbered by child tracking. Declared `_nextEpoch` instance field for V8 monomorphism.
+- **Scheduler**: Active scheduler execution state flags are preserved during nested `flushSync` calls.
+- **Atom**: Pending notifications are recorded after notifying computed subscribers to prevent stale re-entrancy.
+- **Lens**: `cloneAndSet` preserves prototype-less objects created via `Object.create(null)`.
+
+#### Changed
+
+- Removed obsolete tracking helpers in `base.ts`.
+- Exported `Subscriber` and `SubscriberTarget` types from the public entry point.
+
+### jQuery
+
+#### Fixed
+
+- **atomList**: Sparing and reconnect operations reset `isKept` flags to prevent detached node memory leaks.
+- **atomList**: Keyed reconciliation guards head indices when duplicate keys are encountered.
+- **atomList**: `DocumentFragment` empty placeholders are cloned on insertion; non-element nodes are ignored.
+- **atomForm**: Bound controls are tracked so child bindings are properly cleaned up on form rebind, and the unbind cache is cleared.
+- **atomForm**: `MultiSourceField` detaches source listeners upon disposal, and safely guards callback execution and object subscriber `.execute` calls.
+- **atomForm**: Two-way input bindings are torn down when the control's `name` attribute is removed.
+- **Lifecycle**: `$.fn.remove` defers `markIgnored` until after `cleanupTree` finishes, allowing same-tick rebinds.
+- **Lifecycle**: Auto-cleanup supports non-HTML `Element` nodes (e.g. SVG elements).
+- **Security**: `sanitizeHtml` detects spaced `expression(...)` patterns and blocks multi-URL declarations in CSS; SVG `attributeName` casing is normalized.
+- **Unified**: Removed redundant `change` event listener registration in `bindChecked`.
+
+#### Deprecated
+
+- Deprecated `DisposableWritableAtom` type alias in favor of `WritableAtom`.
+
+### Utils
+
+#### Fixed
+
+- **SlotBuffer**: Indices in `at()`, `setAt()`, and `truncateFrom()` are clamped to `0` when negative values are passed.
+
 ## [0.35.0]
 
 ### Core

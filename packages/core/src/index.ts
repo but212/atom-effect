@@ -43,6 +43,8 @@ export type {
   EffectOptions,
   MergedDependencyValue,
   ReadonlyAtom,
+  Subscriber,
+  SubscriberTarget,
   WritableAtom,
 } from '@/types';
 export {

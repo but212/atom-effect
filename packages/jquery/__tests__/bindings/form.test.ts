@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MultiSourceField } from '@/bindings/form-field-atoms';
 import $ from '@/index';
 import { castTo, setupDOMCleanup } from '../utils/test-helpers';
 
@@ -564,6 +565,152 @@ describe('Form Binding (atomForm)', () => {
 
       expect(data.value).not.toHaveProperty('null');
       expect(data.value).not.toHaveProperty('undefined');
+    });
+
+    it('cleans up two-way binding when input name attribute is removed', async () => {
+      const data = $.atom({ name: 'Alice' });
+      const $form = appendToBody('<form><input name="name" value="Alice"></form>');
+      $form.atomForm(data);
+      await $.nextTick();
+
+      const input = $form.find('input')[0] as HTMLInputElement;
+      expect(input.value).toBe('Alice');
+
+      input.removeAttribute('name');
+      await waitMutation();
+      await $.nextTick();
+
+      $form.find('input').val('Bob').trigger('input');
+      await $.nextTick();
+      expect(data.value.name).toBe('Alice');
+
+      data.value = { name: 'Charlie' };
+      await $.nextTick();
+      expect(input.value).toBe('Bob');
+    });
+  });
+
+  describe('MultiSourceField Lifecycle & Disposal', () => {
+    it('should track its own disposed state and become a write no-op after disposal', () => {
+      const source1 = $.atom({ profile: { name: 'Alice' } });
+      const source2 = $.atom({ profile: { age: 30 } });
+      const field = new MultiSourceField([source1, source2], 'profile.name');
+
+      expect(field.value).toBe('Alice');
+      expect((field as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
+
+      // Mutate via field
+      field.value = 'Bob';
+      expect(source1.value.profile.name).toBe('Bob');
+
+      // Dispose field
+      field.dispose();
+      expect((field as unknown as { isDisposed: boolean }).isDisposed).toBe(true);
+
+      // Writes after disposal must be suppressed (no-op)
+      field.value = 'Charlie';
+      expect(source1.value.profile.name).toBe('Bob');
+
+      // Underlying sources must NOT be marked as disposed
+      expect((source1 as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
+      expect((source2 as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
+    });
+
+    it('detaches source subscriptions and suppresses notifications upon disposal', () => {
+      const source = $.atom({ profile: { name: 'Alice' } });
+      const field = new MultiSourceField([source], 'profile.name');
+      const listener = vi.fn();
+
+      field.subscribe(listener);
+      expect(source.subscriberCount()).toBe(1);
+
+      field.dispose();
+      expect(source.subscriberCount()).toBe(0);
+
+      source.value = { profile: { name: 'Bob' } };
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('supports Subscriber object with execute() method', async () => {
+      const source = $.atom({ profile: { name: 'Alice' } });
+      const field = new MultiSourceField([source], 'profile.name');
+      const subscriber = { execute: vi.fn() };
+
+      const unsub = field.subscribe(subscriber as never);
+      expect(subscriber.execute).not.toHaveBeenCalled();
+
+      source.value = { profile: { name: 'Bob' } };
+      await $.nextTick();
+      expect(subscriber.execute).toHaveBeenCalledTimes(1);
+
+      unsub();
+      source.value = { profile: { name: 'Charlie' } };
+      await $.nextTick();
+      expect(subscriber.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns direct subscriber count instead of summing upstream source subscribers', () => {
+      const source = $.atom({ profile: { name: 'Alice' } });
+      source.subscribe(() => {});
+      expect(source.subscriberCount()).toBe(1);
+
+      const field = new MultiSourceField([source], 'profile.name');
+      expect(field.subscriberCount()).toBe(0);
+
+      const unsub = field.subscribe(() => {});
+      expect(field.subscriberCount()).toBe(1);
+
+      unsub();
+      expect(field.subscriberCount()).toBe(0);
+    });
+
+    it('re-binds removed and re-inserted form controls correctly', async () => {
+      const data = $.atom({ name: 'Alice' });
+      const $form = appendToBody('<form><input name="name" /></form>');
+      $form.atomForm(data);
+      await $.nextTick();
+
+      const input = $form.find('input')[0] as HTMLInputElement;
+      expect(input.value).toBe('Alice');
+
+      // Remove input from DOM
+      $(input).detach();
+      await $.nextTick();
+
+      // Re-insert input into form
+      $form.append(input);
+      await $.nextTick();
+
+      // Update atom; re-inserted input should reflect update
+      data.value = { name: 'Bob' };
+      await $.nextTick();
+      expect(input.value).toBe('Bob');
+    });
+
+    it('cleans up previous child bindings when re-binding a form to a second atom', async () => {
+      const atomA = $.atom({ name: 'Alpha' });
+      const atomB = $.atom({ name: 'Beta' });
+      const $form = appendToBody('<form><input name="name" /></form>');
+
+      $form.atomForm(atomA);
+      await $.nextTick();
+      const input = $form.find('input')[0] as HTMLInputElement;
+      expect(input.value).toBe('Alpha');
+
+      // Re-bind to atomB
+      $form.atomForm(atomB);
+      await $.nextTick();
+      expect(input.value).toBe('Beta');
+
+      // Modifying atomA should not affect input
+      atomA.value = { name: 'Alpha2' };
+      await $.nextTick();
+      expect(input.value).toBe('Beta');
+
+      // Modifying atomB should update input
+      atomB.value = { name: 'Beta2' };
+      await $.nextTick();
+      expect(input.value).toBe('Beta2');
     });
   });
 });

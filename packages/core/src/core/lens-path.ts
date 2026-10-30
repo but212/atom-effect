@@ -142,8 +142,11 @@ function cloneAndSet(container: CloneContainer, key: string, value: unknown): ob
     return new Map(container).set(key, value);
   }
   const objectPrototype = Object.getPrototypeOf(container);
-  if (objectPrototype === Object.prototype || objectPrototype === null) {
+  if (objectPrototype === Object.prototype) {
     return { ...container, [key]: value };
+  }
+  if (objectPrototype === null) {
+    return Object.assign(Object.create(null), container, { [key]: value });
   }
   const cloneMethod = Reflect.get(container, LENS_CLONE);
   let clonedObject: Record<string, unknown>;

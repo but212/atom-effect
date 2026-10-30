@@ -46,6 +46,7 @@ export class SlotBuffer<T> {
    * @returns The item, or null if the slot is empty or out of bounds.
    */
   at(index: number): T | null {
+    if (index < 0) return null;
     if (index < FAST_CAPACITY) {
       if (index === 0) return this.#fastSlot0;
       if (index === 1) return this.#fastSlot1;
@@ -178,6 +179,7 @@ export class SlotBuffer<T> {
    * Caution: Manual indexing can create gaps. Use compact() if order/density matters.
    */
   setAt(index: number, item: T | null): void {
+    if (index < 0) return;
     const previousItem = this.at(index);
     if (previousItem === item) return;
 
@@ -208,27 +210,28 @@ export class SlotBuffer<T> {
   }
 
   truncateFrom(index: number): void {
+    const targetIndex = Math.max(index, 0);
     const physicalCapacityLimit = this.#physicalCapacity;
-    if (index >= physicalCapacityLimit) return;
+    if (targetIndex >= physicalCapacityLimit) return;
 
-    for (let i = index; i < physicalCapacityLimit; i++) {
+    for (let i = targetIndex; i < physicalCapacityLimit; i++) {
       if (this.at(i) !== null) {
         this.#activeItemsCount--;
       }
     }
 
     const fastCapacityLimit = Math.min(physicalCapacityLimit, FAST_CAPACITY);
-    for (let i = index; i < fastCapacityLimit; i++) {
+    for (let i = targetIndex; i < fastCapacityLimit; i++) {
       this.#rawWrite(i, null);
     }
 
-    if (index <= FAST_CAPACITY) {
+    if (targetIndex <= FAST_CAPACITY) {
       this.#overflowBuffer = null;
     } else if (this.#overflowBuffer !== null) {
-      this.#overflowBuffer.length = index - FAST_CAPACITY;
+      this.#overflowBuffer.length = targetIndex - FAST_CAPACITY;
     }
 
-    this.#physicalCapacity = index;
+    this.#physicalCapacity = targetIndex;
   }
 
   /**

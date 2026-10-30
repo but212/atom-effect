@@ -385,6 +385,25 @@ describe('Atom-Effect: Security Specification', () => {
       expect(result2).not.toContain('attributeName');
       expect(result2).not.toContain('from');
       expect(result2).not.toContain('to');
+
+      const payloadUpper = '<animate attributeName="ONCLICK" values="alert(1)" />';
+      const resultUpper = await TestKit.sanitize(payloadUpper);
+      expect(resultUpper).not.toContain('attributeName');
+
+      const payloadPadded = '<animate attributeName="  onclick  " values="alert(1)" />';
+      const resultPadded = await TestKit.sanitize(payloadPadded);
+      expect(resultPadded).not.toContain('attributeName');
+    });
+
+    it('should detect multi-url and spaced expression() in CSS style attributes', async () => {
+      const payloadMulti =
+        "<div style=\"background-image: url('safe.png'), url('javascript:alert(1)')\">test</div>";
+      const resultMulti = await TestKit.sanitize(payloadMulti);
+      expect(resultMulti).toContain('data-unsafe-css:');
+
+      const payloadSpaced = '<div style="width: expression (alert(1))">test</div>';
+      const resultSpaced = await TestKit.sanitize(payloadSpaced);
+      expect(resultSpaced).toContain('data-unsafe-css:');
     });
   });
 

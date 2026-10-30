@@ -59,7 +59,7 @@ import { ReactiveTracker } from './tracker';
 export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracker): boolean {
   const asyncState = flags & STATE_MASKS.ASYNC_MASK;
   return (
-    (flags & COMPUTED_STATE_FLAGS.FORCE_COMPUTE) !== 0 ||
+    (flags & (COMPUTED_STATE_FLAGS.FORCE_COMPUTE | COMPUTED_STATE_FLAGS.DIRTY)) !== 0 ||
     asyncState === COMPUTED_STATE_FLAGS.IDLE ||
     isBufferDirty(tracker) ||
     (asyncState === COMPUTED_STATE_FLAGS.RESOLVED && tracker._depSlots.size === 0)
@@ -216,6 +216,7 @@ class ComputedAtomImpl<T>
     const STABLE_MASK =
       STATE_MASKS.ASYNC_MASK |
       COMPUTED_STATE_FLAGS.DIRTY |
+      COMPUTED_STATE_FLAGS.FORCE_COMPUTE |
       COMPUTED_STATE_FLAGS.DISPOSED |
       COMPUTED_STATE_FLAGS.RECOMPUTING;
     return (this.flags & STABLE_MASK) === COMPUTED_STATE_FLAGS.RESOLVED;
@@ -404,13 +405,14 @@ class ComputedAtomImpl<T>
 
         // Logic: Stale Result Suppression
         // If the node became dirty during the wait, defer resolution.
-        if (this.hasDirtyDeps()) return this.#markDirty();
+        if (this.isDirty || this.hasDirtyDeps()) return this.#markDirty();
 
         this.#finalizeResolution(result);
         nodeNotifySubscribers(this, result, undefined);
       },
       (error) => {
         if (this.#activeSessionId !== flushSessionId || this.isDisposed) return;
+        if (this.isDirty || this.hasDirtyDeps()) return this.#markDirty();
         this.#handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
       }
     );

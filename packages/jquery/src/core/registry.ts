@@ -74,6 +74,16 @@ class BindingRegistry {
     this.#getState(node).isKept = true;
   }
 
+  /**
+   * Clears the resource preservation flag on a node.
+   */
+  unkeep(node: Node): void {
+    const state = nodeStates.get(node);
+    if (state?.isKept) {
+      state.isKept = false;
+    }
+  }
+
   /** Determines if a node is marked for resource preservation. */
   isKept(node: Node): boolean {
     return !!nodeStates.get(node)?.isKept;
@@ -346,10 +356,21 @@ class BindingRegistry {
 export const registry = new BindingRegistry();
 
 /** Observer safety net; removed elements are cleaned unless explicitly kept or ignored. */
-export const autoCleanup = new AutoCleanup((element) => {
-  if (registry.isKept(element) || registry.isIgnored(element)) return;
-  registry.cleanupTree(element);
-});
+export const autoCleanup = new AutoCleanup(
+  (element) => {
+    if (registry.isKept(element)) {
+      registry.unkeep(element);
+      return;
+    }
+    if (registry.isIgnored(element)) return;
+    registry.cleanupTree(element);
+  },
+  (element) => {
+    if (registry.isKept(element)) {
+      registry.unkeep(element);
+    }
+  }
+);
 
 export const enableAutoCleanup = (root: Element | ShadowRoot | DocumentFragment): void =>
   autoCleanup.enable(root);

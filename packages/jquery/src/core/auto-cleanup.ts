@@ -15,13 +15,18 @@ type CleanupRoot = Element | ShadowRoot | DocumentFragment;
 
 export class AutoCleanup {
   readonly #onRemoved: (element: Element) => void;
+  readonly #onAdded?: ((element: Element) => void) | undefined;
   /** Roots currently observed, mapped to their observer un-subscriptions. */
   readonly #unsubscribeByRoot = new Map<Node, () => void>();
   #isAllowed = true;
   #isScheduled = false;
 
-  constructor(onRemoved: (element: Element) => void) {
+  constructor(
+    onRemoved: (element: Element) => void,
+    onAdded?: ((element: Element) => void) | undefined
+  ) {
     this.#onRemoved = onRemoved;
+    this.#onAdded = onAdded;
   }
 
   /**
@@ -77,13 +82,22 @@ export class AutoCleanup {
     if (this.#unsubscribeByRoot.has(root)) return;
 
     const observer = getOrCreateRootObserver(root);
-    const unsubscribeCallback = observer.onNodeRemoved((node) => {
+    const unsubscribeRemoved = observer.onNodeRemoved((node) => {
       // Condition: Clean up only elements that are genuinely disconnected from the document.
       if (node.nodeType !== 1 || (node as Element).isConnected) return;
       this.#onRemoved(node as Element);
     });
 
-    this.#unsubscribeByRoot.set(root, unsubscribeCallback);
+    const unsubscribeAdded = this.#onAdded
+      ? observer.onNodeAdded('*', (element) => {
+          this.#onAdded?.(element);
+        })
+      : undefined;
+
+    this.#unsubscribeByRoot.set(root, () => {
+      unsubscribeRemoved();
+      unsubscribeAdded?.();
+    });
   }
 
   /** Disconnects and destroys all registered auto-cleanup observers. */

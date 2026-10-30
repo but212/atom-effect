@@ -54,6 +54,21 @@ describe('Scheduler Engine', () => {
       // @ts-expect-error Testing invalid callback type
       expect(() => schedulerSchedule(scheduler, null)).toThrow(SchedulerError);
     });
+
+    it('preserves job deduplication when computed evaluations or tracking sessions intervene', async () => {
+      const a = atom(1);
+      const c = computed(() => a.value * 2);
+      const job = vi.fn();
+
+      schedulerSchedule(scheduler, job);
+      expect(c.value).toBe(2);
+      schedulerSchedule(scheduler, job);
+
+      expect(scheduler.queueSize).toBe(1);
+
+      await sleep(10);
+      expect(job).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('batch()', () => {
@@ -559,6 +574,18 @@ describe('Scheduler Engine', () => {
 
           source.dispose();
           consoleError.mockRestore();
+        });
+
+        it('flushSync preserves existing scheduler state bits', () => {
+          scheduler.startBatch();
+          expect(schedulerIsBatching(scheduler)).toBe(true);
+
+          scheduler.flushSync();
+
+          // BATCHING state should still be preserved
+          expect(schedulerIsBatching(scheduler)).toBe(true);
+          scheduler.endBatch();
+          expect(schedulerIsBatching(scheduler)).toBe(false);
         });
       });
     });
