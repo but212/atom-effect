@@ -27,23 +27,22 @@ We follow the **Conventional Commits** specification. Every commit message must 
 
 The `type` must be one of the following:
 
-| Type | Description | Example |
-| :--- | :--- | :--- |
-| **`feat`** | A new feature | `feat(core): add support for atom map primitives` |
-| **`fix`** | A bug fix | `fix(jquery): resolve memory leak in element cleanup` |
-| **`refactor`** | A code change that neither fixes a bug nor adds a feature | `refactor(core): optimize dependency tracking loop` |
-| **`test`** | Adding missing tests or correcting existing tests | `test(core): restructure core tests to mirror src` |
-| **`docs`** | Documentation only changes | `docs(conventions): add git conventions guide` |
-| **`ci`** | Changes to CI configuration files and scripts | `ci: refactor setup flow to use composite actions` |
-| **`chore`** | Other changes that don't modify src or test files | `chore: upgrade vitest version to 1.2.0` |
-| **`style`** | Changes that do not affect the meaning of the code | `style: run biome formatter across core package` |
+| Type           | Description                                               | Example                                               |
+| :------------- | :-------------------------------------------------------- | :---------------------------------------------------- |
+| **`feat`**     | A new feature                                             | `feat(core): add support for atom map primitives`     |
+| **`fix`**      | A bug fix                                                 | `fix(jquery): resolve memory leak in element cleanup` |
+| **`refactor`** | A code change that neither fixes a bug nor adds a feature | `refactor(core): optimize dependency tracking loop`   |
+| **`test`**     | Adding missing tests or correcting existing tests         | `test(core): restructure core tests to mirror src`    |
+| **`docs`**     | Documentation only changes                                | `docs(conventions): add git conventions guide`        |
+| **`ci`**       | Changes to CI configuration files and scripts             | `ci: refactor setup flow to use composite actions`    |
+| **`chore`**    | Other changes that don't modify src or test files         | `chore: upgrade vitest version to 1.2.0`              |
+| **`style`**    | Changes that do not affect the meaning of the code        | `style: run biome formatter across core package`      |
 
 ---
 
 ### Scopes
 
 The `scope` identifies the specific area of the monorepo affected by the change. It is usually one of the packages, but can be omitted or set to `root` for project-wide configuration.
-
 - **`core`**: Changes related to `packages/core` (reactive engine: Atoms, Computeds, Effects).
 - **`jquery`**: Changes related to `packages/jquery` (jQuery bindings).
 - **`utils`**: Changes related to `packages/utils` (Option, Result primitives).
@@ -64,7 +63,7 @@ The `scope` identifies the specific area of the monorepo affected by the change.
 
 ### Body and Footers (Optional)
 
-- **Body**: Use the body to explain the *what* and *why* of the change, not the *how*.
+- **Body**: Use the body to explain the _what_ and _why_ of the change, not the _how_.
 - **Breaking Changes**: Must be declared in the footer or by appending a `!` after the type/scope.
 
   ```text
@@ -117,16 +116,20 @@ When opening a PR, please structure the description as follows:
 
 ```markdown
 ## Why (Background)
+
 Describe the problem you are solving, or the context behind this change.
 
 ## What (Implementation Details)
+
 Summarize the code changes. Highlight key design decisions or refactorings.
 
 ## Impact & Verification
+
 - What packages are affected?
 - How did you test your changes? (e.g., ran Vitest unit tests, verified bundle output, etc.)
 
 ## Self-Checklist
+
 - [ ] My code conforms to the project lint rules (`pnpm lint` passes).
 - [ ] All unit tests pass locally (`pnpm test` passes).
 - [ ] TypeScript compiles without errors (`pnpm typecheck` passes).
@@ -139,25 +142,24 @@ Summarize the code changes. Highlight key design decisions or refactorings.
 Before committing or pushing your changes to the remote repository, you **MUST** verify your code locally. This minimizes CI failures and ensures high code quality.
 
 Run the following commands in the root directory:
-
 1. **Lint/Format Check**:
 
    ```bash
    pnpm lint
    ```
 
-   *Make sure Biome reports zero errors.*
+   _Make sure Biome reports zero errors._
 2. **Type Check**:
 
    ```bash
    pnpm typecheck
    ```
 
-   *Ensure the TypeScript compiler completes with no diagnostics errors.*
+   _Ensure the TypeScript compiler completes with no diagnostics errors._
 3. **Run Unit Tests**:
 
    ```bash
    pnpm test
    ```
 
-   *All tests across packages must pass.*
+   _All tests across packages must pass._

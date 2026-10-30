@@ -5,9 +5,9 @@ This document outlines the conventions for TSDoc and inline comments within the 
 ## Core Philosophy
 
 1. **Audience Segmentation**:
-    - **User (API Consumer)**: Targets for Public TSDoc. Focus on usage, examples, and safety.
-    - **Contributor (Developer)**: Targets for Inline/TSDoc Comments. Focus on design intent, "why" decisions, and maintenance constraints.
-2. **Document the "Why" and "When"**: Code shows *what* it does. Comments must explain *why* a particular approach was taken and *when* the code should (or should not) be used.
+   - **User (API Consumer)**: Targets for Public TSDoc. Focus on usage, examples, and safety.
+     - **Contributor (Developer)**: Targets for Inline/TSDoc Comments. Focus on design intent, "why" decisions, and maintenance constraints.
+2. **Document the "Why" and "When"**: Code shows _what_ it does. Comments must explain _why_ a particular approach was taken and _when_ the code should (or should not) be used.
 3. **The 3-Second Rule**: A reader should grasp the core intent or constraint within 3 seconds. Use structured tags and concise language.
 4. **Neutrality & Technical Precision**: Avoid promotional, subjective, or anthropomorphic language. Use passive voice and objective technical terms (e.g., "Orchestrates synchronization" instead of "Magically handles updates").
 
@@ -17,13 +17,13 @@ This document outlines the conventions for TSDoc and inline comments within the 
 
 To maintain a professional and consistent standard, follow these diction rules:
 
-| Avoid (Subjective/Informal) | Use (Neutral/Technical) |
-| :--- | :--- |
-| Easy, Simple, Magic | Deterministic, Automatic, Logic-driven |
-| Fast, Speedy | Optimized, High-performance, Low-overhead |
-| Remembers, Thinks | Persists, Caches, Tracks |
-| Makes sure, Ensures | Enforces, Validates, Synchronizes |
-| Great way to... | Recommended for..., When to use:... |
+| Avoid (Subjective/Informal) | Use (Neutral/Technical)                   |
+| :-------------------------- | :---------------------------------------- |
+| Easy, Simple, Magic         | Deterministic, Automatic, Logic-driven    |
+| Fast, Speedy                | Optimized, High-performance, Low-overhead |
+| Remembers, Thinks           | Persists, Caches, Tracks                  |
+| Makes sure, Ensures         | Enforces, Validates, Synchronizes         |
+| Great way to...             | Recommended for..., When to use:...       |
 
 ---
 
@@ -54,16 +54,16 @@ All public-facing APIs **MUST** include TSDoc.
 ```typescript
 /**
  * [One-line summary of role]
- * 
+ *
  * When to use:
  * - [Required Scenario 1: Guide the user on when this tool is appropriate]
- * 
+ *
  * @param name [Required if type alone doesn't convey intent or valid range. Do NOT use a dash separator.]
- * 
+ *
  * @returns [Required if non-obvious] Description of return value and its meaning.
- * 
+ *
  * @throws {ErrorType} [Required if applicable] Description of when this is thrown.
- * 
+ *
  * @example [Required - Standalone & Runnable]
  * const source = atom(0);
  * $.effect(() => console.log(source.value));
@@ -83,7 +83,7 @@ Use the `@remarks` tag to house long-form explanations, complex behaviors, warni
 ```typescript
 /**
  * Resolves a computed reactive node.
- * 
+ *
  * @remarks
  * This function initiates a dependency collection phase. Do not call this inside
  * an active evaluation cycle as it may trigger circular dependency errors.
@@ -114,7 +114,7 @@ When a parameter accepts multiple forms (e.g., literal, atom, or getter), explic
 ```typescript
 /**
  * Logic: Polymorphic Input
- * Supports raw values for static initialization, reactive atoms for 
+ * Supports raw values for static initialization, reactive atoms for
  * state-driven updates, or functional getters for deferred execution.
  */
 export type ReactiveValue<T> = T | ReadonlyAtom<T> | (() => T);
@@ -133,17 +133,16 @@ Use the `@see` tag to link to external references, MDN documentation, specificat
 ```typescript
 /**
  * Triggers a DOM update using requestAnimationFrame.
- * 
+ *
  * @see https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame
  */
 ```
 
 ### 7. @deprecated Policy (Reserved)
 
-*Note: This is a reserved policy. It will be actively applied when deprecations are introduced.*
+_Note: This is a reserved policy. It will be actively applied when deprecations are introduced._
 
 Deprecation is a critical communication tool for users. Always include:
-
 - **since**: The version where it was first deprecated.
 - **Removal Version**: State when it will be removed (usually the next Major version).
 - **Migration Path**: Provide the name of the replacement API or a link to a migration guide.
@@ -165,7 +164,6 @@ Use specialized prefixes to categorize maintenance information.
 ### Prefix Locations
 
 Prefixes are dual-format and can be placed in two locations depending on scope:
-
 1. **Single-line implementation comments (`// Prefix: ...`)**: Best for low-level, line-specific behavior.
 2. **TSDoc blocks (`* Prefix: ...`)**: Best for overall API block explanations, design roles, and safety guarantees.
 
@@ -174,7 +172,7 @@ Prefixes are dual-format and can be placed in two locations depending on scope:
 - **`Security:`**: Documents mechanisms for XSS mitigation, DOM Clobbering prevention, or sensitive data handling.
 - **`Caution:`**: Highlights fragile code prone to regressions, tricky side effects, or potential "glitches".
 - **`Constraint:`**: Documents hard requirements or limits (e.g., "Must be called before removal", "Max depth is 8").
-- **`Logic:`**: Explains the *intent* or implementation mechanics behind complex transitions, bitmasking, or non-linear branching.
+- **`Logic:`**: Explains the _intent_ or implementation mechanics behind complex transitions, bitmasking, or non-linear branching.
 - **`Optimization:`**: Explains performance-related complexity, monomorphic access patterns, batching strategies, or diffing algorithms.
 - **`Reason:`**: Explains the rationale behind a specific value, constant, design choice, or why a particular (perhaps non-obvious) approach was taken instead of a simpler one.
 
@@ -197,7 +195,6 @@ $$\text{Security} \succ \text{Caution} \succ \text{Constraint} \succ \text{Logic
 ## Lifecycle & Concurrency Standards
 
 For operations involving asynchronous logic or DOM lifecycles, you must document:
-
 1. **Cleanup Mechanism**: How resources (timers, observers, listeners) are released.
 2. **Concurrency Control**: How "out-of-order" responses or race conditions are handled (e.g., `AbortController`, version tracking).
 3. **Teardown Order**: If the sequence of destruction matters.
@@ -205,7 +202,7 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 ```typescript
 /**
  * Logic: Concurrency Control
- * Uses AbortController to ensure that only the result of the most recent 
+ * Uses AbortController to ensure that only the result of the most recent
  * request is reflected in the state, discarding stale responses.
  */
 ```
@@ -214,10 +211,9 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 
 ## TODO & FIXME Standards (Reserved)
 
-*Note: This is a reserved policy. It will be actively applied when introducing tasks/fixes.*
-
+_Note: This is a reserved policy. It will be actively applied when introducing tasks/fixes._
 - **Issue Tracking**: Every TODO or FIXME must reference an issue number or a specific owner.
-- **Resolution Condition**: State *what* must happen for the tag to be removed, rather than just a date.
+- **Resolution Condition**: State _what_ must happen for the tag to be removed, rather than just a date.
 
 ```typescript
 // TODO(#123): Remove this fallback once Node 18 support is dropped.

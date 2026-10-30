@@ -16,10 +16,13 @@ For asynchronous operations (`fetch`, IndexedDB, Web Workers), `$.computed` prov
 ```javascript
 const userId = $.atom(1);
 
-const userProfile = $.computed(async () => {
+const userProfile = $.computed(
+  async () => {
     const res = await fetch(`/api/users/${userId.value}`);
     return res.json();
-}, { defaultValue: null });
+  },
+  { defaultValue: null }
+);
 
 // isPending and hasError are reactive properties
 $('#loading').atomShow(userProfile.isPending);
@@ -40,19 +43,19 @@ Bind visibility and state classes directly to reactive variables rather than exe
 const isModalOpen = $.atom(false);
 
 // Event Handlers update state
-$('#open-btn').on('click', () => isModalOpen.value = true);
-$('#close-btn, .modal-backdrop').on('click', () => isModalOpen.value = false);
+$('#open-btn').on('click', () => (isModalOpen.value = true));
+$('#close-btn, .modal-backdrop').on('click', () => (isModalOpen.value = false));
 
 // Declarative Binding
 $('.modal').atomBind({
-    class: { 'open': isModalOpen },
-    show: isModalOpen
+  class: { open: isModalOpen },
+  show: isModalOpen,
 });
 
 // Animation logic isolated in an Effect
 $.effect(() => {
-    if (isModalOpen.value) $('.modal').fadeIn(200);
-    else $('.modal').fadeOut(200);
+  if (isModalOpen.value) $('.modal').fadeIn(200);
+  else $('.modal').fadeOut(200);
 });
 ```
 
@@ -68,14 +71,14 @@ const $select = $('#tags').select2();
 
 // Atom -> Plugin Synchronization
 $.effect(() => {
-    if ($select.val() !== selectedTag.value) {
-        $select.val(selectedTag.value).trigger('change');
-    }
+  if ($select.val() !== selectedTag.value) {
+    $select.val(selectedTag.value).trigger('change');
+  }
 });
 
 // Plugin -> Atom Synchronization
 $select.on('change', (e) => {
-    selectedTag.value = e.target.value;
+  selectedTag.value = e.target.value;
 });
 ```
 
@@ -129,8 +132,8 @@ The `atomVal` method supports `parse` and `format` hooks for data transformation
 const price = $.atom(9.99);
 
 $('#price-input').atomVal(price, {
-  parse:  str => parseFloat(str) || 0,
-  format: value => value.toFixed(2),
+  parse: (str) => parseFloat(str) || 0,
+  format: (value) => value.toFixed(2),
   debounce: 300,
 });
 ```
@@ -144,14 +147,13 @@ const user = $.atom({ name: '', age: 0 });
 
 $('form').atomForm(user, {
   validation: {
-    'name': (v) => (v.length >= 2 ? true : 'Name is too short'),
-    'age': (v) => (v >= 18 ? '' : 'Must be at least 18')
-  }
+    name: (v) => (v.length >= 2 ? true : 'Name is too short'),
+    age: (v) => (v >= 18 ? '' : 'Must be at least 18'),
+  },
 });
 ```
 
 When validation fails:
-
 - The input matches the `:invalid` CSS pseudo-class.
 - Native browser validation tooltips appear upon form submission.
 
@@ -181,10 +183,10 @@ const users = $.atom([
 ]);
 
 $('ul').atomList(users, {
-  key: u => u.id,
-  render: u => `<li class="user-item"><span>${u.name}</span><button class="del">✕</button></li>`,
-  onAdd:    $element => $element.hide().fadeIn(200),
-  onRemove: $element => $element.fadeOut(200).promise(),
+  key: (u) => u.id,
+  render: (u) => `<li class="user-item"><span>${u.name}</span><button class="del">✕</button></li>`,
+  onAdd: ($element) => $element.hide().fadeIn(200),
+  onRemove: ($element) => $element.fadeOut(200).promise(),
   events: {
     'click .del': (user, index, e) => removeUser(user.id),
   },
@@ -205,14 +207,13 @@ The `atomMount` method encapsulates DOM structure and reactive bindings into iso
 
 ```javascript
 const UserCard = ($element, { userId }) => {
-  const user = $.computed(
-    async () => (await fetch(`/api/users/${userId}`)).json(),
-    { defaultValue: null }
-  );
+  const user = $.computed(async () => (await fetch(`/api/users/${userId}`)).json(), {
+    defaultValue: null,
+  });
 
   $element.atomBind({
     html: $.computed(() => `<h2>${user.value?.name ?? ''}</h2>`),
-    class: { 'loading': user.isPending },
+    class: { loading: user.isPending },
   });
 
   return () => console.log('Component unmounted');

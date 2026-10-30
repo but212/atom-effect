@@ -36,7 +36,6 @@ Contributions to `@but212/atom-effect` are welcome. This guide will help you get
 ### Project Structure
 
 This is a monorepo containing:
-
 - `packages/core`: The main reactivity library.
   - `src/core`: `atom`, `computed`, `effect` implementations.
   - `src/internal`: Scheduler, epoch management, object pooling.
@@ -48,7 +47,6 @@ Most contributions will likely be in `packages/core`.
 ### Running Tests
 
 **Vitest** is used for testing.
-
 - Run all tests:
 
   ```bash
@@ -64,7 +62,6 @@ Most contributions will likely be in `packages/core`.
 ### Type Checking
 
 TypeScript is used for static analysis.
-
 - Run type check:
 
   ```bash
@@ -74,7 +71,6 @@ TypeScript is used for static analysis.
 ### Linting and Formatting
 
 **Biome** is used for linting and formatting.
-
 - Check for issues:
 
   ```bash
@@ -90,7 +86,6 @@ TypeScript is used for static analysis.
 ### Benchmarks
 
 Performance is critical. If you make a change, please verify there are no regressions.
-
 - Run benchmarks:
 
   ```bash

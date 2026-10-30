@@ -5,7 +5,6 @@ This guide introduces the core concepts, mental model, and standard patterns of 
 ## Mental Model
 
 The reactive system in `@but212/atom-effect` operates on a deterministic push-pull graph, conceptually similar to a spreadsheet:
-
 - **Atoms**: Source cells containing raw data (inputs).
 - **Computeds**: Derived cells with formulas that automatically re-evaluate based on their inputs.
 - **Effects**: Observers that perform side-effects (e.g., DOM updates, network requests) when their dependencies change.
@@ -59,7 +58,6 @@ console.log(total.value); // 110 (Evaluated lazily upon access)
 ```
 
 **Key Characteristics**:
-
 - **Lazy Evaluation**: The computation executes only when the value is accessed.
 - **Caching**: Results are cached. Re-evaluation occurs only if upstream dependencies have changed.
 - **Async Support**: Computeds can return a `Promise`. An explicit `defaultValue` is required to provide a synchronous state while the Promise is pending.
@@ -120,7 +118,7 @@ import { untracked } from '@but212/atom-effect';
 effect(() => {
   // `a.value` triggers the effect, `b.value` does not.
   const aVal = a.value;
-  const bVal = untracked(() => b.value); 
+  const bVal = untracked(() => b.value);
 });
 ```
 
@@ -161,13 +159,16 @@ Dependency tracking is strictly synchronous. You must read all required reactive
 ```typescript
 const userId = atom(123);
 
-const userData = computed(async () => {
-  // CORRECT: Read dependencies synchronously before awaiting
-  const currentId = userId.value; 
-  
-  const response = await fetch(`/api/user/${currentId}`);
-  return response.json();
-}, { defaultValue: null });
+const userData = computed(
+  async () => {
+    // CORRECT: Read dependencies synchronously before awaiting
+    const currentId = userId.value;
+
+    const response = await fetch(`/api/user/${currentId}`);
+    return response.json();
+  },
+  { defaultValue: null }
+);
 ```
 
 ---
@@ -200,7 +201,7 @@ import { mergeAtoms } from '@but212/atom-effect';
 const settings = atom({ theme: 'dark' });
 const user = atom({ name: 'Alice' });
 
-const state = mergeAtoms(settings, user); 
+const state = mergeAtoms(settings, user);
 // state.value -> { theme: 'dark', name: 'Alice' }
 ```
 
@@ -220,7 +221,7 @@ combined.value = { name: 'Bob', theme: 'light' };
 // settings.value.config -> { name: 'Bob', theme: 'light' }
 ```
 
-A whole-value write lands in its entirety on every underlying lens — it is never split by path. A *sub-path* write over a merged root (`atomLens(combined, 'name').value = 'Bob'`) is rejected, because a merged root cannot partition it; read through the composed lens, but write to the underlying sources.
+A whole-value write lands in its entirety on every underlying lens — it is never split by path. A _sub-path_ write over a merged root (`atomLens(combined, 'name').value = 'Bob'`) is rejected, because a merged root cannot partition it; read through the composed lens, but write to the underlying sources.
 
 ---
 

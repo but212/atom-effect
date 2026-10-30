@@ -7,7 +7,6 @@ This document outlines the conventions for creating, formatting, and structuring
 ## 1. Heading Hierarchy & Structure
 
 To ensure semantic structure and easy outline generation, follow these rules:
-
 1. **Single Top-Level Heading**: Every document **MUST** have exactly one top-level heading (`# [Title]`) at the very beginning of the file (aligned with `MD025` and `MD041`).
 2. **Sequential Heading Levels**: Do not skip heading levels (e.g., do not go from `#` directly to `###` or `####`). Always descend sequentially: `#` ➔ `##` ➔ `###` (aligned with `MD001`).
 3. **No Trailing Punctuation**: Headings must not end with punctuation marks such as periods, colons, or semicolons (aligned with `MD026`).
@@ -19,7 +18,6 @@ To ensure semantic structure and easy outline generation, follow these rules:
 ## 2. Lists & Markers
 
 Lists should be structured consistently to prevent rendering glitches:
-
 - **Unordered Lists**: Use hyphens (`-`) exclusively for all unordered list items (aligned with `MD004`). Avoid using asterisks (`*`) or plus signs (`+`).
 - **Ordered Lists**: Use sequential numbers (`1.`, `2.`, `3.`) for ordered lists instead of repeating `1.` (aligned with `MD029`).
 - **Surrounding Space**: Unordered and ordered lists must be separated from adjacent paragraphs by a blank line (aligned with `MD032`).
@@ -30,8 +28,7 @@ Lists should be structured consistently to prevent rendering glitches:
 ## 3. Code Blocks & Commands
 
 Fenced code blocks are widely used for code examples, configurations, and commands:
-
-- **Language Specifier**: Every fenced code block **MUST** specify a language immediately after the opening backticks (e.g., ````typescript`,````bash`, ````json`, ````markdown`,````mermaid`, ````text`) (aligned with `MD040`).
+- **Language Specifier**: Every fenced code block **MUST** specify a language immediately after the opening backticks (e.g., ``typescript`,``bash`, ````json`, ``markdown`,``mermaid`, ````text`) (aligned with `MD040`).
 - **Command Copyability**: For command-line instructions, do not prefix commands with `$` or `>` (e.g., `pnpm install` instead of `$ pnpm install`) unless the block contains command output immediately below the command (aligned with `MD014`). This enables direct copy-pasting from documentation.
 - **Surrounding Space**: Always separate fenced code blocks from adjacent text or headers with a blank line (aligned with `MD031`).
 
@@ -65,7 +62,6 @@ Avoid using traditional bolded blockquotes like `> **Note**: ...` when an alert 
 ## 5. Internal File Links
 
 When referencing other files or documentation in the repository, follow these conventions:
-
 - **Relative Paths**: Always use relative paths (e.g., `[ONBOARDING.md](../../packages/core/docs/ONBOARDING.md)`) for internal repository links instead of absolute GitHub URLs. This enables offline navigation in IDEs (like VS Code) and keeps links working when browsing branches or forks.
 - **Descriptive Link Text**: Provide clear, descriptive text for the link. Do not surround link text with backticks as it breaks link formatting in some renderers.
   - **Correct**: Read the [Onboarding Guide](../../packages/core/docs/ONBOARDING.md) for details.
@@ -76,7 +72,6 @@ When referencing other files or documentation in the repository, follow these co
 ## 6. Tables
 
 Use standard GitHub Flavored Markdown (GFM) tables:
-
 - **Headers**: Separate headers from rows with a delimiter row containing hyphens (`-`).
 - **Alignment**: Align columns using colons (`:`) in the delimiter row:
   - Left-aligned: `:---`
@@ -85,10 +80,10 @@ Use standard GitHub Flavored Markdown (GFM) tables:
 - **Clean Structure**: Add a blank line before and after the table to ensure correct rendering.
 
 ```markdown
-| Package | Role | Description |
-| :--- | :---: | :--- |
-| `core` | Reactive Engine | Core atoms, computeds, and effects |
-| `jquery` | Adapter | DOM integration and bindings |
+| Package  |      Role       | Description                        |
+| :------- | :-------------: | :--------------------------------- |
+| `core`   | Reactive Engine | Core atoms, computeds, and effects |
+| `jquery` |     Adapter     | DOM integration and bindings       |
 ```
 
 ---

@@ -147,14 +147,14 @@
 
   Replace instance calls with standalone functions from the core package.
 
-  *Before:*
+  _Before:_
 
   ```typescript
   const chain = error.getChain();
   const json = error.toJSON();
   ```
 
-  *After:*
+  _After:_
 
   ```typescript
   import { getErrorChain, serializeError } from '@but212/atom-effect';
@@ -170,7 +170,7 @@
 - **Web Component Architecture & DI**: Redesigned as a minimal, stateless architecture.
   - **Explicit Setup Required**: The engine no longer auto-runs `setup()` for components with static properties (`aejStyles`, `aejBind`, etc.). Call `this.aej.setup()` in `connectedCallback()`.
 
-    *How to Migrate:*
+    _How to Migrate:_
 
     ```typescript
     class MyComponent extends HTMLElement {
@@ -187,7 +187,7 @@
   - **Stateless DI (DOM Traversal)**: `injectAtom` and `provideAtom` resolve contexts by synchronous DOM traversal (`parentNode` and `ShadowRoot.host`) instead of `aej:context-request` events. Consumers must be structural DOM descendants of their providers. Stop relying on `aej:context-request`.
   - **Strict Type Safety for Proxies**: `injectAtom` and `createContextProxy` return `WritableAtom<T | null> | null` (previously `WritableAtom<T> | null`). Handle nullability explicitly.
 
-    *How to Migrate:*
+    _How to Migrate:_
 
     ```typescript
     const themeProxy = $.injectAtom<string>(this, 'theme');
@@ -288,7 +288,7 @@
 - **Packaging**: `@but212/atom-effect` is externalized in ESM and CJS builds and must be a peer dependency. Install it in your project.
 - **CDN**: Default CDN entry point changed. Use the explicit UMD bundle path instead of the package base URL.
 
-  *How to Migrate:* update `<script>` tags:
+  _How to Migrate:_ update `<script>` tags:
 
   ```html
   <!-- Before -->

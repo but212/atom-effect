@@ -17,7 +17,6 @@ Normative contracts for DOM bindings, lifecycle invariants, the and the security
 Central dispatcher for multiple declarative bindings in one call. Accepts `text`, `html`, `class`, `css`, `attr`, `prop`, `show`, `hide`, `value`, `checked`, `form`, `on`.
 
 Implementation invariants:
-
 - **Task-based loop**: bindings are pre-compiled into a task array before iterating the collection; no key enumeration inside the DOM loop.
 - **Monomorphic strategy**: handlers resolve read/write strategy (e.g. `multipleSelect`) at construction, avoiding feature-detection branches in the reactive path.
 - **Local caching**: handlers cache the last written DOM value to avoid layout thrashing.
@@ -26,14 +25,14 @@ Implementation invariants:
 
 ### 1.2 Content & attributes
 
-| Method | Contract |
-| :--- | :--- |
-| `.atomText(atom, formatter?)` | Updates `textContent`. Accepts `AsyncReactiveValue` (direct Promise or atom yielding Promise). Tuple form `[source, formatter]` valid inside `.atomBind()`. |
-| `.atomHtml(atom)` | Updates `innerHTML`, always routed through `sanitizeHtml` (§4). |
-| `.atomClass(name, atom)` / `.atomClass(classMap)` | Toggles classes by truthiness. A class remains applied if any associated condition is true. |
-| `.atomCss(prop, atom, unit?)` / map | Updates inline CSS; optional unit suffix. |
-| `.atomAttr(name, atom)` / map | Updates HTML/SVG attrs. Blocks `on*`, `srcdoc` and protocol payloads. Boolean attrs removed when `false`; WAI-ARIA booleans coerced to `"true"`/`"false"`. |
-| `.atomProp(prop, atom)` / map | Sets DOM object properties. Blocks structural properties (`innerHTML`, `outerHTML`) and prototype vectors (`__proto__`, `constructor`, `prototype`). |
+| Method                                            | Contract                                                                                                                                                    |
+| :------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.atomText(atom, formatter?)`                     | Updates `textContent`. Accepts `AsyncReactiveValue` (direct Promise or atom yielding Promise). Tuple form `[source, formatter]` valid inside `.atomBind()`. |
+| `.atomHtml(atom)`                                 | Updates `innerHTML`, always routed through `sanitizeHtml` (§4).                                                                                             |
+| `.atomClass(name, atom)` / `.atomClass(classMap)` | Toggles classes by truthiness. A class remains applied if any associated condition is true.                                                                 |
+| `.atomCss(prop, atom, unit?)` / map               | Updates inline CSS; optional unit suffix.                                                                                                                   |
+| `.atomAttr(name, atom)` / map                     | Updates HTML/SVG attrs. Blocks `on*`, `srcdoc` and protocol payloads. Boolean attrs removed when `false`; WAI-ARIA booleans coerced to `"true"`/`"false"`.  |
+| `.atomProp(prop, atom)` / map                     | Sets DOM object properties. Blocks structural properties (`innerHTML`, `outerHTML`) and prototype vectors (`__proto__`, `constructor`, `prototype`).        |
 
 ### 1.3 Control flow
 
@@ -42,12 +41,12 @@ Implementation invariants:
 
 ### 1.4 Form bindings
 
-| Method | Contract |
-| :--- | :--- |
-| `.atomVal(atom, options?)` | Two-way sync for `<input>`, `<textarea>`, `<select>`; supports `<select multiple>` via `string[]`. IME-stable (composition states), cursor/focus preserved. Options: `debounce`, `format`, `parse`, `equal`. |
-| `.atomChecked(atom)` | Two-way for checkbox/radio. Radio groups sync peers sharing a `name` via scoped root/form queries. |
+| Method                                | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| :------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.atomVal(atom, options?)`            | Two-way sync for `<input>`, `<textarea>`, `<select>`; supports `<select multiple>` via `string[]`. IME-stable (composition states), cursor/focus preserved. Options: `debounce`, `format`, `parse`, `equal`.                                                                                                                                                                                                                                                                                                                                                                                              |
+| `.atomChecked(atom)`                  | Two-way for checkbox/radio. Radio groups sync peers sharing a `name` via scoped root/form queries.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `.atomForm(atom \| atom[], options?)` | Two-way form sync mapping inputs by `name`. Multi-atom (a field reads through the merged view of every source, so it follows the field if a source gains or drops the path; a write mutates only the source that currently owns the path — the last source defining it, falling back to the first source), nested dot-paths, dynamic inputs via `MutationObserver`, native Constraint Validation via `setCustomValidity`. Supports `debounce`, `event`, `parse`, `format`, `equal`, `transform`, `onChange`, and `validation`. An empty source array throws; a form with no source can never synchronize. |
-| `.atomOn(event, handler)` | Lifecycle-aware delegation; handlers run inside `batch()`; auto-unbound on teardown. |
+| `.atomOn(event, handler)`             | Lifecycle-aware delegation; handlers run inside `batch()`; auto-unbound on teardown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 **Multi-atom trade-off**: because a field read observes every source, a write to any source re-runs that field's effect. The DOM write is still skipped when the field value is unchanged, so this costs CPU, not DOM mutations.
 
@@ -59,7 +58,6 @@ Implementation invariants:
 ## 2. `atomList` reconciliation
 
 3-pass pipeline minimizing DOM churn:
-
 1. **Head/tail fast-forwarding**: skip diffing for stable bounds.
 2. **Middle-range diffing**: compare the dirty middle using a persistent key map → insertion/deletion/move instructions.
 3. **Greedy placement**: reverse-order `insertBefore` for predictable cross-browser behavior.
@@ -68,7 +66,6 @@ Implementation invariants:
 **Optional callbacks/options:** `key` (required), `render`, `bind`, `update`, `onAdd`, `onRemove`, `empty`, `isEqual`, `events`.
 
 **Async removal & node identity invariants:**
-
 - Pending `onRemove` transitions are tracked by **node identity, not key**. On entering removal the `data-atom-key` is stripped; if re-bound live before async removal resolves, `commitRemoval` sees the re-bound key and aborts teardown.
 - A re-bind backstop guarantees a pending node carrying `data-atom-key` is never physically removed.
 - **Node-identity tracking applies to `Element`/`jQuery`/`DocumentFragment` renders** (nodes persist across cycles). With **string `render`**, the container is rebuilt via `replaceChildren` each cycle, so identity cannot span a pending removal.
@@ -79,19 +76,19 @@ Implementation invariants:
 
 ### 3.1 States
 
-| State | Description | Triggers |
-| :--- | :--- | :--- |
-| ATTACHED | Connected; reactive effects/bindings active. | `.atomMount()`, insertion |
-| DETACHED | Disconnected but retains reactive state. | `.detach()`, synchronous relocation |
+| State     | Description                                  | Triggers                                  |
+| :-------- | :------------------------------------------- | :---------------------------------------- |
+| ATTACHED  | Connected; reactive effects/bindings active. | `.atomMount()`, insertion                 |
+| DETACHED  | Disconnected but retains reactive state.     | `.detach()`, synchronous relocation       |
 | DESTROYED | Permanently removed; all resources released. | `.remove()`, `.empty()`, `.atomUnmount()` |
 
 ### 3.2 Scenario matrix
 
-| Scenario | Transition | Cleanup | Mechanism |
-| :--- | :--- | :--- | :--- |
-| DOM relocation | ATTACHED → DETACHED → ATTACHED | None | `MutationObserver` checks `isConnected` during microtask; synchronous moves preserve bindings. |
-| `.detach()` | ATTACHED → DETACHED | None | `registry.keep()` bypasses auto-cleanup. |
-| Native removal | ATTACHED → DESTROYED | Deferred | Observer runs `cleanupTree()` in a microtask if still disconnected. |
+| Scenario       | Transition                     | Cleanup  | Mechanism                                                                                      |
+| :------------- | :----------------------------- | :------- | :--------------------------------------------------------------------------------------------- |
+| DOM relocation | ATTACHED → DETACHED → ATTACHED | None     | `MutationObserver` checks `isConnected` during microtask; synchronous moves preserve bindings. |
+| `.detach()`    | ATTACHED → DETACHED            | None     | `registry.keep()` bypasses auto-cleanup.                                                       |
+| Native removal | ATTACHED → DESTROYED           | Deferred | Observer runs `cleanupTree()` in a microtask if still disconnected.                            |
 
 ### 3.3 `BindingRegistry`
 
@@ -130,20 +127,19 @@ Implementation invariants:
 
 ### 4.3 Sanitization policy
 
-| Vector | Defense |
-| :--- | :--- |
-| Executable tags (`script`, `iframe`, `object`, `embed`, `applet`) | Neutralized to `<span>` wrappers (attributes scrubbed). |
-| Structural/state tags (`base`, `meta`, `link`, `style`, `title`, `noscript`, `form`, `isindex`) | Neutralized. |
-| Global fragment `body` | Neutralized. |
-| Event handlers (`on*`) | Stripped; logged to `data-unsafe-attr`. |
-| URI protocols (`javascript:`, `vbscript:`) | In `atomHtml`: value replaced with `data-unsafe-protocol:`. In `atomAttr`/`atomProp`: update aborted (target unchanged) + warning. |
-| DOM clobbering (`id`/`name` matching `attributes`, `tagName`, `parentNode`, …) | Blocked. |
-| CSS injection | Filtered by `isDangerousCss` (strips comments, blocks `expression()`, `-moz-binding`, dangerous `url()`). |
-| SVG/SMIL (`attributeName`, `from`, `to`, `values`) | Scrubbed if they contain handlers or dangerous URIs. |
-| Encoded bypasses | Recursive double entity decoding; null bytes, control chars (`\x00-\x1f`), and `\ufffd` stripped. |
+| Vector                                                                                          | Defense                                                                                                                            |
+| :---------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------- |
+| Executable tags (`script`, `iframe`, `object`, `embed`, `applet`)                               | Neutralized to `<span>` wrappers (attributes scrubbed).                                                                            |
+| Structural/state tags (`base`, `meta`, `link`, `style`, `title`, `noscript`, `form`, `isindex`) | Neutralized.                                                                                                                       |
+| Global fragment `body`                                                                          | Neutralized.                                                                                                                       |
+| Event handlers (`on*`)                                                                          | Stripped; logged to `data-unsafe-attr`.                                                                                            |
+| URI protocols (`javascript:`, `vbscript:`)                                                      | In `atomHtml`: value replaced with `data-unsafe-protocol:`. In `atomAttr`/`atomProp`: update aborted (target unchanged) + warning. |
+| DOM clobbering (`id`/`name` matching `attributes`, `tagName`, `parentNode`, …)                  | Blocked.                                                                                                                           |
+| CSS injection                                                                                   | Filtered by `isDangerousCss` (strips comments, blocks `expression()`, `-moz-binding`, dangerous `url()`).                          |
+| SVG/SMIL (`attributeName`, `from`, `to`, `values`)                                              | Scrubbed if they contain handlers or dangerous URIs.                                                                               |
+| Encoded bypasses                                                                                | Recursive double entity decoding; null bytes, control chars (`\x00-\x1f`), and `\ufffd` stripped.                                  |
 
 **Sink contracts:**
-
 - `.atomHtml` — always routes through `sanitizeHtml` (primary XSS defense).
 - `.atomAttr(name, atom)` — validates name and value; blocks `on*` and `srcdoc` (case-insensitive); URI values protocol-checked (abort + warning on danger).
 - `.atomProp(name, atom)` — strict sink blacklist (`innerHTML`, `outerHTML`, `srcdoc` blocked; abort + warning on danger).

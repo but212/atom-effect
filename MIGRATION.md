@@ -2,16 +2,16 @@
 
 Breaking changes and upgrade steps for `@but212/atom-effect`, `@but212/atom-effect-jquery`, and `@but212/atom-effect-utils`, newest first. Every section mirrors the matching entry in [CHANGELOG.md](./CHANGELOG.md).
 
-| Version | Package | Breaking change |
-| --- | --- | --- |
-| v0.35.0 | jQuery | `$.route`, `$.atomFetch`, `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` and their types removed |
-| v0.35.0 | jQuery | `$.atomNav` removed |
-| v0.35.0 | jQuery | `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, `$.untracked` removed |
-| v0.35.0 | Utils | Most `Result` helpers and `isResult()` removed |
-| v0.34.0 | Core | `AtomError.getChain()` and `AtomError.toJSON()` removed |
-| v0.34.0 | jQuery | Web Component setup and dependency injection reworked |
-| v0.33.0 | Core | Build output partitioned; `AtomErrorConstructor` and `AtomErrorJSON` relocated |
-| v0.33.0 | jQuery | Core externalized in library builds; CDN entry point changed |
+| Version | Package | Breaking change                                                                                                                  |
+| ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| v0.35.0 | jQuery  | `$.route`, `$.atomFetch`, `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` and their types removed                          |
+| v0.35.0 | jQuery  | `$.atomNav` removed                                                                                                              |
+| v0.35.0 | jQuery  | `$.atomLens`, `$.composeLens`, `$.lensFor`, `$.mergeLenses`, `$.mergeAtoms`, `$.isComputed`, `$.isEffect`, `$.untracked` removed |
+| v0.35.0 | Utils   | Most `Result` helpers and `isResult()` removed                                                                                   |
+| v0.34.0 | Core    | `AtomError.getChain()` and `AtomError.toJSON()` removed                                                                          |
+| v0.34.0 | jQuery  | Web Component setup and dependency injection reworked                                                                            |
+| v0.33.0 | Core    | Build output partitioned; `AtomErrorConstructor` and `AtomErrorJSON` relocated                                                   |
+| v0.33.0 | jQuery  | Core externalized in library builds; CDN entry point changed                                                                     |
 
 ---
 
@@ -38,10 +38,9 @@ const user = $.atomFetch(() => `/api/users/${userId.value}`, { defaultValue: nul
 **After:**
 
 ```typescript
-const user = $.computed(
-  async () => (await fetch(`/api/users/${userId.value}`)).json(),
-  { defaultValue: null }
-);
+const user = $.computed(async () => (await fetch(`/api/users/${userId.value}`)).json(), {
+  defaultValue: null,
+});
 ```
 
 - **Routing, Custom Elements, context injection:** use a dedicated router or native Custom Element APIs, and share state by importing atoms.
@@ -100,11 +99,11 @@ const value = r.ok ? r.value : fallback;
 
 ### 1.5 Behavior changes without API removal
 
-- **Core `getErrorMetadata`:** plain objects with a `_tag` ending in `Error` are no longer special-cased. They report `name: 'Unexpected error'`, `recoverable: true`, and no `code`. `AtomError` subclasses are unaffected.
-- **Core `{ sync: true }` atoms:** a subscriber that writes back to its own atom now reports a `SchedulerError` and drops the pending notification instead of cycling forever.
+- **Core`getErrorMetadata`:** plain objects with a `_tag` ending in `Error` are no longer special-cased. They report `name: 'Unexpected error'`, `recoverable: true`, and no `code`. `AtomError` subclasses are unaffected.
+- **Core`{ sync: true }` atoms:** a subscriber that writes back to its own atom now reports a `SchedulerError` and drops the pending notification instead of cycling forever.
 - **Core lenses:** a sub-path write through a lens rooted at a merged lens now throws (reads are unchanged). Write the whole value to the merged lens, or write to the owning source atom.
-- **jQuery `atomList`:** `onRemove` runs once per removed item. It previously ran twice for items whose key left the list.
-- **jQuery `atomForm`:** a field write in a multi-atom form mutates only the source atom that owns the path (the last source defining it, falling back to the first). An empty source array is rejected with a named error at the binding boundary.
+- **jQuery`atomList`:** `onRemove` runs once per removed item. It previously ran twice for items whose key left the list.
+- **jQuery`atomForm`:** a field write in a multi-atom form mutates only the source atom that owns the path (the last source defining it, falling back to the first). An empty source array is rejected with a named error at the binding boundary.
 
 ---
 

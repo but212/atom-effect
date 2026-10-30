@@ -16,7 +16,6 @@ The `update-benchmarks.js` script automates parsing raw Vitest benchmark executi
 ### Prerequisites
 
 Ensure the raw benchmark logs are located at the root of the workspace, or pass the directory containing them as the first argument:
-
 - `core-micro.txt`
 - `core-macro.txt`
 - `core-realistic.txt`

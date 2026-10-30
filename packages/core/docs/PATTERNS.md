@@ -7,7 +7,6 @@ This document describes recommended architectural patterns for state management 
 ## 1. Structural Sharing with Lenses
 
 When managing large, complex objects (like configuration state or deeply nested JSON), updating a single property normally requires cloning the entire object or mutating it directly (which breaks reactivity). **Lenses** provide two-way reactive views into specific paths.
-
 - **Why**: Lenses use path-based structural sharing, meaning only the objects along the modified path are cloned. This preserves referential equality for unaffected branches, suppressing unnecessary downstream re-computations.
 
 ### Example: Deep State Management
@@ -17,7 +16,7 @@ import { atom, atomLens } from '@but212/atom-effect';
 
 const appState = atom({
   user: { name: 'Alice', theme: 'dark' },
-  ui: { sidebarOpen: false }
+  ui: { sidebarOpen: false },
 });
 
 // Create a lens pointing to the theme
@@ -62,7 +61,6 @@ The hook must return a fresh instance with the same prototype. Without a hook, l
 ## 2. Asynchronous Data Fetching
 
 Handling asynchronous data requires managing loading and error states. `computed` natively supports asynchronous resolution.
-
 - **Why**: Using a `defaultValue` allows the rest of the application to render synchronously while the async work happens in the background.
 
 ### Example: Async Computed with Defaults
@@ -72,14 +70,17 @@ import { atom, computed, effect } from '@but212/atom-effect';
 
 const userId = atom(1);
 
-const userProfile = computed(async () => {
-  const currentId = userId.value; // Tracked synchronously
-  const res = await fetch(`/api/user/${currentId}`);
-  if (!res.ok) throw new Error('Fetch failed');
-  return res.json();
-}, {
-  defaultValue: { loading: true } // Synchronous fallback
-});
+const userProfile = computed(
+  async () => {
+    const currentId = userId.value; // Tracked synchronously
+    const res = await fetch(`/api/user/${currentId}`);
+    if (!res.ok) throw new Error('Fetch failed');
+    return res.json();
+  },
+  {
+    defaultValue: { loading: true }, // Synchronous fallback
+  }
+);
 
 // Reacting to async states
 effect(() => {
@@ -101,7 +102,6 @@ effect(() => {
 ## 3. State Composition via Merging
 
 Large applications often need to combine isolated state domains into a unified interface for a component.
-
 - **Why**: `mergeAtoms` (read-only) and `mergeLenses` (writable) allow developers to aggregate disparate atoms into a single reactive object without duplicating state or manually synchronizing updates.
 
 ### Example: Unifying Writable State
@@ -131,8 +131,7 @@ formState.value = { name: 'Bob', notifications: false };
 
 ## 4. Bypassing Reactivity (Untracked)
 
-Sometimes you need to read an atom's value inside an effect *without* subscribing to its changes.
-
+Sometimes you need to read an atom's value inside an effect _without_ subscribing to its changes.
 - **Why**: This is common for "submit" actions where the effect should only trigger on the button click, not when the form data changes.
 
 ### Example: Untracked Reads
@@ -140,7 +139,9 @@ Sometimes you need to read an atom's value inside an effect *without* subscribin
 ```typescript
 import { atom, effect, untracked } from '@but212/atom-effect';
 
-const formData = atom({ /* ... */ });
+const formData = atom({
+  /* ... */
+});
 const submitTrigger = atom(0);
 
 effect(() => {

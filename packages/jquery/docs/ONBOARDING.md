@@ -9,7 +9,6 @@ Welcome to the `@but212/atom-effect-jquery` integration! This guide provides the
 Traditional jQuery relies on imperative DOM manipulation (e.g., listening to events and manually calling `.text()`, `.addClass()`, or `.show()`).
 
 This package shifts you to a **Declarative & Reactive** model:
-
 1. **State is the Single Source of Truth**: You define your data using Atoms.
 2. **DOM is a Projection of State**: You bind jQuery elements to these Atoms.
 3. **Automatic Synchronization**: When the Atom changes, the DOM updates automatically.
@@ -71,7 +70,7 @@ Instead of writing imperative `.text()` or `.val()` updates, use the `atom*` pre
 Use `.atomText()`, `.atomHtml()`, and `.atomAttr()` to project state into the DOM.
 
 ```javascript
-const message = $.atom("Hello World");
+const message = $.atom('Hello World');
 
 // The h1 will automatically update whenever message.value changes
 $('h1').atomText(message);
@@ -79,10 +78,10 @@ $('h1').atomText(message);
 
 ### 2. Form Inputs (Two-Way)
 
-Use `.atomVal()`, `.atomChecked()`, and `.atomForm()` for inputs. These synchronize the UI to the state *and* the state to the UI.
+Use `.atomVal()`, `.atomChecked()`, and `.atomForm()` for inputs. These synchronize the UI to the state _and_ the state to the UI.
 
 ```javascript
-const username = $.atom("");
+const username = $.atom('');
 
 // Types in the input update the atom. Changing the atom updates the input.
 $('#user-input').atomVal(username, { debounce: 200 });
@@ -96,7 +95,7 @@ Use `.atomClass()`, `.atomShow()`, and `.atomHide()` to toggle UI states declara
 const isSaving = $.atom(false);
 
 $('#spinner').atomShow(isSaving);
-$('#save-btn').atomClass({ 'disabled': isSaving });
+$('#save-btn').atomClass({ disabled: isSaving });
 ```
 
 ### 4. Grouped Bindings
@@ -106,8 +105,8 @@ To bind multiple properties to a single element without repeating selectors, use
 ```javascript
 $('#alert-box').atomBind({
   text: message,
-  show: $.computed(() => message.value !== ""),
-  class: { 'error-state': hasError }
+  show: $.computed(() => message.value !== ''),
+  class: { 'error-state': hasError },
 });
 ```
 
@@ -118,18 +117,16 @@ $('#alert-box').atomBind({
 Rendering arrays of data imperative is error-prone. Use `.atomList()` to let the engine handle DOM diffing and element re-use automatically.
 
 ```javascript
-const todos = $.atom([
-  { id: 1, text: 'Learn Atoms' }
-]);
+const todos = $.atom([{ id: 1, text: 'Learn Atoms' }]);
 
 $('#todo-list').atomList(todos, {
-  key: todo => todo.id, // Critical for performance
-  render: todo => `<li class="todo-item"></li>`,
+  key: (todo) => todo.id, // Critical for performance
+  render: (todo) => `<li class="todo-item"></li>`,
   bind: ($element, todo) => {
     // This function runs once when the element is created.
     // If 'todo' is static data, bind directly:
     $element.atomText(todo.text);
-  }
+  },
 });
 ```
 
@@ -145,7 +142,7 @@ The library auto-initializes on `document.body` by default. Use `$.initAEJ` to c
 // Customize patches and target a specific container
 $.initAEJ({
   patch: { lifecycle: true, events: false },
-  autoCleanup: { root: myContainer }
+  autoCleanup: { root: myContainer },
 });
 
 // Manual mode (disable automated features)
@@ -155,7 +152,6 @@ $.initAEJ({ patch: false, autoCleanup: false });
 Subsequent calls to `initAEJ` replace the existing configuration.
 
 When accessed via a CDN (e.g., jsDelivr or unpkg), the library exposes the global `AtomEffectJQuery` namespace:
-
 - `initAEJ(config)` — unified entry point for library configuration (patches, auto-cleanup).
 - `enableAutoCleanup(container)` — attaches a MutationObserver to a specific element.
 - `disableAutoCleanup()` — removes all global observers.
@@ -165,7 +161,6 @@ When accessed via a CDN (e.g., jsDelivr or unpkg), the library exposes the globa
 ### Debug mode
 
 When enabled via `$.debug.enabled = true`:
-
 - **Console Diagnostics**: Logs node updates and specific DOM operations.
 - **Visual Highlighting**: Outlines updated elements using native CSS animation (`Element.prototype.animate`) immediately when the DOM updates.
 - **Precision**: Logs structural paths using the `tag#id.class` format.

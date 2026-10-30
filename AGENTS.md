@@ -16,7 +16,6 @@ This document provides essential context and operational mandates for AI agents 
 ## 3. Core Commands
 
 Execute from the root directory:
-
 - **Setup**: `pnpm install`
 - **Build**: `pnpm build` (Turbo-powered)
 - **Test**: `pnpm test` (Vitest)
@@ -26,7 +25,6 @@ Execute from the root directory:
 ## 4. Validation Protocol
 
 Before completing any task, ensure:
-
 1. **Zero Regressions**: `pnpm test` passes for all packages.
 2. **Type Safety**: `pnpm typecheck` returns no errors.
 3. **Style Consistency**: `pnpm lint` (Biome) is clean.
