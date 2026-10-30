@@ -566,6 +566,28 @@ describe('Form Binding (atomForm)', () => {
       expect(data.value).not.toHaveProperty('null');
       expect(data.value).not.toHaveProperty('undefined');
     });
+
+    it('cleans up two-way binding when input name attribute is removed', async () => {
+      const data = $.atom({ name: 'Alice' });
+      const $form = appendToBody('<form><input name="name" value="Alice"></form>');
+      $form.atomForm(data);
+      await $.nextTick();
+
+      const input = $form.find('input')[0] as HTMLInputElement;
+      expect(input.value).toBe('Alice');
+
+      input.removeAttribute('name');
+      await waitMutation();
+      await $.nextTick();
+
+      $form.find('input').val('Bob').trigger('input');
+      await $.nextTick();
+      expect(data.value.name).toBe('Alice');
+
+      data.value = { name: 'Charlie' };
+      await $.nextTick();
+      expect(input.value).toBe('Bob');
+    });
   });
 
   describe('MultiSourceField Lifecycle & Disposal', () => {
@@ -607,6 +629,39 @@ describe('Form Binding (atomForm)', () => {
 
       source.value = { profile: { name: 'Bob' } };
       expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('supports Subscriber object with execute() method', async () => {
+      const source = $.atom({ profile: { name: 'Alice' } });
+      const field = new MultiSourceField([source], 'profile.name');
+      const subscriber = { execute: vi.fn() };
+
+      const unsub = field.subscribe(subscriber as never);
+      expect(subscriber.execute).not.toHaveBeenCalled();
+
+      source.value = { profile: { name: 'Bob' } };
+      await $.nextTick();
+      expect(subscriber.execute).toHaveBeenCalledTimes(1);
+
+      unsub();
+      source.value = { profile: { name: 'Charlie' } };
+      await $.nextTick();
+      expect(subscriber.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns direct subscriber count instead of summing upstream source subscribers', () => {
+      const source = $.atom({ profile: { name: 'Alice' } });
+      source.subscribe(() => {});
+      expect(source.subscriberCount()).toBe(1);
+
+      const field = new MultiSourceField([source], 'profile.name');
+      expect(field.subscriberCount()).toBe(0);
+
+      const unsub = field.subscribe(() => {});
+      expect(field.subscriberCount()).toBe(1);
+
+      unsub();
+      expect(field.subscriberCount()).toBe(0);
     });
   });
 });

@@ -271,7 +271,6 @@ export function bindForm<T extends object, U = unknown>(
   const bindField = (element: Element): void => {
     if (!(element instanceof HTMLElement)) return;
     const name = element.getAttribute('name') || getElementNameProperty(element);
-    if (!name) return;
 
     const control = element as HTMLElement & {
       name?: string;
@@ -280,6 +279,15 @@ export function bindForm<T extends object, U = unknown>(
     };
 
     const oldName = names.get(control);
+
+    if (!name) {
+      if (oldName !== undefined) {
+        names.delete(control);
+        registry.cleanup(control);
+      }
+      return;
+    }
+
     if (oldName === name) return;
 
     if (oldName !== undefined) {

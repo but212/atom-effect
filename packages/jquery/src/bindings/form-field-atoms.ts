@@ -12,6 +12,7 @@ import {
   getPathValue,
   type Paths,
   type PathValue,
+  type SubscriberTarget,
   setDeepValue,
   untracked,
   type WritableAtom,
@@ -41,7 +42,7 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
     return this.node.peek();
   }
 
-  subscribe(listener: (newValue?: unknown, oldValue?: unknown) => void): () => void {
+  subscribe(listener: SubscriberTarget<unknown>): () => void {
     return this.node.subscribe(listener);
   }
 
@@ -181,9 +182,10 @@ export class MultiSourceField implements WritableAtom<unknown> {
     return getPathValue(this.#sources[0]?.peek(), this.#parts);
   }
 
-  subscribe(listener: (newValue?: unknown, oldValue?: unknown) => void): () => void {
+  subscribe(listener: SubscriberTarget<unknown>): () => void {
     if (this.isDisposed) return () => {};
     let previous = this.peek();
+    const isFn = typeof listener === 'function';
     const unsubs = this.#sources.map((source) =>
       source.subscribe(() => {
         if (this.isDisposed) return;
@@ -191,7 +193,11 @@ export class MultiSourceField implements WritableAtom<unknown> {
         if (!shallowEqual(current, previous)) {
           const old = previous;
           previous = current;
-          listener(current, old);
+          if (isFn) {
+            listener(current, old);
+          } else {
+            listener.execute();
+          }
         }
       })
     );
@@ -204,11 +210,7 @@ export class MultiSourceField implements WritableAtom<unknown> {
   }
 
   subscriberCount(): number {
-    let total = 0;
-    for (let i = 0; i < this.#sources.length; i++) {
-      total += this.#sources[i]?.subscriberCount() ?? 0;
-    }
-    return total;
+    return this.#activeUnsubs.size;
   }
 
   get version(): number {

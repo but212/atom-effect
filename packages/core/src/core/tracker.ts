@@ -20,7 +20,7 @@ import type {
   ReactiveDependencyTracker,
   SubscriberTarget,
 } from '@/types';
-import { generateId } from '@/utils';
+import { generateId, nextSmi } from '@/utils';
 import {
   BUFFER_FLAGS,
   claimExisting,
@@ -30,7 +30,14 @@ import {
   isBufferDirty,
   refreshDepFlags,
 } from './buffers';
-import { scheduler } from './scheduler';
+
+let trackingSessionEpoch = 0;
+
+/** @internal */
+export function nextTrackingSessionEpoch(): number {
+  trackingSessionEpoch = nextSmi(trackingSessionEpoch);
+  return trackingSessionEpoch;
+}
 
 export abstract class ReactiveTracker implements ReactiveDependencyTracker, DependencySubscriber {
   flags: number = 0;
@@ -50,7 +57,7 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * and resetting the track counter.
    */
   startTracking(): number {
-    const epoch = scheduler.nextEpoch();
+    const epoch = nextTrackingSessionEpoch();
     this._trackEpoch = epoch;
     this._trackCount = 0;
     refreshDepFlags(this);
