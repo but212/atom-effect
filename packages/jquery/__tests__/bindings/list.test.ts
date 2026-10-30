@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createListContext, removeNode, resolveEventTarget } from '@/bindings/list/context';
+import {
+  commitRemoval,
+  createListContext,
+  isNodeRemoving,
+  removeNode,
+  resolveEventTarget,
+} from '@/bindings/list/context';
 import { applyListBinding } from '@/bindings/list/index';
 import { injectKeyToHtml } from '@/bindings/list/utils';
 import { registry } from '@/core/registry';
@@ -1151,6 +1157,22 @@ describe('$.atomList (Integration)', () => {
 
       expect($container.find('.item').length).toBe(0);
       expect(registry.hasBind(itemEl)).toBe(false);
+    });
+
+    it('should delete nodes from removingKeys in commitRemoval even when re-bound backstop triggers', () => {
+      const ctx = createListContext($container, undefined);
+      const el = document.createElement('div');
+      el.setAttribute('data-atom-key', '1');
+      const nodes = [el];
+      const pending = new Set<Node[]>([nodes]);
+      ctx.removingKeys.set(1, pending);
+
+      expect(isNodeRemoving(ctx.removingKeys, 1, nodes)).toBe(true);
+
+      commitRemoval(ctx, 1, nodes);
+
+      expect(isNodeRemoving(ctx.removingKeys, 1, nodes)).toBe(false);
+      expect(ctx.removingKeys.has(1)).toBe(false);
     });
   });
 });

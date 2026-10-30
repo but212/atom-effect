@@ -593,5 +593,20 @@ describe('Form Binding (atomForm)', () => {
       expect((source1 as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
       expect((source2 as unknown as { isDisposed: boolean }).isDisposed).toBe(false);
     });
+
+    it('detaches source subscriptions and suppresses notifications upon disposal', () => {
+      const source = $.atom({ profile: { name: 'Alice' } });
+      const field = new MultiSourceField([source], 'profile.name');
+      const listener = vi.fn();
+
+      field.subscribe(listener);
+      expect(source.subscriberCount()).toBe(1);
+
+      field.dispose();
+      expect(source.subscriberCount()).toBe(0);
+
+      source.value = { profile: { name: 'Bob' } };
+      expect(listener).not.toHaveBeenCalled();
+    });
   });
 });

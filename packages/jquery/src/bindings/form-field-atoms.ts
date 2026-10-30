@@ -125,6 +125,7 @@ let nextMultiSourceFieldId = 1;
 export class MultiSourceField implements WritableAtom<unknown> {
   readonly #sources: WritableAtom<unknown>[];
   readonly #parts: string[];
+  readonly #activeUnsubs = new Set<() => void>();
   readonly id: number = ++nextMultiSourceFieldId;
   flags: number = 0;
   _lastSeenEpoch: number = -1;
@@ -139,7 +140,13 @@ export class MultiSourceField implements WritableAtom<unknown> {
   }
 
   dispose(): void {
+    if (this.isDisposed) return;
     this.flags |= DISPOSED_FLAG;
+    const active = Array.from(this.#activeUnsubs);
+    this.#activeUnsubs.clear();
+    for (let i = 0; i < active.length; i++) {
+      active[i]?.();
+    }
   }
 
   get value(): unknown {
@@ -179,6 +186,7 @@ export class MultiSourceField implements WritableAtom<unknown> {
     let previous = this.peek();
     const unsubs = this.#sources.map((source) =>
       source.subscribe(() => {
+        if (this.isDisposed) return;
         const current = this.peek();
         if (!shallowEqual(current, previous)) {
           const old = previous;
@@ -187,9 +195,12 @@ export class MultiSourceField implements WritableAtom<unknown> {
         }
       })
     );
-    return () => {
+    const unsub = () => {
+      this.#activeUnsubs.delete(unsub);
       for (let i = 0; i < unsubs.length; i++) unsubs[i]?.();
     };
+    this.#activeUnsubs.add(unsub);
+    return unsub;
   }
 
   subscriberCount(): number {

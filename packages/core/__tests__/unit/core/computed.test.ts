@@ -812,5 +812,28 @@ describe('Computed', () => {
       const mergedResult = merged.value;
       expect(Object.keys(mergedResult).length).toBeGreaterThan(0);
     });
+
+    it('handles diamond interleaved dependencies without dropping subscription or duplicate slots', async () => {
+      const a = atom(1);
+      const b = computed(() => a.value * 2);
+      // c reads a.value, then b.value (which evaluates and updates a._lastSeenEpoch), then a.value again
+      const c = computed(() => {
+        const v1 = a.value;
+        const v2 = b.value;
+        const v3 = a.value;
+        return v1 + v2 + v3;
+      });
+
+      const spy = vi.fn();
+      c.subscribe(spy);
+
+      expect(c.value).toBe(4); // 1 + 2 + 1
+      expect((c as unknown as { _trackCount: number })._trackCount).toBe(2);
+
+      a.value = 5;
+      await aeNextTick();
+      expect(c.value).toBe(20); // 5 + 10 + 5
+      expect(spy).toHaveBeenCalled();
+    });
   });
 });

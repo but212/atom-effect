@@ -54,6 +54,27 @@ describe('ReactiveTracker (tracker.ts)', () => {
     expect(tracker._depSlots.size).toBe(1);
   });
 
+  it('deduplicates dependency when _lastSeenEpoch was clobbered by interleaved child tracking', () => {
+    const tracker = new TestTracker();
+    const sourceAtom = atom(10);
+    const notifyCb = vi.fn();
+
+    tracker.startTracking();
+    tracker.trackDependency(sourceAtom as unknown as Dependency, notifyCb);
+    expect(tracker._trackCount).toBe(1);
+
+    // Simulate an interleaved child computation that reads the same sourceAtom, clobbering _lastSeenEpoch
+    (sourceAtom as unknown as Dependency)._lastSeenEpoch = 999999;
+
+    // Outer tracker encounters sourceAtom again in the same tracking session
+    tracker.trackDependency(sourceAtom as unknown as Dependency, notifyCb);
+
+    // Should NOT allocate another track index or slot
+    expect(tracker._trackCount).toBe(1);
+    expect(tracker._depSlots.size).toBe(1);
+    expect((sourceAtom as unknown as Dependency)._lastSeenEpoch).toBe(tracker._trackEpoch);
+  });
+
   it('sets HAS_COMPUTEDS flag when tracking computed dependencies', () => {
     const tracker = new TestTracker();
     const sourceAtom = atom(1);

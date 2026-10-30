@@ -80,6 +80,15 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
 
     const trackEpoch = this._trackEpoch;
     if (dependency._lastSeenEpoch === trackEpoch) return;
+
+    const slots = this._depSlots;
+    for (let i = 0; i < this._trackCount; i++) {
+      if (slots.at(i)?.node === dependency) {
+        dependency._lastSeenEpoch = trackEpoch;
+        return;
+      }
+    }
+
     dependency._lastSeenEpoch = trackEpoch;
 
     const trackIndex = this._trackCount++;

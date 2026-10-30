@@ -135,27 +135,30 @@ export function commitRemoval<T>(
   itemKey: ListKey,
   nodes: Node[]
 ): void {
-  if (listContext.reactiveEffect?.isDisposed) return;
+  try {
+    if (listContext.reactiveEffect?.isDisposed) return;
 
-  // Re-bind backstop: if any of these exact nodes was re-bound live while the
-  // async removal was pending (re-carrying data-atom-key), do NOT tear it down.
-  for (let i = 0; i < nodes.length; i++) {
-    const element = nodes[i];
-    if (element instanceof Element && element.hasAttribute('data-atom-key')) return;
-  }
-
-  cleanupNodes(nodes);
-
-  for (let i = 0; i < nodes.length; i++) {
-    const element = nodes[i];
-    if (element?.isConnected && element.parentNode) {
-      element.parentNode.removeChild(element);
+    // Re-bind backstop: if any of these exact nodes was re-bound live while the
+    // async removal was pending (re-carrying data-atom-key), do NOT tear it down.
+    for (let i = 0; i < nodes.length; i++) {
+      const element = nodes[i];
+      if (element instanceof Element && element.hasAttribute('data-atom-key')) return;
     }
-  }
-  const pendingNodes = listContext.removingKeys.get(itemKey);
-  if (pendingNodes) {
-    pendingNodes.delete(nodes);
-    if (pendingNodes.size === 0) listContext.removingKeys.delete(itemKey);
+
+    cleanupNodes(nodes);
+
+    for (let i = 0; i < nodes.length; i++) {
+      const element = nodes[i];
+      if (element?.isConnected && element.parentNode) {
+        element.parentNode.removeChild(element);
+      }
+    }
+  } finally {
+    const pendingNodes = listContext.removingKeys.get(itemKey);
+    if (pendingNodes) {
+      pendingNodes.delete(nodes);
+      if (pendingNodes.size === 0) listContext.removingKeys.delete(itemKey);
+    }
   }
 }
 
