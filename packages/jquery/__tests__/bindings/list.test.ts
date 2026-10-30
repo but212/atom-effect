@@ -76,6 +76,51 @@ describe('$.atomList (Integration)', () => {
       expect($container.find('p').length).toBe(1);
     });
 
+    it('should correctly handle empty DocumentFragment across [] -> [a] -> [] cycles', async () => {
+      const itemsList = $.atom<string[]>([]);
+      const frag = document.createDocumentFragment();
+      const p = document.createElement('p');
+      p.className = 'empty-doc-frag';
+      p.textContent = 'Empty Fragment';
+      frag.appendChild(p);
+
+      $container.atomList(itemsList, {
+        key: (item: string) => item,
+        render: (item) => `<span>${item}</span>`,
+        empty: frag,
+      });
+
+      await $.nextTick();
+      expect($container.find('.empty-doc-frag').length).toBe(1);
+
+      // Transition to non-empty: empty placeholder should be removed
+      itemsList.value = ['item1'];
+      await $.nextTick();
+      expect($container.find('.empty-doc-frag').length).toBe(0);
+      expect($container.find('span').text()).toBe('item1');
+
+      // Transition back to empty: empty placeholder should be restored
+      itemsList.value = [];
+      await $.nextTick();
+      expect($container.find('span').length).toBe(0);
+      expect($container.find('.empty-doc-frag').length).toBe(1);
+      expect($container.find('.empty-doc-frag').text()).toBe('Empty Fragment');
+    });
+
+    it('should safely ignore non-element nodes in collection when calling atomList', () => {
+      const textNode = document.createTextNode('text');
+      const elementNode = document.createElement('div');
+      const mixed = $([textNode, elementNode] as unknown as HTMLElement[]);
+
+      const items = $.atom(['hello']);
+      expect(() => {
+        mixed.atomList(items, {
+          key: (item) => item,
+          render: (item) => `<span>${item}</span>`,
+        });
+      }).not.toThrow();
+    });
+
     it('should keep the empty placeholder on []->[] when onRemove is set', async () => {
       const itemsList = $.atom<string[]>([]);
 

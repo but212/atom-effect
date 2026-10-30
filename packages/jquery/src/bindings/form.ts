@@ -196,7 +196,11 @@ export function bindForm<T extends object, U = unknown>(
   const entries = new Map<string, FieldEntry>();
   const names = new WeakMap<Element, string>();
 
+  const boundControls = new Set<Element>();
+
   const unbindField = (element: Element, name: string): void => {
+    boundControls.delete(element);
+    names.delete(element);
     const entry = entries.get(name);
     if (entry && --entry.refCount <= 0) {
       const disposableAtom = entry.atom;
@@ -296,6 +300,7 @@ export function bindForm<T extends object, U = unknown>(
 
     const entry = ensureField(name);
     names.set(control, name);
+    boundControls.add(control);
 
     registry.onCleanup(control, () => unbindField(control, name));
 
@@ -351,5 +356,8 @@ export function bindForm<T extends object, U = unknown>(
   registry.onCleanup(form, () => {
     unsubscribeNodeAdded();
     unsubscribeAttributeChanged();
+    for (const control of Array.from(boundControls)) {
+      unbindField(control, names.get(control) ?? '');
+    }
   });
 }

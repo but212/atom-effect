@@ -575,6 +575,18 @@ describe('Scheduler Engine', () => {
           source.dispose();
           consoleError.mockRestore();
         });
+
+        it('flushSync preserves existing scheduler state bits', () => {
+          scheduler.startBatch();
+          expect(schedulerIsBatching(scheduler)).toBe(true);
+
+          scheduler.flushSync();
+
+          // BATCHING state should still be preserved
+          expect(schedulerIsBatching(scheduler)).toBe(true);
+          scheduler.endBatch();
+          expect(schedulerIsBatching(scheduler)).toBe(false);
+        });
       });
     });
   });

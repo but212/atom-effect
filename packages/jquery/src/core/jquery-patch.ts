@@ -154,8 +154,8 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
       const targets = selector ? this.filter(selector) : this;
       for (const element of targets) {
         if (element) {
-          registry.markIgnored(element);
           registry.cleanupTree(element);
+          registry.markIgnored(element);
         }
       }
       return originalMethods.remove.call(this, selector);

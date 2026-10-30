@@ -188,7 +188,7 @@ export function applyListBinding<T>(
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
   for (let i = 0, length = this.length; i < length; i++) {
     const element = this[i];
-    if (element) {
+    if (element && element.nodeType === 1) {
       applyListBinding(element, source, options);
     }
   }

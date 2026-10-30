@@ -93,11 +93,19 @@ export function handleEmpty<T>(
   }
 
   if (empty && !ctx.$emptyElement) {
-    const elementSource = typeof empty === 'string' ? $.parseHTML(sanitizeHtml(empty)) : empty;
-    if (elementSource) {
-      ctx.$emptyElement = $(
-        elementSource as Element | ArrayLike<Element> | JQuery<Element>
-      ).appendTo($container);
+    if (typeof empty === 'string') {
+      const parsed = $.parseHTML(sanitizeHtml(empty));
+      if (parsed) {
+        ctx.$emptyElement = $(parsed as Element | ArrayLike<Element>).appendTo($container);
+      }
+    } else if (empty instanceof DocumentFragment) {
+      const cloned = empty.cloneNode(true) as DocumentFragment;
+      const childNodes = Array.from(cloned.childNodes);
+      ctx.$emptyElement = $(childNodes as Element[]).appendTo($container);
+    } else {
+      ctx.$emptyElement = $(empty as Element | ArrayLike<Element> | JQuery<Element>).appendTo(
+        $container
+      );
     }
   }
 

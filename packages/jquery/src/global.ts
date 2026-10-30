@@ -14,6 +14,7 @@
 import type {
   ComputedAtom,
   ComputedOptions,
+  EffectFunction,
   EffectObject,
   EffectOptions,
   ReadonlyAtom,
@@ -27,7 +28,6 @@ import type {
   ComponentFn,
   CssBindings,
   CssValue,
-  EffectResult,
   FormOptions,
   ListOptions,
   PrimitiveValue,
@@ -67,7 +67,28 @@ declare global {
      * count.value += 1; // Logs: "0 -> 1"
      * ```
      */
-    atom<T>(initialValue: T, options?: AtomOptions): WritableAtom<T>;
+    atom<T>(initialValue: T, options?: AtomOptions<T>): WritableAtom<T>;
+    /**
+     * Creates an asynchronous reactive computation.
+     *
+     * When to use:
+     * - For logic involving fetch, database queries, or long-running tasks.
+     *
+     * Attention:
+     * A `defaultValue` is mandatory for async computations to provide a valid
+     * state while the Promise is PENDING.
+     */
+    computed<T>(
+      computationCallback: () => Promise<T>,
+      options: ComputedOptions<T> & { defaultValue: T }
+    ): ComputedAtom<T>;
+    /**
+     * Creates an asynchronous reactive computation without a default value.
+     */
+    computed<T>(
+      computationCallback: () => Promise<T>,
+      options?: ComputedOptions<T>
+    ): ComputedAtom<T>;
     /**
      * Creates a reactive computation derived from other atoms or computed nodes.
      *
@@ -89,20 +110,9 @@ declare global {
      * console.log(doubled.value); // 10
      * ```
      */
-    computed<T>(computationCallback: () => T, options?: ComputedOptions<T>): ComputedAtom<T>;
-    /**
-     * Creates an asynchronous reactive computation.
-     *
-     * When to use:
-     * - For logic involving fetch, database queries, or long-running tasks.
-     *
-     * Attention:
-     * A `defaultValue` is mandatory for async computations to provide a valid
-     * state while the Promise is PENDING.
-     */
     computed<T>(
-      computationCallback: () => Promise<T>,
-      options: ComputedOptions<T> & { defaultValue: T }
+      computationCallback: () => T extends Promise<unknown> ? never : T,
+      options?: ComputedOptions<T>
     ): ComputedAtom<T>;
     /**
      * Creates a reactive side-effect that synchronizes state with external systems.
@@ -134,7 +144,7 @@ declare global {
      * subscribe.dispose(); // Stops the effect
      * ```
      */
-    effect(effectCallback: () => EffectResult, options?: EffectOptions): EffectObject;
+    effect(effectCallback: EffectFunction, options?: EffectOptions): EffectObject;
     /**
      * Logic: Atomic Update Batching
      * Groups multiple state updates into a single atomic change cycle.
@@ -253,7 +263,7 @@ declare global {
      * import { initAEJ } from '@but212/atom-effect-jquery';
      *
      * initAEJ({
-     *   patch: { html: true, text: true },
+     *   patch: true,
      *   autoCleanup: { root: document.getElementById('app') }
      * });
      * ```

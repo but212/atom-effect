@@ -623,5 +623,17 @@ describe('Lens System', () => {
 
       expect(state.value).toEqual({ profile: { name: 'Bob' } });
     });
+
+    it('should preserve Object.create(null) prototype on lens updates', () => {
+      const nullProtoObj: Record<string, unknown> = Object.create(null);
+      nullProtoObj.key = 'initial';
+      const root = atom(nullProtoObj);
+      const l = atomLens(root, 'key');
+
+      l.value = 'updated';
+      expect(l.value).toBe('updated');
+      expect(root.value.key).toBe('updated');
+      expect(Object.getPrototypeOf(root.value)).toBeNull();
+    });
   });
 });

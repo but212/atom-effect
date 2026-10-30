@@ -639,5 +639,26 @@ describe('SlotBuffer', () => {
       expect(slotBuffer.size).toBe(3);
       expect(slotBuffer.length).toBe(3);
     });
+
+    it('should safely handle negative indices for at(), setAt(), and truncateFrom()', () => {
+      const slotBuffer = new SlotBuffer<string>();
+      slotBuffer.push('a');
+      slotBuffer.push('b');
+
+      expect(slotBuffer.at(-1)).toBeNull();
+      expect(slotBuffer.at(-99)).toBeNull();
+
+      // setAt with negative index should be a no-op
+      slotBuffer.setAt(-1, 'negative');
+      expect(slotBuffer.size).toBe(2);
+      expect(slotBuffer.length).toBe(2);
+      expect(slotBuffer.at(3)).toBeNull();
+
+      // truncateFrom with negative index clamps to 0 (clearing all)
+      slotBuffer.truncateFrom(-5);
+      expect(slotBuffer.size).toBe(0);
+      expect(slotBuffer.length).toBe(0);
+      expect(slotBuffer.at(0)).toBeNull();
+    });
   });
 });

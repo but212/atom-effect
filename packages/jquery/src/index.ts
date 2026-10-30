@@ -44,7 +44,7 @@ import { autoCleanup as autoCleanupSafetyNet, disableAutoCleanup, registry } fro
  * import { initAEJ } from '@but212/atom-effect-jquery';
  *
  * initAEJ({
- *   patch: { html: true, text: true },
+ *   patch: true,
  *   autoCleanup: { root: document.getElementById('app') }
  * });
  * ```
@@ -100,8 +100,8 @@ export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
  * cleanup($('.old-widget'));
  * ```
  */
-export function cleanup(element: HTMLElement | JQuery): void {
-  if (element instanceof HTMLElement) {
+export function cleanup(element: Element | JQuery): void {
+  if (element instanceof Element) {
     registry.cleanupTree(element);
   } else {
     element.each((_, currentElement) => registry.cleanupTree(currentElement));

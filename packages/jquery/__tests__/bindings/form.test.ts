@@ -663,5 +663,54 @@ describe('Form Binding (atomForm)', () => {
       unsub();
       expect(field.subscriberCount()).toBe(0);
     });
+
+    it('re-binds removed and re-inserted form controls correctly', async () => {
+      const data = $.atom({ name: 'Alice' });
+      const $form = appendToBody('<form><input name="name" /></form>');
+      $form.atomForm(data);
+      await $.nextTick();
+
+      const input = $form.find('input')[0] as HTMLInputElement;
+      expect(input.value).toBe('Alice');
+
+      // Remove input from DOM
+      $(input).detach();
+      await $.nextTick();
+
+      // Re-insert input into form
+      $form.append(input);
+      await $.nextTick();
+
+      // Update atom; re-inserted input should reflect update
+      data.value = { name: 'Bob' };
+      await $.nextTick();
+      expect(input.value).toBe('Bob');
+    });
+
+    it('cleans up previous child bindings when re-binding a form to a second atom', async () => {
+      const atomA = $.atom({ name: 'Alpha' });
+      const atomB = $.atom({ name: 'Beta' });
+      const $form = appendToBody('<form><input name="name" /></form>');
+
+      $form.atomForm(atomA);
+      await $.nextTick();
+      const input = $form.find('input')[0] as HTMLInputElement;
+      expect(input.value).toBe('Alpha');
+
+      // Re-bind to atomB
+      $form.atomForm(atomB);
+      await $.nextTick();
+      expect(input.value).toBe('Beta');
+
+      // Modifying atomA should not affect input
+      atomA.value = { name: 'Alpha2' };
+      await $.nextTick();
+      expect(input.value).toBe('Beta');
+
+      // Modifying atomB should update input
+      atomB.value = { name: 'Beta2' };
+      await $.nextTick();
+      expect(input.value).toBe('Beta2');
+    });
   });
 });
