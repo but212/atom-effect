@@ -1,6 +1,6 @@
+import type { WritableAtom } from '@but212/atom-effect';
 import { describe, expect, it } from 'vitest';
 import $ from '@/index';
-import type { DisposableWritableAtom } from '@/types';
 import { setupDOMCleanup } from '../../utils/test-helpers';
 
 describe('Complex App Scenarios', () => {
@@ -139,7 +139,7 @@ describe('Complex App Scenarios', () => {
     interface Category {
       id: number;
       title: string;
-      items: DisposableWritableAtom<Item[]>;
+      items: WritableAtom<Item[]>;
     }
 
     const categories = $.atom<Category[]>([

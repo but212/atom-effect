@@ -160,12 +160,6 @@ export interface BindingOptions<T = unknown, TText = unknown> {
   on?: Record<string, (event: JQuery.Event) => void>;
 }
 
-/**
- * A writable atom that includes an explicit disposal mechanism.
- * @deprecated Use `WritableAtom<T>` directly.
- */
-export type DisposableWritableAtom<T> = WritableAtom<T>;
-
 /** Supported key types for identifying items in a reactive list. */
 export type ListKey = string | number;
 
