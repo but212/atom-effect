@@ -21,7 +21,7 @@ import {
   SCHEDULER_CONFIG,
   SCHEDULER_STATE,
 } from '@/constants';
-import type { JobBuffer, SchedulerJob, SchedulerJobObject, SchedulerState } from '@/types';
+import type { JobBuffer, SchedulerJob, SchedulerJobObject } from '@/types';
 import { nextSmi, SchedulerError } from '@/utils';
 
 import { resetTrackingContext, trackingContext } from './base';
@@ -40,7 +40,7 @@ class AggregateExecutionLimitError extends Error {
  * Maintains 'active' and 'standby' queues to allow new jobs to be scheduled
  * safely while the current batch is being processed.
  */
-class ReactiveScheduler implements SchedulerState {
+class ReactiveScheduler {
   #epoch = 0;
   #state = SCHEDULER_STATE.IDLE;
   #batchDepth = 0;
@@ -436,10 +436,10 @@ export function isAggregateExecutionLimitError(error: Error): boolean {
 }
 
 /** @internal */
-export const schedulerSchedule = (state: SchedulerState, callback: SchedulerJob) =>
+export const schedulerSchedule = (state: ReactiveScheduler, callback: SchedulerJob) =>
   Result.unwrap(state.schedule(callback));
 /** @internal */
-export const schedulerIsBatching = (state: SchedulerState) =>
+export const schedulerIsBatching = (state: ReactiveScheduler) =>
   (state.state & SCHEDULER_STATE.BATCHING) !== 0;
 
 /**

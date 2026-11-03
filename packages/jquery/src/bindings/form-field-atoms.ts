@@ -55,7 +55,7 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
   }
 
   get isDisposed(): boolean {
-    return (this.node as unknown as { isDisposed?: boolean }).isDisposed ?? false;
+    return this.node.isDisposed;
   }
 
   get id(): number {
@@ -74,9 +74,7 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
     return this.node.isComputed;
   }
   get isRejected(): boolean {
-    // SAFETY: `isRejected` exists on the reactive node at runtime but is absent from the public
-    // `WritableAtom` type, so the delegation cannot be typed directly.
-    return (this.node as unknown as { isRejected: boolean }).isRejected ?? false;
+    return this.node.isRejected;
   }
   get hasError(): boolean {
     return this.node.hasError;
@@ -85,6 +83,8 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
     return this.node[BRAND] ?? 0;
   }
 }
+
+export type NonEmptySources = readonly [WritableAtom<unknown>, ...WritableAtom<unknown>[]];
 
 /**
  * Logic: Field Ownership
@@ -97,7 +97,7 @@ abstract class DelegatingAtom implements WritableAtom<unknown> {
  *
  * @internal
  */
-function resolveOwner(sources: WritableAtom<unknown>[], parts: string[]): WritableAtom<object> {
+function resolveOwner(sources: NonEmptySources, parts: string[]): WritableAtom<object> {
   for (let i = sources.length - 1; i >= 0; i--) {
     const source = sources[i];
     if (source && getPathValue(source.peek(), parts) !== undefined) {
@@ -124,14 +124,14 @@ let nextMultiSourceFieldId = 1;
  * @internal
  */
 export class MultiSourceField implements WritableAtom<unknown> {
-  readonly #sources: WritableAtom<unknown>[];
+  readonly #sources: NonEmptySources;
   readonly #parts: string[];
   readonly #activeUnsubs = new Set<() => void>();
   readonly id: number = ++nextMultiSourceFieldId;
   flags: number = 0;
   _lastSeenEpoch: number = -1;
 
-  constructor(sources: WritableAtom<unknown>[], dotPath: string) {
+  constructor(sources: NonEmptySources, dotPath: string) {
     this.#sources = sources;
     this.#parts = dotPath.split('.');
   }
@@ -179,7 +179,7 @@ export class MultiSourceField implements WritableAtom<unknown> {
         if (val !== undefined) return val;
       }
     }
-    return getPathValue(this.#sources[0]?.peek(), this.#parts);
+    return getPathValue(this.#sources[0].peek(), this.#parts);
   }
 
   subscribe(listener: SubscriberTarget<unknown>): () => void {

@@ -6,12 +6,14 @@
  */
 
 import { COMPUTED_STATE_FLAGS, STATE_MASKS } from '@/constants';
-import type { Dependency, ReactiveDependencyTracker, ReactiveNodeBase } from '@/types';
+import type { Dependency, DependencyId, ReactiveDependencyTracker } from '@/types';
 import { BUFFER_FLAGS } from './buffers';
 
 function isDependencyTracker(node: unknown): node is ReactiveDependencyTracker {
   return node != null && typeof node === 'object' && '_depSlots' in node;
 }
+
+export type ErrorTraversableNode = { id: DependencyId; flags: number; _error?: Error | null };
 
 /**
  * Logic: Error Collection (Graph Traversal)
@@ -19,18 +21,19 @@ function isDependencyTracker(node: unknown): node is ReactiveDependencyTracker {
  * a visited set to handle potential cycles or diamonds.
  * @internal
  */
-export function collectErrorsRecursive(startNode: ReactiveNodeBase, stopOnFirst: boolean): Error[] {
+export function collectErrorsRecursive(
+  startNode: ErrorTraversableNode,
+  stopOnFirst: boolean
+): Error[] {
   const collected: Error[] = [];
   const seen = new Set<number>();
 
-  const walk = (node: ReactiveNodeBase | Dependency): boolean => {
+  const walk = (node: ErrorTraversableNode | Dependency): boolean => {
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
     if (node._error || (node.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) {
-      collected.push(
-        node._error ?? new Error('Internal Inconsistency: REJECTED flag set but error is null')
-      );
+      collected.push(node._error as Error);
       if (stopOnFirst) return true;
     }
 

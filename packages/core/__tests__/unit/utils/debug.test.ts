@@ -182,18 +182,6 @@ describe('Debug System', () => {
     });
   });
 
-  describe('isWarningCondition()', () => {
-    it('should output prefixed logs only when enabled', () => {
-      debug.isEnabled = true;
-      debug.isWarningCondition(true, 'Hello');
-      expect(console.warn).toHaveBeenCalledWith('[Atom Effect] Hello');
-
-      vi.mocked(console.warn).mockClear();
-      debug.isEnabled = false;
-      expect(console.warn).not.toHaveBeenCalled();
-    });
-  });
-
   describe('diagnostic controller modes', () => {
     it('registerNode and attachDebugInfo edge cases', () => {
       // Disabled mode
@@ -249,7 +237,6 @@ describe('Debug System', () => {
         expect(prodDebug.getDebugType(null)).toBeUndefined();
 
         // No-ops
-        expect(prodDebug.isWarningCondition(true, 'msg')).toBeUndefined();
         expect(prodDebug.registerNode(null as unknown as DebugNode)).toBeUndefined();
         expect(prodDebug.attachDebugInfo(null as unknown as DebugNode, 'atom', 1)).toBeUndefined();
         expect(prodDebug.trackUpdate(1)).toBeUndefined();

@@ -116,11 +116,7 @@ class ComputedAtomImpl<T>
     debug.attachDebugInfo(this, 'computed', this.id, options.name);
 
     if (options.lazy === false) {
-      try {
-        this.#recompute();
-      } catch {
-        /* Error handling is performed within #recompute */
-      }
+      this.#recompute();
     }
   }
 
@@ -136,9 +132,6 @@ class ComputedAtomImpl<T>
   get isRejected(): boolean {
     trackingContext.current?.addDependency(this);
     return (this.flags & STATE_MASKS.ASYNC_MASK) === COMPUTED_STATE_FLAGS.REJECTED;
-  }
-  get isRecomputing(): boolean {
-    return (this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0;
   }
 
   /**
@@ -169,7 +162,7 @@ class ComputedAtomImpl<T>
       (flags & STATE_MASKS.ASYNC_MASK) === COMPUTED_STATE_FLAGS.REJECTED &&
       (flags & COMPUTED_STATE_FLAGS.DIRTY) === 0
     ) {
-      return this.#getFallbackOrError(this._error ?? new Error('REJECTED without error'));
+      return this.#getFallbackOrError(this._error as Error);
     }
 
     if ((flags & STATE_MASKS.CYCLIC_OR_RECOMPUTING_MASK) !== 0) {
@@ -192,7 +185,7 @@ class ComputedAtomImpl<T>
     if (asyncState === COMPUTED_STATE_FLAGS.RESOLVED) return this.#value;
 
     if (asyncState === COMPUTED_STATE_FLAGS.REJECTED) {
-      return this.#getFallbackOrError(this._error ?? new Error('REJECTED without error'));
+      return this.#getFallbackOrError(this._error as Error);
     }
 
     return this.#getFallbackOrError(
@@ -370,7 +363,7 @@ class ComputedAtomImpl<T>
         ) {
           throw computationError;
         }
-        this.#handleError(computationError, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED, false);
+        this.#handleError(computationError, ERROR_MESSAGES.COMPUTED_COMPUTATION_FAILED);
         return;
       }
 
@@ -418,12 +411,11 @@ class ComputedAtomImpl<T>
     );
   }
 
-  #handleError(error: unknown, message: string, shouldThrow = false): void {
+  #handleError(error: unknown, message: string): void {
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.REJECTED;
     nodeHandleError(this, error, ComputedError, message, this.#onErrorCallback);
-    if (shouldThrow) throw this._error;
   }
 
   /**

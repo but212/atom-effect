@@ -24,14 +24,7 @@ import {
   SCHEDULER_CONFIG,
 } from '@/constants';
 import { runInTrackingContext, trackingContext } from '@/core/base';
-import type {
-  Dependency,
-  DependencyTracker,
-  EffectFunction,
-  EffectObject,
-  EffectOptions,
-  Subscriber,
-} from '@/types';
+import type { Dependency, EffectFunction, EffectObject, EffectOptions, Subscriber } from '@/types';
 import { debug, EffectError, wrapError } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import {
@@ -44,7 +37,7 @@ import { ReactiveTracker } from './tracker';
 
 const EMPTY_EFFECT: EffectFunction = () => undefined;
 
-class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTracker, Subscriber {
+class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
@@ -84,7 +77,6 @@ class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTrac
         ? () => {
             const executionResult = runInFlushScope(() => this.execute());
             if (
-              executionResult &&
               Result.isErr(executionResult) &&
               !isAggregateExecutionLimitError(executionResult.error)
             ) {

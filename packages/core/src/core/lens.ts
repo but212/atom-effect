@@ -27,7 +27,6 @@ import type {
   DependencyId,
   MergedDependencyValue,
   ReactiveNode,
-  ReactiveNodeBase,
   SubscriberTarget,
   WritableAtom,
 } from '@/types';
@@ -46,7 +45,7 @@ import { batch } from './scheduler';
  *
  * @internal
  */
-abstract class BaseLens<T = unknown> implements ReactiveNodeBase {
+abstract class BaseLens<T = unknown> implements ReactiveNode<T> {
   flags: number;
   version = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
@@ -79,6 +78,7 @@ abstract class BaseLens<T = unknown> implements ReactiveNodeBase {
     return nodeGetSubscriberCount(this);
   }
 
+  abstract get value(): T;
   abstract peek(): T;
   protected abstract _equals(nextValue: T, previousValue: T | undefined): boolean;
   /** Subscribes to the upstream source(s); invoked when the first listener arrives. */
@@ -224,25 +224,12 @@ class LensImpl<T extends object, P extends string>
  * nameLens.value = 'Bob';      // Updates user.value.profile.name
  * ```
  */
-interface LensNode {
-  // biome-ignore lint/suspicious/noExplicitAny: type-erased root atom
-  _root: WritableAtom<any>;
-  _path: string;
-}
-
-function isLensNode(atom: unknown): atom is LensNode {
-  return atom != null && typeof atom === 'object' && '_root' in atom && '_path' in atom;
-}
-
 export function atomLens<T extends object, P extends Paths<T>>(
   atom: WritableAtom<T>,
   path: P
 ): WritableAtom<PathValue<T, P>> {
-  const brand = atom[BRAND] || 0;
-  if (brand & BrandFlags.Lens) {
-    if (isLensNode(atom)) {
-      return atomLens(atom._root, `${atom._path}.${path}` as P);
-    }
+  if (atom instanceof LensImpl) {
+    return atomLens(atom._root, `${atom._path}.${path}` as P);
   }
   return new LensImpl(atom, path);
 }

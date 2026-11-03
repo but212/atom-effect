@@ -108,12 +108,6 @@ class DevDebugEngine implements DebugConfig {
     this.#isFailureCleanupScheduled = false;
   };
 
-  isWarningCondition(isWarningCondition: boolean, warningMessage: string): void {
-    if (this.isEnabled && isWarningCondition) {
-      console.warn(`${DEBUG_PREFIX} ${warningMessage}`);
-    }
-  }
-
   registerNode(node: IdentifiableNode): void {
     if (!this.isEnabled || node === null || typeof node !== 'object' || node.id === undefined) {
       return;
@@ -132,11 +126,11 @@ class DevDebugEngine implements DebugConfig {
     customName?: string
   ): void {
     if (!this.isEnabled) return;
-    const hasEntry = this.#registry.has(id);
+    let nodeMetadata = this.#registry.get(id);
+    const hasEntry = nodeMetadata !== undefined;
     if (!hasEntry && customName === undefined && !this.shouldTrackGraph) return;
     if (targetObject === null || typeof targetObject !== 'object' || id === undefined) return;
 
-    let nodeMetadata = this.#registry.get(id);
     if (nodeMetadata) {
       if (customName !== undefined) {
         nodeMetadata.name = customName;
@@ -240,7 +234,6 @@ const ProdDebugController: DebugConfig = {
   isEnabled: false,
   shouldWarnInfiniteLoop: false,
   shouldTrackGraph: false,
-  isWarningCondition: noopCallback,
   registerNode: noopCallback,
   attachDebugInfo: noopCallback,
   trackUpdate: noopCallback,

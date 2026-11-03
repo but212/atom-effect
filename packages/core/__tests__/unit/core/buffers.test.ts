@@ -32,7 +32,7 @@ function createDepBuffer(): ReactiveDependencyTracker {
 const createLink = (
   node: Dependency,
   version: number,
-  unsubscribeCallback?: () => void
+  unsubscribeCallback: () => void = vi.fn()
 ): DependencyLink => ({ node, version, unsubscribeCallback });
 
 describe('DepBuffer', () => {

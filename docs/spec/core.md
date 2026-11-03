@@ -13,6 +13,7 @@ The engine is a deterministic push-pull graph of three node roles:
 | Sink      | `effect()`   | Reactive | Void   | Terminal, side-effects |
 
 **Propagation lifecycle (push → schedule → pull):**
+
 1. **Push**: An `atom` write increments its version and synchronously invalidates direct computed subscribers. Computeds become `DIRTY`; effects are scheduled without executing their side effects in default mode.
 2. **Schedule**: Atom subscriber notifications and default effect executions are coalesced into a single microtask flush. Multiple writes coalesce into one downstream pass.
 3. **Pull**: On access or effect execution, a node validates its dependencies. Re-computation only occurs if an upstream version incremented. If a dependency re-evaluates to an identical result (version unchanged), the pull short-circuits.
@@ -34,6 +35,7 @@ The engine is a deterministic push-pull graph of three node roles:
 ## 3. Async boundary
 
 Async computeds are treated as state machines with sessions.
+
 - **Session locking**: Only the result of the _most recent_ asynchronous trigger resolves the node; results from older, stale sessions are discarded.
 - **Synchronous tracking boundary**: Only dependencies accessed **before the first `await`** are tracked. Dependencies after an `await` return their current value but do not trigger re-evaluation. This keeps tracking deterministic and avoids long-lived tracking contexts.
 - **AsyncState**: `'idle'`, `'pending'`, `'resolved'`, `'rejected'`.
@@ -60,6 +62,7 @@ Async computeds are treated as state machines with sessions.
 ## 6. Error handling (Result propagation)
 
 The engine uses a hybrid model to keep the core pure and avoid `try-catch` overhead in hot paths.
+
 1. **Internal monadic propagation**: Internal checks (argument validation, loop budgets, disposed access, circularity) return a `Result<T, Error>`; they do not throw directly. Subscription (`.subscribe()`) is the exception: an invalid listener throws `AtomError` immediately.
 2. **Synchronous boundary unwrapping**: Public boundaries (`.value` getters, factories, public scheduler wrappers) call `Result.unwrap`, throwing a standard `Error` (`ComputedError`, `EffectError`, `SchedulerError`) for compatibility with throwing consumer code.
 3. **Asynchronous scheduler isolation**: During flush, a failed job `Result` is wrapped in a `SchedulerError` and logged — never an unhandled rejection.
@@ -68,6 +71,7 @@ The engine uses a hybrid model to keep the core pure and avoid `try-catch` overh
 **Circularity**: The `RECOMPUTING` flag identifies a node accessed during its own derivation, throwing `ComputedError`.
 
 **Error types:**
+
 - `AtomError` — base: `message`, `cause`, `code` (e.g. `ERR_CIRCULAR_DEP`), `recoverable`.
 - `ComputedError`, `EffectError`, `SchedulerError` — specializations.
 - `getErrorChain(error)` — reconstructs the `.cause` chain.
@@ -84,7 +88,7 @@ The engine uses a hybrid model to keep the core pure and avoid `try-catch` overh
 | `subscribe(listener \| Subscriber)` | Returns an unsubscription function. Callback params may be `undefined` during certain transitions.                                                      |
 | `subscriberCount()`                 | Active subscriber count for diagnostics.                                                                                                                |
 | `dispose()`                         | Permanently disables; clears subscribers and releases value.                                                                                            |
-| `isDisposed`                        | Read-only disposal flag (runtime only, not on public TS interfaces).                                                                                    |
+| `isDisposed` / `isRejected`         | Read-only lifecycle flags.                                                                                                                              |
 
 Options: `name`, `sync` (default `false`), `equal`.
 
@@ -119,12 +123,13 @@ Options: `name`, `sync`, `onError`, `maxExecutionsPerFlush` (default 100), `maxE
 
 - `batch(fn): T` — see §4.
 - `aeNextTick(cb?): Promise<void>` — resolves after next flush; for tests.
-- `globalScheduler` — low-level flush/batching/execution control. Concrete `ReactiveScheduler`/`SchedulerState` are not exported.
+- `globalScheduler` — low-level flush/batching/execution control. Concrete `ReactiveScheduler` is not exported.
 - `untracked(fn): T` — run without dependency registration.
 
 ## 8. Lenses & structural sharing
 
 `atomLens(atom, path)` creates a writable virtual atom for a dot-path.
+
 - **Structural sharing**: only objects along the modified path are cloned; unrelated branches keep reference identity, suppressing redundant recomputes.
 - **Paths**: dot-notation, array indices (`users.0.name`), and `Map` keys. `Set` is a terminal value (no nested traversal).
 - **Prototype preservation**: updates to class instances preserve the original prototype and methods (`instanceof` intact). The `LENS_CLONE` symbol protocol lets a class provide a fresh clone when it has private fields or internal slots; a hook result must be a fresh object with the same prototype or the lens write throws `TypeError`. Classes without a hook retain the `Object.create`/`Object.assign` fallback, which cannot preserve private state or internal slots.

@@ -26,7 +26,7 @@ import { registry } from '@/core/registry';
 import { markInternal } from '@/core/symbols';
 import type { FormOptions, ValOptions } from '@/types';
 import { formNameToPath } from '@/utils';
-import { InterceptedLens, MultiSourceField } from './form-field-atoms';
+import { InterceptedLens, MultiSourceField, type NonEmptySources } from './form-field-atoms';
 import { bindVal } from './unified';
 
 /**
@@ -203,10 +203,7 @@ export function bindForm<T extends object, U = unknown>(
     names.delete(element);
     const entry = entries.get(name);
     if (entry && --entry.refCount <= 0) {
-      const disposableAtom = entry.atom;
-      if (typeof disposableAtom.dispose === 'function') {
-        disposableAtom.dispose();
-      }
+      entry.atom.dispose();
       entries.delete(name);
     }
     registry.cleanup(element);
@@ -223,7 +220,10 @@ export function bindForm<T extends object, U = unknown>(
     // SAFETY: the field atom is a `WritableAtom<unknown>` by construction; the single-source path
     // narrows it to the declared path type, and `InterceptedLens` only forwards reads and writes.
     const baseLens = sources
-      ? (new MultiSourceField(sources, dotPath) as unknown as WritableAtom<PathValue<T, Paths<T>>>)
+      ? (new MultiSourceField(
+          sources as unknown as NonEmptySources,
+          dotPath
+        ) as unknown as WritableAtom<PathValue<T, Paths<T>>>)
       : ((lensFor(singleSource as WritableAtom<object>) as (path: string) => WritableAtom<unknown>)(
           dotPath
         ) as unknown as WritableAtom<PathValue<T, Paths<T>>>);
@@ -234,9 +234,7 @@ export function bindForm<T extends object, U = unknown>(
     );
 
     const newEntry: FieldEntry = {
-      // SAFETY: the wrapper only stores an opaque `WritableAtom<unknown>`; its reads and writes are
-      // forwarded to `baseLens`, whose path type is erased for the multi-source case.
-      atom: atom as unknown as WritableAtom<unknown>,
+      atom,
       name,
       refCount: 1,
     };
@@ -331,14 +329,12 @@ export function bindForm<T extends object, U = unknown>(
       for (const control of form.elements) {
         bindField(control);
       }
-    } else if (element.matches?.(SELECTOR)) {
+    } else if (element.matches(SELECTOR)) {
       bindField(element);
     } else {
-      const targets = element.querySelectorAll?.(SELECTOR);
-      if (targets) {
-        for (const target of targets) {
-          bindField(target);
-        }
+      const targets = element.querySelectorAll(SELECTOR);
+      for (const target of targets) {
+        bindField(target);
       }
     }
   };

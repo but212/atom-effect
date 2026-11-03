@@ -11,7 +11,7 @@
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { IS_DEV, KIND, LOG_PREFIX, SMI_MAX } from '@/constants';
+import { KIND, SMI_MAX } from '@/constants';
 import type {
   Dependency,
   DependencyId,
@@ -69,13 +69,7 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * and refreshing buffer flags.
    */
   commitDeps(): void {
-    try {
-      depBufferTruncateFrom(this, this._trackCount);
-    } catch (error) {
-      if (IS_DEV) {
-        console.warn(`${LOG_PREFIX} commitDeps failed for node ${this.id}:`, error);
-      }
-    }
+    depBufferTruncateFrom(this, this._trackCount);
   }
 
   /**
@@ -83,8 +77,6 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * Uses session-level versioning via `_lastSeenEpoch` for deduplication.
    */
   trackDependency(dependency: Dependency, notifyCallback: SubscriberTarget<unknown>): void {
-    if (!this._depSlots) return;
-
     const trackEpoch = this._trackEpoch;
     if (dependency._lastSeenEpoch === trackEpoch) return;
 

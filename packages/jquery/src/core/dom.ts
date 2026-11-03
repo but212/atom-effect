@@ -20,8 +20,9 @@ export function atomEachElement(
   jqueryCollection: JQuery,
   callback: (element: HTMLElement) => void
 ): JQuery {
-  for (const node of jqueryCollection) {
-    if (node.nodeType === Node.ELEMENT_NODE) callback(node);
+  for (let i = 0, len = jqueryCollection.length; i < len; i++) {
+    const node = jqueryCollection[i];
+    if (node && node.nodeType === Node.ELEMENT_NODE) callback(node as HTMLElement);
   }
   return jqueryCollection;
 }

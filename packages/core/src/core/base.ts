@@ -167,9 +167,7 @@ export function nodeUnsubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTa
   const slots = node._subscriberSlots;
   if (slots == null) return;
 
-  if (slots.remove(listener)) {
-    slots.compact();
-  }
+  slots.remove(listener);
 }
 
 /**

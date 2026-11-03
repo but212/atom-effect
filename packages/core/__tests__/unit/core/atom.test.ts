@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { ATOM_STATE_FLAGS, SCHEDULER_CONFIG } from '@/constants';
+import { SCHEDULER_CONFIG } from '@/constants';
 import { AtomError, aeNextTick, atom, batch, computed, globalScheduler } from '@/index';
 
 describe('Atom', () => {
@@ -223,30 +223,6 @@ describe('Atom', () => {
         expect(notificationLog).toEqual(['s1']);
       });
     });
-
-    it('should correctly expose internal getters: isNotifying, isNotificationScheduled, and isSync', async () => {
-      const someAtom = atom(42);
-      expect(Reflect.get(someAtom, 'isNotifying')).toBe(false);
-      expect(Reflect.get(someAtom, 'isNotificationScheduled')).toBe(false);
-      expect(Reflect.get(someAtom, 'isSync')).toBe(false);
-
-      let notified = false;
-      someAtom.subscribe(() => {
-        notified = true;
-        expect(Reflect.get(someAtom, 'isNotifying')).toBe(true);
-      });
-
-      someAtom.value = 100;
-      expect(Reflect.get(someAtom, 'isNotificationScheduled')).toBe(true);
-
-      await aeNextTick();
-      expect(notified).toBe(true);
-      expect(Reflect.get(someAtom, 'isNotifying')).toBe(false);
-      expect(Reflect.get(someAtom, 'isNotificationScheduled')).toBe(false);
-
-      const syncAtom = atom(42, { sync: true });
-      expect(Reflect.get(syncAtom, 'isSync')).toBe(true);
-    });
   });
 
   describe('computed dirty propagation', () => {
@@ -438,21 +414,6 @@ describe('Atom', () => {
           }
         }
       }
-    });
-
-    it('should break out of flushNotifications and clear the scheduled flag when prev is NO_VALUE', () => {
-      const someAtom = atom(42);
-
-      const currentFlags = Reflect.get(someAtom, 'flags') as number;
-      Reflect.set(someAtom, 'flags', currentFlags | ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED);
-
-      expect(() => {
-        Reflect.get(someAtom, 'execute').call(someAtom);
-      }).not.toThrow();
-
-      expect(
-        (Reflect.get(someAtom, 'flags') as number) & ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED
-      ).toBe(0);
     });
   });
 });

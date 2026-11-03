@@ -51,7 +51,7 @@ export function claimExisting(
   if (slots.length <= trackIndex) return false;
 
   const current = slots.at(trackIndex);
-  if (current?.node === dependency && current.unsubscribeCallback) {
+  if (current?.node === dependency) {
     current.version = dependency.version;
     return true;
   }
@@ -84,7 +84,7 @@ function findExistingIndex(
   const slots = state._depSlots;
   for (let i = start + 1, slotsLength = slots.length; i < slotsLength; i++) {
     const link = slots.at(i);
-    if (link?.node === dependency && link.unsubscribeCallback) return i;
+    if (link?.node === dependency) return i;
   }
   return -1;
 }
@@ -188,12 +188,10 @@ export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: n
     for (let i = index; i < slotsLength; i++) {
       const link = slots.at(i);
       if (link) {
-        if (link.unsubscribeCallback) {
-          try {
-            link.unsubscribeCallback();
-          } catch (unsubscribeError) {
-            if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
-          }
+        try {
+          link.unsubscribeCallback();
+        } catch (unsubscribeError) {
+          if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
         }
       }
     }

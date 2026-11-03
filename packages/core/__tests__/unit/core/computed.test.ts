@@ -128,15 +128,13 @@ describe('Computed', () => {
     });
 
     describe('internal state getters', () => {
-      it('should correctly expose internal getters: isDirty, isRecomputing, and isValid', () => {
+      it('should correctly expose internal getters: isDirty and isValid', () => {
         const someAtom = atom(0, { sync: true });
         const computedInstance = computed(() => {
-          expect(Reflect.get(computedInstance, 'isRecomputing')).toBe(true);
           return someAtom.value * 2;
         });
 
         expect(Reflect.get(computedInstance, 'isDirty')).toBe(true);
-        expect(Reflect.get(computedInstance, 'isRecomputing')).toBe(false);
         expect(Reflect.get(computedInstance, 'isValid')).toBe(true);
 
         computedInstance.subscribe(() => {});
