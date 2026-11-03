@@ -6,10 +6,10 @@ Benchmarking suite for `@but212/atom-effect-utils` to quantify the performance o
 
 | Category       | Key Metric   | Value          | Technical Context                       |
 | :------------- | :----------- | :------------- | :-------------------------------------- |
-| **SlotBuffer** | push (small) | 947.4K ops/sec | Internal high-performance buffer (x100) |
+| **SlotBuffer** | push (small) | 719.7K ops/sec | Internal high-performance buffer (x100) |
 | **Option**     | isSome check | 2.04M ops/sec  | Reactive-compatible Option type (x100)  |
-| **Result**     | ok creation  | 934.9K ops/sec | Error handling primitive (x100)         |
-| **Type Guard** | isPromise    | 1.70M ops/sec  | Fast async primitive detection (x100)   |
+| **Result**     | ok creation  | 721.5K ops/sec | Error handling primitive (x100)         |
+| **Type Guard** | isPromise    | 1.24M ops/sec  | Fast async primitive detection (x100)   |
 
 ---
 
@@ -61,7 +61,7 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case                  | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :------------------------- | :----------- | :-------- | :------- |
-| Literal assignment         | 1,704,225.67 | 0.0006    | 0.0006   |
+| Literal assignment         | 1,245,716.51 | 0.0008    | 0.0008   |
 | Null check                 | 2,632,515.04 | 0.0004    | 0.0004   |
 | Nullish coalescing (mixed) | 2,528,804.14 | 0.0004    | 0.0004   |
 | Inline ternary map         | 2,617,729.87 | 0.0004    | 0.0007   |
@@ -84,44 +84,44 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 #### Native Comparison (try/catch) (x100)
 
-| Test Case                      | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :----------------------------- | :----------- | :-------- | :------- |
-| Literal assignment             | 1,704,225.67 | 0.0006    | 0.0006   |
-| Boolean flag check             | 1,700,752.11 | 0.0006    | 0.0006   |
-| Ternary error fallback (mixed) | 1,460,396.39 | 0.0007    | 0.0007   |
-| Native try/catch (mixed)       | 76,192.05    | 0.0132    | 0.0195   |
+| Literal assignment | 1,245,716.51 | 0.0008 | 0.0008 |
+| Boolean flag check | 1,247,855.01 | 0.0008 | 0.0008 |
+| Ternary error fallback (mixed) | 1,084,553.09 | 0.0009 | 0.0018 |
+| Native try/catch (mixed) | 63,392.56 | 0.0159 | 0.0242 |
 
 #### Result Operations (x100)
 
-| Test Case               | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :---------------------- | :----------- | :-------- | :------- |
-| Result.ok creation      | 934,922.43   | 0.0011    | 0.0016   |
-| Result.err creation     | 935,267.74   | 0.0011    | 0.0015   |
-| Result.tryCatch (mixed) | 60,095.73    | 0.0168    | 0.0236   |
+| Result.ok creation | 721,522.44 | 0.0015 | 0.0022 |
+| Result.err creation | 720,752.69 | 0.0015 | 0.0022 |
+| Result.tryCatch (mixed) | 59,409.77 | 0.0171 | 0.0254 |
 
 ---
 
 ### 3. Data Structures: SlotBuffer (x100)
 
-| Test Case               | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :---------------------- | :----------- | :-------- | :------- |
-| push (small, x100)      | 947,363.91   | 0.0011    | 0.0020   |
-| push (large, x10)       | 84,030.50    | 0.0123    | 0.0203   |
-| has (x100)              | 294,604.53   | 0.0034    | 0.0035   |
-| forEach (x100)          | 48,214.19    | 0.0208    | 0.0278   |
-| compact (x100)          | 27,037.68    | 0.0375    | 0.0466   |
-| some (early exit, x100) | 708,758.72   | 0.0014    | 0.0027   |
-| some (full scan, x100)  | 67,166.40    | 0.0149    | 0.0216   |
+| push (small, x100) | 719,744.75 | 0.0014 | 0.0027 |
+| push (large, x10) | 69,716.22 | 0.0146 | 0.0240 |
+| has (x100) | 244,746.48 | 0.0041 | 0.0041 |
+| forEach (x100) | 37,636.84 | 0.0267 | 0.0339 |
+| compact (x100) | 19,063.62 | 0.0529 | 0.0647 |
+| some (early exit, x100) | 541,897.20 | 0.0019 | 0.0036 |
+| some (full scan, x100) | 49,294.67 | 0.0205 | 0.0351 |
 
 ---
 
 ### 4. Utilities: Type Guards (x100)
 
-| Test Case                 | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :------------------------ | :----------- | :-------- | :------- |
-| isPromise: native promise | 1,699,498.42 | 0.0006    | 0.0006   |
-| isPromise: thenable       | 1,706,251.14 | 0.0006    | 0.0006   |
-| isPromise: object         | 1,332,333.89 | 0.0008    | 0.0008   |
-| isOption: true            | 2,107,975.23 | 0.0005    | 0.0005   |
-| isOption: false           | 2,093,706.04 | 0.0005    | 0.0005   |
-| isPromise: mixed data     | 1,184,140.27 | 0.0009    | 0.0016   |
+| isPromise: native promise | 1,240,833.37 | 0.0008 | 0.0008 |
+| isPromise: thenable | 1,239,018.17 | 0.0008 | 0.0008 |
+| isPromise: object | 1,008,797.26 | 0.0010 | 0.0010 |
+| isOption: true | 2,107,975.23 | 0.0005 | 0.0005 |
+| isOption: false | 2,093,706.04 | 0.0005 | 0.0005 |
+| isPromise: mixed data | 893,769.65 | 0.0011 | 0.0012 |

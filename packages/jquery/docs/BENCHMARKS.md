@@ -4,14 +4,14 @@ Benchmarking suite for `@but212/atom-effect-jquery` to measure DOM binding perfo
 
 ## Performance Summary
 
-| Category             | Key Metric                 | Value         | Technical Context                    |
+| Category | Key Metric | Value | Technical Context |
 | -------------------- | -------------------------- | ------------- | ------------------------------------ |
-| **Text Binding**     | Update (100el × 50)        | 1.8K ops/sec  | Direct text node synchronization     |
-| **Class Binding**    | Toggle (100el × 100)       | 1.8K ops/sec  | Class list manipulation              |
-| **List Render**      | Reconciliation (100 items) | 3.2K ops/sec  | Keyed 3-pass reconciliation          |
-| **Input (DOM→Atom)** | 100 events                 | 2.0K ops/sec  | Direct event-to-atom synchronization |
-| **Todo App**         | Full workflow              | 23.4K ops/sec | Batch-optimized workflow execution   |
-| **Dashboard**        | Fan-in chain               | 209.0 ops/sec | Multi-level propagation chain        |
+| **Text Binding** | Update (100el × 50) | 1.1K ops/sec | Direct text node synchronization |
+| **Class Binding** | Toggle (100el × 100) | 1.1K ops/sec | Class list manipulation |
+| **List Render** | Reconciliation (100 items) | 2.0K ops/sec | Keyed 3-pass reconciliation |
+| **Input (DOM→Atom)** | 100 events | 2.0K ops/sec | Direct event-to-atom synchronization |
+| **Todo App** | Full workflow | 32.4K ops/sec | Batch-optimized workflow execution |
+| **Dashboard** | Fan-in chain | 155.1 ops/sec | Multi-level propagation chain |
 
 ---
 
@@ -102,15 +102,15 @@ Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 
 ### Benchmark Highlights
 
-| Benchmark                           | Result        | Technical Context                                  |
+| Benchmark | Result | Technical Context |
 | ----------------------------------- | ------------- | -------------------------------------------------- |
-| atomText update (100el × 50)        | 1.8K ops/sec  | Frequency for 5,000 total text node updates        |
-| atomClass toggle (100el × 100)      | 1.8K ops/sec  | Frequency for 10,000 total class list toggles      |
-| atomList reconciliation (100 items) | 3.2K ops/sec  | Frequency for 100-item reconciliation cycles       |
-| atomVal DOM→Atom (100 events)       | 2.0K ops/sec  | Frequency for 100 sequential input events          |
-| Todo full workflow                  | 23.4K ops/sec | Frequency for combined CRUD operations             |
-| Dashboard fan-in                    | 209.0 ops/sec | Frequency for multi-level fan-in propagation       |
-| atomForm O(1) Scaling               | 13.1K ops/sec | Validates consistent performance across form sizes |
+| atomText update (100el × 50) | 1.1K ops/sec | Frequency for 5,000 total text node updates |
+| atomClass toggle (100el × 100) | 1.1K ops/sec | Frequency for 10,000 total class list toggles |
+| atomList reconciliation (100 items) | 2.0K ops/sec | Frequency for 100-item reconciliation cycles |
+| atomVal DOM→Atom (100 events) | 2.0K ops/sec | Frequency for 100 sequential input events |
+| Todo full workflow | 32.4K ops/sec | Frequency for combined CRUD operations |
+| Dashboard fan-in | 155.1 ops/sec | Frequency for multi-level fan-in propagation |
+| atomForm O(1) Scaling | 16.0K ops/sec | Validates consistent performance across form sizes |
 
 ## Contributing Benchmarks
 
@@ -139,127 +139,127 @@ Refer to [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for further deta
 
 #### Bindings: One-way Propagation
 
-| Benchmark Case                                             | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ---------------------------------------------------------- | ------------ | --------- | -------- |
-| Native: create 100 text nodes                              | 9,397.34     | 0.0945    | 0.3000   |
-| jQuery: create 100 text elements                           | 2,308.31     | 0.4819    | 2.0000   |
-| atom-effect: create 100 text bindings (atomText)           | 1,779.39     | 0.6283    | 3.3090   |
-| atom-effect: create 100 HTML bindings (atomHtml)           | 1,093.20     | 0.9972    | 4.2000   |
-| Native: update text (100 elements x 50 updates)            | 398.04       | 2.7144    | 8.9000   |
-| jQuery: update text (100 elements x 50 updates)            | 162.37       | 6.5860    | 14.4030  |
-| atom-effect: update text (100 elements x 50 updates)       | 1,826.26     | 0.6128    | 3.8760   |
-| atom-effect: update html (100 elements x 20 updates)       | 1,113.30     | 0.9792    | 4.4000   |
-| atom-effect: toggle class (100 elements x 100 toggles)     | 1,821.79     | 0.6014    | 2.5320   |
-| atom-effect: update CSS (100 elements x 50 updates)        | 1,649.58     | 0.6665    | 4.2000   |
-| atom-effect: toggle visibility (100 elements x 50 toggles) | 1,077.11     | 0.9708    | 1.4000   |
+| Native: create 100 text nodes | 8,614.11 | 0.1178 | 0.3000 |
+| jQuery: create 100 text elements | 1,620.29 | 0.6854 | 2.4840 |
+| atom-effect: create 100 text bindings (atomText) | 1,173.77 | 0.9300 | 3.0250 |
+| atom-effect: create 100 HTML bindings (atomHtml) | 684.49 | 1.6377 | 9.3250 |
+| Native: update text (100 elements x 50 updates) | 263.92 | 4.1544 | 14.2200 |
+| jQuery: update text (100 elements x 50 updates) | 97.54 | 10.6320 | 24.1000 |
+| atom-effect: update text (100 elements x 50 updates) | 1,107.53 | 0.9776 | 3.0920 |
+| atom-effect: update html (100 elements x 20 updates) | 643.99 | 1.7096 | 8.3640 |
+| atom-effect: toggle class (100 elements x 100 toggles) | 1,132.97 | 0.9519 | 2.3500 |
+| atom-effect: update CSS (100 elements x 50 updates) | 1,001.87 | 1.0618 | 5.8100 |
+| atom-effect: toggle visibility (100 elements x 50 toggles) | 583.84 | 1.7671 | 3.9200 |
 
 #### Bindings: Two-way (Input/Checked)
 
-| Benchmark Case                                              | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ----------------------------------------------------------- | ------------ | --------- | -------- |
-| atom → DOM: input val (100 inputs x 100 updates)            | 181.06       | 5.5230    | 11.3000  |
-| DOM → atom: input val (trigger 100 events)                  | 2,038.39     | 0.4906    | 0.6000   |
-| checkbox toggle (100 elements x 100 toggles)                | 795.72       | 1.3484    | 7.7000   |
-| textarea val (100 textareas x 100 updates)                  | 198.49       | 5.0380    | 9.8000   |
-| select single option (100 selects x 100 updates)            | 273.15       | 3.7834    | 9.4360   |
-| select multiple options (100 selects x 50 updates)          | 218.86       | 4.6743    | 10.6740  |
-| radio check toggle (100 radio groups x 100 updates)         | 161.17       | 6.4045    | 12.1030  |
-| sequential chain calls (text+class+css+show) x 100 elements | 588.39       | 2.1470    | 8.2050   |
-| unified atomBind (text+class+css+show) x 100 elements       | 662.12       | 1.5826    | 6.3000   |
+| atom → DOM: input val (100 inputs x 100 updates) | 181.06 | 5.5230 | 11.3000 |
+| DOM → atom: input val (trigger 100 events) | 2,038.39 | 0.4906 | 0.6000 |
+| checkbox toggle (100 elements x 100 toggles) | 467.33 | 2.3055 | 9.9000 |
+| textarea val (100 textareas x 100 updates) | 198.49 | 5.0380 | 9.8000 |
+| select single option (100 selects x 100 updates) | 148.27 | 6.8420 | 12.9000 |
+| select multiple options (100 selects x 50 updates) | 124.55 | 8.5885 | 29.7030 |
+| radio check toggle (100 radio groups x 100 updates) | 91.61 | 11.1055 | 18.1000 |
+| sequential chain calls (text+class+css+show) x 100 elements | 256.83 | 3.9766 | 8.7960 |
+| unified atomBind (text+class+css+show) x 100 elements | 285.71 | 3.5943 | 9.6000 |
 
 #### Bindings: Form (atomForm)
 
-| Benchmark Case                                         | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ------------------------------------------------------ | ------------ | --------- | -------- |
-| atomForm initial setup x 10 forms                      | 50.09        | 21.2650   | 30.0020  |
-| atomForm update via state (10 forms x 50 updates)      | 27.74        | 36.8610   | 50.8000  |
-| atomForm update via DOM trigger (10 forms x 50 events) | 19.11        | 52.5645   | 61.5140  |
-| atomForm setup with validation hooks x 10 forms        | 15.32        | 66.9295   | 85.2020  |
+| atomForm initial setup x 10 forms | 47.51 | 21.8890 | 29.9000 |
+| atomForm update via state (10 forms x 50 updates) | 26.72 | 38.3380 | 50.9040 |
+| atomForm update via DOM trigger (10 forms x 50 events) | 18.09 | 55.7560 | 66.3590 |
+| atomForm setup with validation hooks x 10 forms | 15.42 | 66.5930 | 86.5420 |
 
 #### List Rendering: atomList
 
-| Benchmark Case                                               | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ------------------------------------------------------------ | ------------ | --------- | -------- |
-| jQuery: manual render 1000 items                             | 2,047.25     | 0.5365    | 2.6620   |
-| atom-effect: atomList render 1000 items                      | 290.82       | 3.6974    | 11.9840  |
-| atom-effect: atomList render 1000 items (with bind callback) | 99.14        | 10.4115   | 22.9100  |
-| Reconciliation: append 10 items to 100                       | 2,615.22     | 0.3824    | 0.8000   |
-| Reconciliation: prepend 10 items to 100                      | 2,653.00     | 0.3769    | 0.8000   |
-| Reconciliation: full shuffle 100 items                       | 3,234.31     | 0.3612    | 0.9000   |
-| Reconciliation: remove 50 items                              | 3,260.49     | 0.3595    | 0.9000   |
+| jQuery: manual render 1000 items | 1,400.42 | 0.7799 | 2.3000 |
+| atom-effect: atomList render 1000 items | 199.07 | 5.2905 | 14.3020 |
+| atom-effect: atomList render 1000 items (with bind callback) | 74.47 | 13.7740 | 26.6030 |
+| Reconciliation: append 10 items to 100 | 2,615.22 | 0.3824 | 0.8000 |
+| Reconciliation: prepend 10 items to 100 | 2,653.00 | 0.3769 | 0.8000 |
+| Reconciliation: full shuffle 100 items | 2,014.93 | 0.5392 | 1.2000 |
+| Reconciliation: remove 50 items | 2,000.95 | 0.5554 | 1.3000 |
 
 #### Mounting: Component Lifecycle
 
-| Benchmark Case                                          | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ------------------------------------------------------- | ------------ | --------- | -------- |
-| atomMount initial setup (100 elements)                  | 1,425.05     | 0.7802    | 2.4960   |
-| atomMount replacement (10 elements x 10 re-mounts)      | 3,826.60     | 0.3136    | 0.4000   |
-| atomUnmount (100 elements)                              | 1,526.47     | 1.1083    | 4.1500   |
-| mount and deep unmount (depth 4, breadth 3 ~ 120 nodes) | 10,538.12    | 0.0786    | 0.2000   |
+| atomMount initial setup (100 elements) | 994.14 | 1.1165 | 6.9200 |
+| atomMount replacement (10 elements x 10 re-mounts) | 2,609.10 | 0.4215 | 0.9000 |
+| atomUnmount (100 elements) | 934.96 | 1.1589 | 3.9600 |
+| mount and deep unmount (depth 4, breadth 3 ~ 120 nodes) | 8,440.85 | 0.1220 | 0.3000 |
 
 #### Sanitize: Safe Content & Vulnerability checks
 
-| Benchmark Case                                           | ops/sec (Hz)  | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | -------------------------------------------------------- | ------------- | --------- | -------- |
-| sanitize small safe HTML                                 | 16,280,249.11 | 0.0001    | 0.0000   |
-| sanitize medium safe HTML                                | 19,101,365.10 | 0.0001    | 0.0000   |
-| scrub blacklisted tags (script, iframe)                  | 19,200,812.21 | 0.0001    | 0.0000   |
-| scrub inline event attributes (onerror, onload, onclick) | 19,277,878.18 | 0.0001    | 0.0000   |
-| scrub recursively nested srcdoc payloads                 | 18,912,551.28 | 0.0001    | 0.0000   |
-| check safe vs unsafe URLs (100 runs)                     | 79,916.21     | 0.0113    | 0.1000   |
-| check safe vs unsafe CSS values (100 runs)               | 124,439.32    | 0.0075    | 0.1000   |
-| mitigate complex DOM Clobbering payload                  | 19,198,562.21 | 0.0001    | 0.0000   |
+| sanitize small safe HTML | 12,809,881.80 | 0.0001 | 0.0000 |
+| sanitize medium safe HTML | 13,381,572.31 | 0.0001 | 0.0000 |
+| scrub blacklisted tags (script, iframe) | 13,496,039.80 | 0.0001 | 0.0000 |
+| scrub inline event attributes (onerror, onload, onclick) | 13,658,419.32 | 0.0001 | 0.0000 |
+| scrub recursively nested srcdoc payloads | 14,000,497.09 | 0.0001 | 0.0000 |
+| check safe vs unsafe URLs (100 runs) | 49,493.52 | 0.0174 | 0.1000 |
+| check safe vs unsafe CSS values (100 runs) | 36,939.37 | 0.0224 | 0.1000 |
+| mitigate complex DOM Clobbering payload | 14,110,454.08 | 0.0001 | 0.0000 |
 
 #### Input Bindings: Event Propagation
 
-| Benchmark Case                                         | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ------------------------------------------------------ | ------------ | --------- | -------- |
-| Standard input event propagation (100 events)          | 6,068.06     | 0.2057    | 0.4000   |
-| IME Composition input overhead (50 composition cycles) | 4,409.66     | 0.2821    | 0.6000   |
-| Checkbox change event propagation (100 changes)        | 8,150.27     | 0.1396    | 0.3000   |
+| Standard input event propagation (100 events) | 2,967.98 | 0.3664 | 0.7000 |
+| IME Composition input overhead (50 composition cycles) | 2,393.54 | 0.4733 | 1.0000 |
+| Checkbox change event propagation (100 changes) | 5,262.09 | 0.2247 | 0.4000 |
 
 #### Effect Factory: Binding Initialization
 
-| Benchmark Case                                                   | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ---------------------------------------------------------------- | ------------ | --------- | -------- |
-| Single reactive binding setup (atomText x 100)                   | 1,649.90     | 0.6598    | 2.5850   |
-| Map reactive binding setup (atomClass with 5 keys x 20 elements) | 6,587.52     | 0.1820    | 0.3000   |
-| Synchronous path updates (10 elements x 50 updates)              | 11,572.31    | 0.0692    | 0.2000   |
-| Asynchronous path updates (10 elements x 50 updates)             | 9,890.26     | 0.0876    | 0.2000   |
+| Single reactive binding setup (atomText x 100) | 1,130.75 | 0.9491 | 2.6470 |
+| Map reactive binding setup (atomClass with 5 keys x 20 elements) | 3,927.57 | 0.2882 | 0.7000 |
+| Synchronous path updates (10 elements x 50 updates) | 8,791.25 | 0.1130 | 0.3000 |
+| Asynchronous path updates (10 elements x 50 updates) | 7,080.35 | 0.1695 | 0.4000 |
 
 #### Patch: jQuery method overrides overhead
 
-| Benchmark Case                                       | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ---------------------------------------------------- | ------------ | --------- | -------- |
-| text() - Patch disabled (Native jQuery, 1000 calls)  | 1,678.06     | 0.6152    | 0.9000   |
-| text() - Patch enabled (Reactive jQuery, 1000 calls) | 1,272.45     | 0.8287    | 1.1000   |
-| html() - Patch disabled (Native jQuery, 1000 calls)  | 723.82       | 2.1248    | 4.0200   |
-| html() - Patch enabled (Reactive jQuery, 1000 calls) | 719.90       | 1.4382    | 3.9100   |
+| text() - Patch disabled (Native jQuery, 1000 calls) | 1,046.65 | 0.9617 | 1.1000 |
+| text() - Patch enabled (Reactive jQuery, 1000 calls) | 788.96 | 1.2750 | 1.7000 |
+| html() - Patch disabled (Native jQuery, 1000 calls) | 442.18 | 2.2779 | 3.3240 |
+| html() - Patch enabled (Reactive jQuery, 1000 calls) | 415.15 | 2.4232 | 2.8760 |
 
 #### List Diffing: Reconciliation computation overhead (1000 items)
 
-| Benchmark Case                        | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ------------------------------------- | ------------ | --------- | -------- |
-| No-op (Same reference, no diffing)    | 210.67       | 5.5955    | 17.7070  |
-| Append 100 items (Tail insertion)     | 203.03       | 5.9435    | 20.6090  |
-| Prepend 100 items (Head insertion)    | 205.89       | 5.7855    | 18.5110  |
-| Reverse list (1000 items diff & swap) | 207.99       | 5.7130    | 19.3130  |
-| Filter/Remove 500 items               | 208.02       | 5.7635    | 18.3200  |
-| Clear all items                       | 216.44       | 5.5265    | 19.6030  |
+| No-op (Same reference, no diffing) | 171.85 | 6.9130 | 21.9080 |
+| Append 100 items (Tail insertion) | 169.51 | 7.1165 | 22.9030 |
+| Prepend 100 items (Head insertion) | 173.75 | 6.9290 | 21.9050 |
+| Reverse list (1000 items diff & swap) | 170.61 | 7.2660 | 24.5110 |
+| Filter/Remove 500 items | 174.15 | 6.9435 | 22.3060 |
+| Clear all items | 169.07 | 7.2820 | 25.8240 |
 
 #### Registry: Deep Tree Cleanup
 
-| Benchmark Case                                           | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | -------------------------------------------------------- | ------------ | --------- | -------- |
-| cleanup() - non-reactive 1000 elements tree scan         | 1,800.84     | 0.6020    | 1.6000   |
-| cleanup() - reactive 1000 elements tree (mixed bindings) | 280.95       | 3.7502    | 10.8240  |
+| cleanup() - non-reactive 1000 elements tree scan | 1,089.85 | 0.9625 | 2.5620 |
+| cleanup() - reactive 1000 elements tree (mixed bindings) | 209.94 | 5.1330 | 15.3050 |
 
 #### Debug Diagnostics: Runtime Overhead
 
-| Benchmark Case                                             | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ---------------------------------------------------------- | ------------ | --------- | -------- |
-| 100 elements x 20 updates (Debug Disabled)                 | 1,776.37     | 0.6214    | 0.8000   |
-| 100 elements x 20 updates (Debug Enabled - console mocked) | 569.32       | 2.2303    | 12.9600  |
+| 100 elements x 20 updates (Debug Disabled) | 1,079.88 | 1.0393 | 3.1180 |
+| 100 elements x 20 updates (Debug Enabled - console mocked) | 311.49 | 3.3919 | 12.2040 |
 
 ---
 
@@ -267,31 +267,31 @@ Refer to [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for further deta
 
 #### Todo App Scenarios
 
-| Scenario                                                                             | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Scenario | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | ------------------------------------------------------------------------------------ | ------------ | --------- | -------- |
-| Full Workflow (small): Add(20) → Toggle(10) → Filter(active) → Delete(5) → All       | 23,398.71    | 0.0339    | 0.1000   |
-| Full Workflow (large): Add(100) → Toggle(50) → Filter(active) → Delete(25) → All     | 20,223.55    | 0.0387    | 0.2000   |
-| Full Workflow (massive): Add(500) → Toggle(250) → Filter(active) → Delete(125) → All | 11,565.76    | 0.0684    | 0.2000   |
-| Batch Deletion (500 items -> delete 250 items at once)                               | 423.22       | 2.5142    | 8.1040   |
-| Filter Toggling (500 items -> toggle active/completed/all 10 times)                  | 404.28       | 2.6234    | 9.0870   |
+| Full Workflow (small): Add(20) → Toggle(10) → Filter(active) → Delete(5) → All | 32,366.36 | 0.0257 | 0.1000 |
+| Full Workflow (large): Add(100) → Toggle(50) → Filter(active) → Delete(25) → All | 27,754.90 | 0.0295 | 0.1000 |
+| Full Workflow (massive): Add(500) → Toggle(250) → Filter(active) → Delete(125) → All | 15,540.94 | 0.0500 | 0.2000 |
+| Batch Deletion (500 items -> delete 250 items at once) | 593.46 | 1.8412 | 7.5860 |
+| Filter Toggling (500 items -> toggle active/completed/all 10 times) | 552.32 | 1.9773 | 8.0420 |
 
 #### Dashboard & Reactive Topology
 
-| Scenario                                                        | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Scenario | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --------------------------------------------------------------- | ------------ | --------- | -------- |
-| 100 widgets batch update (50 rounds)                            | 69.67        | 14.7583   | 26.1900  |
-| Mount/Unmount 100 components (10 cycles)                        | 44.52        | 22.9182   | 34.8400  |
-| Deep Propagation: 10-level Chain → 100 DOM Widgets (50 updates) | 1,196.22     | 0.9063    | 2.9380   |
-| Fan-out: 1 Atom → 100 Computed → 100 DOM Bindings               | 1,155.30     | 0.9220    | 2.6700   |
-| Fan-in: 100 Atoms → 1 Computed → 1 DOM Binding                  | 208.97       | 4.8410    | 7.3000   |
+| 100 widgets batch update (50 rounds) | 114.67 | 9.1726 | 21.0220 |
+| Mount/Unmount 100 components (10 cycles) | 56.67 | 18.5556 | 36.7000 |
+| Deep Propagation: 10-level Chain → 100 DOM Widgets (50 updates) | 1,737.77 | 0.6359 | 2.3420 |
+| Fan-out: 1 Atom → 100 Computed → 100 DOM Bindings | 1,599.80 | 0.6888 | 2.4460 |
+| Fan-in: 100 Atoms → 1 Computed → 1 DOM Binding | 155.06 | 6.4754 | 7.7000 |
 
 #### atomForm O(1) Scaling
 
-| Scenario                                                  | ops/sec (Hz) | Mean (ms) | p99 (ms) |
+| Scenario | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | --------------------------------------------------------- | ------------ | --------- | -------- |
-| Update 1 field in 10-field form (x100)                    | 92,105.54    | 0.0099    | 0.1000   |
-| Update 1 field in 100-field form (x100)                   | 13,073.14    | 0.0583    | 0.2000   |
-| Update 1 field in 1000-field form (O(1) validation, x100) | 1,765.39     | 0.5755    | 0.8000   |
+| Update 1 field in 10-field form (x100) | 112,621.87 | 0.0082 | 0.1000 |
+| Update 1 field in 100-field form (x100) | 15,956.46 | 0.0476 | 0.2000 |
+| Update 1 field in 1000-field form (O(1) validation, x100) | 2,628.19 | 0.3932 | 0.7000 |
 
 > [!NOTE]
 > Field updates scale efficiently from 10 fields (851K ops/sec) to 100 fields (373.8K ops/sec) and 1000 fields (58.0K ops/sec), representing highly optimized performance across form sizes.
