@@ -4,10 +4,13 @@ import {
   nodeHasSubscription,
   nodeNotifySubscribers,
   nodeUnsubscribe,
+  resetTrackingContext,
+  runInTrackingContext,
+  trackingContext,
   untracked,
 } from '@/core/base';
 import { atom, computed, effect } from '@/index';
-import type { ReactiveNode, SubscriberTarget } from '@/types';
+import type { DependencySubscriber, ReactiveNode, SubscriberTarget } from '@/types';
 
 describe('BaseEngine (base.ts)', () => {
   describe('Tracking Context Primitives', () => {
@@ -40,6 +43,69 @@ describe('BaseEngine (base.ts)', () => {
             throw new Error('baz');
           })
         ).toThrow('baz');
+      });
+    });
+
+    describe('trackingContext.current restoration', () => {
+      const makeSubscriber = (): DependencySubscriber => ({ addDependency: () => {} });
+
+      it('restores the outer subscriber after nested runInTrackingContext', () => {
+        const outer = makeSubscriber();
+        const inner = makeSubscriber();
+        const seen: unknown[] = [];
+
+        runInTrackingContext(outer, () => {
+          seen.push(trackingContext.current);
+          runInTrackingContext(inner, () => seen.push(trackingContext.current));
+          seen.push(trackingContext.current);
+        });
+
+        expect(seen).toEqual([outer, inner, outer]);
+        expect(trackingContext.current).toBeNull();
+      });
+
+      it('restores the outer subscriber when the callback throws', () => {
+        const outer = makeSubscriber();
+        const inner = makeSubscriber();
+
+        runInTrackingContext(outer, () => {
+          expect(() =>
+            runInTrackingContext(inner, () => {
+              throw new Error('boom');
+            })
+          ).toThrow('boom');
+          expect(trackingContext.current).toBe(outer);
+        });
+
+        expect(trackingContext.current).toBeNull();
+      });
+
+      it('suppresses tracking inside untracked and restores it afterwards, including on throw', () => {
+        const outer = makeSubscriber();
+
+        runInTrackingContext(outer, () => {
+          untracked(() => {
+            expect(trackingContext.current).toBeNull();
+            untracked(() => expect(trackingContext.current).toBeNull());
+            expect(trackingContext.current).toBeNull();
+          });
+          expect(trackingContext.current).toBe(outer);
+
+          expect(() =>
+            untracked(() => {
+              throw new Error('boom');
+            })
+          ).toThrow('boom');
+          expect(trackingContext.current).toBe(outer);
+        });
+
+        expect(trackingContext.current).toBeNull();
+      });
+
+      it('resetTrackingContext clears an active subscriber', () => {
+        trackingContext.current = makeSubscriber();
+        resetTrackingContext();
+        expect(trackingContext.current).toBeNull();
       });
     });
 

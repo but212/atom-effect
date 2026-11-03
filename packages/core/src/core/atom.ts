@@ -20,7 +20,6 @@ import {
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
   IS_DEV,
-  KIND,
   SCHEDULER_CONFIG,
 } from '@/constants';
 import {
@@ -55,7 +54,6 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   version: number = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   _nextEpoch: number | undefined = undefined;
-  _kind: typeof KIND.Obj = KIND.Obj;
   readonly id: DependencyId = generateId();
 
   _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;

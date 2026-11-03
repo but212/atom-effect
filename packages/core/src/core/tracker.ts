@@ -11,7 +11,6 @@
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { KIND } from '@/constants';
 import type {
   Dependency,
   DependencyId,
@@ -36,7 +35,6 @@ let trackingSessionEpoch = 0;
 export abstract class ReactiveTracker implements ReactiveDependencyTracker, DependencySubscriber {
   flags: number = 0;
   readonly id: DependencyId = generateId();
-  readonly _kind: typeof KIND.Obj = KIND.Obj;
 
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
   _depFlags: number = BUFFER_FLAGS.NONE;

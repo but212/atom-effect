@@ -7,7 +7,7 @@
  */
 
 import type { Equal, Merge, Prettify, SlotBuffer } from '@but212/atom-effect-utils';
-import type { AsyncState, BRAND, KIND } from '@/constants';
+import type { AsyncState, BRAND } from '@/constants';
 import type { AtomError } from '@/utils/errors';
 
 /**
@@ -204,13 +204,7 @@ export interface DependencyLink {
  * @internal
  */
 export interface ReactiveNode<T = unknown> extends Dependency<T>, Disposable {
-  readonly id: DependencyId;
-  flags: number;
-  version: number;
-  _lastSeenEpoch: number;
-  _error?: Error | null;
   readonly isRejected: boolean;
-  _kind?: typeof KIND.Obj | undefined;
   _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null;
 }
 
@@ -219,24 +213,11 @@ export interface ReactiveNode<T = unknown> extends Dependency<T>, Disposable {
  * @internal
  */
 export interface ReactiveDependencyTracker extends IdentifiableNode {
-  readonly id: DependencyId;
   flags: number;
   _depSlots: SlotBuffer<DependencyLink>;
   _depFlags: number;
   _trackEpoch: number;
   _trackCount: number;
-}
-
-/**
- * Manages the global state of active computations to ensure correct
- * association between dependencies and their consumers.
- * @internal
- */
-export interface TrackingContext {
-  /** The stack of parent computations currently being evaluated. */
-  stack: (DependencySubscriber | null)[];
-  /** The current active subscriber recording dependencies. */
-  current: DependencySubscriber | null;
 }
 
 /**
@@ -264,8 +245,6 @@ export interface SchedulerJobObject {
   execute(): void;
   /** Tracks the scheduler epoch in which this job was last added. */
   _nextEpoch?: number | undefined;
-  /** Discriminator used for low-overhead dispatching. */
-  _kind?: typeof KIND.Obj | undefined;
   /**
    * Called when the scheduler discards this job for good (overflow with no retry left),
    * so the owner can release any "already queued" state it keeps.
@@ -282,8 +261,6 @@ export interface SchedulerJobFunction {
   (): void;
   /** Tracks the scheduler epoch to prevent duplicate scheduling. */
   _nextEpoch?: number | undefined;
-  /** Discriminator used for low-overhead dispatching. */
-  _kind?: typeof KIND.Fn | undefined;
 }
 
 /**

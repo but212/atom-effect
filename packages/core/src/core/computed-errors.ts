@@ -6,14 +6,12 @@
  */
 
 import { COMPUTED_STATE_FLAGS } from '@/constants';
-import type { Dependency, DependencyId, ReactiveDependencyTracker } from '@/types';
+import type { Dependency, ReactiveDependencyTracker } from '@/types';
 import { BUFFER_FLAGS } from './buffers';
 
 function isDependencyTracker(node: unknown): node is ReactiveDependencyTracker {
   return node != null && typeof node === 'object' && '_depSlots' in node;
 }
-
-export type ErrorTraversableNode = { id: DependencyId; flags: number; _error?: Error | null };
 
 /**
  * Logic: Error Collection (Graph Traversal)
@@ -21,14 +19,11 @@ export type ErrorTraversableNode = { id: DependencyId; flags: number; _error?: E
  * a visited set to handle potential cycles or diamonds.
  * @internal
  */
-export function collectErrorsRecursive(
-  startNode: ErrorTraversableNode,
-  stopOnFirst: boolean
-): Error[] {
+export function collectErrorsRecursive(startNode: Dependency, stopOnFirst: boolean): Error[] {
   const collected: Error[] = [];
   const seen = new Set<number>();
 
-  const walk = (node: ErrorTraversableNode | Dependency): boolean => {
+  const walk = (node: Dependency): boolean => {
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 

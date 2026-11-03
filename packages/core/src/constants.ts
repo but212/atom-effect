@@ -82,16 +82,6 @@ export const BRAND_IDENTITY_MAP = {
 } as const;
 
 /**
- * @internal
- * Optimization: Differentiates between function-based and object-based subscribers.
- * Avoids expensive `typeof` or `instanceof` checks on the propagation hot path.
- */
-export const KIND = {
-  Fn: 0,
-  Obj: 1,
-} as const;
-
-/**
  * States representing the execution phase of asynchronous reactive nodes.
  *
  * When to use:

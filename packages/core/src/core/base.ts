@@ -13,32 +13,23 @@
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, STATE_FLAGS } from '@/constants';
-import type {
-  DependencySubscriber,
-  ReactiveNode,
-  SubscriberTarget,
-  TrackingContext,
-} from '@/types';
+import type { DependencySubscriber, ReactiveNode, SubscriberTarget } from '@/types';
 import { AtomError, wrapError } from '@/utils';
 
 /**
  * Role: Global singleton orchestrating the current reactive tracking state.
  * @internal
  */
-export const trackingContext: TrackingContext = { stack: [], current: null };
+export const trackingContext: { current: DependencySubscriber | null } = { current: null };
 
-function pushTrackingSubscriber(subscriber: DependencySubscriber | null): void {
-  trackingContext.stack.push(subscriber);
+function runWithSubscriber<T>(subscriber: DependencySubscriber | null, callback: () => T): T {
+  const previous = trackingContext.current;
   trackingContext.current = subscriber;
-}
-
-function popTrackingSubscriber(): void {
-  const trackingSubscriberStack = trackingContext.stack;
-  trackingSubscriberStack.pop();
-  trackingContext.current =
-    trackingSubscriberStack.length > 0
-      ? (trackingSubscriberStack[trackingSubscriberStack.length - 1] ?? null)
-      : null;
+  try {
+    return callback();
+  } finally {
+    trackingContext.current = previous;
+  }
 }
 
 /**
@@ -47,20 +38,13 @@ function popTrackingSubscriber(): void {
  * @internal
  */
 export function runInTrackingContext<T>(subscriber: DependencySubscriber, callback: () => T): T {
-  // Optimization: Skip stack operations if already in the target context.
+  // Optimization: Skip save/restore if already in the target context.
   if (trackingContext.current === subscriber) return callback();
-
-  pushTrackingSubscriber(subscriber);
-  try {
-    return callback();
-  } finally {
-    popTrackingSubscriber();
-  }
+  return runWithSubscriber(subscriber, callback);
 }
 
 /** @internal */
 export function resetTrackingContext(): void {
-  trackingContext.stack.length = 0;
   trackingContext.current = null;
 }
 
@@ -89,13 +73,7 @@ export function resetTrackingContext(): void {
  */
 export function untracked<T>(callback: () => T): T {
   if (trackingContext.current === null) return callback();
-
-  pushTrackingSubscriber(null);
-  try {
-    return callback();
-  } finally {
-    popTrackingSubscriber();
-  }
+  return runWithSubscriber(null, callback);
 }
 
 /**
@@ -174,11 +152,8 @@ export function nodeNotifySubscribers<T>(
   const slots = node._subscriberSlots;
   if (slots == null || slots.size === 0) return;
 
-  const isTracking = trackingContext.current !== null;
-
-  if (isTracking) {
-    pushTrackingSubscriber(null);
-  }
+  const previousSubscriber = trackingContext.current;
+  trackingContext.current = null;
 
   slots.lock();
   try {
@@ -202,9 +177,7 @@ export function nodeNotifySubscribers<T>(
       }
     }
   } finally {
-    if (isTracking) {
-      popTrackingSubscriber();
-    }
+    trackingContext.current = previousSubscriber;
     slots.unlock();
   }
 }

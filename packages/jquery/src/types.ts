@@ -10,12 +10,7 @@
  * ensuring compatibility with the underlying atom-effect core.
  */
 
-import type {
-  AtomOptions as BaseAtomOptions,
-  EffectCleanup,
-  ReadonlyAtom,
-  WritableAtom,
-} from '@but212/atom-effect';
+import type { EffectCleanup, ReadonlyAtom, WritableAtom } from '@but212/atom-effect';
 
 /**
  * Role: Lifecycle Teardown
@@ -35,19 +30,6 @@ export type EffectResult = undefined | EffectCleanup | ComponentLifecycle;
  * logically equivalent, even if object references have changed.
  */
 export type EqualFn<T> = (first: T, second: T) => boolean;
-
-/**
- * Configuration options for creating reactive atoms.
- *
- * When to use:
- * - When creating a new state atom that requires a name for diagnostics
- *   or specific update scheduling (sync vs batched).
- *
- * @public
- * @example
- * const count = atom(0, { name: 'counter', sync: true });
- */
-export type AtomOptions<T = unknown> = BaseAtomOptions<T>;
 
 /**
  * Logic: Polymorphic Input

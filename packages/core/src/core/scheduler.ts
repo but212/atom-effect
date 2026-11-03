@@ -13,15 +13,8 @@
  */
 
 import { Result } from '@but212/atom-effect-utils';
-import {
-  ERROR_MESSAGES,
-  IS_DEV,
-  KIND,
-  LOG_PREFIX,
-  SCHEDULER_CONFIG,
-  SCHEDULER_STATE,
-} from '@/constants';
-import type { JobBuffer, SchedulerJob, SchedulerJobObject } from '@/types';
+import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, SCHEDULER_CONFIG, SCHEDULER_STATE } from '@/constants';
+import type { JobBuffer, SchedulerJob } from '@/types';
 import { nextSmi, SchedulerError } from '@/utils';
 
 import { resetTrackingContext } from './base';
@@ -138,7 +131,6 @@ class ReactiveScheduler {
     this.#activeJobBuffer.size = 0;
 
     this.nextEpoch();
-    const functionKind = KIND.Fn;
     this.#processingJobs = activeJobs;
 
     for (let i = 0; i < activeJobsCount; i++) {
@@ -148,13 +140,10 @@ class ReactiveScheduler {
       activeJobs[i] = undefined;
 
       try {
-        if (job._kind === functionKind) {
+        if (typeof job === 'function') {
           job();
         } else {
-          const executionResult = (job as SchedulerJobObject).execute() as Result<
-            void,
-            Error
-          > | void;
+          const executionResult = job.execute() as Result<void, Error> | void;
           if (executionResult !== undefined && Result.isErr(executionResult)) {
             const executionError = executionResult.error;
             if (!(executionError instanceof AggregateExecutionLimitError)) {
@@ -384,10 +373,6 @@ class ReactiveScheduler {
 
     if (schedulerJob._nextEpoch === this.#epoch) return Result.ok(undefined);
     schedulerJob._nextEpoch = this.#epoch;
-
-    if (schedulerJob._kind === undefined) {
-      schedulerJob._kind = typeof schedulerJob === 'function' ? KIND.Fn : KIND.Obj;
-    }
 
     const target = this.#activeJobBuffer;
     target.items[target.size++] = schedulerJob;
