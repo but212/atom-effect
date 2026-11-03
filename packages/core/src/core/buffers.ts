@@ -16,8 +16,7 @@ export const BUFFER_FLAGS = {
   HAS_COMPUTEDS: 1 << 0,
 } as const;
 
-/** @internal */
-export function refreshDepFlags(state: ReactiveDependencyTracker): void {
+function refreshDepFlags(state: ReactiveDependencyTracker): void {
   let flags = state._depFlags & ~BUFFER_FLAGS.HAS_COMPUTEDS;
   const slots = state._depSlots;
 

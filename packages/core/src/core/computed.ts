@@ -448,8 +448,6 @@ class ComputedAtomImpl<T>
 
   /** @internal - Interface for the global scheduler. */
   execute(): void {
-    if ((this.flags & (COMPUTED_STATE_FLAGS.RECOMPUTING | COMPUTED_STATE_FLAGS.DIRTY)) !== 0)
-      return;
     this.#markDirty();
   }
 

@@ -87,6 +87,54 @@ describe('ReactiveTracker (tracker.ts)', () => {
     expect((tracker._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0).toBe(true);
   });
 
+  describe('HAS_COMPUTEDS mirrors slot contents (I-01)', () => {
+    const hasComputeds = (t: TestTracker) => (t._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0;
+
+    it('clears the flag when a committed session drops the last computed', () => {
+      const tracker = new TestTracker();
+      const source = atom(1);
+      const derived = computed(() => source.value * 2);
+
+      tracker.startTracking();
+      tracker.trackDependency(derived as unknown as Dependency, () => {});
+      tracker.commitDeps();
+      expect(hasComputeds(tracker)).toBe(true);
+
+      tracker.startTracking();
+      tracker.trackDependency(source as unknown as Dependency, () => {});
+      tracker.commitDeps();
+      expect(hasComputeds(tracker)).toBe(false);
+    });
+
+    it('keeps the flag when a session starts but is never committed', () => {
+      const tracker = new TestTracker();
+      const source = atom(1);
+      const derived = computed(() => source.value * 2);
+
+      tracker.startTracking();
+      tracker.trackDependency(derived as unknown as Dependency, () => {});
+      tracker.commitDeps();
+
+      tracker.startTracking();
+      tracker.trackDependency(source as unknown as Dependency, () => {});
+
+      expect(tracker._depSlots.size).toBe(2);
+      expect(hasComputeds(tracker)).toBe(true);
+    });
+
+    it('stays clear across startTracking() when only atoms are held', () => {
+      const tracker = new TestTracker();
+      const source = atom(1);
+
+      tracker.startTracking();
+      tracker.trackDependency(source as unknown as Dependency, () => {});
+      tracker.commitDeps();
+
+      tracker.startTracking();
+      expect(hasComputeds(tracker)).toBe(false);
+    });
+  });
+
   it('truncates unvisited dependencies on commitDeps()', () => {
     const tracker = new TestTracker();
     const atomA = atom('a');

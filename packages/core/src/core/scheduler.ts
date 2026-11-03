@@ -133,7 +133,7 @@ class ReactiveScheduler {
     this.#standbyJobBuffer = activeJobBuffer;
     this.#activeJobBuffer.size = 0;
 
-    this.nextEpoch();
+    this.#epoch = nextSmi(this.#epoch);
     this.#processingJobs = activeJobs;
 
     for (let i = 0; i < activeJobsCount; i++) {
@@ -313,11 +313,6 @@ class ReactiveScheduler {
         { cause: new AggregateExecutionLimitError() }
       )
     );
-  }
-
-  nextEpoch(): number {
-    this.#epoch = nextSmi(this.#epoch);
-    return this.#epoch;
   }
 
   /** @internal - Starts a new flush session. */

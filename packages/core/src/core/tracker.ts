@@ -26,7 +26,6 @@ import {
   depBufferTruncateFrom,
   insertNew,
   isBufferDirty,
-  refreshDepFlags,
 } from './buffers';
 
 let trackingSessionEpoch = 0;
@@ -52,7 +51,6 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
     const epoch = trackingSessionEpoch;
     this._trackEpoch = epoch;
     this._trackCount = 0;
-    refreshDepFlags(this);
     return epoch;
   }
 
