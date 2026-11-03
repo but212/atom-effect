@@ -53,7 +53,6 @@ import {
 } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, isBufferDirty, isBufferShallowDirty } from './buffers';
-import { collectErrorsRecursive } from './computed-errors';
 import { ReactiveTracker } from './tracker';
 
 /**
@@ -87,11 +86,10 @@ class ComputedAtomImpl<T>
   implements ComputedAtom<T>, Subscriber, ReactiveNode<T>
 {
   // Logic: Engine-exposed state (Public fields for monomorphic performance)
-  public flags: number =
-    COMPUTED_STATE_FLAGS.IS_COMPUTED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
+  public flags: number = COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
   public version: number = 0;
   public _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
-  public _nextEpoch: number | undefined = undefined;
+  public readonly isComputed = true;
   public _error: Error | null = null;
 
   public _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
@@ -100,8 +98,7 @@ class ComputedAtomImpl<T>
   public readonly [BRAND] = BrandFlags.Atom | BrandFlags.Computed;
 
   // Logic: Strictly encapsulated state
-  #activeSessionId = 0;
-  #sessionCounter = 0;
+  #asyncSession = 0;
 
   #value: T;
   #isEqual: (a: T, b: T) => boolean;
@@ -131,9 +128,6 @@ class ComputedAtomImpl<T>
   }
   get isDisposed(): boolean {
     return (this.flags & COMPUTED_STATE_FLAGS.DISPOSED) !== 0;
-  }
-  get isComputed(): boolean {
-    return true;
   }
   get isRejected(): boolean {
     trackingContext.current?.addDependency(this);
@@ -324,10 +318,7 @@ class ComputedAtomImpl<T>
     this._subscriberSlots?.clear();
     this.#releaseComputationState();
     this.flags =
-      COMPUTED_STATE_FLAGS.DISPOSED |
-      COMPUTED_STATE_FLAGS.IS_COMPUTED |
-      COMPUTED_STATE_FLAGS.DIRTY |
-      COMPUTED_STATE_FLAGS.IDLE;
+      COMPUTED_STATE_FLAGS.DISPOSED | COMPUTED_STATE_FLAGS.DIRTY | COMPUTED_STATE_FLAGS.IDLE;
 
     this._error = null;
   }
@@ -387,8 +378,7 @@ class ComputedAtomImpl<T>
    * to discard results from computation cycles that are no longer valid.
    */
   #handleAsyncComputation(promise: Promise<T>): void {
-    const flushSessionId = ++this.#sessionCounter;
-    this.#activeSessionId = flushSessionId;
+    const flushSessionId = ++this.#asyncSession;
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.PENDING;
@@ -396,7 +386,7 @@ class ComputedAtomImpl<T>
 
     promise.then(
       (result) => {
-        if (this.#activeSessionId !== flushSessionId || this.isDisposed) return;
+        if (this.#asyncSession !== flushSessionId || this.isDisposed) return;
 
         // Logic: Stale Result Suppression
         // If the node became dirty during the wait, defer resolution.
@@ -406,7 +396,7 @@ class ComputedAtomImpl<T>
         nodeNotifySubscribers(this, result, undefined);
       },
       (error) => {
-        if (this.#activeSessionId !== flushSessionId || this.isDisposed) return;
+        if (this.#asyncSession !== flushSessionId || this.isDisposed) return;
         if (this.isDirty || this.hasDirtyDeps()) return this.#markDirty();
         this.#handleError(error, ERROR_MESSAGES.COMPUTED_ASYNC_COMPUTATION_FAILED);
       }
@@ -483,6 +473,42 @@ class ComputedAtomImpl<T>
     debug.trackUpdate(this.id, debug.getDebugName(this));
     nodeNotifySubscribers(this, undefined, undefined);
   }
+}
+
+/**
+ * Logic: Error Collection (Graph Traversal)
+ * Crawls the computed sub-graph to collect errors, tracking visited nodes
+ * to handle diamonds.
+ * @internal
+ */
+type ErrorBearingTracker = ReactiveTracker & { _error: Error | null };
+
+function collectErrorsRecursive(startNode: ErrorBearingTracker, stopOnFirst: boolean) {
+  const collected: Error[] = [];
+  const seen = new Set<number>();
+
+  const walk = (node: ErrorBearingTracker): boolean => {
+    if (seen.has(node.id)) return false;
+    seen.add(node.id);
+
+    if (node._error) {
+      collected.push(node._error);
+      if (stopOnFirst) return true;
+    }
+
+    if ((node._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
+      const slots = node._depSlots;
+      const slotsLength = slots.length;
+      for (let i = 0; i < slotsLength; i++) {
+        const dependency = slots.at(i)?.node;
+        if (dependency instanceof ComputedAtomImpl && walk(dependency)) return true;
+      }
+    }
+    return false;
+  };
+
+  walk(startNode);
+  return collected;
 }
 
 /**

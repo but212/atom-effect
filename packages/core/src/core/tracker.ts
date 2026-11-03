@@ -24,7 +24,6 @@ import {
   BUFFER_FLAGS,
   claimExisting,
   depBufferTruncateFrom,
-  disposeAll,
   insertNew,
   isBufferDirty,
   refreshDepFlags,
@@ -103,7 +102,7 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * Disposes of all dependency links and resets dependency flags.
    */
   disposeDeps(): void {
-    disposeAll(this);
+    depBufferTruncateFrom(this, 0);
   }
 
   /**

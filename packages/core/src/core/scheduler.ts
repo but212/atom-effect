@@ -17,7 +17,7 @@ import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, SCHEDULER_CONFIG, SCHEDULER_STATE }
 import type { JobBuffer, SchedulerJob } from '@/types';
 import { nextSmi, SchedulerError } from '@/utils';
 
-import { resetTrackingContext } from './base';
+import { trackingContext } from './base';
 
 class AggregateExecutionLimitError extends Error {
   constructor() {
@@ -62,6 +62,9 @@ class ReactiveScheduler {
   }
   get maxFlushIterations() {
     return this.#maxFlushIterations;
+  }
+  get isBatching() {
+    return (this.#state & SCHEDULER_STATE.BATCHING) !== 0;
   }
   get isSessionActive() {
     return this.#isSessionActive;
@@ -189,7 +192,7 @@ class ReactiveScheduler {
         if (this.#activeJobBuffer.size === 0) return;
         this.flushQueues();
       } catch (microtaskError) {
-        resetTrackingContext();
+        trackingContext.current = null;
         throw microtaskError;
       } finally {
         this.#state &= ~SCHEDULER_STATE.PROCESSING;
@@ -419,13 +422,6 @@ export const scheduler = new ReactiveScheduler();
 export function isAggregateExecutionLimitError(error: Error): boolean {
   return error instanceof AggregateExecutionLimitError;
 }
-
-/** @internal */
-export const schedulerSchedule = (state: ReactiveScheduler, callback: SchedulerJob) =>
-  Result.unwrap(state.schedule(callback));
-/** @internal */
-export const schedulerIsBatching = (state: ReactiveScheduler) =>
-  (state.state & SCHEDULER_STATE.BATCHING) !== 0;
 
 /**
  * Logic: Atomic Update Batching

@@ -27,12 +27,7 @@ import { runInTrackingContext } from '@/core/base';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions, Subscriber } from '@/types';
 import { debug, EffectError, wrapError } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import {
-  isAggregateExecutionLimitError,
-  runInFlushScope,
-  scheduler,
-  schedulerSchedule,
-} from './scheduler';
+import { isAggregateExecutionLimitError, runInFlushScope, scheduler } from './scheduler';
 import { ReactiveTracker } from './tracker';
 
 const EMPTY_EFFECT: EffectFunction = () => undefined;
@@ -80,7 +75,7 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
               console.error(executionResult.error);
             }
           }
-        : () => schedulerSchedule(scheduler, this);
+        : () => Result.unwrap(scheduler.schedule(this));
 
     if (IS_DEV) debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }

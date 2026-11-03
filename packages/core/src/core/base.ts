@@ -43,11 +43,6 @@ export function runInTrackingContext<T>(subscriber: DependencySubscriber, callba
   return runWithSubscriber(subscriber, callback);
 }
 
-/** @internal */
-export function resetTrackingContext(): void {
-  trackingContext.current = null;
-}
-
 /**
  * Executes a scope where reactive dependencies are suppressed.
  *
@@ -107,29 +102,18 @@ export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarg
   node._subscriberSlots ??= new SlotBuffer<SubscriberTarget<T>>();
   const slots = node._subscriberSlots;
 
-  if (nodeHasSubscription(node, listener)) {
+  if (slots.has(listener)) {
     if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
     return () => {};
   }
 
   slots.push(listener);
-  let targetNode: ReactiveNode<T> | undefined = node;
-  let subscriberListener: SubscriberTarget<T> | undefined = listener;
+  let subscribed = true;
   return () => {
-    if (targetNode && subscriberListener) {
-      nodeUnsubscribe(targetNode, subscriberListener);
-      targetNode = undefined;
-      subscriberListener = undefined;
-    }
+    if (!subscribed) return;
+    subscribed = false;
+    slots.remove(listener);
   };
-}
-
-/** @internal */
-export function nodeUnsubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): void {
-  const slots = node._subscriberSlots;
-  if (slots == null) return;
-
-  slots.remove(listener);
 }
 
 /**
@@ -180,21 +164,6 @@ export function nodeNotifySubscribers<T>(
     trackingContext.current = previousSubscriber;
     slots.unlock();
   }
-}
-
-/** @internal */
-export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown): boolean {
-  const slots = node._subscriberSlots;
-  if (slots == null || slots.size === 0) return false;
-
-  const slotsLength = slots.length;
-  for (let i = 0; i < slotsLength; i++) {
-    const subscriber = slots.at(i);
-    if (subscriber != null && subscriber === listener) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /** @internal - Returns active listener count. */

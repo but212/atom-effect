@@ -207,7 +207,6 @@ export const IS_DEV = (() => {
  */
 const FLAGS = {
   DISPOSED: 1 << 0,
-  IS_COMPUTED: 1 << 1,
 
   DIRTY: 1 << 8,
   RECOMPUTING: 1 << 9,
@@ -261,7 +260,6 @@ export const EFFECT_STATE_FLAGS = {
  */
 export const COMPUTED_STATE_FLAGS = {
   DISPOSED: FLAGS.DISPOSED,
-  IS_COMPUTED: FLAGS.IS_COMPUTED,
   DIRTY: FLAGS.DIRTY,
   IDLE: FLAGS.IDLE,
   PENDING: FLAGS.PENDING,

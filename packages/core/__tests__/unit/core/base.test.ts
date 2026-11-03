@@ -1,16 +1,13 @@
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
 import {
-  nodeHasSubscription,
   nodeNotifySubscribers,
-  nodeUnsubscribe,
-  resetTrackingContext,
   runInTrackingContext,
   trackingContext,
   untracked,
 } from '@/core/base';
 import { atom, computed, effect } from '@/index';
-import type { DependencySubscriber, ReactiveNode, SubscriberTarget } from '@/types';
+import type { DependencySubscriber, ReactiveNode } from '@/types';
 
 describe('BaseEngine (base.ts)', () => {
   describe('Tracking Context Primitives', () => {
@@ -101,12 +98,6 @@ describe('BaseEngine (base.ts)', () => {
 
         expect(trackingContext.current).toBeNull();
       });
-
-      it('resetTrackingContext clears an active subscriber', () => {
-        trackingContext.current = makeSubscriber();
-        resetTrackingContext();
-        expect(trackingContext.current).toBeNull();
-      });
     });
 
     describe('Asynchronous tracking boundaries (Limitations)', () => {
@@ -160,13 +151,30 @@ describe('BaseEngine (base.ts)', () => {
   });
 
   describe('Internal Engine API Functions', () => {
-    describe('nodeUnsubscribe()', () => {
-      it('handles undefined slots gracefully without throwing TypeError', () => {
-        const mockNode = {} as ReactiveNode<void>;
-        const mockLink = (() => {}) as SubscriberTarget<void>;
-        expect(() => {
-          nodeUnsubscribe(mockNode, mockLink);
-        }).not.toThrow();
+    describe('nodeSubscribe() release handle', () => {
+      it('is idempotent: repeated calls leave the subscriber count at zero', () => {
+        const source = atom(0);
+        const unsubscribe = source.subscribe(() => {});
+        expect(source.subscriberCount()).toBe(1);
+
+        unsubscribe();
+        unsubscribe();
+        expect(source.subscriberCount()).toBe(0);
+        source.dispose();
+      });
+
+      it('ignores a duplicate listener and keeps the original subscription', () => {
+        const source = atom(0);
+        const listener = () => {};
+        const first = source.subscribe(listener);
+        const second = source.subscribe(listener);
+
+        expect(source.subscriberCount()).toBe(1);
+        second();
+        expect(source.subscriberCount()).toBe(1);
+        first();
+        expect(source.subscriberCount()).toBe(0);
+        source.dispose();
       });
     });
 
@@ -175,15 +183,6 @@ describe('BaseEngine (base.ts)', () => {
         const mockNode = {} as ReactiveNode<void>;
         expect(() => {
           nodeNotifySubscribers(mockNode, undefined, undefined);
-        }).not.toThrow();
-      });
-    });
-
-    describe('nodeHasSubscription()', () => {
-      it('handles undefined slots gracefully without throwing TypeError', () => {
-        const mockNode = {} as ReactiveNode<void>;
-        expect(() => {
-          nodeHasSubscription(mockNode, () => {});
         }).not.toThrow();
       });
     });

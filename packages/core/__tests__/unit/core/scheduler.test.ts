@@ -3,25 +3,18 @@ import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it, vi } from 'vitest';
 import { SCHEDULER_STATE } from '@/constants';
 import { trackingContext } from '@/core/base';
-import {
-  aeNextTick,
-  batch,
-  runInFlushScope,
-  scheduler,
-  schedulerIsBatching,
-  schedulerSchedule,
-} from '@/core/scheduler';
+import { aeNextTick, batch, runInFlushScope, scheduler } from '@/core/scheduler';
 import { atom, computed, effect, SCHEDULER_CONFIG, SchedulerError } from '@/index';
 
 describe('Scheduler Engine', () => {
-  describe('schedulerSchedule()', () => {
+  describe('scheduler.schedule()', () => {
     it('manages job lifecycle: deduplication, async execution, and queue drainage', async () => {
       const job1 = vi.fn();
       const job2 = vi.fn();
 
-      schedulerSchedule(scheduler, job1);
-      schedulerSchedule(scheduler, job1);
-      schedulerSchedule(scheduler, job2);
+      scheduler.schedule(job1);
+      scheduler.schedule(job1);
+      scheduler.schedule(job2);
 
       expect(scheduler.queueSize).toBe(2);
       expect(job1).not.toHaveBeenCalled();
@@ -38,11 +31,11 @@ describe('Scheduler Engine', () => {
       const nestedJob = vi.fn(() => log.push('nested'));
       const initialJob = vi.fn(() => {
         log.push('initial');
-        schedulerSchedule(scheduler, nestedJob);
+        scheduler.schedule(nestedJob);
         expect(scheduler.queueSize).toBe(1);
       });
 
-      schedulerSchedule(scheduler, initialJob);
+      scheduler.schedule(initialJob);
       await sleep(10);
 
       expect(log).toEqual(['initial', 'nested']);
@@ -52,7 +45,8 @@ describe('Scheduler Engine', () => {
 
     it('rejects invalid scheduler callback types', () => {
       // @ts-expect-error Testing invalid callback type
-      expect(() => schedulerSchedule(scheduler, null)).toThrow(SchedulerError);
+      const result = scheduler.schedule(null);
+      expect(Result.isErr(result) && result.error).toBeInstanceOf(SchedulerError);
     });
 
     it('preserves job deduplication when computed evaluations or tracking sessions intervene', async () => {
@@ -60,9 +54,9 @@ describe('Scheduler Engine', () => {
       const c = computed(() => a.value * 2);
       const job = vi.fn();
 
-      schedulerSchedule(scheduler, job);
+      scheduler.schedule(job);
       expect(c.value).toBe(2);
-      schedulerSchedule(scheduler, job);
+      scheduler.schedule(job);
 
       expect(scheduler.queueSize).toBe(1);
 
@@ -119,7 +113,7 @@ describe('Scheduler Engine', () => {
       }).toThrow('batch-fail');
 
       expect(someAtom.value).toBe(42);
-      expect(schedulerIsBatching(scheduler)).toBe(false);
+      expect(scheduler.isBatching).toBe(false);
       consoleError.mockRestore();
     });
 
@@ -193,8 +187,8 @@ describe('Scheduler Engine', () => {
       });
       const successJob = vi.fn();
 
-      schedulerSchedule(scheduler, failingJob);
-      schedulerSchedule(scheduler, successJob);
+      scheduler.schedule(failingJob);
+      scheduler.schedule(successJob);
 
       await sleep(10);
 
@@ -213,8 +207,8 @@ describe('Scheduler Engine', () => {
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
       scheduler.maxFlushIterations = 10;
 
-      const loop = () => schedulerSchedule(scheduler, loop);
-      schedulerSchedule(scheduler, loop);
+      const loop = () => scheduler.schedule(loop);
+      scheduler.schedule(loop);
 
       // One-shot recovery re-queues dropped jobs once; the second overflow is
       // terminal, after which the queue is fully drained again.
@@ -238,8 +232,8 @@ describe('Scheduler Engine', () => {
       const originalMax = SCHEDULER_CONFIG.MAX_FLUSH_ITERATIONS;
       scheduler.maxFlushIterations = 10;
 
-      const loop = () => schedulerSchedule(scheduler, loop);
-      schedulerSchedule(scheduler, loop);
+      const loop = () => scheduler.schedule(loop);
+      scheduler.schedule(loop);
 
       await sleep(20);
 
@@ -262,9 +256,9 @@ describe('Scheduler Engine', () => {
       let executions = 0;
       const convergingJob = () => {
         executions++;
-        if (executions < 100) schedulerSchedule(scheduler, convergingJob);
+        if (executions < 100) scheduler.schedule(convergingJob);
       };
-      schedulerSchedule(scheduler, convergingJob);
+      scheduler.schedule(convergingJob);
 
       await sleep(50);
 
@@ -283,17 +277,17 @@ describe('Scheduler Engine', () => {
 
       let overflows = 0;
       const probe = vi.fn();
-      const loop = () => schedulerSchedule(scheduler, loop);
+      const loop = () => scheduler.schedule(loop);
       scheduler.onOverflow = () => {
         overflows++;
         if (overflows === 2) {
           scheduler.onOverflow = null;
           // Scheduled while PROCESSING is set and recovery is exhausted:
           // the re-arm guarantee must still flush this job.
-          schedulerSchedule(scheduler, probe);
+          scheduler.schedule(probe);
         }
       };
-      schedulerSchedule(scheduler, loop);
+      scheduler.schedule(loop);
 
       await sleep(50);
 
@@ -416,7 +410,7 @@ describe('Scheduler Engine', () => {
         // @ts-expect-error - mock context
         trackingContext.current = { id: 999 };
 
-        schedulerSchedule(scheduler, () => {});
+        scheduler.schedule(() => {});
 
         await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
@@ -578,14 +572,14 @@ describe('Scheduler Engine', () => {
 
         it('flushSync preserves existing scheduler state bits', () => {
           scheduler.startBatch();
-          expect(schedulerIsBatching(scheduler)).toBe(true);
+          expect(scheduler.isBatching).toBe(true);
 
           scheduler.flushSync();
 
           // BATCHING state should still be preserved
-          expect(schedulerIsBatching(scheduler)).toBe(true);
+          expect(scheduler.isBatching).toBe(true);
           scheduler.endBatch();
-          expect(schedulerIsBatching(scheduler)).toBe(false);
+          expect(scheduler.isBatching).toBe(false);
         });
       });
     });

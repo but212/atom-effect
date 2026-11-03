@@ -11,7 +11,7 @@
  * as data sources for Computeds and Effects.
  */
 
-import type { SlotBuffer } from '@but212/atom-effect-utils';
+import { Result, type SlotBuffer } from '@but212/atom-effect-utils';
 import {
   ATOM_STATE_FLAGS,
   BRAND,
@@ -36,7 +36,7 @@ import type {
   WritableAtom,
 } from '@/types';
 import { AtomError, debug, generateId, nextSmi, SchedulerError } from '@/utils';
-import { scheduler, schedulerIsBatching, schedulerSchedule } from './scheduler';
+import { scheduler } from './scheduler';
 
 /**
  * Role: Internal implementation of a {@link WritableAtom}.
@@ -157,10 +157,10 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     this.#pendingPreviousValue = oldValue;
     this.flags |= SCHED;
 
-    if ((this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler)) {
+    if ((this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
       if (!slots.isLocked) this.#flushNotifications();
     } else {
-      schedulerSchedule(scheduler, this);
+      Result.unwrap(scheduler.schedule(this));
     }
   }
 
@@ -186,12 +186,11 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   #flushNotifications(): void {
     const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
     const MASK = SCHED | ATOM_STATE_FLAGS.DISPOSED;
-    const isSyncActive =
-      (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !schedulerIsBatching(scheduler);
+    const isSyncActive = (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching;
 
     // SAFETY: this method never re-enters itself. {@link nodeNotifySubscribers} holds
     // `slots.lock()`, so a write-back from inside a subscriber finds `slots.isLocked === true` and
-    // takes the `schedulerSchedule` branch in {@link #scheduleNotification} instead of recursing.
+    // takes the `scheduler.schedule` branch in {@link #scheduleNotification} instead of recursing.
     // A self-writing sync subscriber therefore re-arms SCHED and re-loops *here*, within one frame,
     // so a frame-local round counter bounds the cascade correctly and needs no per-atom state.
     //
