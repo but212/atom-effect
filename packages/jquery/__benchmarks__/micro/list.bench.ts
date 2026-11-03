@@ -64,12 +64,22 @@ describe('List Rendering: Initial Render (1000 items)', () => {
 
 describe('List Rendering: Reconciliation (Base 100 items)', () => {
   const base = makeItems(100);
+  const reversed = [...base].reverse();
+  const oddEvenInterleaved = [
+    ...base.filter((_, i) => i % 2 === 1),
+    ...base.filter((_, i) => i % 2 === 0),
+  ];
+
   const cases = [
     { name: 'append 10 items', next: [...base, ...makeItems(10, 100)] },
     { name: 'prepend 10 items', next: [...makeItems(10, 100), ...base] },
     {
-      name: 'reconciliation: full shuffle 100 items',
-      next: [...base].sort(() => 0.5 - Math.random()),
+      name: 'reconciliation: reverse 100 items (deterministic LIS worst-case)',
+      next: reversed,
+    },
+    {
+      name: 'reconciliation: odd/even interleave 100 items',
+      next: oddEvenInterleaved,
     },
     { name: 'reconciliation: remove 50 items', next: base.slice(0, 50) },
   ];

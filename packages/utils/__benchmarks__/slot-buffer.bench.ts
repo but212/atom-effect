@@ -73,4 +73,42 @@ describe('SlotBuffer', () => {
       })
     );
   });
+
+  test('fragmentation and slot reallocation', async ({ bench }) => {
+    await bench.compare(
+      bench(`interleaved remove and re-push (x${repeats})`, () => {
+        const buffer = new BufferClass<{ id: number }>();
+        const items = Array.from({ length: 50 }, (_, i) => ({ id: i }));
+        for (const item of items) buffer.push(item);
+
+        for (let i = 0; i < repeats; i++) {
+          // Remove even slots to create fragmentation
+          for (let j = 0; j < 50; j += 2) {
+            const item = items[j];
+            if (item) buffer.remove(item);
+          }
+          // Re-insert new items
+          for (let j = 0; j < 50; j += 2) {
+            const nextItem = { id: j + i };
+            items[j] = nextItem;
+            buffer.push(nextItem);
+          }
+        }
+        _keep(buffer.size);
+      }),
+      bench(`churn: fill and drain odd slots with compact (x${repeats})`, () => {
+        for (let i = 0; i < repeats; i++) {
+          const buffer = new BufferClass<{ id: number }>();
+          const items = Array.from({ length: 100 }, (_, j) => ({ id: j }));
+          for (const item of items) buffer.push(item);
+          for (let j = 1; j < 100; j += 2) {
+            const item = items[j];
+            if (item) buffer.remove(item);
+          }
+          buffer.compact();
+          _keep(buffer.size);
+        }
+      })
+    );
+  });
 });

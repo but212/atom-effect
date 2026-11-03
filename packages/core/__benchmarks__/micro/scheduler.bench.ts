@@ -6,13 +6,7 @@
 
 import { describe, test } from 'vitest';
 import { aeNextTick, atom, computed, untracked } from '../../dist';
-import {
-  asyncParallelBenchOptions,
-  asyncSingleBenchOptions,
-  keep,
-  microBenchOptions,
-  REPEATS,
-} from '../utils/setup.js';
+import { asyncParallelBenchOptions, keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
 const repeats = REPEATS;
 const _keep = keep;
@@ -22,18 +16,6 @@ const _computed = computed;
 const _untracked = untracked;
 
 describe('Scheduler: aeNextTick', () => {
-  test('single microtask comparison', async ({ bench }) => {
-    await bench.compare(
-      bench('baseline: schedule 1 native microtask', async () => {
-        await Promise.resolve();
-      }),
-      bench('schedule 1 microtask', async () => {
-        await _aeNextTick();
-      }),
-      asyncSingleBenchOptions
-    );
-  });
-
   test('parallel microtask comparison', async ({ bench }) => {
     const promises = new Array<Promise<void>>(repeats);
 
