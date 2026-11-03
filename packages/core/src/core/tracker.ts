@@ -11,7 +11,7 @@
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { KIND, SMI_MAX } from '@/constants';
+import { KIND } from '@/constants';
 import type {
   Dependency,
   DependencyId,
@@ -33,15 +33,9 @@ import {
 
 let trackingSessionEpoch = 0;
 
-/** @internal */
-export function nextTrackingSessionEpoch(): number {
-  trackingSessionEpoch = nextSmi(trackingSessionEpoch);
-  return trackingSessionEpoch;
-}
-
 export abstract class ReactiveTracker implements ReactiveDependencyTracker, DependencySubscriber {
   flags: number = 0;
-  readonly id: DependencyId = (generateId() & SMI_MAX) as DependencyId;
+  readonly id: DependencyId = generateId();
   readonly _kind: typeof KIND.Obj = KIND.Obj;
 
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
@@ -57,7 +51,8 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * and resetting the track counter.
    */
   startTracking(): number {
-    const epoch = nextTrackingSessionEpoch();
+    trackingSessionEpoch = nextSmi(trackingSessionEpoch);
+    const epoch = trackingSessionEpoch;
     this._trackEpoch = epoch;
     this._trackCount = 0;
     refreshDepFlags(this);

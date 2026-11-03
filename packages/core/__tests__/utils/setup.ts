@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, vi } from 'vitest';
 import { SCHEDULER_CONFIG } from '@/constants';
-import { resetTrackingContext, trackingContext } from '@/core/base';
+import { resetTrackingContext } from '@/core/base';
 import { aeNextTick, scheduler, schedulerIsBatching } from '@/core/scheduler';
 
 beforeEach(async () => {
@@ -11,7 +11,7 @@ beforeEach(async () => {
   await aeNextTick();
 
   // Reset tracking context to avoid active tracking leaking across tests
-  resetTrackingContext(trackingContext);
+  resetTrackingContext();
 
   // Terminate any unbalanced batch depths
   while (schedulerIsBatching(scheduler)) {

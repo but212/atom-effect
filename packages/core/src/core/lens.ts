@@ -19,7 +19,6 @@ import {
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
   KIND,
-  SMI_MAX,
   STATE_FLAGS,
 } from '@/constants';
 import { nodeGetSubscriberCount, nodeNotifySubscribers, nodeSubscribe } from '@/core/base';
@@ -50,7 +49,7 @@ abstract class BaseLens<T = unknown> implements ReactiveNode<T> {
   version = 0;
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   _kind: typeof KIND.Obj = KIND.Obj;
-  readonly id: DependencyId = generateId() & SMI_MAX;
+  readonly id: DependencyId = generateId();
   _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
   #previousValue: T | undefined;
 

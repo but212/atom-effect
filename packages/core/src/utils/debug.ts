@@ -21,6 +21,7 @@ import {
   DEBUG_CONFIG,
   DEBUG_PREFIX,
   IS_DEV,
+  SMI_MAX,
 } from '@/constants';
 import type { DebugConfig, DependencyId, IdentifiableNode, NodeMetadata } from '@/types';
 
@@ -265,4 +266,4 @@ let nextNodeId = 1;
  *
  * @returns A process-local `DependencyId`.
  */
-export const generateId = (): DependencyId => nextNodeId++;
+export const generateId = (): DependencyId => nextNodeId++ & SMI_MAX;

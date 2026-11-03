@@ -23,7 +23,7 @@ import {
   IS_DEV,
   SCHEDULER_CONFIG,
 } from '@/constants';
-import { runInTrackingContext, trackingContext } from '@/core/base';
+import { runInTrackingContext } from '@/core/base';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions, Subscriber } from '@/types';
 import { debug, EffectError, wrapError } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
@@ -146,7 +146,7 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
     this.startTracking();
 
     try {
-      const executionResult = runInTrackingContext(trackingContext, this, this.#effectCallback);
+      const executionResult = runInTrackingContext(this, this.#effectCallback);
       this.commitDeps();
       this.#handleResult(executionResult, sessionId);
     } catch (executionError) {

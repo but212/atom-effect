@@ -6,20 +6,17 @@
  * primitives from the core atom-effect library.
  */
 
-import { atom, batch, computed, effect, isAtom, aeNextTick as nextTick } from '@but212/atom-effect';
-import { isPromise } from '@but212/atom-effect-utils';
+import {
+  atom,
+  batch,
+  computed,
+  effect,
+  isAtom,
+  isPromise,
+  aeNextTick as nextTick,
+} from '@but212/atom-effect';
 import $ from 'jquery';
 import { debug } from '@/utils/debug';
-
-/**
- * Logic: Asynchronous Update Synchronization
- * Returns a promise that resolves after the next reactive update cycle.
- *
- * When to use:
- * - Perform manual DOM measurements after reactive changes.
- * - Coordinate external library initializations dependent on current DOM state.
- */
-export { nextTick };
 
 /**
  * Logic: Unified Reactive Namespace

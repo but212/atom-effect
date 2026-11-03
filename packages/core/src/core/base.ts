@@ -21,25 +21,21 @@ import type {
 } from '@/types';
 import { AtomError, wrapError } from '@/utils';
 
-/** @internal */
-function createTrackingContext(): TrackingContext {
-  return { stack: [], current: null };
+/**
+ * Role: Global singleton orchestrating the current reactive tracking state.
+ * @internal
+ */
+export const trackingContext: TrackingContext = { stack: [], current: null };
+
+function pushTrackingSubscriber(subscriber: DependencySubscriber | null): void {
+  trackingContext.stack.push(subscriber);
+  trackingContext.current = subscriber;
 }
 
-/** @internal */
-export function pushTrackingSubscriber(
-  context: TrackingContext,
-  subscriber: DependencySubscriber | null
-): void {
-  context.stack.push(subscriber);
-  context.current = subscriber;
-}
-
-/** @internal */
-export function popTrackingSubscriber(context: TrackingContext): void {
-  const trackingSubscriberStack = context.stack;
+function popTrackingSubscriber(): void {
+  const trackingSubscriberStack = trackingContext.stack;
   trackingSubscriberStack.pop();
-  context.current =
+  trackingContext.current =
     trackingSubscriberStack.length > 0
       ? (trackingSubscriberStack[trackingSubscriberStack.length - 1] ?? null)
       : null;
@@ -50,33 +46,23 @@ export function popTrackingSubscriber(context: TrackingContext): void {
  * Executes a function within the scope of a specific subscriber.
  * @internal
  */
-export function runInTrackingContext<T>(
-  context: TrackingContext,
-  subscriber: DependencySubscriber,
-  callback: () => T
-): T {
+export function runInTrackingContext<T>(subscriber: DependencySubscriber, callback: () => T): T {
   // Optimization: Skip stack operations if already in the target context.
-  if (context.current === subscriber) return callback();
+  if (trackingContext.current === subscriber) return callback();
 
-  pushTrackingSubscriber(context, subscriber);
+  pushTrackingSubscriber(subscriber);
   try {
     return callback();
   } finally {
-    popTrackingSubscriber(context);
+    popTrackingSubscriber();
   }
 }
 
 /** @internal */
-export function resetTrackingContext(context: TrackingContext): void {
-  context.stack.length = 0;
-  context.current = null;
+export function resetTrackingContext(): void {
+  trackingContext.stack.length = 0;
+  trackingContext.current = null;
 }
-
-/**
- * Role: Global singleton orchestrating the current reactive tracking state.
- * @internal
- */
-export const trackingContext = createTrackingContext();
 
 /**
  * Executes a scope where reactive dependencies are suppressed.
@@ -102,14 +88,13 @@ export const trackingContext = createTrackingContext();
  * ```
  */
 export function untracked<T>(callback: () => T): T {
-  const ctx = trackingContext;
-  if (ctx.current === null) return callback();
+  if (trackingContext.current === null) return callback();
 
-  pushTrackingSubscriber(ctx, null);
+  pushTrackingSubscriber(null);
   try {
     return callback();
   } finally {
-    popTrackingSubscriber(ctx);
+    popTrackingSubscriber();
   }
 }
 
@@ -189,12 +174,10 @@ export function nodeNotifySubscribers<T>(
   const slots = node._subscriberSlots;
   if (slots == null || slots.size === 0) return;
 
-  const ctx = trackingContext;
-  const prevCurrent = ctx.current;
-  const isTracking = prevCurrent !== null;
+  const isTracking = trackingContext.current !== null;
 
   if (isTracking) {
-    pushTrackingSubscriber(ctx, null);
+    pushTrackingSubscriber(null);
   }
 
   slots.lock();
@@ -220,15 +203,10 @@ export function nodeNotifySubscribers<T>(
     }
   } finally {
     if (isTracking) {
-      popTrackingSubscriber(ctx);
+      popTrackingSubscriber();
     }
     slots.unlock();
   }
-}
-
-/** @internal - Invalidates computed subscribers without running external listeners. */
-export function nodeNotifyComputedSubscribers<T>(node: ReactiveNode<T>): void {
-  nodeNotifySubscribers(node, undefined, undefined, true);
 }
 
 /** @internal */

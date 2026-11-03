@@ -24,7 +24,7 @@ import {
 import type { JobBuffer, SchedulerJob, SchedulerJobObject } from '@/types';
 import { nextSmi, SchedulerError } from '@/utils';
 
-import { resetTrackingContext, trackingContext } from './base';
+import { resetTrackingContext } from './base';
 
 class AggregateExecutionLimitError extends Error {
   constructor() {
@@ -200,7 +200,7 @@ class ReactiveScheduler {
         if (this.#activeJobBuffer.size === 0) return;
         this.flushQueues();
       } catch (microtaskError) {
-        resetTrackingContext(trackingContext);
+        resetTrackingContext();
         throw microtaskError;
       } finally {
         this.#state &= ~SCHEDULER_STATE.PROCESSING;

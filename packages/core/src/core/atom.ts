@@ -22,11 +22,9 @@ import {
   IS_DEV,
   KIND,
   SCHEDULER_CONFIG,
-  SMI_MAX,
 } from '@/constants';
 import {
   nodeGetSubscriberCount,
-  nodeNotifyComputedSubscribers,
   nodeNotifySubscribers,
   nodeSubscribe,
   trackingContext,
@@ -58,7 +56,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   _lastSeenEpoch: number = EPOCH_CONSTANTS.UNINITIALIZED;
   _nextEpoch: number | undefined = undefined;
   _kind: typeof KIND.Obj = KIND.Obj;
-  readonly id: DependencyId = generateId() & SMI_MAX;
+  readonly id: DependencyId = generateId();
 
   _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null = null;
 
@@ -153,7 +151,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     // Computed nodes must become dirty on every write, not only the first of a
     // pending notification, so pull reads observe the latest source value even
     // while ordinary notifications remain batched.
-    nodeNotifyComputedSubscribers(this);
+    nodeNotifySubscribers(this, undefined, undefined, true);
 
     // Optimization: Avoid redundant scheduling if already queued.
     if ((this.flags & SCHED) !== 0) return;

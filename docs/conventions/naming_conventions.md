@@ -72,7 +72,7 @@ Functions and methods must use verbs or verb phrases that clearly describe their
 | :----------------------- | :------------------------------------------------------------------------ | :------------------------------------------------------------------------------ |
 | **Verb/Verb Phrase**     | Standard operations, actions, or transformations.                         | `computed()`, `batch()`, `peek()`, `dispose()`, `execute()`                     |
 | `is[State]`/`has[State]` | Type guards, capability checks, or status probes returning a boolean.     | `isAtom()`, `isWritable()`, `nodeIsDirty()`                                     |
-| `node[Action]`           | Internal engine functions operating directly on `ReactiveNode` instances. | `nodeSubscribe()`, `nodeNotifySubscribers()`, `nodeNotifyComputedSubscribers()` |
+| `node[Action]`           | Internal engine functions operating directly on `ReactiveNode` instances. | `nodeSubscribe()`, `nodeNotifySubscribers()`, `nodeGetSubscriberCount()`         |
 | `depBuffer[Action]`      | Internal engine functions operating directly on dependency buffers.       | `depBufferTruncateFrom()`, `depBufferPush()`                                    |
 | `[Action]Callback`       | Suffix for variables or parameters holding executable callbacks.          | `effectCallback`, `onErrorCallback`, `onOverflowCallback`                       |
 | `#` Private Methods      | Class-private helper methods.                                             | `#drainQueue()`, `#execCleanup()`, `#recompute()`                               |

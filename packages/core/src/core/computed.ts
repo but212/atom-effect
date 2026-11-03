@@ -356,7 +356,7 @@ class ComputedAtomImpl<T>
 
       let computedValue: T | Promise<T>;
       try {
-        computedValue = runInTrackingContext(trackingContext, this, this.#computationCallback);
+        computedValue = runInTrackingContext(this, this.#computationCallback);
       } catch (computationError) {
         if (
           computationError instanceof RangeError ||
