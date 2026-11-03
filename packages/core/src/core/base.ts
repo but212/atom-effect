@@ -13,37 +13,23 @@
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, STATE_FLAGS } from '@/constants';
-import type {
-  AtomErrorConstructor,
-  DependencySubscriber,
-  ReactiveNode,
-  SubscriberTarget,
-  TrackingContext,
-} from '@/types';
-import { AtomError, nextSmi, wrapError } from '@/utils';
+import type { DependencySubscriber, ReactiveNode, SubscriberTarget } from '@/types';
+import { AtomError, wrapError } from '@/utils';
 
-/** @internal */
-function createTrackingContext(): TrackingContext {
-  return { stack: [], current: null };
-}
+/**
+ * Role: Global singleton orchestrating the current reactive tracking state.
+ * @internal
+ */
+export const trackingContext: { current: DependencySubscriber | null } = { current: null };
 
-/** @internal */
-export function pushTrackingSubscriber(
-  context: TrackingContext,
-  subscriber: DependencySubscriber | null
-): void {
-  context.stack.push(subscriber);
-  context.current = subscriber;
-}
-
-/** @internal */
-export function popTrackingSubscriber(context: TrackingContext): void {
-  const trackingSubscriberStack = context.stack;
-  trackingSubscriberStack.pop();
-  context.current =
-    trackingSubscriberStack.length > 0
-      ? (trackingSubscriberStack[trackingSubscriberStack.length - 1] ?? null)
-      : null;
+function runWithSubscriber<T>(subscriber: DependencySubscriber | null, callback: () => T): T {
+  const previous = trackingContext.current;
+  trackingContext.current = subscriber;
+  try {
+    return callback();
+  } finally {
+    trackingContext.current = previous;
+  }
 }
 
 /**
@@ -51,33 +37,11 @@ export function popTrackingSubscriber(context: TrackingContext): void {
  * Executes a function within the scope of a specific subscriber.
  * @internal
  */
-export function runInTrackingContext<T>(
-  context: TrackingContext,
-  subscriber: DependencySubscriber,
-  callback: () => T
-): T {
-  // Optimization: Skip stack operations if already in the target context.
-  if (context.current === subscriber) return callback();
-
-  pushTrackingSubscriber(context, subscriber);
-  try {
-    return callback();
-  } finally {
-    popTrackingSubscriber(context);
-  }
+export function runInTrackingContext<T>(subscriber: DependencySubscriber, callback: () => T): T {
+  // Optimization: Skip save/restore if already in the target context.
+  if (trackingContext.current === subscriber) return callback();
+  return runWithSubscriber(subscriber, callback);
 }
-
-/** @internal */
-export function resetTrackingContext(context: TrackingContext): void {
-  context.stack.length = 0;
-  context.current = null;
-}
-
-/**
- * Role: Global singleton orchestrating the current reactive tracking state.
- * @internal
- */
-export const trackingContext = createTrackingContext();
 
 /**
  * Executes a scope where reactive dependencies are suppressed.
@@ -103,15 +67,8 @@ export const trackingContext = createTrackingContext();
  * ```
  */
 export function untracked<T>(callback: () => T): T {
-  const ctx = trackingContext;
-  if (ctx.current === null) return callback();
-
-  pushTrackingSubscriber(ctx, null);
-  try {
-    return callback();
-  } finally {
-    popTrackingSubscriber(ctx);
-  }
+  if (trackingContext.current === null) return callback();
+  return runWithSubscriber(null, callback);
 }
 
 /**
@@ -145,31 +102,18 @@ export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarg
   node._subscriberSlots ??= new SlotBuffer<SubscriberTarget<T>>();
   const slots = node._subscriberSlots;
 
-  if (nodeHasSubscription(node, listener)) {
+  if (slots.has(listener)) {
     if (IS_DEV) console.warn(`${LOG_PREFIX} Duplicate subscription ignored on node ${node.id}`);
     return () => {};
   }
 
   slots.push(listener);
-  let targetNode: ReactiveNode<T> | undefined = node;
-  let subscriberListener: SubscriberTarget<T> | undefined = listener;
+  let subscribed = true;
   return () => {
-    if (targetNode && subscriberListener) {
-      nodeUnsubscribe(targetNode, subscriberListener);
-      targetNode = undefined;
-      subscriberListener = undefined;
-    }
+    if (!subscribed) return;
+    subscribed = false;
+    slots.remove(listener);
   };
-}
-
-/** @internal */
-export function nodeUnsubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarget<T>): void {
-  const slots = node._subscriberSlots;
-  if (slots == null) return;
-
-  if (slots.remove(listener)) {
-    slots.compact();
-  }
 }
 
 /**
@@ -192,13 +136,8 @@ export function nodeNotifySubscribers<T>(
   const slots = node._subscriberSlots;
   if (slots == null || slots.size === 0) return;
 
-  const ctx = trackingContext;
-  const prevCurrent = ctx.current;
-  const isTracking = prevCurrent !== null;
-
-  if (isTracking) {
-    pushTrackingSubscriber(ctx, null);
-  }
+  const previousSubscriber = trackingContext.current;
+  trackingContext.current = null;
 
   slots.lock();
   try {
@@ -222,68 +161,9 @@ export function nodeNotifySubscribers<T>(
       }
     }
   } finally {
-    if (isTracking) {
-      popTrackingSubscriber(ctx);
-    }
+    trackingContext.current = previousSubscriber;
     slots.unlock();
   }
-}
-
-/** @internal - Invalidates computed subscribers without running external listeners. */
-export function nodeNotifyComputedSubscribers<T>(node: ReactiveNode<T>): void {
-  nodeNotifySubscribers(node, undefined, undefined, true);
-}
-
-/** @internal */
-export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown): boolean {
-  const slots = node._subscriberSlots;
-  if (slots == null || slots.size === 0) return false;
-
-  const slotsLength = slots.length;
-  for (let i = 0; i < slotsLength; i++) {
-    const subscriber = slots.at(i);
-    if (subscriber != null && subscriber === listener) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Logic: Reactive Error Boundary
- *
- * Why:
- * Computed nodes increment their version on error to signal a state change
- * even if a valid value was not produced. This ensures downstream nodes
- * can react to the failure state.
- *
- * @internal
- */
-export function nodeHandleError<T>(
-  node: ReactiveNode<T> & { isComputed?: boolean; version: number },
-  error: unknown,
-  errorConstructor: AtomErrorConstructor,
-  message: string,
-  onError?: ((error: Error) => void) | ((error: unknown) => void) | null
-): void {
-  const wrappedError = wrapError(error, errorConstructor, message);
-
-  if (node.isComputed) {
-    node.version = nextSmi(node.version);
-    node._error = wrappedError;
-  } else {
-    console.error(wrappedError);
-  }
-
-  if (onError) {
-    try {
-      onError(wrappedError);
-    } catch (error) {
-      console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, error);
-    }
-  }
-
-  nodeNotifySubscribers(node, undefined, undefined);
 }
 
 /** @internal - Returns active listener count. */

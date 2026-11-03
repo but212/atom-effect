@@ -4,14 +4,11 @@
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { COMPUTED_STATE_FLAGS } from '@/constants';
 import { trackingContext } from '@/core/base';
 import {
   BUFFER_FLAGS,
   claimExisting,
-  depBufferPush,
   depBufferTruncateFrom,
-  disposeAll,
   insertNew,
   isBufferDirty,
 } from '@/core/buffers';
@@ -32,7 +29,7 @@ function createDepBuffer(): ReactiveDependencyTracker {
 const createLink = (
   node: Dependency,
   version: number,
-  unsubscribeCallback?: () => void
+  unsubscribeCallback: () => void = vi.fn()
 ): DependencyLink => ({ node, version, unsubscribeCallback });
 
 describe('DepBuffer', () => {
@@ -55,7 +52,7 @@ describe('DepBuffer', () => {
       if (!mockDependency0 || !mockDependency1 || !mockDependency2) throw new Error('Setup failed');
       const links = mockDependencies.map((d) => createLink(d, 1, vi.fn()));
       for (const l of links) {
-        depBufferPush(depBuffer, l);
+        depBuffer._depSlots.push(l);
       }
 
       // Case 1: Search ahead and swap (index 2 -> index 0)
@@ -73,8 +70,8 @@ describe('DepBuffer', () => {
       const dependencyLink0A = createLink(mockDependency0, 1, vi.fn());
       const dependencyLink0B = createLink(mockDependency0, 1, vi.fn());
 
-      depBufferPush(depBuffer, dependencyLink0A);
-      depBufferPush(depBuffer, dependencyLink0B);
+      depBuffer._depSlots.push(dependencyLink0A);
+      depBuffer._depSlots.push(dependencyLink0B);
 
       // 1. Should hit the first instance at trackIndex
       expect(claimExisting(depBuffer, mockDependency0, 0)).toBe(true);
@@ -119,14 +116,14 @@ describe('DepBuffer', () => {
     });
   });
 
-  describe('depBufferTruncateFrom() & disposeAll()', () => {
+  describe('depBufferTruncateFrom()', () => {
     it('triggers unsubscriptions when truncating or disposing', () => {
       const depBuffer = createDepBuffer();
       const unsubscribeCallbacks = [vi.fn(), vi.fn(), vi.fn()];
       for (let i = 0; i < unsubscribeCallbacks.length; i++) {
         const u = unsubscribeCallbacks[i];
         if (u) {
-          depBufferPush(depBuffer, createLink(createMockDep(i), 1, u));
+          depBuffer._depSlots.push(createLink(createMockDep(i), 1, u));
         }
       }
 
@@ -135,7 +132,7 @@ describe('DepBuffer', () => {
       expect(unsubscribeCallbacks[1]).toHaveBeenCalled();
       expect(unsubscribeCallbacks[2]).toHaveBeenCalled();
 
-      disposeAll(depBuffer);
+      depBufferTruncateFrom(depBuffer, 0);
       expect(unsubscribeCallbacks[0]).toHaveBeenCalled();
       expect(depBuffer._depSlots.size).toBe(0);
     });
@@ -148,14 +145,14 @@ describe('DepBuffer', () => {
       const systemErrorDep: Partial<Dependency> = {
         id: 998,
         version: 1,
-        flags: COMPUTED_STATE_FLAGS.IS_COMPUTED,
+        isComputed: true,
         get value() {
           throw new RangeError('Maximum call stack size exceeded');
         },
         subscribe: vi.fn(() => vi.fn()),
       };
 
-      depBufferPush(depBuffer, createLink(systemErrorDep as Dependency, 1));
+      depBuffer._depSlots.push(createLink(systemErrorDep as Dependency, 1));
 
       expect(() => isBufferDirty(depBuffer)).toThrow(RangeError);
     });
@@ -166,14 +163,14 @@ describe('DepBuffer', () => {
       const customErrorDep: Partial<Dependency> = {
         id: 999,
         version: 1,
-        flags: COMPUTED_STATE_FLAGS.IS_COMPUTED,
+        isComputed: true,
         get value() {
           throw new Error('Custom computation error');
         },
         subscribe: vi.fn(() => vi.fn()),
       };
 
-      depBufferPush(depBuffer, createLink(customErrorDep as Dependency, 1));
+      depBuffer._depSlots.push(createLink(customErrorDep as Dependency, 1));
 
       expect(isBufferDirty(depBuffer)).toBe(true);
     });
@@ -184,13 +181,13 @@ describe('DepBuffer', () => {
       const computedDep: Partial<Dependency> = {
         id: 100,
         version: 1,
-        flags: COMPUTED_STATE_FLAGS.IS_COMPUTED,
+        isComputed: true,
         get value() {
           return depValSpy();
         },
         subscribe: vi.fn(() => vi.fn()),
       };
-      depBufferPush(depBuffer, createLink(computedDep as Dependency, 1));
+      depBuffer._depSlots.push(createLink(computedDep as Dependency, 1));
 
       const mockContext = {
         addDependency: vi.fn(),
@@ -213,7 +210,7 @@ describe('DepBuffer', () => {
       const errorThrowingUnsubscribe = () => {
         throw new Error('Unsubscribe failed error');
       };
-      depBufferPush(depBuffer, createLink(createMockDep(1), 1, errorThrowingUnsubscribe));
+      depBuffer._depSlots.push(createLink(createMockDep(1), 1, errorThrowingUnsubscribe));
 
       expect(() => {
         depBufferTruncateFrom(depBuffer, 0);

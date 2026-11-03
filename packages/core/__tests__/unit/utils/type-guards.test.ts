@@ -96,6 +96,22 @@ describe('Core Symbols & Branding', () => {
     });
   });
 
+  describe('brand edge cases', () => {
+    it('rejects values with a non-numeric or undefined brand', () => {
+      expect(isAtom({ [BRAND]: 'atom' })).toBe(false);
+      expect(isAtom({ [BRAND]: undefined })).toBe(false);
+      expect(isAtom({ [BRAND]: BrandFlags.Computed })).toBe(false);
+      expect(isAtom(null)).toBe(false);
+      expect(isAtom(1)).toBe(false);
+    });
+
+    it('accepts branded functions', () => {
+      const branded = Object.assign(() => {}, { [BRAND]: BrandFlags.Atom });
+      expect(isAtom(branded)).toBe(true);
+      expect(isWritable(branded)).toBe(false);
+    });
+  });
+
   describe('Utility Helpers', () => {
     describe('nextSmi', () => {
       it('should increment SMI values normally', () => {

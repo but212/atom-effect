@@ -20,6 +20,7 @@ Breaking changes and upgrade steps for `@but212/atom-effect`, `@but212/atom-effe
 ### 1.1 jQuery: `route`, `fetch`, and Web Component features removed
 
 `@but212/atom-effect-jquery` no longer ships these APIs or their types:
+
 - `$.route` with `RouteConfig`, `RouteDefinition`, `RouteLifecycle`, `Router`.
 - `$.atomFetch` with `FetchOptions`, `FetchError`.
 - `$.useAtomComponent`, `$.provideAtom`, `$.injectAtom` with `AtomComponentController`, `JQueryScopedSelector`.
@@ -134,6 +135,7 @@ const json = serializeError(error);
 
 > [!NOTE]
 > These APIs were themselves removed in the v0.35.0 changes (see [1.1](#11-jquery-route-fetch-and-web-component-features-removed)). This section applies only if you stay on v0.34.x.
+
 - **Explicit setup:** the engine no longer triggers `setup()` for components with static properties (`aejStyles`, `aejBind`, ...). Call `this.aej.setup()` in `connectedCallback()`.
 - **Stateless DI:** `injectAtom` and `provideAtom` resolve contexts by walking `parentNode` and `ShadowRoot.host` instead of `aej:context-request` events. Consumers must be structural DOM descendants of their providers.
 - **Nullable proxies:** `injectAtom` and `createContextProxy` now return `WritableAtom<T | null> | null` (previously `WritableAtom<T> | null`).

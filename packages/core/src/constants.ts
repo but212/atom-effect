@@ -82,16 +82,6 @@ export const BRAND_IDENTITY_MAP = {
 } as const;
 
 /**
- * @internal
- * Optimization: Differentiates between function-based and object-based subscribers.
- * Avoids expensive `typeof` or `instanceof` checks on the propagation hot path.
- */
-export const KIND = {
-  Fn: 0,
-  Obj: 1,
-} as const;
-
-/**
  * States representing the execution phase of asynchronous reactive nodes.
  *
  * When to use:
@@ -217,7 +207,6 @@ export const IS_DEV = (() => {
  */
 const FLAGS = {
   DISPOSED: 1 << 0,
-  IS_COMPUTED: 1 << 1,
 
   DIRTY: 1 << 8,
   RECOMPUTING: 1 << 9,
@@ -246,7 +235,6 @@ export const STATE_MASKS = {
   ASYNC_MASK: FLAGS.ASYNC_MASK,
   CYCLIC_OR_RECOMPUTING_MASK: FLAGS.RECOMPUTING | FLAGS.CHECKING_DIRTY,
   LIFECYCLE_MASK: FLAGS.ASYNC_MASK | FLAGS.DIRTY,
-  ERROR_MASK: FLAGS.REJECTED,
 } as const;
 
 /**
@@ -272,7 +260,6 @@ export const EFFECT_STATE_FLAGS = {
  */
 export const COMPUTED_STATE_FLAGS = {
   DISPOSED: FLAGS.DISPOSED,
-  IS_COMPUTED: FLAGS.IS_COMPUTED,
   DIRTY: FLAGS.DIRTY,
   IDLE: FLAGS.IDLE,
   PENDING: FLAGS.PENDING,

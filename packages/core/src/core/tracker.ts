@@ -11,7 +11,6 @@
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { IS_DEV, KIND, LOG_PREFIX, SMI_MAX } from '@/constants';
 import type {
   Dependency,
   DependencyId,
@@ -25,24 +24,15 @@ import {
   BUFFER_FLAGS,
   claimExisting,
   depBufferTruncateFrom,
-  disposeAll,
   insertNew,
   isBufferDirty,
-  refreshDepFlags,
 } from './buffers';
 
 let trackingSessionEpoch = 0;
 
-/** @internal */
-export function nextTrackingSessionEpoch(): number {
-  trackingSessionEpoch = nextSmi(trackingSessionEpoch);
-  return trackingSessionEpoch;
-}
-
 export abstract class ReactiveTracker implements ReactiveDependencyTracker, DependencySubscriber {
   flags: number = 0;
-  readonly id: DependencyId = (generateId() & SMI_MAX) as DependencyId;
-  readonly _kind: typeof KIND.Obj = KIND.Obj;
+  readonly id: DependencyId = generateId();
 
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
   _depFlags: number = BUFFER_FLAGS.NONE;
@@ -57,10 +47,10 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * and resetting the track counter.
    */
   startTracking(): number {
-    const epoch = nextTrackingSessionEpoch();
+    trackingSessionEpoch = nextSmi(trackingSessionEpoch);
+    const epoch = trackingSessionEpoch;
     this._trackEpoch = epoch;
     this._trackCount = 0;
-    refreshDepFlags(this);
     return epoch;
   }
 
@@ -69,13 +59,7 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * and refreshing buffer flags.
    */
   commitDeps(): void {
-    try {
-      depBufferTruncateFrom(this, this._trackCount);
-    } catch (error) {
-      if (IS_DEV) {
-        console.warn(`${LOG_PREFIX} commitDeps failed for node ${this.id}:`, error);
-      }
-    }
+    depBufferTruncateFrom(this, this._trackCount);
   }
 
   /**
@@ -83,8 +67,6 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * Uses session-level versioning via `_lastSeenEpoch` for deduplication.
    */
   trackDependency(dependency: Dependency, notifyCallback: SubscriberTarget<unknown>): void {
-    if (!this._depSlots) return;
-
     const trackEpoch = this._trackEpoch;
     if (dependency._lastSeenEpoch === trackEpoch) return;
 
@@ -118,7 +100,7 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
    * Disposes of all dependency links and resets dependency flags.
    */
   disposeDeps(): void {
-    disposeAll(this);
+    depBufferTruncateFrom(this, 0);
   }
 
   /**

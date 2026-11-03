@@ -16,8 +16,7 @@ export const BUFFER_FLAGS = {
   HAS_COMPUTEDS: 1 << 0,
 } as const;
 
-/** @internal */
-export function refreshDepFlags(state: ReactiveDependencyTracker): void {
+function refreshDepFlags(state: ReactiveDependencyTracker): void {
   let flags = state._depFlags & ~BUFFER_FLAGS.HAS_COMPUTEDS;
   const slots = state._depSlots;
 
@@ -51,7 +50,7 @@ export function claimExisting(
   if (slots.length <= trackIndex) return false;
 
   const current = slots.at(trackIndex);
-  if (current?.node === dependency && current.unsubscribeCallback) {
+  if (current?.node === dependency) {
     current.version = dependency.version;
     return true;
   }
@@ -84,7 +83,7 @@ function findExistingIndex(
   const slots = state._depSlots;
   for (let i = start + 1, slotsLength = slots.length; i < slotsLength; i++) {
     const link = slots.at(i);
-    if (link?.node === dependency && link.unsubscribeCallback) return i;
+    if (link?.node === dependency) return i;
   }
   return -1;
 }
@@ -101,15 +100,7 @@ export function insertNew(
 ): void {
   const occupant = state._depSlots.at(trackIndex);
   state._depSlots.setAt(trackIndex, link);
-  if (occupant !== null) depBufferPush(state, occupant);
-}
-
-/** @internal */
-export function depBufferPush(
-  state: ReactiveDependencyTracker,
-  dependencyLink: DependencyLink
-): number {
-  return state._depSlots.push(dependencyLink);
+  if (occupant !== null) state._depSlots.push(occupant);
 }
 
 /**
@@ -136,7 +127,6 @@ function isDirtyInternal(state: ReactiveDependencyTracker, deep: boolean): boole
   const slotsLength = slots.length;
   if (slotsLength === 0) return false;
 
-  const IS_COMPUTED = COMPUTED_STATE_FLAGS.IS_COMPUTED;
   const DIRTY = COMPUTED_STATE_FLAGS.DIRTY;
 
   for (let i = 0; i < slotsLength; i++) {
@@ -145,7 +135,7 @@ function isDirtyInternal(state: ReactiveDependencyTracker, deep: boolean): boole
 
     const dependency = link.node;
 
-    if (deep && (dependency.flags & IS_COMPUTED) !== 0) {
+    if (deep && dependency.isComputed) {
       // Logic: Accessing .value on a computed dependency triggers its internal
       // check/refresh logic. If it throws, we track it for debugging.
       try {
@@ -188,12 +178,10 @@ export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: n
     for (let i = index; i < slotsLength; i++) {
       const link = slots.at(i);
       if (link) {
-        if (link.unsubscribeCallback) {
-          try {
-            link.unsubscribeCallback();
-          } catch (unsubscribeError) {
-            if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
-          }
+        try {
+          link.unsubscribeCallback();
+        } catch (unsubscribeError) {
+          if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
         }
       }
     }
@@ -201,14 +189,4 @@ export function depBufferTruncateFrom(state: ReactiveDependencyTracker, index: n
   }
 
   refreshDepFlags(state);
-}
-
-/**
- * Fully disposes of the buffer state, clearing all subscriptions.
- *
- * @internal
- */
-export function disposeAll(state: ReactiveDependencyTracker): void {
-  depBufferTruncateFrom(state, 0);
-  state._depFlags &= ~BUFFER_FLAGS.HAS_COMPUTEDS;
 }

@@ -12,6 +12,7 @@
  */
 
 import type {
+  AtomOptions,
   ComputedAtom,
   ComputedOptions,
   EffectFunction,
@@ -23,7 +24,6 @@ import type {
 import type {
   AEJConfig,
   AsyncReactiveValue,
-  AtomOptions,
   BindingOptions,
   ComponentFn,
   CssBindings,

@@ -154,6 +154,7 @@ $('form').atomForm(user, {
 ```
 
 When validation fails:
+
 - The input matches the `:invalid` CSS pseudo-class.
 - Native browser validation tooltips appear upon form submission.
 

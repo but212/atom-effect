@@ -39,6 +39,7 @@ pnpm bench:all
 **Version**: v0.34.0
 **Last Updated**: 2026-06-20
 **Environment**:
+
 - **Node.js**: v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)
 
@@ -48,6 +49,7 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 **Last Updated**: 2026-06-20
 **Version**: v0.34.0
+
 - **Runtime**: Node.js v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)
 

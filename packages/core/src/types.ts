@@ -6,8 +6,8 @@
  * Consolidates all base, reactive, API, internal, error, debug, and scheduler types.
  */
 
-import type { Equal, Merge, Prettify, Result, SlotBuffer } from '@but212/atom-effect-utils';
-import type { AsyncState, BRAND, KIND, SCHEDULER_STATE } from '@/constants';
+import type { Equal, Merge, Prettify, SlotBuffer } from '@but212/atom-effect-utils';
+import type { AsyncState, BRAND } from '@/constants';
 import type { AtomError } from '@/utils/errors';
 
 /**
@@ -115,6 +115,10 @@ export interface Dependency<T = unknown> {
  * A read-only reactive container.
  */
 export interface ReadonlyAtom<T = unknown> extends Dependency<T>, Disposable {
+  /** True if the node has been permanently disposed. */
+  readonly isDisposed: boolean;
+  /** True if the most recent computation was rejected (async or sync). Always false for non-computed atoms. */
+  readonly isRejected: boolean;
   /** Returns the count of active listeners for diagnostic purposes. */
   subscriberCount(): number;
 }
@@ -142,10 +146,6 @@ export interface ComputedAtom<T = unknown> extends ReadonlyAtom<T> {
   readonly isPending: boolean;
   /** True if the node has resolved to a valid value at least once. */
   readonly isResolved: boolean;
-  /** True if the most recent computation was rejected (async or sync). */
-  readonly isRejected: boolean;
-  /** True if the node has been permanently disposed. */
-  readonly isDisposed: boolean;
   /** True if the current value is safe to read (resolved and error-free). */
   readonly isValid: boolean;
 
@@ -195,22 +195,7 @@ export interface DependencyLink {
   /** The version of the node when the link was established. */
   version: number;
   /** The unsubscription cleanup function. */
-  unsubscribeCallback: (() => void) | undefined;
-}
-
-/**
- * Base structure for any reactive node containing properties independent of the value type.
- * @internal
- */
-export interface ReactiveNodeBase {
-  flags: number;
-  version: number;
-  _lastSeenEpoch: number;
-  _error?: Error | null;
-  readonly isRejected: boolean;
-  readonly id: DependencyId;
-  _kind?: typeof KIND.Obj | undefined;
-  _subscriberSlots: unknown | null;
+  unsubscribeCallback: () => void;
 }
 
 /**
@@ -218,7 +203,8 @@ export interface ReactiveNodeBase {
  * including listeners and upstream buffers.
  * @internal
  */
-export interface ReactiveNode<T> extends ReactiveNodeBase {
+export interface ReactiveNode<T = unknown> extends Dependency<T>, Disposable {
+  readonly isRejected: boolean;
   _subscriberSlots: SlotBuffer<SubscriberTarget<T>> | null;
 }
 
@@ -227,24 +213,11 @@ export interface ReactiveNode<T> extends ReactiveNodeBase {
  * @internal
  */
 export interface ReactiveDependencyTracker extends IdentifiableNode {
-  readonly id: DependencyId;
   flags: number;
   _depSlots: SlotBuffer<DependencyLink>;
   _depFlags: number;
   _trackEpoch: number;
   _trackCount: number;
-}
-
-/**
- * Manages the global state of active computations to ensure correct
- * association between dependencies and their consumers.
- * @internal
- */
-export interface TrackingContext {
-  /** The stack of parent computations currently being evaluated. */
-  stack: (DependencySubscriber | null)[];
-  /** The current active subscriber recording dependencies. */
-  current: DependencySubscriber | null;
 }
 
 /**
@@ -255,12 +228,6 @@ export interface DependencySubscriber {
   /** Records a dependency in the current computation's tracking buffer. */
   addDependency(dependency: Dependency): void;
 }
-
-/**
- * A unified consumer that both tracks dependencies and executes logic.
- * @internal
- */
-export interface DependencyTracker extends DependencySubscriber, Subscriber {}
 
 /**
  * Supports both functional callbacks for external listeners and structured
@@ -278,8 +245,6 @@ export interface SchedulerJobObject {
   execute(): void;
   /** Tracks the scheduler epoch in which this job was last added. */
   _nextEpoch?: number | undefined;
-  /** Discriminator used for low-overhead dispatching. */
-  _kind?: typeof KIND.Obj | undefined;
   /**
    * Called when the scheduler discards this job for good (overflow with no retry left),
    * so the owner can release any "already queued" state it keeps.
@@ -296,8 +261,6 @@ export interface SchedulerJobFunction {
   (): void;
   /** Tracks the scheduler epoch to prevent duplicate scheduling. */
   _nextEpoch?: number | undefined;
-  /** Discriminator used for low-overhead dispatching. */
-  _kind?: typeof KIND.Fn | undefined;
 }
 
 /**
@@ -315,28 +278,6 @@ export interface JobBuffer {
   items: (SchedulerJob | undefined)[];
   /** Current number of active jobs in the buffer. */
   size: number;
-}
-
-/**
- * The complete internal state container for the reactive update scheduler.
- * @internal
- */
-export interface SchedulerState {
-  epoch: number;
-  state: (typeof SCHEDULER_STATE)[keyof typeof SCHEDULER_STATE];
-  maxFlushIterations: number;
-  isSessionActive: boolean;
-  sessionEpoch: number;
-  queueSize: number;
-  onOverflow: ((droppedCount: number, droppedJobs: SchedulerJob[]) => void) | null;
-  nextEpoch(): number;
-  startFlush(): boolean;
-  endFlush(): void;
-  incrementFlushExecutionCount(job?: SchedulerJob): Result<void, Error>;
-  schedule(callback: SchedulerJob): Result<void, Error>;
-  flushSync(): void;
-  startBatch(): void;
-  endBatch(): void;
 }
 
 /**
@@ -370,7 +311,6 @@ export interface DebugConfig {
   isEnabled: boolean;
   shouldWarnInfiniteLoop: boolean;
   shouldTrackGraph: boolean;
-  isWarningCondition(condition: boolean, message: string): void;
   attachDebugInfo(obj: IdentifiableNode, type: string, id: DependencyId, customName?: string): void;
   getDebugName(obj: object | null | undefined): string | undefined;
   getDebugType(obj: object | null | undefined): string | undefined;

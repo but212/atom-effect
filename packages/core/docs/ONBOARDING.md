@@ -5,6 +5,7 @@ This guide introduces the core concepts, mental model, and standard patterns of 
 ## Mental Model
 
 The reactive system in `@but212/atom-effect` operates on a deterministic push-pull graph, conceptually similar to a spreadsheet:
+
 - **Atoms**: Source cells containing raw data (inputs).
 - **Computeds**: Derived cells with formulas that automatically re-evaluate based on their inputs.
 - **Effects**: Observers that perform side-effects (e.g., DOM updates, network requests) when their dependencies change.
@@ -58,6 +59,7 @@ console.log(total.value); // 110 (Evaluated lazily upon access)
 ```
 
 **Key Characteristics**:
+
 - **Lazy Evaluation**: The computation executes only when the value is accessed.
 - **Caching**: Results are cached. Re-evaluation occurs only if upstream dependencies have changed.
 - **Async Support**: Computeds can return a `Promise`. An explicit `defaultValue` is required to provide a synchronous state while the Promise is pending.

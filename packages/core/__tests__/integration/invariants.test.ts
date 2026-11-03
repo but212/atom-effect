@@ -57,6 +57,58 @@ describe('Version Semantics', () => {
   });
 });
 
+describe('Computed Error State', () => {
+  it('isRejected tracks lastError across sync failure, recovery, async failure and disposal', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const shouldFail = atom(true, { sync: true });
+    const computedInstance = computed(
+      () => {
+        if (shouldFail.value) throw new Error('boom');
+        return 1;
+      },
+      { defaultValue: -1 }
+    );
+
+    computedInstance.value;
+    expect(computedInstance.isRejected).toBe(true);
+    expect(computedInstance.lastError).not.toBeNull();
+    expect(computedInstance.hasError).toBe(true);
+
+    shouldFail.value = false;
+    computedInstance.value;
+    expect(computedInstance.isRejected).toBe(false);
+    expect(computedInstance.lastError).toBeNull();
+    expect(computedInstance.hasError).toBe(false);
+
+    computedInstance.dispose();
+    expect(computedInstance.isRejected).toBe(false);
+    expect(computedInstance.lastError).toBeNull();
+    consoleError.mockRestore();
+  });
+
+  it('bumps version when recovering from an error to the previously cached value', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const shouldFail = atom(false, { sync: true });
+    const computedInstance = computed(
+      () => {
+        if (shouldFail.value) throw new Error('boom');
+        return 7;
+      },
+      { defaultValue: -1 }
+    );
+
+    computedInstance.value;
+    shouldFail.value = true;
+    computedInstance.value;
+    const rejectedVersion = getNodeVersion(computedInstance);
+
+    shouldFail.value = false;
+    expect(computedInstance.value).toBe(7);
+    expect(getNodeVersion(computedInstance)).toBeGreaterThan(rejectedVersion);
+    consoleError.mockRestore();
+  });
+});
+
 describe('Push-Pull Propagation', () => {
   it('atom notifies async by default, sync when opted in', async () => {
     const asyncAtom = atom(0);

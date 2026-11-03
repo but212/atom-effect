@@ -86,7 +86,7 @@ export function handleEmpty<T>(
 
   if (onRemove) {
     for (const listSnapshot of snapshots) {
-      if (listSnapshot.node) removeNode(ctx, listSnapshot.key, listSnapshot.node);
+      removeNode(ctx, listSnapshot.key, listSnapshot.node);
     }
   } else {
     $container.empty();
@@ -133,7 +133,7 @@ export function renderItems<T>(
     ? results.map((result, i) => {
         const slot = toRender[i];
         const sanitizedResult = typeof result === 'string' ? sanitizeHtml(result) : result;
-        if (typeof sanitizedResult === 'string' && slot !== undefined) {
+        if (typeof sanitizedResult === 'string' && slot) {
           return injectKeyToHtml(sanitizedResult, String(slot.key));
         }
         return sanitizedResult;
@@ -228,8 +228,7 @@ export function placeItems<T>(
   }
 
   // Swap ForceReplace nodes before reordering
-  for (let i = 0; i < count; i++) {
-    const slot = slots[i];
+  for (const slot of slots) {
     if (slot && slot.state === ItemState.ForceReplace && slot.oldNodes && slot.nodes) {
       replaceDomNodes(slot.oldNodes, slot.nodes);
     }

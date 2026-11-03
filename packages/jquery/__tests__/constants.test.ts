@@ -25,10 +25,22 @@ describe('Constants', () => {
       }
     });
 
-    it('should return a non-empty string for zero-argument messages', () => {
-      expect(SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR('#sel')).toBeTruthy();
-      expect(SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR('#sel')).toBeTruthy();
-      expect(SYSTEM_BINDING.ERRORS.CLEANUP_ERROR('#sel')).toBeTruthy();
+    it('should include the identifier when provided and omit it when absent', () => {
+      const templates = [
+        SYSTEM_MOUNT.ERRORS.CLEANUP_ERROR,
+        SYSTEM_CORE.ERRORS.EFFECT_DISPOSE_ERROR,
+        SYSTEM_BINDING.ERRORS.CLEANUP_ERROR,
+      ];
+
+      for (const template of templates) {
+        const withIdentifier = template('#sel');
+        const withoutIdentifier = template();
+
+        expect(withIdentifier).toContain('#sel');
+        expect(withoutIdentifier.length).toBeGreaterThan(0);
+        expect(withoutIdentifier).not.toContain('undefined');
+        expect(withIdentifier).not.toBe(withoutIdentifier);
+      }
     });
   });
 });

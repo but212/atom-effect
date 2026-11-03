@@ -50,6 +50,7 @@ pnpm bench:macro
 ### Micro-Benchmarks
 
 Located in `__benchmarks__/micro/`, these test individual binding operations in isolation:
+
 - **Binding**: `atomText`, `atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow/Hide`, `atomBind`.
 - **List**: `atomList` initial render, append, removal, shuffle, and bind callbacks.
 - **Input**: `atomVal`, `atomChecked`, and debounced updates.
@@ -58,6 +59,7 @@ Located in `__benchmarks__/micro/`, these test individual binding operations in 
 ### Macro-Benchmarks
 
 Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
+
 - **Todo App**: Add, toggle, filter, and delete operations with full DOM rendering.
 - **Dashboard**: Multi-widget updates, mount/unmount cycles, and computed-to-DOM chains.
 - **Form Scaling**: Verification of O(1) field dispatch performance across different form sizes.
@@ -91,6 +93,7 @@ Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 **Version**: v0.34.0
 **Last Updated**: 2026-06-20
 **Environment**:
+
 - **Node.js**: v22.x
 - **Browser**: Chromium (via Vitest browser mode)
 - **OS**: ubuntu-latest (GitHub Actions)
@@ -112,6 +115,7 @@ Located in `__benchmarks__/macro/`, these test combined DOM scenarios:
 ## Contributing Benchmarks
 
 When adding new benchmarks:
+
 1. **Micro**: Test a single DOM binding operation in isolation.
 2. **Macro**: Test a combined DOM workflow with rendering.
 
@@ -121,6 +125,7 @@ Refer to [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for further deta
 
 **Last Updated**: 2026-06-20
 **Version**: v0.34.0
+
 - **Node.js**: v22.x
 - **Browser**: Chromium (via Vitest browser mode)
 - **OS**: ubuntu-latest (GitHub Actions)

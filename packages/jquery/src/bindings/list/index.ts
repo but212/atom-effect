@@ -12,6 +12,7 @@
 
 import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
+import { atomEachElement } from '@/core/dom';
 import { registry } from '@/core/registry';
 import type { ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
 import {
@@ -133,7 +134,7 @@ export function applyListBinding<T>(
       for (let i = 0; i < ctx.snapshots.length; i++) {
         const snapshot = ctx.snapshots[i];
         if (
-          snapshot?.node &&
+          snapshot &&
           !claimedOldIndices.has(i) &&
           !isNodeRemoving(ctx.removingKeys, snapshot.key, snapshot.node)
         ) {
@@ -145,7 +146,7 @@ export function applyListBinding<T>(
       // Snapshot current state for the next O(N) diff cycle.
       ctx.snapshots = [];
       for (const slot of diff.slots) {
-        if (slot) {
+        if (slot?.nodes) {
           ctx.snapshots.push({ key: slot.key, item: slot.item, node: slot.nodes });
         }
       }
@@ -155,7 +156,7 @@ export function applyListBinding<T>(
   ctx.reactiveEffect = reactiveEffect;
 
   if (eventBindings.length > 0) {
-    setupEvents(ctx, containerElement, eventBindings);
+    setupEvents(ctx, containerElement, eventBindings, element);
   }
 
   instances.set(element, { reactiveEffect: reactiveEffect, ctx });
@@ -186,13 +187,9 @@ export function applyListBinding<T>(
  * ```
  */
 function atomList<T>(this: JQuery, source: ReadonlyAtom<T[]>, options: ListOptions<T>): JQuery {
-  for (let i = 0, length = this.length; i < length; i++) {
-    const element = this[i];
-    if (element && element.nodeType === 1) {
-      applyListBinding(element, source, options);
-    }
-  }
-  return this;
+  return atomEachElement(this, (element) => {
+    applyListBinding(element, source, options);
+  });
 }
 
 /**
@@ -232,11 +229,9 @@ function normalizeEvents<T>(events: ListOptions<T>['events']): EventBinding<T>[]
 function setupEvents<T>(
   ctx: ListContext<T>,
   $container: JQuery,
-  bindings: EventBinding<T>[]
+  bindings: EventBinding<T>[],
+  containerEl: HTMLElement
 ): void {
-  const containerEl = $container[0];
-  if (containerEl?.nodeType !== 1) return;
-
   for (const { type, selector, callback } of bindings) {
     $container.on(
       `${type}.atomList`,

@@ -31,7 +31,7 @@ export interface ListSnapshot<T> {
   key: ListKey;
   item: T;
   /** The actual raw DOM nodes representing this item. */
-  node?: Node[] | undefined;
+  node: Node[];
 }
 
 /**

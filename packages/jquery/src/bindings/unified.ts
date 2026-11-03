@@ -181,31 +181,28 @@ export function bindClass(
 export function bindCss(element: HTMLElement, cssMap: Record<string, CssValue>): void {
   const { style } = element;
   const reactiveMap: Record<string, ReactiveValue<unknown>> = {};
-  const metaMap: Record<string, string> = {};
+  const descriptors: { property: string; kebab: string; unit: string }[] = [];
   const previousStyles = new Map<string, string>();
 
   for (const [property, value] of Object.entries(cssMap)) {
     const [source, unit] = Array.isArray(value) ? value : [value, ''];
     reactiveMap[property] = source;
-    metaMap[property] = unit;
+    descriptors.push({ property, kebab: toKebab(property), unit });
   }
 
   registerMapEffect(
     element,
     reactiveMap,
     (states) => {
-      for (const property in states) {
-        if (Object.hasOwn(states, property)) {
-          const value = states[property];
-          const unit = metaMap[property] ?? '';
-          const cssValueString = unit ? `${value}${unit}` : String(value);
+      for (const desc of descriptors) {
+        const value = states[desc.property];
+        const cssValueString = desc.unit ? `${value}${desc.unit}` : String(value);
 
-          if (previousStyles.get(property) !== cssValueString) {
-            if (!isDangerousCssValue(cssValueString)) {
-              style.setProperty(toKebab(property), cssValueString);
-            }
-            previousStyles.set(property, cssValueString);
+        if (previousStyles.get(desc.property) !== cssValueString) {
+          if (!isDangerousCssValue(cssValueString)) {
+            style.setProperty(desc.kebab, cssValueString);
           }
+          previousStyles.set(desc.property, cssValueString);
         }
       }
     },
@@ -231,48 +228,40 @@ export function bindAttr(
 ): void {
   const safeEntries = getSafeEntries(attrMap, false);
   const safeMap = Object.fromEntries(safeEntries);
-  const isAriaMap: Record<string, boolean> = {};
   const previousAttributes: Record<string, string | null> = {};
-
-  for (const [name] of safeEntries) {
-    isAriaMap[name] = name.toLowerCase().startsWith('aria-');
+  const descriptors = safeEntries.map(([name]) => {
     previousAttributes[name] = element.getAttribute(name);
-  }
+    return { name, isAria: name.toLowerCase().startsWith('aria-') };
+  });
 
   registerMapEffect(
     element,
     safeMap,
     (states) => {
-      for (const name in states) {
-        if (Object.hasOwn(states, name)) {
-          if (!(name in isAriaMap)) continue;
-          const isAria = isAriaMap[name];
-          if (isAria === undefined) continue;
-
-          const value = states[name];
-          let attributeValue: string | null = null;
-          if (value !== null && value !== undefined) {
-            if (typeof value === 'boolean') {
-              attributeValue = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
-            } else {
-              attributeValue = String(value);
-            }
+      for (const { name, isAria } of descriptors) {
+        const value = states[name];
+        let attributeValue: string | null = null;
+        if (value !== null && value !== undefined) {
+          if (typeof value === 'boolean') {
+            attributeValue = value ? (isAria ? 'true' : name) : isAria ? 'false' : null;
+          } else {
+            attributeValue = String(value);
           }
+        }
 
-          // 2. Validate and Apply
-          if (attributeValue !== null && isDangerousUrl(name, attributeValue)) {
-            debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name));
-            continue;
-          }
+        // 2. Validate and Apply
+        if (attributeValue !== null && isDangerousUrl(name, attributeValue)) {
+          debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name));
+          continue;
+        }
 
-          if (previousAttributes[name] !== attributeValue) {
-            if (attributeValue === null) {
-              element.removeAttribute(name);
-            } else {
-              element.setAttribute(name, attributeValue);
-            }
-            previousAttributes[name] = attributeValue;
+        if (previousAttributes[name] !== attributeValue) {
+          if (attributeValue === null) {
+            element.removeAttribute(name);
+          } else {
+            element.setAttribute(name, attributeValue);
           }
+          previousAttributes[name] = attributeValue;
         }
       }
     },
@@ -295,24 +284,23 @@ export function bindProp(
   const safeEntries = getSafeEntries(propMap, true);
   const safeMap = Object.fromEntries(safeEntries);
   const previousValues: Record<string, unknown> = {};
+  const propNames = safeEntries.map(([name]) => name);
 
   registerMapEffect(
     element,
     safeMap,
     (states) => {
-      for (const name in states) {
-        if (Object.hasOwn(states, name)) {
-          const value = states[name];
-          if (previousValues[name] === value) continue;
+      for (const name of propNames) {
+        const value = states[name];
+        if (previousValues[name] === value) continue;
 
-          if (typeof value === 'string' && isDangerousUrl(name, value)) {
-            debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name));
-            continue;
-          }
-
-          Reflect.set(element, name, value);
-          previousValues[name] = value;
+        if (typeof value === 'string' && isDangerousUrl(name, value)) {
+          debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_SECURITY.ERRORS.BLOCKED_PROTOCOL(name));
+          continue;
         }
+
+        Reflect.set(element, name, value);
+        previousValues[name] = value;
       }
     },
     'prop'

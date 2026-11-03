@@ -13,18 +13,11 @@
  */
 
 import { Result } from '@but212/atom-effect-utils';
-import {
-  ERROR_MESSAGES,
-  IS_DEV,
-  KIND,
-  LOG_PREFIX,
-  SCHEDULER_CONFIG,
-  SCHEDULER_STATE,
-} from '@/constants';
-import type { JobBuffer, SchedulerJob, SchedulerJobObject, SchedulerState } from '@/types';
+import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, SCHEDULER_CONFIG, SCHEDULER_STATE } from '@/constants';
+import type { JobBuffer, SchedulerJob } from '@/types';
 import { nextSmi, SchedulerError } from '@/utils';
 
-import { resetTrackingContext, trackingContext } from './base';
+import { trackingContext } from './base';
 
 class AggregateExecutionLimitError extends Error {
   constructor() {
@@ -40,7 +33,7 @@ class AggregateExecutionLimitError extends Error {
  * Maintains 'active' and 'standby' queues to allow new jobs to be scheduled
  * safely while the current batch is being processed.
  */
-class ReactiveScheduler implements SchedulerState {
+class ReactiveScheduler {
   #epoch = 0;
   #state = SCHEDULER_STATE.IDLE;
   #batchDepth = 0;
@@ -69,6 +62,9 @@ class ReactiveScheduler implements SchedulerState {
   }
   get maxFlushIterations() {
     return this.#maxFlushIterations;
+  }
+  get isBatching() {
+    return (this.#state & SCHEDULER_STATE.BATCHING) !== 0;
   }
   get isSessionActive() {
     return this.#isSessionActive;
@@ -137,8 +133,7 @@ class ReactiveScheduler implements SchedulerState {
     this.#standbyJobBuffer = activeJobBuffer;
     this.#activeJobBuffer.size = 0;
 
-    this.nextEpoch();
-    const functionKind = KIND.Fn;
+    this.#epoch = nextSmi(this.#epoch);
     this.#processingJobs = activeJobs;
 
     for (let i = 0; i < activeJobsCount; i++) {
@@ -148,13 +143,10 @@ class ReactiveScheduler implements SchedulerState {
       activeJobs[i] = undefined;
 
       try {
-        if (job._kind === functionKind) {
+        if (typeof job === 'function') {
           job();
         } else {
-          const executionResult = (job as SchedulerJobObject).execute() as Result<
-            void,
-            Error
-          > | void;
+          const executionResult = job.execute() as Result<void, Error> | void;
           if (executionResult !== undefined && Result.isErr(executionResult)) {
             const executionError = executionResult.error;
             if (!(executionError instanceof AggregateExecutionLimitError)) {
@@ -200,7 +192,7 @@ class ReactiveScheduler implements SchedulerState {
         if (this.#activeJobBuffer.size === 0) return;
         this.flushQueues();
       } catch (microtaskError) {
-        resetTrackingContext(trackingContext);
+        trackingContext.current = null;
         throw microtaskError;
       } finally {
         this.#state &= ~SCHEDULER_STATE.PROCESSING;
@@ -323,11 +315,6 @@ class ReactiveScheduler implements SchedulerState {
     );
   }
 
-  nextEpoch(): number {
-    this.#epoch = nextSmi(this.#epoch);
-    return this.#epoch;
-  }
-
   /** @internal - Starts a new flush session. */
   startFlush(): boolean {
     if (this.#isSessionActive) {
@@ -385,10 +372,6 @@ class ReactiveScheduler implements SchedulerState {
     if (schedulerJob._nextEpoch === this.#epoch) return Result.ok(undefined);
     schedulerJob._nextEpoch = this.#epoch;
 
-    if (schedulerJob._kind === undefined) {
-      schedulerJob._kind = typeof schedulerJob === 'function' ? KIND.Fn : KIND.Obj;
-    }
-
     const target = this.#activeJobBuffer;
     target.items[target.size++] = schedulerJob;
 
@@ -434,13 +417,6 @@ export const scheduler = new ReactiveScheduler();
 export function isAggregateExecutionLimitError(error: Error): boolean {
   return error instanceof AggregateExecutionLimitError;
 }
-
-/** @internal */
-export const schedulerSchedule = (state: SchedulerState, callback: SchedulerJob) =>
-  Result.unwrap(state.schedule(callback));
-/** @internal */
-export const schedulerIsBatching = (state: SchedulerState) =>
-  (state.state & SCHEDULER_STATE.BATCHING) !== 0;
 
 /**
  * Logic: Atomic Update Batching

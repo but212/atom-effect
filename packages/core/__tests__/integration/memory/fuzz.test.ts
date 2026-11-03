@@ -6,7 +6,15 @@
 
 import { seededRandom } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
-import { atom, batch, type ComputedAtom, computed, type WritableAtom } from '@/index';
+import {
+  aeNextTick,
+  atom,
+  batch,
+  type ComputedAtom,
+  computed,
+  effect,
+  type WritableAtom,
+} from '@/index';
 
 function buildGraph(randomGenerator: () => number, atomCount = 5, computedCount = 20) {
   const atoms: WritableAtom<number>[] = [];
@@ -39,16 +47,46 @@ function buildGraph(randomGenerator: () => number, atomCount = 5, computedCount 
 }
 
 describe('Fuzz Testing (Deterministic)', () => {
-  it('computed values stay finite after random mutations', () => {
+  it('computed values equal the dependency sum after random single-atom mutations', () => {
     const randomGenerator = seededRandom(12345);
-    const { atoms, computeds } = buildGraph(randomGenerator);
+    const { atoms, computeds, depMap } = buildGraph(randomGenerator);
 
     for (let i = 0; i < 100; i++) {
       const targetAtom = atoms[Math.floor(randomGenerator() * atoms.length)];
       if (targetAtom) targetAtom.value = Math.floor(randomGenerator() * 100);
 
-      const targetComputed = computeds[Math.floor(randomGenerator() * computeds.length)];
-      if (targetComputed) expect(Number.isFinite(targetComputed.value)).toBe(true);
+      const idx = Math.floor(randomGenerator() * computeds.length);
+      const expected = depMap[idx]?.reduce((sum, dependency) => sum + dependency.value, 0);
+      expect(computeds[idx]?.value).toBe(expected);
+    }
+  });
+
+  it('effects observe the settled value of every computed after batched mutations', async () => {
+    const randomGenerator = seededRandom(24680);
+    const { atoms, computeds } = buildGraph(randomGenerator, 5, 10);
+
+    const observed = computeds.map(() => Number.NaN);
+    const effects = computeds.map((computedInstance, idx) =>
+      effect(() => {
+        observed[idx] = computedInstance.value;
+      })
+    );
+
+    try {
+      for (let i = 0; i < 20; i++) {
+        batch(() => {
+          for (const someAtom of atoms) {
+            someAtom.value = Math.floor(randomGenerator() * 100);
+          }
+        });
+        await aeNextTick();
+
+        for (let idx = 0; idx < computeds.length; idx++) {
+          expect(observed[idx]).toBe(computeds[idx]?.value);
+        }
+      }
+    } finally {
+      for (const fx of effects) fx.dispose();
     }
   });
 

@@ -23,28 +23,16 @@ import {
   IS_DEV,
   SCHEDULER_CONFIG,
 } from '@/constants';
-import { runInTrackingContext, trackingContext } from '@/core/base';
-import type {
-  Dependency,
-  DependencyTracker,
-  EffectFunction,
-  EffectObject,
-  EffectOptions,
-  Subscriber,
-} from '@/types';
+import { runInTrackingContext } from '@/core/base';
+import type { Dependency, EffectFunction, EffectObject, EffectOptions, Subscriber } from '@/types';
 import { debug, EffectError, wrapError } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import {
-  isAggregateExecutionLimitError,
-  runInFlushScope,
-  scheduler,
-  schedulerSchedule,
-} from './scheduler';
+import { isAggregateExecutionLimitError, runInFlushScope, scheduler } from './scheduler';
 import { ReactiveTracker } from './tracker';
 
 const EMPTY_EFFECT: EffectFunction = () => undefined;
 
-class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTracker, Subscriber {
+class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
   /** @internal */
   readonly [BRAND] = BrandFlags.Effect;
 
@@ -68,9 +56,6 @@ class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTrac
 
   constructor(effectCallback: EffectFunction, options: EffectOptions = {}) {
     super();
-    if (typeof effectCallback !== 'function') {
-      throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
-    }
     this.#effectCallback = effectCallback;
     this.#onErrorCallback = options.onError ?? null;
 
@@ -84,14 +69,13 @@ class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTrac
         ? () => {
             const executionResult = runInFlushScope(() => this.execute());
             if (
-              executionResult &&
               Result.isErr(executionResult) &&
               !isAggregateExecutionLimitError(executionResult.error)
             ) {
               console.error(executionResult.error);
             }
           }
-        : () => schedulerSchedule(scheduler, this);
+        : () => Result.unwrap(scheduler.schedule(this));
 
     if (IS_DEV) debug.attachDebugInfo(this, 'effect', this.id, options.name);
   }
@@ -157,7 +141,7 @@ class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTrac
     this.startTracking();
 
     try {
-      const executionResult = runInTrackingContext(trackingContext, this, this.#effectCallback);
+      const executionResult = runInTrackingContext(this, this.#effectCallback);
       this.commitDeps();
       this.#handleResult(executionResult, sessionId);
     } catch (executionError) {
@@ -181,18 +165,11 @@ class EffectImpl extends ReactiveTracker implements EffectObject, DependencyTrac
    * Synchronously assigns the cleanup handle or delegates to the async handler.
    */
   #handleResult(executionResult: ReturnType<EffectFunction>, sessionId: number): void {
-    if (executionResult === undefined || executionResult === null) {
-      this.#cleanupCallback = null;
-      return;
-    }
-
     if (typeof executionResult === 'function') {
       this.#cleanupCallback = executionResult;
       if (this.isDisposed) this.#execCleanup();
     } else if (isPromise(executionResult)) {
       this.#handleAsyncResult(executionResult, sessionId);
-    } else {
-      this.#cleanupCallback = null;
     }
   }
 

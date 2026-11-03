@@ -1,13 +1,13 @@
 import { sleep } from '@tests/utils/test-helpers';
 import { describe, expect, it } from 'vitest';
 import {
-  nodeHasSubscription,
   nodeNotifySubscribers,
-  nodeUnsubscribe,
+  runInTrackingContext,
+  trackingContext,
   untracked,
 } from '@/core/base';
 import { atom, computed, effect } from '@/index';
-import type { ReactiveNode, SubscriberTarget } from '@/types';
+import type { DependencySubscriber, ReactiveNode } from '@/types';
 
 describe('BaseEngine (base.ts)', () => {
   describe('Tracking Context Primitives', () => {
@@ -40,6 +40,63 @@ describe('BaseEngine (base.ts)', () => {
             throw new Error('baz');
           })
         ).toThrow('baz');
+      });
+    });
+
+    describe('trackingContext.current restoration', () => {
+      const makeSubscriber = (): DependencySubscriber => ({ addDependency: () => {} });
+
+      it('restores the outer subscriber after nested runInTrackingContext', () => {
+        const outer = makeSubscriber();
+        const inner = makeSubscriber();
+        const seen: unknown[] = [];
+
+        runInTrackingContext(outer, () => {
+          seen.push(trackingContext.current);
+          runInTrackingContext(inner, () => seen.push(trackingContext.current));
+          seen.push(trackingContext.current);
+        });
+
+        expect(seen).toEqual([outer, inner, outer]);
+        expect(trackingContext.current).toBeNull();
+      });
+
+      it('restores the outer subscriber when the callback throws', () => {
+        const outer = makeSubscriber();
+        const inner = makeSubscriber();
+
+        runInTrackingContext(outer, () => {
+          expect(() =>
+            runInTrackingContext(inner, () => {
+              throw new Error('boom');
+            })
+          ).toThrow('boom');
+          expect(trackingContext.current).toBe(outer);
+        });
+
+        expect(trackingContext.current).toBeNull();
+      });
+
+      it('suppresses tracking inside untracked and restores it afterwards, including on throw', () => {
+        const outer = makeSubscriber();
+
+        runInTrackingContext(outer, () => {
+          untracked(() => {
+            expect(trackingContext.current).toBeNull();
+            untracked(() => expect(trackingContext.current).toBeNull());
+            expect(trackingContext.current).toBeNull();
+          });
+          expect(trackingContext.current).toBe(outer);
+
+          expect(() =>
+            untracked(() => {
+              throw new Error('boom');
+            })
+          ).toThrow('boom');
+          expect(trackingContext.current).toBe(outer);
+        });
+
+        expect(trackingContext.current).toBeNull();
       });
     });
 
@@ -94,13 +151,30 @@ describe('BaseEngine (base.ts)', () => {
   });
 
   describe('Internal Engine API Functions', () => {
-    describe('nodeUnsubscribe()', () => {
-      it('handles undefined slots gracefully without throwing TypeError', () => {
-        const mockNode = {} as ReactiveNode<void>;
-        const mockLink = (() => {}) as SubscriberTarget<void>;
-        expect(() => {
-          nodeUnsubscribe(mockNode, mockLink);
-        }).not.toThrow();
+    describe('nodeSubscribe() release handle', () => {
+      it('is idempotent: repeated calls leave the subscriber count at zero', () => {
+        const source = atom(0);
+        const unsubscribe = source.subscribe(() => {});
+        expect(source.subscriberCount()).toBe(1);
+
+        unsubscribe();
+        unsubscribe();
+        expect(source.subscriberCount()).toBe(0);
+        source.dispose();
+      });
+
+      it('ignores a duplicate listener and keeps the original subscription', () => {
+        const source = atom(0);
+        const listener = () => {};
+        const first = source.subscribe(listener);
+        const second = source.subscribe(listener);
+
+        expect(source.subscriberCount()).toBe(1);
+        second();
+        expect(source.subscriberCount()).toBe(1);
+        first();
+        expect(source.subscriberCount()).toBe(0);
+        source.dispose();
       });
     });
 
@@ -109,15 +183,6 @@ describe('BaseEngine (base.ts)', () => {
         const mockNode = {} as ReactiveNode<void>;
         expect(() => {
           nodeNotifySubscribers(mockNode, undefined, undefined);
-        }).not.toThrow();
-      });
-    });
-
-    describe('nodeHasSubscription()', () => {
-      it('handles undefined slots gracefully without throwing TypeError', () => {
-        const mockNode = {} as ReactiveNode<void>;
-        expect(() => {
-          nodeHasSubscription(mockNode, () => {});
         }).not.toThrow();
       });
     });

@@ -25,11 +25,9 @@ function isolateDevIndicators(): () => void {
 
 describe('Constants Integrity', () => {
   describe('AsyncState', () => {
-    it('should have all required state lifecycle values', () => {
-      expect(AsyncState.IDLE).toBeDefined();
-      expect(AsyncState.PENDING).toBeDefined();
-      expect(AsyncState.RESOLVED).toBeDefined();
-      expect(AsyncState.REJECTED).toBeDefined();
+    it('should expose exactly the four lifecycle states with distinct values', () => {
+      expect(Object.keys(AsyncState).sort()).toEqual(['IDLE', 'PENDING', 'REJECTED', 'RESOLVED']);
+      expect(new Set(Object.values(AsyncState)).size).toBe(4);
     });
 
     it('should be strictly frozen to prevent tampering', () => {

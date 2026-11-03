@@ -65,7 +65,6 @@ export function buildIndices<T>(
     if (
       !previousSnapshot ||
       previousSnapshot.key !== itemKey ||
-      !previousSnapshot.node ||
       !isEqualFunction(previousSnapshot.item, item)
     )
       break;
@@ -91,7 +90,6 @@ export function buildIndices<T>(
     if (
       !previousSnapshot ||
       previousSnapshot.key !== itemKey ||
-      !previousSnapshot.node ||
       !isEqualFunction(previousSnapshot.item, item)
     )
       break;
