@@ -5,7 +5,7 @@
  * Pure dependency-graph traversal that gathers errors from a computed and its computed dependencies.
  */
 
-import { COMPUTED_STATE_FLAGS, STATE_MASKS } from '@/constants';
+import { COMPUTED_STATE_FLAGS } from '@/constants';
 import type { Dependency, DependencyId, ReactiveDependencyTracker } from '@/types';
 import { BUFFER_FLAGS } from './buffers';
 
@@ -32,8 +32,8 @@ export function collectErrorsRecursive(
     if (seen.has(node.id)) return false;
     seen.add(node.id);
 
-    if (node._error || (node.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) {
-      collected.push(node._error as Error);
+    if (node._error) {
+      collected.push(node._error);
       if (stopOnFirst) return true;
     }
 

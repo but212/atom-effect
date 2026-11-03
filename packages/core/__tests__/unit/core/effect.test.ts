@@ -341,6 +341,25 @@ describe('Effect', () => {
         expect(cleanup).toHaveBeenCalledTimes(1);
       });
 
+      it('runs a cleanup exactly once when the next run returns no cleanup', async () => {
+        const source = atom(0, { sync: true });
+        const cleanup = vi.fn();
+        const effectInstance = effect(
+          () => {
+            if (source.value === 0) return cleanup;
+            return undefined;
+          },
+          { sync: true }
+        );
+
+        source.value = 1;
+        await vi.runAllTimersAsync();
+        expect(cleanup).toHaveBeenCalledTimes(1);
+
+        effectInstance.dispose();
+        expect(cleanup).toHaveBeenCalledTimes(1);
+      });
+
       it('gracefully handles missing or invalid cleanup returns', async () => {
         // @ts-expect-error Testing invalid cleanup return
         const effectInstance = effect(() => 'invalid');
@@ -845,16 +864,6 @@ describe('Effect', () => {
         expect(consoleSpy).toHaveBeenCalledWith(expect.any(EffectError));
 
         consoleSpy.mockRestore();
-      });
-    });
-
-    describe('internal constructor validation', () => {
-      it('should throw EffectMustBeFunction error when private EffectImpl constructor is invoked with a non-function', () => {
-        const effectInstance = effect(() => {});
-        const EffectImplClass = effectInstance.constructor;
-        expect(
-          () => new (EffectImplClass as unknown as new (fn: unknown) => unknown)(null)
-        ).toThrow(EffectError);
       });
     });
   });

@@ -14,13 +14,12 @@
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, STATE_FLAGS } from '@/constants';
 import type {
-  AtomErrorConstructor,
   DependencySubscriber,
   ReactiveNode,
   SubscriberTarget,
   TrackingContext,
 } from '@/types';
-import { AtomError, nextSmi, wrapError } from '@/utils';
+import { AtomError, wrapError } from '@/utils';
 
 /** @internal */
 function createTrackingContext(): TrackingContext {
@@ -245,43 +244,6 @@ export function nodeHasSubscription<T>(node: ReactiveNode<T>, listener: unknown)
     }
   }
   return false;
-}
-
-/**
- * Logic: Reactive Error Boundary
- *
- * Why:
- * Computed nodes increment their version on error to signal a state change
- * even if a valid value was not produced. This ensures downstream nodes
- * can react to the failure state.
- *
- * @internal
- */
-export function nodeHandleError<T>(
-  node: ReactiveNode<T> & { isComputed?: boolean; version: number },
-  error: unknown,
-  errorConstructor: AtomErrorConstructor,
-  message: string,
-  onError?: ((error: Error) => void) | ((error: unknown) => void) | null
-): void {
-  const wrappedError = wrapError(error, errorConstructor, message);
-
-  if (node.isComputed) {
-    node.version = nextSmi(node.version);
-    node._error = wrappedError;
-  } else {
-    console.error(wrappedError);
-  }
-
-  if (onError) {
-    try {
-      onError(wrappedError);
-    } catch (error) {
-      console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, error);
-    }
-  }
-
-  nodeNotifySubscribers(node, undefined, undefined);
 }
 
 /** @internal - Returns active listener count. */

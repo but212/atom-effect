@@ -25,7 +25,7 @@ import type { ComputedAtom, EffectObject, ReadonlyAtom, WritableAtom } from '@/t
  */
 function isBranded<T>(targetValue: unknown, flag: number): targetValue is T {
   if (targetValue && (typeof targetValue === 'object' || typeof targetValue === 'function')) {
-    const brand = BRAND in targetValue ? Reflect.get(targetValue, BRAND) : undefined;
+    const brand = Reflect.get(targetValue, BRAND);
     return typeof brand === 'number' && (brand & flag) !== 0;
   }
   return false;

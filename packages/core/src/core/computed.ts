@@ -26,7 +26,6 @@ import {
 } from '@/constants';
 import {
   nodeGetSubscriberCount,
-  nodeHandleError,
   nodeNotifySubscribers,
   nodeSubscribe,
   runInTrackingContext,
@@ -44,7 +43,14 @@ import type {
   Subscriber,
   SubscriberTarget,
 } from '@/types';
-import { ComputedError, debug, mergeAtomValues, NO_DEFAULT_VALUE, nextSmi } from '@/utils';
+import {
+  ComputedError,
+  debug,
+  mergeAtomValues,
+  NO_DEFAULT_VALUE,
+  nextSmi,
+  wrapError,
+} from '@/utils';
 import { isPromise } from '@/utils/type-guards';
 import { BUFFER_FLAGS, isBufferDirty, isBufferShallowDirty } from './buffers';
 import { collectErrorsRecursive } from './computed-errors';
@@ -243,7 +249,6 @@ class ComputedAtomImpl<T>
     trackingContext.current?.addDependency(this);
 
     if (this._error) return true;
-    if ((this.flags & STATE_MASKS.ASYNC_MASK) === STATE_MASKS.ERROR_MASK) return true;
     if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
 
     return untracked(() => collectErrorsRecursive(this, true).length > 0);
@@ -343,9 +348,6 @@ class ComputedAtomImpl<T>
    * computation execution.
    */
   #recompute(): void {
-    // Constraint: Prevent re-entrant synchronous calls.
-    if ((this.flags & COMPUTED_STATE_FLAGS.RECOMPUTING) !== 0) return;
-
     this.flags =
       (this.flags & ~COMPUTED_STATE_FLAGS.FORCE_COMPUTE) | COMPUTED_STATE_FLAGS.RECOMPUTING;
 
@@ -415,7 +417,24 @@ class ComputedAtomImpl<T>
     this.flags =
       (this.flags & ~(STATE_MASKS.LIFECYCLE_MASK | COMPUTED_STATE_FLAGS.RECOMPUTING)) |
       COMPUTED_STATE_FLAGS.REJECTED;
-    nodeHandleError(this, error, ComputedError, message, this.#onErrorCallback);
+
+    // Logic: Reactive Error Boundary
+    // The version bump signals downstream nodes that the failure state is a change,
+    // even though no valid value was produced.
+    const wrappedError = wrapError(error, ComputedError, message);
+    this.version = nextSmi(this.version);
+    this._error = wrappedError;
+
+    const onError = this.#onErrorCallback;
+    if (onError) {
+      try {
+        onError(wrappedError);
+      } catch (handlerError) {
+        console.error(ERROR_MESSAGES.CALLBACK_ERROR_IN_ERROR_HANDLER, handlerError);
+      }
+    }
+
+    nodeNotifySubscribers(this, undefined, undefined);
   }
 
   /**
@@ -426,11 +445,7 @@ class ComputedAtomImpl<T>
   #finalizeResolution(value: T): void {
     const flags = this.flags;
     const asyncState = flags & STATE_MASKS.ASYNC_MASK;
-    if (
-      asyncState !== COMPUTED_STATE_FLAGS.RESOLVED ||
-      !this.#isEqual(this.#value, value) ||
-      this._error !== null
-    ) {
+    if (asyncState !== COMPUTED_STATE_FLAGS.RESOLVED || !this.#isEqual(this.#value, value)) {
       this.version = nextSmi(this.version);
     }
 

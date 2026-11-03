@@ -61,9 +61,6 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
 
   constructor(effectCallback: EffectFunction, options: EffectOptions = {}) {
     super();
-    if (typeof effectCallback !== 'function') {
-      throw new EffectError(ERROR_MESSAGES.EFFECT_MUST_BE_FUNCTION);
-    }
     this.#effectCallback = effectCallback;
     this.#onErrorCallback = options.onError ?? null;
 
@@ -173,18 +170,11 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
    * Synchronously assigns the cleanup handle or delegates to the async handler.
    */
   #handleResult(executionResult: ReturnType<EffectFunction>, sessionId: number): void {
-    if (executionResult === undefined || executionResult === null) {
-      this.#cleanupCallback = null;
-      return;
-    }
-
     if (typeof executionResult === 'function') {
       this.#cleanupCallback = executionResult;
       if (this.isDisposed) this.#execCleanup();
     } else if (isPromise(executionResult)) {
       this.#handleAsyncResult(executionResult, sessionId);
-    } else {
-      this.#cleanupCallback = null;
     }
   }
 
