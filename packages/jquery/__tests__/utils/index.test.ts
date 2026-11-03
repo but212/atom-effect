@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import $ from '@/index';
 import { getSelector } from '@/utils';
 import { sanitizeHtml } from '@/utils/sanitize';
 
@@ -29,24 +28,6 @@ describe('Utils', () => {
       for (const { element, expected } of cases) {
         expect(getSelector(element)).toBe(expected);
       }
-    });
-  });
-
-  describe('Reactivity & Promises', () => {
-    it('isAtom identifies atoms', () => {
-      expect($.isAtom($.atom(1))).toBe(true);
-      expect($.isAtom(1)).toBe(false);
-      expect($.isAtom(null)).toBe(false);
-      expect($.isAtom({ value: 1, subscribe: () => {} })).toBe(false);
-    });
-
-    it('isPromise identifies thenables including functions', () => {
-      expect($.isPromise(Promise.resolve())).toBe(true);
-      expect($.isPromise({ then: () => {} })).toBe(true);
-
-      const thenableFn = () => {};
-      thenableFn.then = () => {};
-      expect($.isPromise(thenableFn)).toBe(true);
     });
   });
 

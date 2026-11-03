@@ -18,7 +18,17 @@ describe('jQuery namespace surface', () => {
     'isComputed',
     'isEffect',
     'untracked',
+    'route',
+    'atomFetch',
+    'provideAtom',
+    'injectAtom',
+    'useAtomComponent',
   ])('does not expose $.%s', (name) => {
     expect(($ as unknown as Record<string, unknown>)[name]).toBeUndefined();
+  });
+
+  it('keeps core bindings registered', () => {
+    expect(typeof $.atom).toBe('function');
+    expect(typeof $.fn.atomText).toBe('function');
   });
 });

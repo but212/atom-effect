@@ -1,148 +1,66 @@
 import { describe, expect, it } from 'vitest';
 import { isPromise } from '@/index';
 
+const thenMethod = {
+  then(resolve: () => void) {
+    resolve();
+  },
+};
+
+class CustomThenable {
+  then(resolve: () => void) {
+    resolve();
+  }
+}
+
 describe('Type Guards', () => {
   describe('isPromise', () => {
-    describe('native promises', () => {
-      it('should return true for native Promise instances', () => {
-        expect(isPromise(Promise.resolve(42))).toBe(true);
-        expect(isPromise(new Promise((resolve) => resolve(42)))).toBe(true);
-        expect(isPromise(Promise.reject(new Error('fail')).catch(() => {}))).toBe(true);
-      });
+    it.each<[string, unknown]>([
+      ['native Promise.resolve', Promise.resolve(42)],
+      ['native new Promise', new Promise((resolve) => resolve(42))],
+      ['native caught rejection', Promise.reject(new Error('fail')).catch(() => {})],
+      ['object with a then method', { ...thenMethod }],
+      ['function with a then method', Object.assign(() => {}, thenMethod)],
+      ['custom class with a then method', new CustomThenable()],
+      ['array with a then method', Object.assign([], thenMethod)],
+    ])('returns true for %s', (_label, value) => {
+      expect(isPromise(value)).toBe(true);
     });
 
-    describe('thenable / duck-typed promises', () => {
-      it('should return true for objects with a then method', () => {
-        const thenableObj = {
-          then(resolve: () => void) {
-            resolve();
-          },
-        };
-        expect(isPromise(thenableObj)).toBe(true);
-      });
-
-      it('should return true for functions with a then method', () => {
-        const thenableFunction = Object.assign(() => {}, {
-          then(resolve: () => void) {
-            resolve();
-          },
-        });
-        expect(isPromise(thenableFunction)).toBe(true);
-      });
-
-      it('should return true for custom classes with a then method', () => {
-        class CustomThenable {
-          then(resolve: () => void) {
-            resolve();
-          }
-        }
-        expect(isPromise(new CustomThenable())).toBe(true);
-      });
-
-      it('should return true for arrays with a then method', () => {
-        const thenableArray = Object.assign([], {
-          then(resolve: () => void) {
-            resolve();
-          },
-        });
-        expect(isPromise(thenableArray)).toBe(true);
-      });
-    });
-
-    describe('non-promise values', () => {
-      describe('null and undefined', () => {
-        it('should return false for null', () => {
-          expect(isPromise(null)).toBe(false);
-        });
-
-        it('should return false for undefined', () => {
-          expect(isPromise(undefined)).toBe(false);
-        });
-      });
-
-      describe('primitives', () => {
-        it('should return false for numbers', () => {
-          expect(isPromise(0)).toBe(false);
-          expect(isPromise(42)).toBe(false);
-          expect(isPromise(-1)).toBe(false);
-          expect(isPromise(NaN)).toBe(false);
-          expect(isPromise(Infinity)).toBe(false);
-        });
-
-        it('should return false for strings', () => {
-          expect(isPromise('')).toBe(false);
-          expect(isPromise('promise')).toBe(false);
-        });
-
-        it('should return false for booleans', () => {
-          expect(isPromise(true)).toBe(false);
-          expect(isPromise(false)).toBe(false);
-        });
-
-        it('should return false for symbols', () => {
-          expect(isPromise(Symbol('test'))).toBe(false);
-        });
-
-        it('should return false for bigints', () => {
-          expect(isPromise(10n)).toBe(false);
-        });
-      });
-
-      describe('objects without then / non-function then', () => {
-        it('should return false for plain objects', () => {
-          expect(isPromise({})).toBe(false);
-          expect(isPromise({ a: 1 })).toBe(false);
-        });
-
-        it('should return false for objects where then is not a function', () => {
-          expect(isPromise({ then: 42 })).toBe(false);
-          expect(isPromise({ then: 'string' })).toBe(false);
-          expect(isPromise({ then: {} })).toBe(false);
-          expect(isPromise({ then: null })).toBe(false);
-          expect(isPromise({ then: undefined })).toBe(false);
-          expect(isPromise({ then: true })).toBe(false);
-        });
-
-        it('should return false for arrays without then', () => {
-          expect(isPromise([])).toBe(false);
-          expect(isPromise([1, 2, 3])).toBe(false);
-        });
-
-        it('should return false for arrays where then is not a function', () => {
-          const nonThenableArray = Object.assign([], { then: 42 });
-          expect(isPromise(nonThenableArray)).toBe(false);
-        });
-      });
-
-      describe('functions without then / non-function then', () => {
-        it('should return false for standard functions', () => {
-          expect(isPromise(() => {})).toBe(false);
-        });
-
-        it('should return false for functions where then is not a function', () => {
-          const nonThenableFunction = Object.assign(() => {}, { then: 42 });
-          expect(isPromise(nonThenableFunction)).toBe(false);
-        });
-      });
-
-      describe('other built-in objects', () => {
-        it('should return false for Date instances', () => {
-          expect(isPromise(new Date())).toBe(false);
-        });
-
-        it('should return false for RegExp instances', () => {
-          expect(isPromise(/regex/)).toBe(false);
-        });
-
-        it('should return false for Map and Set instances', () => {
-          expect(isPromise(new Map())).toBe(false);
-          expect(isPromise(new Set())).toBe(false);
-        });
-
-        it('should return false for Error instances', () => {
-          expect(isPromise(new Error('error'))).toBe(false);
-        });
-      });
+    it.each<[string, unknown]>([
+      ['null', null],
+      ['undefined', undefined],
+      ['zero', 0],
+      ['integer', 42],
+      ['negative number', -1],
+      ['NaN', Number.NaN],
+      ['Infinity', Number.POSITIVE_INFINITY],
+      ['empty string', ''],
+      ['string', 'promise'],
+      ['true', true],
+      ['false', false],
+      ['symbol', Symbol('test')],
+      ['bigint', 10n],
+      ['empty object', {}],
+      ['plain object', { a: 1 }],
+      ['object with numeric then', { then: 42 }],
+      ['object with string then', { then: 'string' }],
+      ['object with object then', { then: {} }],
+      ['object with null then', { then: null }],
+      ['object with undefined then', { then: undefined }],
+      ['object with boolean then', { then: true }],
+      ['empty array', []],
+      ['array without then', [1, 2, 3]],
+      ['array with non-function then', Object.assign([], { then: 42 })],
+      ['plain function', () => {}],
+      ['function with non-function then', Object.assign(() => {}, { then: 42 })],
+      ['Date', new Date()],
+      ['RegExp', /regex/],
+      ['Map', new Map()],
+      ['Set', new Set()],
+      ['Error', new Error('error')],
+    ])('returns false for %s', (_label, value) => {
+      expect(isPromise(value)).toBe(false);
     });
   });
 });

@@ -5,7 +5,7 @@
 import { Result } from '@but212/atom-effect-utils';
 import { sleep } from '@tests/utils/test-helpers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { atom, computed, EffectError, effect, globalScheduler } from '@/index';
+import { aeNextTick, atom, computed, EffectError, effect, globalScheduler } from '@/index';
 
 describe('Effect', () => {
   describe('with fake timers', () => {
@@ -865,6 +865,83 @@ describe('Effect', () => {
 
         consoleSpy.mockRestore();
       });
+    });
+  });
+
+  describe('dependency tracking', () => {
+    it('subscribes once and re-runs once when the same atom is read repeatedly', async () => {
+      const source = atom(1);
+      let runs = 0;
+      const fx = effect(() => {
+        runs++;
+        return void (source.value + source.value);
+      });
+
+      expect(source.subscriberCount()).toBe(1);
+
+      source.value = 2;
+      await aeNextTick();
+
+      expect(runs).toBe(2);
+      expect(source.subscriberCount()).toBe(1);
+      fx.dispose();
+    });
+
+    it('drops atoms that a later run no longer reads', async () => {
+      const flag = atom(true);
+      const left = atom('l');
+      const right = atom('r');
+      let runs = 0;
+      const fx = effect(() => {
+        runs++;
+        return void (flag.value ? left.value : right.value);
+      });
+
+      expect(left.subscriberCount()).toBe(1);
+      expect(right.subscriberCount()).toBe(0);
+
+      flag.value = false;
+      await aeNextTick();
+      expect(runs).toBe(2);
+      expect(left.subscriberCount()).toBe(0);
+      expect(right.subscriberCount()).toBe(1);
+
+      left.value = 'l2';
+      await aeNextTick();
+      expect(runs).toBe(2);
+
+      right.value = 'r2';
+      await aeNextTick();
+      expect(runs).toBe(3);
+      fx.dispose();
+    });
+
+    it('drops a computed dependency that a later run no longer reads', async () => {
+      const useDerived = atom(true);
+      const source = atom(1);
+      const derived = computed(() => source.value * 2);
+      let runs = 0;
+      const fx = effect(() => {
+        runs++;
+        return void (useDerived.value ? derived.value : 0);
+      });
+
+      expect(derived.subscriberCount()).toBe(1);
+
+      useDerived.value = false;
+      await aeNextTick();
+      expect(runs).toBe(2);
+      expect(derived.subscriberCount()).toBe(0);
+
+      source.value = 5;
+      await aeNextTick();
+      expect(runs).toBe(2);
+
+      useDerived.value = true;
+      await aeNextTick();
+      expect(runs).toBe(3);
+      expect(derived.subscriberCount()).toBe(1);
+      fx.dispose();
     });
   });
 });

@@ -61,7 +61,7 @@ import { ReactiveTracker } from './tracker';
  * and the recursive dirty state of its dependency buffer.
  * @internal
  */
-export function shouldRecompute(flags: number, tracker: ReactiveDependencyTracker): boolean {
+function shouldRecompute(flags: number, tracker: ReactiveDependencyTracker): boolean {
   const asyncState = flags & STATE_MASKS.ASYNC_MASK;
   return (
     (flags & (COMPUTED_STATE_FLAGS.FORCE_COMPUTE | COMPUTED_STATE_FLAGS.DIRTY)) !== 0 ||

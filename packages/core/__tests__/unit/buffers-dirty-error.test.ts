@@ -25,10 +25,13 @@ describe('isBufferDirty error boundary', () => {
     // Invalidate upstream by changing atom
     trigger.value = 1;
 
-    // Reading downstream.value triggers shouldRecompute -> isBufferDirty -> upstream.value
-    // If upstream.value throws in isBufferDirty, it must NOT escape downstream.value.
-    // Instead, downstream should safely return defaultValue (-1).
+    // An upstream error must NOT escape downstream.value; downstream returns defaultValue.
     expect(downstream.value).toBe(-1);
     expect(downstream.hasError).toBe(true);
+
+    // Recovery: once upstream succeeds again, downstream leaves the error state.
+    trigger.value = 0;
+    expect(downstream.value).toBe(11);
+    expect(downstream.hasError).toBe(false);
   });
 });
