@@ -5,6 +5,7 @@ Normative contracts for the functional primitives and internal data structures. 
 ## 1. `Result<T, E>`
 
 A discriminated union `Ok<T> | Err<E>` for functional error handling without throwing.
+
 - `Ok<T>`: `{ ok: true; value: T; error: undefined }`
 - `Err<E>`: `{ ok: false; value: undefined; error: E }`
 - Default error type `E = Error` when unspecified.
@@ -27,6 +28,7 @@ A discriminated union `Ok<T> | Err<E>` for functional error handling without thr
 ## 2. `SlotBuffer<T>`
 
 High-performance ordered collection for V8 hidden-class stability, used by the reactive dependency tracker.
+
 - **Fast lane**: `#fastSlot0`–`#fastSlot3` inline slots (indices 0–3) avoid array allocation.
 - **Overflow**: array for indices ≥ 4.
 - **`length`** — physical capacity (including null gaps); **`size`** — logical non-null count; **`isLocked`** — true during iteration.
@@ -52,6 +54,7 @@ Tiered detection: native `instanceof Promise` first (fast path), then duck-typed
 ### `shallowEqual(a, b)`
 
 Shallow object equality:
+
 - `Object.is(a, b)` short-circuits (correct `NaN` and `+0`/`-0` handling).
 - Returns false if either side is non-object/`null`.
 - Compares key count first (early exit); each key must exist on `b` (`Object.hasOwn`) and be `Object.is`-equal.

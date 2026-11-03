@@ -83,6 +83,7 @@ pnpm bench computeds
 ### 1. Micro-Benchmarks
 
 Located in `__benchmarks__/micro/`, these tests measure the overhead of individual reactive primitives in isolation.
+
 - **Atom**: Measures creation, reactive/non-reactive reads, writes, and subscription overhead.
 - **Computed**: Measures dependency tracking efficiency, lazy evaluation overhead, and cache hit/miss performance.
 - **Effect**: Measures execution scheduling, cleanup rotation, and disposal latency.
@@ -91,6 +92,7 @@ Located in `__benchmarks__/micro/`, these tests measure the overhead of individu
 ### 2. Macro-Benchmarks
 
 Located in `__benchmarks__/macro/`, these tests simulate common application patterns without external dependencies (e.g., DOM).
+
 - **Todo Workflow**: A complete sequence of adding, toggling, filtering, and deleting items.
 - **Data Grid**: Performance of sorting, filtering, and pagination over large datasets (1000+ rows).
 - **Graph Stress**: Evaluation of complex dependency structures such as diamond and pyramid patterns.
@@ -98,6 +100,7 @@ Located in `__benchmarks__/macro/`, these tests simulate common application patt
 ### 3. Realistic Scenarios
 
 Located in `__benchmarks__/realistic/`, these tests evaluate the system under constraints typical of production environments.
+
 - **Frame Budget Analysis**: Ensures that reactive updates complete within the 16.6ms window required for 60fps rendering.
 - **Memory Stability**: Monitors heap usage during high-churn lifecycle cycles (mount/update/unmount).
 
@@ -133,6 +136,7 @@ Located in `__benchmarks__/realistic/`, these tests evaluate the system under co
 **Version**: v0.34.0
 **Last Updated**: 2026-06-20
 **Environment**:
+
 - **Runtime**: Node.js v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)
 
@@ -142,6 +146,7 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 **Last Updated**: 2026-06-20
 **Version**: v0.34.0
+
 - **Runtime**: Node.js v22.x
 - **Infrastructure**: ubuntu-latest (GitHub Actions)
 

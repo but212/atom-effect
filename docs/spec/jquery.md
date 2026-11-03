@@ -17,6 +17,7 @@ Normative contracts for DOM bindings, lifecycle invariants, the and the security
 Central dispatcher for multiple declarative bindings in one call. Accepts `text`, `html`, `class`, `css`, `attr`, `prop`, `show`, `hide`, `value`, `checked`, `form`, `on`.
 
 Implementation invariants:
+
 - **Task-based loop**: bindings are pre-compiled into a task array before iterating the collection; no key enumeration inside the DOM loop.
 - **Monomorphic strategy**: handlers resolve read/write strategy (e.g. `multipleSelect`) at construction, avoiding feature-detection branches in the reactive path.
 - **Local caching**: handlers cache the last written DOM value to avoid layout thrashing.
@@ -58,6 +59,7 @@ Implementation invariants:
 ## 2. `atomList` reconciliation
 
 3-pass pipeline minimizing DOM churn:
+
 1. **Head/tail fast-forwarding**: skip diffing for stable bounds.
 2. **Middle-range diffing**: compare the dirty middle using a persistent key map → insertion/deletion/move instructions.
 3. **Greedy placement**: reverse-order `insertBefore` for predictable cross-browser behavior.
@@ -66,6 +68,7 @@ Implementation invariants:
 **Optional callbacks/options:** `key` (required), `render`, `bind`, `update`, `onAdd`, `onRemove`, `empty`, `isEqual`, `events`.
 
 **Async removal & node identity invariants:**
+
 - Pending `onRemove` transitions are tracked by **node identity, not key**. On entering removal the `data-atom-key` is stripped; if re-bound live before async removal resolves, `commitRemoval` sees the re-bound key and aborts teardown.
 - A re-bind backstop guarantees a pending node carrying `data-atom-key` is never physically removed.
 - **Node-identity tracking applies to `Element`/`jQuery`/`DocumentFragment` renders** (nodes persist across cycles). With **string `render`**, the container is rebuilt via `replaceChildren` each cycle, so identity cannot span a pending removal.
@@ -140,6 +143,7 @@ Implementation invariants:
 | Encoded bypasses                                                                                | Recursive double entity decoding; null bytes, control chars (`\x00-\x1f`), and `\ufffd` stripped.                                  |
 
 **Sink contracts:**
+
 - `.atomHtml` — always routes through `sanitizeHtml` (primary XSS defense).
 - `.atomAttr(name, atom)` — validates name and value; blocks `on*` and `srcdoc` (case-insensitive); URI values protocol-checked (abort + warning on danger).
 - `.atomProp(name, atom)` — strict sink blacklist (`innerHTML`, `outerHTML`, `srcdoc` blocked; abort + warning on danger).

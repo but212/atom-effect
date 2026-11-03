@@ -9,6 +9,7 @@ Welcome to the `@but212/atom-effect-jquery` integration! This guide provides the
 Traditional jQuery relies on imperative DOM manipulation (e.g., listening to events and manually calling `.text()`, `.addClass()`, or `.show()`).
 
 This package shifts you to a **Declarative & Reactive** model:
+
 1. **State is the Single Source of Truth**: You define your data using Atoms.
 2. **DOM is a Projection of State**: You bind jQuery elements to these Atoms.
 3. **Automatic Synchronization**: When the Atom changes, the DOM updates automatically.
@@ -152,6 +153,7 @@ $.initAEJ({ patch: false, autoCleanup: false });
 Subsequent calls to `initAEJ` replace the existing configuration.
 
 When accessed via a CDN (e.g., jsDelivr or unpkg), the library exposes the global `AtomEffectJQuery` namespace:
+
 - `initAEJ(config)` — unified entry point for library configuration (patches, auto-cleanup).
 - `enableAutoCleanup(container)` — attaches a MutationObserver to a specific element.
 - `disableAutoCleanup()` — removes all global observers.
@@ -161,6 +163,7 @@ When accessed via a CDN (e.g., jsDelivr or unpkg), the library exposes the globa
 ### Debug mode
 
 When enabled via `$.debug.enabled = true`:
+
 - **Console Diagnostics**: Logs node updates and specific DOM operations.
 - **Visual Highlighting**: Outlines updated elements using native CSS animation (`Element.prototype.animate`) immediately when the DOM updates.
 - **Precision**: Logs structural paths using the `tag#id.class` format.

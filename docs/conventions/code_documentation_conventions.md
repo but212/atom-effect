@@ -143,6 +143,7 @@ Use the `@see` tag to link to external references, MDN documentation, specificat
 _Note: This is a reserved policy. It will be actively applied when deprecations are introduced._
 
 Deprecation is a critical communication tool for users. Always include:
+
 - **since**: The version where it was first deprecated.
 - **Removal Version**: State when it will be removed (usually the next Major version).
 - **Migration Path**: Provide the name of the replacement API or a link to a migration guide.
@@ -164,6 +165,7 @@ Use specialized prefixes to categorize maintenance information.
 ### Prefix Locations
 
 Prefixes are dual-format and can be placed in two locations depending on scope:
+
 1. **Single-line implementation comments (`// Prefix: ...`)**: Best for low-level, line-specific behavior.
 2. **TSDoc blocks (`* Prefix: ...`)**: Best for overall API block explanations, design roles, and safety guarantees.
 
@@ -195,6 +197,7 @@ $$\text{Security} \succ \text{Caution} \succ \text{Constraint} \succ \text{Logic
 ## Lifecycle & Concurrency Standards
 
 For operations involving asynchronous logic or DOM lifecycles, you must document:
+
 1. **Cleanup Mechanism**: How resources (timers, observers, listeners) are released.
 2. **Concurrency Control**: How "out-of-order" responses or race conditions are handled (e.g., `AbortController`, version tracking).
 3. **Teardown Order**: If the sequence of destruction matters.
@@ -212,6 +215,7 @@ For operations involving asynchronous logic or DOM lifecycles, you must document
 ## TODO & FIXME Standards (Reserved)
 
 _Note: This is a reserved policy. It will be actively applied when introducing tasks/fixes._
+
 - **Issue Tracking**: Every TODO or FIXME must reference an issue number or a specific owner.
 - **Resolution Condition**: State _what_ must happen for the tag to be removed, rather than just a date.
 

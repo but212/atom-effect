@@ -51,6 +51,7 @@ Specify units and domain boundaries directly in the variable name when the numer
 ### 3. Collections & Buffers
 
 Clearly differentiate between a single item, a list of items, and a structured buffer memory space.
+
 - **Single Item**: `job`, `listener`, `subscriber`
 - **Array / Iterable**: `activeJobs`, `listeners`, `subscribers`
 - **Buffer / Queue Structure**: `activeJobBuffer`, `standbyJobBuffer`
@@ -58,6 +59,7 @@ Clearly differentiate between a single item, a list of items, and a structured b
 ### 4. Data Processing & Conversions
 
 When data passes through stages of mapping, filtration, or normalization, include the processing state in the variable name.
+
 - **Raw Input**: `rawOptions`, `rawCallback`
 - **Processed / Sanitized**: `sanitizedHtml`, `normalizedPath`
 - **Computed / Derived**: `filteredItems`, `sortedJobs`

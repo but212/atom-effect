@@ -7,6 +7,7 @@ This document describes recommended architectural patterns for state management 
 ## 1. Structural Sharing with Lenses
 
 When managing large, complex objects (like configuration state or deeply nested JSON), updating a single property normally requires cloning the entire object or mutating it directly (which breaks reactivity). **Lenses** provide two-way reactive views into specific paths.
+
 - **Why**: Lenses use path-based structural sharing, meaning only the objects along the modified path are cloned. This preserves referential equality for unaffected branches, suppressing unnecessary downstream re-computations.
 
 ### Example: Deep State Management
@@ -61,6 +62,7 @@ The hook must return a fresh instance with the same prototype. Without a hook, l
 ## 2. Asynchronous Data Fetching
 
 Handling asynchronous data requires managing loading and error states. `computed` natively supports asynchronous resolution.
+
 - **Why**: Using a `defaultValue` allows the rest of the application to render synchronously while the async work happens in the background.
 
 ### Example: Async Computed with Defaults
@@ -102,6 +104,7 @@ effect(() => {
 ## 3. State Composition via Merging
 
 Large applications often need to combine isolated state domains into a unified interface for a component.
+
 - **Why**: `mergeAtoms` (read-only) and `mergeLenses` (writable) allow developers to aggregate disparate atoms into a single reactive object without duplicating state or manually synchronizing updates.
 
 ### Example: Unifying Writable State
@@ -132,6 +135,7 @@ formState.value = { name: 'Bob', notifications: false };
 ## 4. Bypassing Reactivity (Untracked)
 
 Sometimes you need to read an atom's value inside an effect _without_ subscribing to its changes.
+
 - **Why**: This is common for "submit" actions where the effect should only trigger on the button click, not when the form data changes.
 
 ### Example: Untracked Reads
