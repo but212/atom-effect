@@ -17,6 +17,10 @@ export const BUFFER_FLAGS = {
 } as const;
 
 function refreshDepFlags(state: ReactiveDependencyTracker): void {
+  if (!(state._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
+    return;
+  }
+
   let flags = state._depFlags & ~BUFFER_FLAGS.HAS_COMPUTEDS;
   const slots = state._depSlots;
 

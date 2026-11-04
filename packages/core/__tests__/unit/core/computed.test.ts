@@ -834,6 +834,22 @@ describe('Computed', () => {
       expect(spy).toHaveBeenCalled();
     });
 
+    it('handles large Fan In (1000 nodes) with accurate tracking and no duplicate slots', async () => {
+      const sources = Array.from({ length: 1000 }, (_, i) => atom(i));
+      const target = computed(() => sources.reduce((sum, s) => sum + s.value, 0));
+
+      expect(target.value).toBe((999 * 1000) / 2);
+      expect((target as unknown as { _trackCount: number })._trackCount).toBe(1000);
+
+      const firstSource = sources[0];
+      if (firstSource) {
+        firstSource.value = 100;
+      }
+      await aeNextTick();
+      expect(target.value).toBe((999 * 1000) / 2 + 100);
+      expect((target as unknown as { _trackCount: number })._trackCount).toBe(1000);
+    });
+
     it('should ignore stale async rejection when dirty or dependencies changed', async () => {
       const source = atom(1);
       let rejectPromise!: (err: unknown) => void;
