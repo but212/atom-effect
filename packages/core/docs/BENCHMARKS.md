@@ -32,9 +32,6 @@ pnpm --filter @but212/atom-effect bench:micro
 # Execute macro-benchmarks only
 pnpm --filter @but212/atom-effect bench:macro
 
-# Execute realistic scenario benchmarks
-pnpm --filter @but212/atom-effect bench:realistic
-
 # Execute state benchmarks only
 pnpm --filter @but212/atom-effect bench:state
 ```
@@ -54,9 +51,6 @@ pnpm bench:micro
 
 # Execute macro-benchmarks only
 pnpm bench:macro
-
-# Execute realistic scenario benchmarks
-pnpm bench:realistic
 
 # Execute state benchmarks only
 pnpm bench:state
@@ -96,13 +90,14 @@ Located in `__benchmarks__/macro/`, these tests simulate common application patt
 - **Todo Workflow**: A complete sequence of adding, toggling, filtering, and deleting items.
 - **Data Grid**: Performance of sorting, filtering, and pagination over large datasets (1000+ rows).
 - **Graph Stress**: Evaluation of complex dependency structures such as diamond and pyramid patterns.
+- **Realistic Workflows**: End-to-end patterns including search filter, cart workflows, and KPI pipelines.
 
-### 3. Realistic Scenarios
+### 3. State Benchmarks
 
-Located in `__benchmarks__/realistic/`, these tests evaluate the system under constraints typical of production environments.
+Located in `__benchmarks__/state/`, these tests measure cold start evaluation overhead and steady-state warm cache execution.
 
-- **Frame Budget Analysis**: Ensures that reactive updates complete within the 16.6ms window required for 60fps rendering.
-- **Memory Stability**: Monitors heap usage during high-churn lifecycle cycles (mount/update/unmount).
+- **Cold Start**: First evaluation and instantiation overhead for atoms, computeds, and effects.
+- **Steady State**: Repeated execution, cache hit rates, and subscription stability.
 
 ---
 

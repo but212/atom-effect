@@ -54,7 +54,6 @@ Located in `__benchmarks__/micro/`, these test individual binding operations in 
 - **Binding**: `atomText`, `atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow/Hide`, `atomBind`.
 - **List**: `atomList` initial render, append, removal, shuffle, and bind callbacks.
 - **Input**: `atomVal`, `atomChecked`, and debounced updates.
-- **Lens**: Creation, reading, writing, and propagation through lenses.
 
 ### Macro-Benchmarks
 
@@ -253,13 +252,6 @@ Refer to [CONTRIBUTING.md](../../../CONTRIBUTING.md#benchmarks) for further deta
 | -------------------------------------------------------- | ------------ | --------- | -------- |
 | cleanup() - non-reactive 1000 elements tree scan | 1,126.09 | 0.9314 | 2.4000 |
 | cleanup() - reactive 1000 elements tree (mixed bindings) | 219.18 | 4.7990 | 14.1920 |
-
-#### Debug Diagnostics: Runtime Overhead
-
-| Benchmark Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
-| ---------------------------------------------------------- | ------------ | --------- | -------- |
-| 100 elements x 20 updates (Debug Disabled) | 1,079.88 | 1.0393 | 3.1180 |
-| 100 elements x 20 updates (Debug Enabled - console mocked) | 311.49 | 3.3919 | 12.2040 |
 
 ---
 
