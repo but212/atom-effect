@@ -6,9 +6,9 @@ Benchmarking suite for `@but212/atom-effect-utils` to quantify the performance o
 
 | Category       | Key Metric   | Value          | Technical Context                       |
 | :------------- | :----------- | :------------- | :-------------------------------------- |
-| **SlotBuffer** | push (small) | 972.6K ops/sec | Internal high-performance buffer (x100) |
+| **SlotBuffer** | push (small) | 950.9K ops/sec | Internal high-performance buffer (x100) |
 | **Option**     | isSome check | 2.04M ops/sec  | Reactive-compatible Option type (x100)  |
-| **Result** | ok creation | 1.25M ops/sec | Error handling primitive (x100) |
+| **Result** | ok creation | 931.7K ops/sec | Error handling primitive (x100) |
 | **Type Guard** | isPromise    | 1.24M ops/sec  | Fast async primitive detection (x100)   |
 
 ---
@@ -95,9 +95,9 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :---------------------- | :----------- | :-------- | :------- |
-| Result.ok creation | 1,254,228.84 | 0.0008 | 0.0013 |
-| Result.err creation | 1,268,519.59 | 0.0009 | 0.0013 |
-| Result.tryCatch (mixed) | 82,216.17 | 0.0123 | 0.0178 |
+| Result.ok creation | 931,663.52 | 0.0011 | 0.0018 |
+| Result.err creation | 931,967.14 | 0.0011 | 0.0018 |
+| Result.tryCatch (mixed) | 76,258.84 | 0.0133 | 0.0200 |
 
 ---
 
@@ -105,13 +105,13 @@ This document provides raw data and detailed breakdowns for the `@but212/atom-ef
 
 | Test Case | ops/sec (Hz) | Mean (ms) | p99 (ms) |
 | :---------------------- | :----------- | :-------- | :------- |
-| push (small, x100) | 972,591.23 | 0.0012 | 0.0019 |
-| push (large, x10) | 102,707.25 | 0.0103 | 0.0171 |
-| has (x100) | 359,919.13 | 0.0028 | 0.0032 |
-| forEach (x100) | 59,457.10 | 0.0169 | 0.0225 |
-| compact (x100) | 35,097.61 | 0.0290 | 0.0402 |
-| some (early exit, x100) | 1,029,463.99 | 0.0010 | 0.0019 |
-| some (full scan, x100) | 86,336.44 | 0.0119 | 0.0206 |
+| push (small, x100) | 950,938.27 | 0.0011 | 0.0016 |
+| push (large, x10) | 85,060.03 | 0.0121 | 0.0203 |
+| has (x100) | 294,644.49 | 0.0034 | 0.0036 |
+| forEach (x100) | 48,338.53 | 0.0208 | 0.0272 |
+| compact (x100) | 26,794.87 | 0.0380 | 0.0526 |
+| some (early exit, x100) | 714,278.95 | 0.0014 | 0.0015 |
+| some (full scan, x100) | 66,886.95 | 0.0151 | 0.0267 |
 
 ---
 
