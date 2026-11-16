@@ -11,7 +11,7 @@ allowBuilds:
 
 catalogs:
   default:
-    "@biomejs/biome": 2.6.6
+    "@biomejs/biome": 2.6.7
     rimraf: ^6.1.4
     "@types/node": 26.6.5
   build:
