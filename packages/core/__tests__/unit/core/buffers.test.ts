@@ -1,29 +1,17 @@
 /**
- * @fileoverview DepBuffer Refactored Tests
+ * @fileoverview ReactiveTracker Dependency Buffer Tests
  */
 
-import { SlotBuffer } from '@but212/atom-effect-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { trackingContext } from '@/core/base';
-import {
-  BUFFER_FLAGS,
-  claimExisting,
-  depBufferTruncateFrom,
-  insertNew,
-  isBufferDirty,
-} from '@/core/buffers';
-import type { Dependency } from '@/index';
-import type { DependencyLink, ReactiveDependencyTracker } from '@/types';
+import { ReactiveTracker } from '@/core/tracker';
+import { atom, type Dependency } from '@/index';
+import type { DependencyLink } from '@/types';
 
-function createDepBuffer(): ReactiveDependencyTracker {
-  return {
-    id: 1,
-    flags: 0,
-    _depSlots: new SlotBuffer<DependencyLink>(),
-    _depFlags: BUFFER_FLAGS.NONE,
-    _trackCount: 0,
-    _trackEpoch: 0,
-  };
+class TestTracker extends ReactiveTracker {
+  addDependency(dependency: Dependency): void {
+    this.trackDependency(dependency, () => {});
+  }
 }
 
 const createLink = (
@@ -32,7 +20,7 @@ const createLink = (
   unsubscribeCallback: () => void = vi.fn()
 ): DependencyLink => ({ node, version, unsubscribeCallback });
 
-describe('DepBuffer', () => {
+describe('ReactiveTracker Dependency Buffer', () => {
   const createMockDep = (id: number): Dependency => {
     const mock: Partial<Dependency> = {
       id,
@@ -44,103 +32,130 @@ describe('DepBuffer', () => {
     return mock as Dependency;
   };
 
-  describe('claimExisting()', () => {
-    it('should swap and relocate dependencies correctly', () => {
-      const depBuffer = createDepBuffer();
+  describe('trackDependency() link reuse & swapping', () => {
+    it('should swap and relocate existing dependencies without re-subscribing', () => {
+      const tracker = new TestTracker();
       const mockDependencies = [0, 1, 2].map((id) => createMockDep(id));
-      const [mockDependency0, mockDependency1, mockDependency2] = mockDependencies;
-      if (!mockDependency0 || !mockDependency1 || !mockDependency2) throw new Error('Setup failed');
-      const links = mockDependencies.map((d) => createLink(d, 1, vi.fn()));
-      for (const l of links) {
-        depBuffer._depSlots.push(l);
+      const [dep0, dep1, dep2] = mockDependencies;
+      if (!dep0 || !dep1 || !dep2) throw new Error('Setup failed');
+
+      tracker.startTracking();
+      for (const dep of mockDependencies) {
+        tracker.addDependency(dep);
       }
+      tracker.truncateDepsFrom(tracker._trackCount);
 
-      // Case 1: Search ahead and swap (index 2 -> index 0)
-      expect(claimExisting(depBuffer, mockDependency2, 0)).toBe(true);
-      expect(depBuffer._depSlots.at(0)).toBe(links[2]);
-      expect(depBuffer._depSlots.at(2)).toBe(links[0]);
+      expect(dep0.subscribe).toHaveBeenCalledTimes(1);
+      expect(dep1.subscribe).toHaveBeenCalledTimes(1);
+      expect(dep2.subscribe).toHaveBeenCalledTimes(1);
 
-      // Case 2: Out of range search
-      expect(claimExisting(depBuffer, createMockDep(99), 0)).toBe(false);
+      // Re-track in reverse order: dep2 should be swapped to index 0 without re-subscribing
+      tracker.startTracking();
+      tracker.addDependency(dep2);
+      tracker.addDependency(dep1);
+      tracker.addDependency(dep0);
+      tracker.truncateDepsFrom(tracker._trackCount);
+
+      expect(tracker._depSlots.at(0)?.node).toBe(dep2);
+      expect(tracker._depSlots.at(1)?.node).toBe(dep1);
+      expect(tracker._depSlots.at(2)?.node).toBe(dep0);
+      expect(dep2.subscribe).toHaveBeenCalledTimes(1);
     });
 
-    it('handles duplicate dependencies by hitting the correct instances', () => {
-      const depBuffer = createDepBuffer();
-      const mockDependency0 = createMockDep(0);
-      const dependencyLink0A = createLink(mockDependency0, 1, vi.fn());
-      const dependencyLink0B = createLink(mockDependency0, 1, vi.fn());
+    it('preserves the subscription displaced by a newly tracked dependency', () => {
+      const tracker = new TestTracker();
+      const first = atom(1);
+      const second = atom(2);
+      const subscribe = vi.spyOn(first, 'subscribe');
 
-      depBuffer._depSlots.push(dependencyLink0A);
-      depBuffer._depSlots.push(dependencyLink0B);
+      tracker.startTracking();
+      tracker.addDependency(first);
+      tracker.truncateDepsFrom(tracker._trackCount);
 
-      // 1. Should hit the first instance at trackIndex
-      expect(claimExisting(depBuffer, mockDependency0, 0)).toBe(true);
-      expect(depBuffer._depSlots.at(0)).toBe(dependencyLink0A);
+      tracker.startTracking();
+      tracker.addDependency(second);
+      tracker.addDependency(first);
+      tracker.truncateDepsFrom(tracker._trackCount);
 
-      // 2. Should find the next instance ahead
-      expect(claimExisting(depBuffer, mockDependency0, 1)).toBe(true);
-      expect(depBuffer._depSlots.at(1)).toBe(dependencyLink0B);
+      expect(subscribe).toHaveBeenCalledTimes(1);
+      expect(first.subscriberCount()).toBe(1);
+      expect(second.subscriberCount()).toBe(1);
+
+      tracker.truncateDepsFrom(0);
+      expect(first.subscriberCount()).toBe(0);
+      expect(second.subscriberCount()).toBe(0);
+    });
+
+    it('handles duplicate dependencies within a single tracking session', () => {
+      const tracker = new TestTracker();
+      const dep0 = createMockDep(0);
+
+      tracker.startTracking();
+      tracker.addDependency(dep0);
+      tracker.addDependency(dep0);
+      tracker.truncateDepsFrom(tracker._trackCount);
+
+      expect(tracker._depSlots.size).toBe(1);
+      expect(dep0.subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not inflate size when re-tracking after full truncation', () => {
+      const tracker = new TestTracker();
+      const dep0 = createMockDep(0);
+      const dep1 = createMockDep(1);
+
+      tracker.startTracking();
+      tracker.addDependency(dep0);
+      tracker.truncateDepsFrom(tracker._trackCount);
+      expect(tracker._depSlots.size).toBe(1);
+
+      tracker.truncateDepsFrom(0);
+      expect(tracker._depSlots.size).toBe(0);
+
+      tracker.startTracking();
+      tracker.addDependency(dep1);
+      tracker.truncateDepsFrom(tracker._trackCount);
+      expect(tracker._depSlots.size).toBe(1);
     });
   });
 
-  describe('insertNew()', () => {
-    it('should correctly manage logical size irrespective of occupancy', () => {
-      const depBuffer = createDepBuffer();
-      const dependencyLink0 = createLink(createMockDep(0), 1, vi.fn());
-
-      // 1. Write to empty slot (logical size 0 -> 1)
-      insertNew(depBuffer, 2, dependencyLink0);
-      expect(depBuffer._depSlots.size).toBe(1);
-
-      // 2. Write to occupied slot (relocate dependencyLink0, write dependencyLink1 -> logical size 1 -> 2)
-      const dependencyLink1 = createLink(createMockDep(1), 1, vi.fn());
-      insertNew(depBuffer, 2, dependencyLink1);
-      expect(depBuffer._depSlots.size).toBe(2);
-      expect(depBuffer._depSlots.at(2)).toBe(dependencyLink1);
-      expect(depBuffer._depSlots.has(dependencyLink0)).toBe(true); // Occupant must be relocated, not deleted
-    });
-
-    it('does not inflate size when doing repeated insertion into the same empty slot', () => {
-      const depBuffer = createDepBuffer();
-      const mockDependency0 = createMockDep(0);
-      const mockDependency1 = createMockDep(1);
-
-      insertNew(depBuffer, 0, createLink(mockDependency0, 1, vi.fn()));
-      expect(depBuffer._depSlots.size).toBe(1);
-
-      depBufferTruncateFrom(depBuffer, 0);
-      expect(depBuffer._depSlots.size).toBe(0);
-
-      insertNew(depBuffer, 0, createLink(mockDependency1, 1, vi.fn()));
-      expect(depBuffer._depSlots.size).toBe(1);
-    });
-  });
-
-  describe('depBufferTruncateFrom()', () => {
+  describe('truncateDepsFrom()', () => {
     it('triggers unsubscriptions when truncating or disposing', () => {
-      const depBuffer = createDepBuffer();
+      const tracker = new TestTracker();
       const unsubscribeCallbacks = [vi.fn(), vi.fn(), vi.fn()];
       for (let i = 0; i < unsubscribeCallbacks.length; i++) {
         const u = unsubscribeCallbacks[i];
         if (u) {
-          depBuffer._depSlots.push(createLink(createMockDep(i), 1, u));
+          tracker._depSlots.push(createLink(createMockDep(i), 1, u));
         }
       }
 
-      depBufferTruncateFrom(depBuffer, 1); // Removes index 1, 2
+      tracker.truncateDepsFrom(1); // Removes index 1, 2
       expect(unsubscribeCallbacks[0]).not.toHaveBeenCalled();
       expect(unsubscribeCallbacks[1]).toHaveBeenCalled();
       expect(unsubscribeCallbacks[2]).toHaveBeenCalled();
 
-      depBufferTruncateFrom(depBuffer, 0);
+      tracker.truncateDepsFrom(0);
       expect(unsubscribeCallbacks[0]).toHaveBeenCalled();
-      expect(depBuffer._depSlots.size).toBe(0);
+      expect(tracker._depSlots.size).toBe(0);
+    });
+
+    it('handles unsubscribe callback throwing errors during truncation', () => {
+      const tracker = new TestTracker();
+      const errorThrowingUnsubscribe = () => {
+        throw new Error('Unsubscribe failed error');
+      };
+      tracker._depSlots.push(createLink(createMockDep(1), 1, errorThrowingUnsubscribe));
+
+      expect(() => {
+        tracker.truncateDepsFrom(0);
+      }).not.toThrow();
     });
   });
 
-  describe('isBufferDirty()', () => {
+  describe('isDepsDirty()', () => {
     it('should not swallow system-level exceptions (e.g. RangeError)', () => {
-      const depBuffer = createDepBuffer();
+      const tracker = new TestTracker();
 
       const systemErrorDep: Partial<Dependency> = {
         id: 998,
@@ -152,13 +167,13 @@ describe('DepBuffer', () => {
         subscribe: vi.fn(() => vi.fn()),
       };
 
-      depBuffer._depSlots.push(createLink(systemErrorDep as Dependency, 1));
+      tracker._depSlots.push(createLink(systemErrorDep as Dependency, 1));
 
-      expect(() => isBufferDirty(depBuffer)).toThrow(RangeError);
+      expect(() => tracker.isDepsDirty(true)).toThrow(RangeError);
     });
 
     it('should mark buffer as dirty on non-system errors thrown during computed dependency evaluation', () => {
-      const depBuffer = createDepBuffer();
+      const tracker = new TestTracker();
 
       const customErrorDep: Partial<Dependency> = {
         id: 999,
@@ -170,13 +185,13 @@ describe('DepBuffer', () => {
         subscribe: vi.fn(() => vi.fn()),
       };
 
-      depBuffer._depSlots.push(createLink(customErrorDep as Dependency, 1));
+      tracker._depSlots.push(createLink(customErrorDep as Dependency, 1));
 
-      expect(isBufferDirty(depBuffer)).toBe(true);
+      expect(tracker.isDepsDirty(true)).toBe(true);
     });
 
     it('runs untracked if trackingContext.current is active during dirty check', () => {
-      const depBuffer = createDepBuffer();
+      const tracker = new TestTracker();
       const depValSpy = vi.fn(() => 42);
       const computedDep: Partial<Dependency> = {
         id: 100,
@@ -187,7 +202,7 @@ describe('DepBuffer', () => {
         },
         subscribe: vi.fn(() => vi.fn()),
       };
-      depBuffer._depSlots.push(createLink(computedDep as Dependency, 1));
+      tracker._depSlots.push(createLink(computedDep as Dependency, 1));
 
       const mockContext = {
         addDependency: vi.fn(),
@@ -196,25 +211,13 @@ describe('DepBuffer', () => {
       const originalTrackingContext = trackingContext.current;
       try {
         trackingContext.current = mockContext;
-        const isBufferDirtyResult = isBufferDirty(depBuffer);
-        expect(isBufferDirtyResult).toBe(false);
+        const isDirtyResult = tracker.isDepsDirty(true);
+        expect(isDirtyResult).toBe(false);
         expect(depValSpy).toHaveBeenCalled();
         expect(mockContext.addDependency).not.toHaveBeenCalled();
       } finally {
         trackingContext.current = originalTrackingContext;
       }
-    });
-
-    it('handles unsubscribe callback throwing errors during truncation', () => {
-      const depBuffer = createDepBuffer();
-      const errorThrowingUnsubscribe = () => {
-        throw new Error('Unsubscribe failed error');
-      };
-      depBuffer._depSlots.push(createLink(createMockDep(1), 1, errorThrowingUnsubscribe));
-
-      expect(() => {
-        depBufferTruncateFrom(depBuffer, 0);
-      }).not.toThrow();
     });
   });
 });

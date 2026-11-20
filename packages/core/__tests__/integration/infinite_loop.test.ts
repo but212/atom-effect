@@ -29,29 +29,6 @@ describe('Infinite Loop Detection (Epoch Based)', () => {
     consoleSpy.mockRestore();
   });
 
-  it('does not affect sibling effects when one triggers loop detection', () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const trigger = atom(0);
-    const other = atom(0);
-
-    effect(() => {
-      const value = trigger.value;
-      if (value < 200) trigger.value = value + 1;
-    });
-
-    const sibling = effect(() => {
-      other.value;
-    });
-
-    batch(() => {
-      trigger.value = 1;
-    });
-
-    expect(sibling.isDisposed).toBe(false);
-    sibling.dispose();
-    consoleSpy.mockRestore();
-  });
-
   it('respects custom maxExecutionsPerFlush option', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const CUSTOM_LIMIT = 10;

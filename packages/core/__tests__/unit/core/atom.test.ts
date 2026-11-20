@@ -295,16 +295,18 @@ describe('Atom', () => {
     it('should isolate subscriber errors to prevent chain collapse', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const someAtom = atom(0);
-      const good = vi.fn();
-
-      someAtom.subscribe(() => {
+      const bad = vi.fn(() => {
         throw new Error('boom');
       });
+      const good = vi.fn();
+
+      someAtom.subscribe(bad);
       someAtom.subscribe(good);
 
       someAtom.value = 1;
       await aeNextTick();
 
+      expect(bad).toHaveBeenCalled();
       expect(good).toHaveBeenCalled();
       expect(consoleError).toHaveBeenCalled();
     });

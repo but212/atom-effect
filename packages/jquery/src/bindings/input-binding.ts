@@ -83,8 +83,11 @@ const STRATEGIES = {
               Math.min(selectionEnd, formattedLength)
             );
           }
-          return;
-        } catch {}
+        } catch {
+          // Retry the write without preserving the selection.
+          element.value = formatted;
+        }
+        return;
       }
       element.value = formatted;
     },
@@ -95,34 +98,27 @@ const STRATEGIES = {
 
 let instanceCounter = 0;
 
+/** Access relative to the particular form binding requesting the operation. */
+export type FieldAccess = 'owned' | 'suspended' | 'blocked';
+
 /**
- * Applies a two-way reactive binding to a form control element.
- *
- * When to use:
- * - When synchronizing a form control (input, textarea, select) with a `WritableAtom`.
- * - When custom parsing, formatting, or input debouncing is required.
- *
- * @param $element The jQuery element wrap targeting a compatible form control.
- * @param atom The reactive writable atom acting as the source of truth.
- * @param options Configuration options for debouncing, custom events, parsing, and formatting.
- *
- * @returns An object containing the reactive effect and a cleanup function.
- *
- * @example
- * const name = $.atom('Jane Doe');
- * const binding = applyInputBinding($('#name-input'), name, {
- *   debounce: 100,
- *   format: (value) => value.toUpperCase(),
- * });
- * // To tear down bindings:
- * binding.cleanup();
+ * Prepares a two-way input binding so its owner can register disposal before `start()`.
  */
-export function applyInputBinding<T>(
-  $element: JQuery,
+export function createInputBinding<T>(
+  target: HTMLElement,
   atom: WritableAtom<T>,
-  options: ValOptions<T>
-): { reactiveEffect: EffectObject; cleanup: () => void } {
-  const element = $element[0] as FormElement;
+  options: ValOptions<T>,
+  formField?: { getAccess(): FieldAccess; commit(value: T): void }
+): { start(): void; replay(force?: boolean): void; dispose(): void } | undefined {
+  const tagName = target.tagName.toLowerCase();
+  if (
+    !(SYSTEM_BINDING.VALID_INPUT_TAGS as readonly string[]).includes(tagName) &&
+    !tagName.includes('-')
+  ) {
+    debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.INVALID_INPUT_ELEMENT(tagName));
+    return;
+  }
+  const element = target as FormElement;
   const eventNamespace = `.atomBind-${++instanceCounter}`;
 
   // Logic: Monomorphic Dispatch
@@ -134,7 +130,10 @@ export function applyInputBinding<T>(
   ) as BindingStrategy<T>;
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let reactiveEffect: EffectObject | undefined;
+  let pendingSync = false;
   let isInternalWrite = false;
+  let disposed = false;
 
   const readValue = () => strategy.read(element, options.parse);
   const writeToDom = (value: T, formatted: string) => strategy.write(element, value, formatted);
@@ -155,12 +154,15 @@ export function applyInputBinding<T>(
     return formatValue(atomValue) === element.value;
   };
 
+  const canCommit = () => !disposed && (!formField || formField.getAccess() === 'owned');
   const syncToAtom = () => {
-    if (isInternalWrite) return;
+    if (disposed || isInternalWrite) return;
     try {
+      if (!canCommit()) return;
       const domValue = readValue();
-      if (!areEqual(atom.peek(), domValue)) {
-        atom.value = domValue;
+      if (!areEqual(atom.peek(), domValue) && !disposed) {
+        if (formField) formField.commit(domValue);
+        else atom.value = domValue;
       }
     } catch (error) {
       debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', error);
@@ -168,12 +170,26 @@ export function applyInputBinding<T>(
   };
 
   const syncToDom = () => {
+    if (disposed) return;
+    pendingSync = false;
     const atomValue = atom.value;
+    if (disposed) return;
     untracked(() => {
-      if (isDomUpToDate(atomValue)) return;
+      const access = formField?.getAccess();
+      if (access === 'blocked') {
+        pendingSync = true;
+        return;
+      }
+      if (isDomUpToDate(atomValue) || disposed) return;
       isInternalWrite = true;
       try {
         const formatted = formatValue(atomValue);
+        // Formatting can move or rename a field without immediately disposing its binding.
+        if (disposed) return;
+        if (formField?.getAccess() !== access) {
+          pendingSync = true;
+          return;
+        }
         writeToDom(atomValue, formatted);
         debug.domUpdated(SYSTEM_BINDING.PREFIX, $(element), 'val', formatted);
       } catch (error) {
@@ -191,13 +207,13 @@ export function applyInputBinding<T>(
     }
     syncToAtom();
 
-    // Logic: Value normalization ensures that the physical DOM value exactly
-    // matches the reactive state once user interaction has concluded.
-    const atomValue = atom.peek();
     try {
-      if (!isDomUpToDate(atomValue)) {
+      if (!canCommit()) return;
+      const atomValue = atom.peek();
+      if (!isDomUpToDate(atomValue) && canCommit()) {
         isInternalWrite = true;
-        writeToDom(atomValue, formatValue(atomValue));
+        const formatted = formatValue(atomValue);
+        if (canCommit()) writeToDom(atomValue, formatted);
       }
     } catch (error) {
       debug.warn(SYSTEM_BINDING.PREFIX, 'syncToDom (blur format) failed:', error);
@@ -209,7 +225,7 @@ export function applyInputBinding<T>(
   const debounce = options.debounce ?? SYSTEM_BINDING.INPUT_DEFAULTS.debounce;
 
   const handleInput = (event?: Event | JQuery.TriggeredEvent) => {
-    if (isInternalWrite) return;
+    if (disposed || isInternalWrite) return;
 
     const native = (event && 'originalEvent' in event ? event.originalEvent : event) as InputEvent;
     // Logic: Synchronization is deferred while an IME composition is active (Standard InputEvent).
@@ -217,7 +233,12 @@ export function applyInputBinding<T>(
 
     if (debounce > 0) {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(syncToAtom, debounce);
+      try {
+        // The owner could move back before the timer fires; reject stale input at dispatch too.
+        if (canCommit()) debounceTimer = setTimeout(syncToAtom, debounce);
+      } catch (error) {
+        debug.warn(SYSTEM_BINDING.PREFIX, 'syncToAtom failed:', error);
+      }
     } else {
       syncToAtom();
     }
@@ -233,14 +254,33 @@ export function applyInputBinding<T>(
     .map((name) => name + eventNamespace)
     .join(' ');
 
-  $(element).on(`blur${eventNamespace}`, handleBlur).on(eventNames, handleInput);
-
+  const $element = $(element);
   return {
-    reactiveEffect: effect(syncToDom),
-    cleanup: () => {
-      $(element).off(eventNamespace);
-      if (debounceTimer) {
+    start() {
+      if (disposed) return;
+      $element.on(`blur${eventNamespace}`, handleBlur).on(eventNames, handleInput);
+      if (disposed) {
+        $element.off(eventNamespace);
+        return;
+      }
+      // The initial evaluation can synchronously dispose the binding.
+      const runningEffect = effect(syncToDom);
+      if (disposed) runningEffect.dispose();
+      else reactiveEffect = runningEffect;
+    },
+    replay(force = false) {
+      if (!disposed && (force || pendingSync) && formField?.getAccess() !== 'blocked') {
+        reactiveEffect?.run();
+      }
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      try {
+        reactiveEffect?.dispose();
+      } finally {
         clearTimeout(debounceTimer);
+        $element.off(eventNamespace);
       }
     },
   };

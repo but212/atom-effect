@@ -158,12 +158,15 @@ export const getBaseViteConfig = (options) => {
 export const defineViteConfig = (baseOptions, overrides = {}) =>
   defineVite(() => {
     const activeTarget = baseOptions.buildTarget ?? process.env.BUILD_TARGET;
-    const env = {
-      isBundle: activeTarget === 'bundle',
-      isLib: activeTarget === 'lib',
-      isTypes: activeTarget === 'types',
-    };
-    const resolvedOverrides = typeof overrides === 'function' ? overrides(env) : overrides;
+    const resolvedOverrides =
+      typeof overrides === 'function'
+        ? overrides({
+            isBundle: activeTarget === 'bundle',
+            isLib: activeTarget === 'lib',
+            isTypes: activeTarget === 'types',
+          })
+        : overrides;
+
     return mergeConfig(getBaseViteConfig(baseOptions), resolvedOverrides);
   });
 /**

@@ -72,8 +72,7 @@ Functions and methods must use verbs or verb phrases that clearly describe their
 | :----------------------- | :------------------------------------------------------------------------ | :------------------------------------------------------------------------------ |
 | **Verb/Verb Phrase**     | Standard operations, actions, or transformations.                         | `computed()`, `batch()`, `peek()`, `dispose()`, `execute()`                     |
 | `is[State]`/`has[State]` | Type guards, capability checks, or status probes returning a boolean.     | `isAtom()`, `isWritable()`, `nodeIsDirty()`                                     |
-| `node[Action]`           | Internal engine functions operating directly on `ReactiveNode` instances. | `nodeSubscribe()`, `nodeNotifySubscribers()`, `nodeGetSubscriberCount()`         |
-| `depBuffer[Action]`      | Internal engine functions operating directly on dependency buffers.       | `depBufferTruncateFrom()`                                                       |
+| `node[Action]`           | Internal engine functions operating directly on `ReactiveNode` instances. | `nodeSubscribe()`, `nodeNotifySubscribers()`                                    |
 | `[Action]Callback`       | Suffix for variables or parameters holding executable callbacks.          | `effectCallback`, `onErrorCallback`, `onOverflowCallback`                       |
 | `#` Private Methods      | Class-private helper methods.                                             | `#drainQueue()`, `#execCleanup()`, `#recompute()`                               |
 
@@ -118,7 +117,7 @@ Here is a summary of the improvements applied to the reactive scheduler to serve
 - [ ] Do private class fields use the `#` prefix with camelCase naming?
 - [ ] Are list variables named using plural nouns?
 - [ ] Do function/method names start with a verb (except for factories like `atom()`, type guards like `isAtom()`, or boolean properties)?
-- [ ] Are internal engine functions operating on nodes/buffers appropriately prefixed (e.g., `node[Action]`, `depBuffer[Action]`)?
+- [ ] Are internal engine functions operating on nodes appropriately prefixed (e.g., `node[Action]`)?
 - [ ] Are variables/parameters representing callbacks suffixed with `Callback` (e.g., `onErrorCallback`)?
 
 ### For Reviewers (During PR)

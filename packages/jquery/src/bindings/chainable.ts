@@ -17,7 +17,6 @@ import {
   bindChecked,
   bindClass,
   bindCss,
-  bindEvents,
   bindHtml,
   bindOn,
   bindProp,
@@ -26,7 +25,6 @@ import {
   bindVisibility,
 } from '@/bindings/unified';
 import { SYSTEM_BINDING } from '@/constants';
-import { atomEachElement } from '@/core/dom';
 import { registerBatchedEffects, withBatchCollection } from '@/core/effect-factory';
 import { registry } from '@/core/registry';
 import type {
@@ -37,6 +35,7 @@ import type {
   ValOptions,
   WritableAtom,
 } from '@/types';
+import { atomEachElement } from '@/utils';
 
 import { debug } from '@/utils/debug';
 
@@ -314,18 +313,18 @@ $.fn.atomForm = function <T extends object>(
  * Binds a reactive event listener to elements.
  *
  * @param event The name of the DOM event.
- * @param handler The event handler function.
+ * @param handler The event handler, or `false` to prevent default and stop propagation.
  * @returns The original jQuery collection for chaining.
  */
-$.fn.atomOn = function (event: string, handler: (event: JQuery.Event) => void): JQuery {
+$.fn.atomOn = function (event: string, handler: ((event: JQuery.Event) => void) | false): JQuery {
   return atomEachElement(this, (element) => bindOn(element, event, handler));
 };
 
 function unpack<T, O>(unpackedValue: T | [T, O]): [T, O?] {
   if (Array.isArray(unpackedValue) && unpackedValue.length === 2) {
     const second = unpackedValue[1];
+    if (second == null) return [unpackedValue[0] as T];
     if (
-      second == null ||
       typeof second === 'function' ||
       (typeof second === 'object' && !('value' in second) && !('then' in second))
     ) {
@@ -385,7 +384,7 @@ const BINDERS: readonly (readonly [
       bindForm(element, atomOrArr, formOptions);
     },
   ],
-  ['on', (element, options) => bindEvents(element, options.on as never)],
+  ['on', (element, options) => bindOn(element, options.on as never)],
 ];
 
 /**
@@ -443,5 +442,5 @@ $.fn.atomBind = function <T, TText>(this: JQuery, options: BindingOptions<T, TTe
  * ```
  */
 $.fn.atomUnbind = function (this: JQuery): JQuery {
-  return atomEachElement(this, (element) => registry.cleanupTree(element));
+  return atomEachElement(this, (element) => registry.cleanupTree(element, 'unbind'));
 };

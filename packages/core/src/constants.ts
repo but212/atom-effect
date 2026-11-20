@@ -11,8 +11,6 @@
  * bitwise performance, and reduces V8 engine de-optimization vectors.
  */
 
-import type { SchedulerConfig } from './types';
-
 declare global {
   var __DEV__: boolean | undefined;
   var __ATOM_DEBUG__: boolean | undefined;
@@ -205,7 +203,7 @@ export const IS_DEV = (() => {
  * Role: Master dictionary of internal node state flags.
  * Organized into offsets (0: Core, 8: Computed, 16: Async, 24: Atom, 28: Effect).
  */
-const FLAGS = {
+export const FLAGS = {
   DISPOSED: 1 << 0,
 
   DIRTY: 1 << 8,
@@ -239,49 +237,6 @@ export const STATE_MASKS = {
 
 /**
  * @internal
- * Role: Flag contract exposing public capabilities for generic state nodes.
- */
-export const STATE_FLAGS = {
-  DISPOSED: FLAGS.DISPOSED,
-} as const;
-
-/**
- * @internal
- * Role: Flag contract exposing public capabilities for Effect nodes.
- */
-export const EFFECT_STATE_FLAGS = {
-  DISPOSED: FLAGS.DISPOSED,
-  EXECUTING: FLAGS.EFFECT_EXECUTING,
-} as const;
-
-/**
- * @internal
- * Role: Flag contract exposing public capabilities for Computed nodes.
- */
-export const COMPUTED_STATE_FLAGS = {
-  DISPOSED: FLAGS.DISPOSED,
-  DIRTY: FLAGS.DIRTY,
-  IDLE: FLAGS.IDLE,
-  PENDING: FLAGS.PENDING,
-  RESOLVED: FLAGS.RESOLVED,
-  REJECTED: FLAGS.REJECTED,
-  RECOMPUTING: FLAGS.RECOMPUTING,
-  FORCE_COMPUTE: FLAGS.FORCE_COMPUTE,
-  CHECKING_DIRTY: FLAGS.CHECKING_DIRTY,
-} as const;
-
-/**
- * @internal
- * Role: Flag contract exposing public capabilities for Atom nodes.
- */
-export const ATOM_STATE_FLAGS = {
-  DISPOSED: FLAGS.DISPOSED,
-  SYNC: FLAGS.ATOM_SYNC,
-  NOTIFICATION_SCHEDULED: FLAGS.ATOM_NOTIFICATION_SCHEDULED,
-} as const;
-
-/**
- * @internal
  * Logic: Internal state machine flags for scheduler updates.
  * Manages overlapping states (batching, flushing) in a single bitfield.
  */
@@ -299,7 +254,7 @@ export const SCHEDULER_STATE = Object.freeze({
  * - When tuning custom execution bounds for high-frequency or nested reactive updates.
  *
  * @remarks
- * Conforms to the `SchedulerConfig` interface. Limits nested iterations and execution
+ * Limits nested iterations and execution
  * counts to prevent runaway microtask queues from freezing the event loop.
  *
  * @example
@@ -315,7 +270,7 @@ export const SCHEDULER_CONFIG = Object.freeze({
   MAX_EXECUTIONS_PER_FLUSH: 10000,
   MAX_FLUSH_ITERATIONS: 1000,
   MIN_FLUSH_ITERATIONS: 10,
-} as const satisfies SchedulerConfig);
+} as const);
 
 /**
  * @internal

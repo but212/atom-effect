@@ -147,11 +147,11 @@ export function commitRemoval<T>(
 
     cleanupNodes(nodes);
 
-    for (let i = 0; i < nodes.length; i++) {
-      const element = nodes[i];
-      if (element?.isConnected && element.parentNode) {
-        element.parentNode.removeChild(element);
-      }
+    const container = listContext.$container[0];
+    for (const node of nodes) {
+      const parent = node.parentNode;
+      // A list still owns its children while detached from the document.
+      if (parent && (parent === container || node.isConnected)) parent.removeChild(node);
     }
   } finally {
     const pendingNodes = listContext.removingKeys.get(itemKey);

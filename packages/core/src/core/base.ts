@@ -12,7 +12,7 @@
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
-import { ERROR_MESSAGES, IS_DEV, LOG_PREFIX, STATE_FLAGS } from '@/constants';
+import { ERROR_MESSAGES, FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type { DependencySubscriber, ReactiveNode, SubscriberTarget } from '@/types';
 import { AtomError, wrapError } from '@/utils';
 
@@ -95,7 +95,7 @@ export function nodeSubscribe<T>(node: ReactiveNode<T>, listener: SubscriberTarg
     );
   }
 
-  if ((node.flags & STATE_FLAGS.DISPOSED) !== 0) {
+  if ((node.flags & FLAGS.DISPOSED) !== 0) {
     return () => {};
   }
 
@@ -164,9 +164,4 @@ export function nodeNotifySubscribers<T>(
     trackingContext.current = previousSubscriber;
     slots.unlock();
   }
-}
-
-/** @internal - Returns active listener count. */
-export function nodeGetSubscriberCount<T>(node: ReactiveNode<T>): number {
-  return node._subscriberSlots?.size ?? 0;
 }

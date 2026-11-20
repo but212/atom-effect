@@ -49,7 +49,13 @@ Implementation invariants:
 | `.atomForm(atom \| atom[], options?)` | Two-way form sync mapping inputs by `name`. Multi-atom (a field reads through the merged view of every source, so it follows the field if a source gains or drops the path; a write mutates only the source that currently owns the path — the last source defining it, falling back to the first source), nested dot-paths, dynamic inputs via `MutationObserver`, native Constraint Validation via `setCustomValidity`. Supports `debounce`, `event`, `parse`, `format`, `equal`, `transform`, `onChange`, and `validation`. An empty source array throws; a form with no source can never synchronize. |
 | `.atomOn(event, handler)`             | Lifecycle-aware delegation; handlers run inside `batch()`; auto-unbound on teardown.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
-**Multi-atom trade-off**: because a field read observes every source, a write to any source re-runs that field's effect. The DOM write is still skipped when the field value is unchanged, so this costs CPU, not DOM mutations.
+**Multi-atom trade-off**: binding snapshots the source list, not the atoms' values. Because a field read observes every source in that list, a write to any source re-runs the field's effect. The DOM write is still skipped when the field value is unchanged.
+
+**Field ownership**: input requires the current form and field name both at dispatch and when a debounced change commits. If formatting or validation changes ownership, its stale result is discarded. When an observed native removal outside the configured auto-cleanup root leaves an external control without its bound form owner, only the form binding is released. Patched `.detach()` preserves bindings, including across a refresh, whether it removes the control, its form, or a container of that form. While the control has no form owner in that state, model-to-control updates continue but input cannot update the model. A control explicitly unbound with `.atomUnbind()` stays unbound until its form owner or field name changes, or the caller explicitly reconciles or rebinds the form.
+
+**Cross-root form moves**: call the named export `refreshFormBinding(form)` after inserting a detached form into an unobserved shadow root. Also call it when a shadow host containing a bound form connects inside an unobserved shadow root: external controls can acquire a form owner without any mutation in the form's own root. Refresh preserves active bindings, reconciles current controls, and observes future changes in the destination. It does nothing if the form has no binding.
+
+**Validation teardown**: unbinding stops reactive validation immediately. Controls that can never participate in native validation (`fieldset`, `output`, `object`) are not given reactive validators. If the control can be validated, teardown clears a matching binding-owned custom error synchronously. If a custom setter re-enters validation or teardown, pending work is applied after the outer setter returns, using the current binding. If the browser temporarily hides the message because the control is disabled, readonly, or otherwise barred from constraint validation, cleanup waits for a `MutationObserver` delivery at which the control is eligible. Teardown never changes validation eligibility; a synchronous `checkValidity()` immediately after enabling the control may still see the old error. A new validation binding cancels deferred cleanup, as does a successful external call through the binding's `setCustomValidity` wrapper when it can be installed. If the setter is replaced, ownership tracking resumes on the next reactive write. If the setter cannot be wrapped, or an external call uses a previously saved setter, cleanup preserves a different message but cannot distinguish an identical one from the binding's own message.
 
 ### 1.5 Components & lifecycle hooks
 
@@ -87,11 +93,11 @@ Implementation invariants:
 
 ### 3.2 Scenario matrix
 
-| Scenario       | Transition                     | Cleanup  | Mechanism                                                                                      |
-| :------------- | :----------------------------- | :------- | :--------------------------------------------------------------------------------------------- |
-| DOM relocation | ATTACHED → DETACHED → ATTACHED | None     | `MutationObserver` checks `isConnected` during microtask; synchronous moves preserve bindings. |
-| `.detach()`    | ATTACHED → DETACHED            | None     | `registry.keep()` bypasses auto-cleanup.                                                       |
-| Native removal | ATTACHED → DESTROYED           | Deferred | Observer runs `cleanupTree()` in a microtask if still disconnected.                            |
+| Scenario       | Transition                     | Cleanup  | Mechanism                                                                                                    |
+| :------------- | :----------------------------- | :------- | :----------------------------------------------------------------------------------------------------------- |
+| DOM relocation | ATTACHED → DETACHED → ATTACHED | None     | Synchronous moves preserve bindings if the node is connected or remains inside an observed root at delivery. |
+| `.detach()`    | ATTACHED → DETACHED            | None     | The lifecycle patch preserves the detached node's bindings without suppressing subsequent native removals.   |
+| Native removal | ATTACHED → DESTROYED           | Deferred | Observer runs `cleanupTree()` in a microtask for nodes outside the document and observed roots.              |
 
 ### 3.3 `BindingRegistry`
 
@@ -154,6 +160,6 @@ Implementation invariants:
 ## 5. Effect orchestration invariants (all bindings)
 
 - **Race protection**: a monotonic `latestId` ensures only the most recent Promise resolution applies to the DOM.
-- **Disposal tracking**: pending async resolutions are linked to the `BindingRegistry`; if the element disconnects before resolution, the update is discarded.
+- **Disposal tracking**: pending async resolutions are linked to the `BindingRegistry`; updates are discarded after disposal. A patched `.detach()` preserves pending updates along with the binding.
 - **Execution isolation**: updaters run within `untracked` to avoid capturing secondary dependencies during the DOM write phase.
 - **Binding isolation**: bindings declared together through `atomBind` share one effect, but each source is read and applied independently; a source that throws is reported through `debug.error` and does not prevent sibling bindings from running or tracking their dependencies.

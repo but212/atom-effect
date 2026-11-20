@@ -209,18 +209,6 @@ export interface ReactiveNode<T = unknown> extends Dependency<T>, Disposable {
 }
 
 /**
- * A reactive node that also tracks dependencies.
- * @internal
- */
-export interface ReactiveDependencyTracker extends IdentifiableNode {
-  flags: number;
-  _depSlots: SlotBuffer<DependencyLink>;
-  _depFlags: number;
-  _trackEpoch: number;
-  _trackCount: number;
-}
-
-/**
  * A node capable of recording reactive dependencies.
  * @internal
  */
@@ -278,18 +266,6 @@ export interface JobBuffer {
   items: (SchedulerJob | undefined)[];
   /** Current number of active jobs in the buffer. */
   size: number;
-}
-
-/**
- * Global safety configuration parameters for the Scheduler.
- * @internal
- */
-export interface SchedulerConfig {
-  MAX_EXECUTIONS_PER_SECOND: number;
-  MAX_EXECUTIONS_PER_EFFECT: number;
-  MAX_EXECUTIONS_PER_FLUSH: number;
-  MAX_FLUSH_ITERATIONS: number;
-  MIN_FLUSH_ITERATIONS: number;
 }
 
 /**

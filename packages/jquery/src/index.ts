@@ -22,7 +22,7 @@ import type { AEJConfig } from '@/types';
 // Ships the `JQuery`/`JQueryStatic` augmentations in the emitted declarations.
 export type {} from './global';
 
-import { autoCleanup as autoCleanupSafetyNet, disableAutoCleanup, registry } from './core/registry';
+import { registry } from './core/registry';
 
 /**
  * Role: Library Orchestrator
@@ -62,11 +62,11 @@ export function initAEJ(config: AEJConfig = {}): void {
 
   // Security: The MutationObserver safety net is the primary defense against memory
   // leaks in long-running Single Page Applications (SPAs).
-  disableAutoCleanup();
-  autoCleanupSafetyNet.allow(autoCleanup !== false);
+  registry.disableAutoCleanup();
+  registry.allowAutoCleanup(autoCleanup !== false);
   if (autoCleanup !== false) {
     const root = typeof autoCleanup === 'object' ? autoCleanup.root : document.body;
-    if (root) autoCleanupSafetyNet.start(root);
+    if (root) registry.startAutoCleanup(root);
   }
 }
 
@@ -78,6 +78,7 @@ $(() => {
   if (!currentWindow.AEJ_NO_AUTO_INIT) initAEJ();
 });
 
+export { refreshFormBinding } from '@/bindings/form';
 export { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
 export { disableAutoCleanup, enableAutoCleanup } from '@/core/registry';
 

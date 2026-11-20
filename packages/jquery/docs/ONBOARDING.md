@@ -155,8 +155,8 @@ Subsequent calls to `initAEJ` replace the existing configuration.
 When accessed via a CDN (e.g., jsDelivr or unpkg), the library exposes the global `AtomEffectJQuery` namespace:
 
 - `initAEJ(config)` — unified entry point for library configuration (patches, auto-cleanup).
-- `enableAutoCleanup(container)` — attaches a MutationObserver to a specific element.
-- `disableAutoCleanup()` — removes all global observers.
+- `enableAutoCleanup(container)` — observes an additional root without replacing existing observers. To observe a container instead of `document.body`, use `initAEJ({ autoCleanup: { root: container } })`.
+- `disableAutoCleanup()` — removes all current auto-cleanup observers without changing jQuery patches.
 - `enablejQueryOverrides(options)` — enables patches for native jQuery methods (e.g., `.remove()`, `.empty()`).
 - `cleanup(element)` — triggers recursive teardown of reactive resources on an element and its Shadow DOM.
 

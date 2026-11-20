@@ -8,7 +8,7 @@
 
 import { batch } from '@but212/atom-effect';
 import $ from 'jquery';
-import { registry } from '@/core/registry';
+import { getParentNode, registry } from '@/core/registry';
 import type { PatchOptions } from '@/types';
 import { INTERNAL_HANDLER } from './symbols';
 
@@ -63,14 +63,6 @@ const wrapHandler = (eventHandler: EventHandler): EventHandler => {
 };
 
 /**
- * Retrieves the original handler function from a wrapped version.
- * @internal
- */
-const unwrapHandler = (eventHandler: EventHandler): EventHandler => {
-  return handlerMap.get(eventHandler) ?? eventHandler;
-};
-
-/**
  * Normalizes all handlers within a jQuery event map using a processor function.
  * Uses a for-in loop to avoid intermediate entry arrays for speed.
  * @internal
@@ -89,39 +81,66 @@ function processEventMap(
   return resultMap;
 }
 
-/** @internal */
-const wrapEventMap = (map: Record<string, JQueryEventHandler | undefined>) =>
-  processEventMap(map, wrapHandler);
-
-/** @internal */
-const unwrapEventMap = (map: Record<string, JQueryEventHandler | undefined>) =>
-  processEventMap(map, unwrapHandler);
-
 /**
  * Logic: Argument Interception
  * Processes jQuery method arguments to conditionally wrap or unwrap event
  * handlers based on the provided strategy.
  * @internal
  */
-function patchArguments(
-  args: unknown[],
-  mapProcessor: (
-    map: Record<string, JQueryEventHandler | undefined>
-  ) => Record<string, JQueryEventHandler | undefined>,
-  handlerProcessor: (eventHandler: EventHandler) => EventHandler
-) {
+function patchArguments(args: unknown[], processor: (eventHandler: EventHandler) => EventHandler) {
   const firstArgument = args[0];
   if (firstArgument && typeof firstArgument === 'object') {
-    args[0] = mapProcessor(firstArgument as Record<string, JQueryEventHandler | undefined>);
+    args[0] = processEventMap(
+      firstArgument as Record<string, JQueryEventHandler | undefined>,
+      processor
+    );
   } else {
     // Standard jQuery signature: .on( types [, selector ] [, data ], handler )
     // We scan for function arguments to wrap/unwrap them.
     for (let i = 1; i < args.length; i++) {
       if (typeof args[i] === 'function') {
-        args[i] = handlerProcessor(args[i] as EventHandler);
+        args[i] = processor(args[i] as EventHandler);
       }
     }
   }
+}
+
+function removeWithLifecycle(
+  collection: JQuery,
+  targets: JQuery,
+  original: OriginalMethods['detach'],
+  cleanup: boolean
+): JQuery {
+  // Account for pending removals before any teardown or disconnected callback can
+  // remove a later target. An earlier removal must not dispose a replacement binding.
+  for (let i = 0; ; i++) {
+    const target = targets[i];
+    if (target == null) break;
+    if (!getParentNode(target)) registry.preserveDetached(target, !cleanup);
+  }
+  if (cleanup && targets[1] != null) {
+    // Tear down every target before a disconnected callback can reach a later target.
+    for (let i = 0; ; i++) {
+      const target = targets[i];
+      if (target == null) break;
+      registry.cleanupTree(target);
+    }
+  }
+
+  const remove = () => {
+    // Match jQuery's indexed iteration: callbacks can change length during removal.
+    for (let i = 0; ; i++) {
+      const target = targets[i];
+      if (target == null) break;
+      // A callback may have installed new bindings since the initial pass.
+      if (cleanup) registry.cleanupTree(target);
+      // Keep the item as-is, including nested jQuery collections.
+      registry.preserveDuringRemoval(target, () => original.call($([target])), !cleanup);
+    }
+  };
+  if (targets.length > 1) registry.withRemovalBatch(remove);
+  else remove();
+  return collection;
 }
 
 /**
@@ -151,14 +170,12 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
 
   if (lifecycle) {
     $.fn.remove = function (this: JQuery, selector?: string) {
-      const targets = selector ? this.filter(selector) : this;
-      for (const element of targets) {
-        if (element) {
-          registry.cleanupTree(element);
-          registry.markIgnored(element);
-        }
-      }
-      return originalMethods.remove.call(this, selector);
+      return removeWithLifecycle(
+        this,
+        selector ? this.filter(selector) : this,
+        originalMethods.remove,
+        true
+      );
     };
 
     $.fn.empty = function (this: JQuery) {
@@ -171,29 +188,28 @@ export function enablejQueryOverrides(options: PatchOptions = {}): void {
     };
 
     $.fn.detach = function (this: JQuery, selector?: string) {
-      const targets = selector ? this.filter(selector) : this;
-      for (const element of targets) {
-        if (element) {
-          registry.keep(element);
-        }
-      }
-      return originalMethods.detach.call(this, selector);
+      return removeWithLifecycle(
+        this,
+        selector ? this.filter(selector) : this,
+        originalMethods.detach,
+        false
+      );
     };
   }
 
   if (events) {
     $.fn.on = function (this: JQuery, ...args: unknown[]) {
-      patchArguments(args, wrapEventMap, wrapHandler);
+      patchArguments(args, wrapHandler);
       return originalMethods.on.apply(this, args as Parameters<typeof $.fn.on>);
     };
 
     $.fn.one = function (this: JQuery, ...args: unknown[]) {
-      patchArguments(args, wrapEventMap, wrapHandler);
+      patchArguments(args, wrapHandler);
       return originalMethods.one.apply(this, args as Parameters<typeof $.fn.one>);
     };
 
     $.fn.off = function (this: JQuery, ...args: unknown[]) {
-      patchArguments(args, unwrapEventMap, unwrapHandler);
+      patchArguments(args, (eventHandler) => handlerMap.get(eventHandler) ?? eventHandler);
       return originalMethods.off.apply(this, args as Parameters<typeof $.fn.off>);
     };
   }

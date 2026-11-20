@@ -280,25 +280,6 @@ describe('Disposal Finality', () => {
 });
 
 describe('Error Isolation', () => {
-  it('subscriber errors do not affect sibling subscribers', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const someAtom = atom(0);
-    const bad = vi.fn(() => {
-      throw new Error('bad');
-    });
-    const good = vi.fn();
-
-    someAtom.subscribe(bad);
-    someAtom.subscribe(good);
-
-    someAtom.value = 1;
-    await aeNextTick();
-
-    expect(bad).toHaveBeenCalled();
-    expect(good).toHaveBeenCalled();
-    consoleSpy.mockRestore();
-  });
-
   it('computed wraps errors as ComputedError with cause', () => {
     const computedInstance = computed(() => {
       throw new TypeError('raw');

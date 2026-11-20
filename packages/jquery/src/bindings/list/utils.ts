@@ -53,18 +53,6 @@ export function cleanupNodes(nodes: Node[]): void {
   }
 }
 
-/**
- * Escapes special HTML characters to prevent attribute breakout.
- */
-function escapeHtmlAttr(attributeValue: string): string {
-  return attributeValue
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
 const HTML_TAG_START_REGEXP = /^\s*<([a-zA-Z][^\s/>]*)/;
 
 /**
@@ -75,7 +63,12 @@ export function injectKeyToHtml(html: string, key: string): string {
   if (!match) return html;
 
   const insertIndex = match[0].length;
-  const escapedKey = escapeHtmlAttr(key);
+  const escapedKey = key
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   return `${html.slice(0, insertIndex)} data-atom-key="${escapedKey}"${html.slice(insertIndex)}`;
 }
 

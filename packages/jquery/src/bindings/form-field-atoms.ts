@@ -2,87 +2,18 @@
  * @module Form Field Atoms
  *
  * Responsibility:
- * Atom adapters that back a single form control: multi-source ownership resolution and
- * transform/onChange interception around a field lens.
+ * Resolves a form field across multiple source atoms.
  */
 
 import {
   BRAND,
   BrandFlags,
   getPathValue,
-  type Paths,
-  type PathValue,
   type SubscriberTarget,
   setDeepValue,
-  untracked,
   type WritableAtom,
 } from '@but212/atom-effect';
-import { Result, shallowEqual } from '@but212/atom-effect-utils';
-import type { FormOptions } from '@/types';
-
-/**
- * Role: Delegating Atom Base
- *
- * Forwards the reactive-node surface (identity, version, flags, brand, lifecycle) to a wrapped
- * node, so subclasses only define how reads, writes and subscriptions differ from it.
- *
- * @internal
- */
-abstract class DelegatingAtom implements WritableAtom<unknown> {
-  protected readonly node: WritableAtom<unknown>;
-
-  constructor(node: WritableAtom<unknown>) {
-    this.node = node;
-  }
-
-  abstract get value(): unknown;
-  abstract set value(targetValue: unknown);
-
-  peek(): unknown {
-    return this.node.peek();
-  }
-
-  subscribe(listener: SubscriberTarget<unknown>): () => void {
-    return this.node.subscribe(listener);
-  }
-
-  subscriberCount(): number {
-    return this.node.subscriberCount();
-  }
-
-  dispose(): void {
-    this.node.dispose();
-  }
-
-  get isDisposed(): boolean {
-    return this.node.isDisposed;
-  }
-
-  get id(): number {
-    return this.node.id;
-  }
-  get version(): number {
-    return this.node.version;
-  }
-  get flags(): number {
-    return this.node.flags;
-  }
-  get _lastSeenEpoch(): number {
-    return this.node._lastSeenEpoch;
-  }
-  get isComputed(): boolean {
-    return this.node.isComputed;
-  }
-  get isRejected(): boolean {
-    return this.node.isRejected;
-  }
-  get hasError(): boolean {
-    return this.node.hasError;
-  }
-  get [BRAND](): number {
-    return this.node[BRAND] ?? 0;
-  }
-}
+import { shallowEqual } from '@but212/atom-effect-utils';
 
 export type NonEmptySources = readonly [WritableAtom<unknown>, ...WritableAtom<unknown>[]];
 
@@ -232,61 +163,5 @@ export class MultiSourceField implements WritableAtom<unknown> {
   }
   get [BRAND](): number {
     return (BrandFlags.Atom | BrandFlags.Writable) as number;
-  }
-}
-
-/**
- * Role: Interception Wrapper Class
- *
- * Design Intent:
- * Direct WritableAtom implementation delegating to baseLens, avoiding Proxy overhead
- * and repeated .bind() dynamic allocations on hot path.
- *
- * @internal
- */
-export class InterceptedLens<T extends object, U> extends DelegatingAtom {
-  readonly #name: string;
-  readonly #transform: FormOptions<U>['transform'];
-  readonly #onChange: FormOptions<U>['onChange'];
-
-  constructor(
-    name: string,
-    baseLens: WritableAtom<PathValue<T, Paths<T>>>,
-    options: FormOptions<U>
-  ) {
-    super(baseLens);
-    this.#name = name;
-    this.#transform = options.transform;
-    this.#onChange = options.onChange;
-  }
-
-  get value(): PathValue<T, Paths<T>> {
-    return this.node.value as PathValue<T, Paths<T>>;
-  }
-
-  set value(targetValue: unknown) {
-    let transformed = targetValue;
-    const transform = this.#transform;
-    if (transform) {
-      const transformResult = Result.tryCatch(() => transform(this.#name, targetValue));
-      if (Result.isErr(transformResult)) {
-        console.error(
-          `[bindForm] Transform error in field "${this.#name}":`,
-          transformResult.error
-        );
-      } else {
-        transformed = transformResult.value;
-      }
-    }
-    this.node.value = transformed;
-    const onChange = this.#onChange;
-    if (onChange) {
-      const onChangeResult = Result.tryCatch(() =>
-        untracked(() => onChange(this.#name, transformed))
-      );
-      if (Result.isErr(onChangeResult)) {
-        console.error(`[bindForm] onChange error in field "${this.#name}":`, onChangeResult.error);
-      }
-    }
   }
 }

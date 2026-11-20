@@ -464,10 +464,10 @@ declare global {
      * Binds a reactive event listener to elements.
      *
      * @param event The name of the DOM event.
-     * @param handler The event handler function.
+     * @param handler The event handler, or `false` to prevent default and stop propagation.
      * @returns The original jQuery collection for chaining.
      */
-    atomOn(event: string, handler: (event: JQuery.Event) => void): this;
+    atomOn(event: string, handler: ((event: JQuery.Event) => void) | false): this;
 
     /**
      * A unified entry point for declaring multiple reactive bindings in a single call.

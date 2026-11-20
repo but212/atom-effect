@@ -151,7 +151,7 @@ Options: `name`, `sync`, `onError`, `maxExecutionsPerFlush` (default 100), `maxE
 Guards: `isAtom`, `isComputed`, `isEffect`, `isWritable`, `isPromise` (value is `Promise` or thenable).
 Low-level: `getPathValue(source, parts)`, `setDeepValue(obj, keys, index, value)` (immutable, structural-sharing update).
 Debug: `dumpGraph()` (active node metadata), `trackUpdate(id, name)`; automatic names `atom_1`, `calc_5`, `effect_3`.
-Internal: `SlotBuffer` and dependency buffers with lazy `Map`-based indexing past a capacity threshold and swap-based link reconciliation.
+Internal: `SlotBuffer` and `ReactiveTracker` dependency tracking with swap-based link reconciliation.
 
 ## 11. Design invariants (non-negotiable)
 

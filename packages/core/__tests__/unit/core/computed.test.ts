@@ -869,8 +869,8 @@ describe('Computed', () => {
 
       // Now source changes before rejection arrives
       source.value = 2;
-      const internalC = c as unknown as { isDirty: boolean; hasDirtyDeps(): boolean };
-      expect(internalC.isDirty || internalC.hasDirtyDeps()).toBe(true);
+      const internalC = c as unknown as { isDirty: boolean; isDepsDirty(deep?: boolean): boolean };
+      expect(internalC.isDirty || internalC.isDepsDirty(true)).toBe(true);
 
       // Late rejection from cycle 1
       rejectPromise(new Error('Stale failure'));

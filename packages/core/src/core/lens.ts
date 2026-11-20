@@ -18,9 +18,9 @@ import {
   DEFAULT_EQUAL,
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
-  STATE_FLAGS,
+  FLAGS,
 } from '@/constants';
-import { nodeGetSubscriberCount, nodeNotifySubscribers, nodeSubscribe } from '@/core/base';
+import { nodeNotifySubscribers, nodeSubscribe } from '@/core/base';
 import type {
   DependencyId,
   MergedDependencyValue,
@@ -56,7 +56,7 @@ abstract class BaseLens<T = unknown> implements ReactiveNode<T> {
   }
 
   get isDisposed(): boolean {
-    return (this.flags & STATE_FLAGS.DISPOSED) !== 0;
+    return (this.flags & FLAGS.DISPOSED) !== 0;
   }
 
   get isComputed(): boolean {
@@ -72,7 +72,7 @@ abstract class BaseLens<T = unknown> implements ReactiveNode<T> {
   }
 
   subscriberCount(): number {
-    return nodeGetSubscriberCount(this);
+    return this._subscriberSlots?.size ?? 0;
   }
 
   abstract get value(): T;
@@ -84,23 +84,23 @@ abstract class BaseLens<T = unknown> implements ReactiveNode<T> {
   protected abstract _detach(): void;
 
   subscribe(listener: SubscriberTarget<T>): () => void {
-    const wasEmpty = nodeGetSubscriberCount(this) === 0;
+    const wasEmpty = (this._subscriberSlots?.size ?? 0) === 0;
     const innerUnsubscribe = nodeSubscribe(this, listener);
     if (this.isDisposed) {
       return innerUnsubscribe;
     }
-    if (wasEmpty && nodeGetSubscriberCount(this) === 1) {
+    if (wasEmpty && (this._subscriberSlots?.size ?? 0) === 1) {
       this.#previousValue = this.peek();
       this._attach(() => this.#notify());
     }
     return () => {
       innerUnsubscribe();
-      if (nodeGetSubscriberCount(this) === 0) this._detach();
+      if ((this._subscriberSlots?.size ?? 0) === 0) this._detach();
     };
   }
 
   dispose(): void {
-    this.flags |= STATE_FLAGS.DISPOSED;
+    this.flags |= FLAGS.DISPOSED;
     this._detach();
     this._subscriberSlots?.clear();
   }
@@ -319,18 +319,7 @@ export function mergeLenses<L extends WritableAtom<unknown>[]>(
   return new MergedLensImpl(lenses);
 }
 
-/**
- * Composes an existing lens with a new sub-path.
- *
- * Logic: Composition
- * This is a semantic alias for {@link atomLens}. It creates a new lens
- * starting from the value of the provided lens and navigating down the
- * specified path.
- *
- * @param lens The base lens to compose from.
- * @param path The sub-path relative to the base lens.
- * @returns A new lens targeting the nested property.
- */
+/** Creates a sub-lens at a path relative to an existing lens. */
 export const composeLens = <T extends object, P extends Paths<T>>(lens: WritableAtom<T>, path: P) =>
   atomLens(lens, path);
 

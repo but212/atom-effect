@@ -12,9 +12,9 @@
 
 import { type EffectObject, effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { atomEachElement } from '@/core/dom';
 import { registry } from '@/core/registry';
 import type { ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
+import { atomEachElement } from '@/utils';
 import {
   createListContext,
   disposeContext,

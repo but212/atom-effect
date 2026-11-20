@@ -8,7 +8,7 @@
 
 import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { applyInputBinding } from '@/bindings/input-binding';
+import { createInputBinding } from '@/bindings/input-binding';
 import { SYSTEM_BINDING, SYSTEM_SECURITY } from '@/constants';
 import { registerMapEffect, registerReactiveEffect } from '@/core/effect-factory';
 import { registry } from '@/core/registry';
@@ -34,27 +34,23 @@ function toKebab(inputString: string): string {
 }
 
 /**
- * Logic: XSS Protection Filter
- * Validates whether a property or attribute name is safe for reactive binding.
- */
-function checkBindingSafety(name: string, isProperty: boolean): string | undefined {
-  const lowerCaseName = name.toLowerCase();
-  if (lowerCaseName.startsWith('on')) return SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
-  if (lowerCaseName === 'srcdoc') return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
-  if (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name)) {
-    return SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
-  }
-  return undefined;
-}
-
-/**
  * Filters a map of binding entries, validating each key for safety.
  * Logs warnings for unsafe properties or attributes.
  * @internal
  */
 function getSafeEntries<T>(map: Record<string, T>, isProperty: boolean): [string, T][] {
   return Object.entries(map).filter(([name]) => {
-    const safetyError = checkBindingSafety(name, isProperty);
+    const lowerCaseName = name.toLowerCase();
+    let safetyError: string | undefined;
+    if (lowerCaseName.startsWith('on')) {
+      safetyError = SYSTEM_SECURITY.ERRORS.BLOCKED_EVENT_HANDLER(name);
+    } else if (
+      lowerCaseName === 'srcdoc' ||
+      (isProperty && (SYSTEM_SECURITY.DANGEROUS_PROPS as readonly string[]).includes(name))
+    ) {
+      safetyError = SYSTEM_SECURITY.ERRORS.BLOCKED_PROP(name);
+    }
+
     if (safetyError !== undefined) {
       debug.warn(SYSTEM_BINDING.PREFIX, safetyError);
       return false;
@@ -344,18 +340,19 @@ export function bindVal<T>(
   atom: WritableAtom<T>,
   options: ValOptions<T> = {}
 ): void {
-  const tagName = element.tagName.toLowerCase();
-  const isValidTag =
-    (SYSTEM_BINDING.VALID_INPUT_TAGS as readonly string[]).includes(tagName) ||
-    tagName.includes('-'); // Support Custom Elements (FACE)
-
-  if (!isValidTag) {
-    debug.warn(SYSTEM_BINDING.PREFIX, SYSTEM_BINDING.ERRORS.INVALID_INPUT_ELEMENT(tagName));
-    return;
+  const binding = createInputBinding(element, atom, options);
+  if (!binding) return;
+  const unregister = registry.onCleanup(element, binding.dispose);
+  try {
+    binding.start();
+  } catch (error) {
+    try {
+      unregister();
+    } finally {
+      binding.dispose();
+    }
+    throw error;
   }
-  const { reactiveEffect, cleanup } = applyInputBinding($(element), atom, options);
-  registry.trackEffect(element, reactiveEffect);
-  registry.onCleanup(element, cleanup);
 }
 
 /**
@@ -421,35 +418,31 @@ export function bindChecked(element: HTMLElement, atom: WritableAtom<boolean>): 
 }
 
 /**
- * Binds a mapping of event listeners to an element.
+ * Binds a single event listener or an event map to an element.
  *
- * @param element The target HTMLElement.
- * @param eventMap A record mapping event names to handler functions.
- * @internal
- */
-export function bindEvents(
-  element: HTMLElement,
-  eventMap: NonNullable<BindingOptions['on']>
-): void {
-  const $element = $(element);
-  $element.on(eventMap);
-  registry.onCleanup(element, () => $element.off(eventMap));
-}
-
-/**
- * Binds a single event listener to an element.
- *
- * @param element The target HTMLElement.
- * @param event The name of the event.
- * @param handler The handler function to execute.
  * @internal
  */
 export function bindOn(
   element: HTMLElement,
   event: string,
-  handler: (event: JQuery.TriggeredEvent) => void
+  handler: ((event: JQuery.TriggeredEvent) => void) | false
+): void;
+export function bindOn(element: HTMLElement, eventMap: NonNullable<BindingOptions['on']>): void;
+export function bindOn(
+  element: HTMLElement,
+  eventOrMap: string | NonNullable<BindingOptions['on']>,
+  handler?: ((event: JQuery.TriggeredEvent) => void) | false
 ): void {
   const $element = $(element);
-  $element.on(event, handler);
-  registry.onCleanup(element, () => $element.off(event, handler));
+  if (typeof eventOrMap === 'string') {
+    if (!handler && handler !== false) return;
+    // Own the false handler's identity and keep it stable if jQuery patches change.
+    const listener = handler === false ? () => false : handler;
+    if (handler === false) markInternal(listener);
+    $element.on(eventOrMap, listener);
+    registry.onCleanup(element, () => $element.off(eventOrMap, listener));
+  } else {
+    $element.on(eventOrMap);
+    registry.onCleanup(element, () => $element.off(eventOrMap));
+  }
 }

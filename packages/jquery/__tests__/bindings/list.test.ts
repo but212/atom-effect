@@ -28,6 +28,21 @@ describe('$.atomList (Integration)', () => {
   }
 
   describe('Core Rendering & Reconciliation', () => {
+    it('removes obsolete items while the list is detached', async () => {
+      const items = $.atom(['a', 'b']);
+      $container.atomList(items, { key: (item) => item, render: (item) => `<span>${item}</span>` });
+      await $.nextTick();
+      $container.detach();
+      await $.nextTick();
+
+      items.value = ['b'];
+      await $.nextTick();
+      expect($container.find('span')).toHaveLength(1);
+      expect($container.find('span').text()).toBe('b');
+      $container.appendTo(document.body);
+      expect($container.text()).toBe('b');
+    });
+
     it('should handle empty state transitions', async () => {
       const itemsList = $.atom<string[]>(['a']);
 
@@ -747,28 +762,27 @@ describe('$.atomList (Integration)', () => {
   });
 
   describe('Edge Cases & Robustness', () => {
-    it('should render duplicate-key items instead of silently dropping data', async () => {
-      // Unique keys first to bypass initial fragment-optimization
+    it('renders duplicate keys introduced by an update and reconciles the next update', async () => {
       const items = $.atom([{ id: 1 }, { id: 2 }]);
+      const renderedIds = () =>
+        $container
+          .find('span')
+          .map((_, element) => $(element).text())
+          .get();
 
       $container.atomList(items, {
         key: 'id',
         render: (item) => `<span>${item.id}</span>`,
       });
-
       await $.nextTick();
 
-      // Inject duplicate key "3" in the middle of update
       items.value = [{ id: 1 }, { id: 3 }, { id: 3 }, { id: 2 }];
-
       await $.nextTick();
+      expect(renderedIds()).toEqual(['1', '3', '3', '2']);
 
-      // Both duplicate-key items are rendered (warned, but data is not dropped)
-      const text = $container
-        .find('span')
-        .map((_, element) => $(element).text())
-        .get();
-      expect(text).toEqual(['1', '3', '3', '2']);
+      items.value = [{ id: 1 }, { id: 3 }, { id: 4 }, { id: 2 }];
+      await $.nextTick();
+      expect(renderedIds()).toEqual(['1', '3', '4', '2']);
     });
 
     it('should render duplicates on initial render and stay fresh on later updates', async () => {
@@ -941,28 +955,6 @@ describe('$.atomList (Integration)', () => {
       expect(spy.mock.calls.length).toBe(initialCallCount);
 
       spy.mockRestore();
-    });
-
-    it('should not corrupt snapshot when duplicate keys are encountered', async () => {
-      const items = $.atom([{ id: 1 }, { id: 2 }]);
-
-      $container.atomList(items, {
-        key: 'id',
-        render: (item) => `<span>${item.id}</span>`,
-      });
-      await $.nextTick();
-
-      items.value = [{ id: 1 }, { id: 3 }, { id: 3 }, { id: 2 }];
-      await $.nextTick();
-
-      items.value = [{ id: 1 }, { id: 3 }, { id: 4 }, { id: 2 }];
-      await $.nextTick();
-
-      const text = $container
-        .find('span')
-        .map((_, element) => $(element).text())
-        .get();
-      expect(text).toEqual(['1', '3', '4', '2']);
     });
 
     it('should not clobber head item event routing when duplicate keys are present at boundary during reconciliation', async () => {

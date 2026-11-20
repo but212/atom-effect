@@ -19,7 +19,8 @@ import { nextSmi, SchedulerError } from '@/utils';
 
 import { trackingContext } from './base';
 
-class AggregateExecutionLimitError extends Error {
+/** @internal */
+export class AggregateExecutionLimitError extends Error {
   constructor() {
     super(`${LOG_PREFIX} Infinite loop detected: limit exceeded.`);
     this.name = 'AggregateExecutionLimitError';
@@ -412,11 +413,6 @@ class ReactiveScheduler {
 
 /** @internal */
 export const scheduler = new ReactiveScheduler();
-
-/** @internal */
-export function isAggregateExecutionLimitError(error: Error): boolean {
-  return error instanceof AggregateExecutionLimitError;
-}
 
 /**
  * Logic: Atomic Update Batching

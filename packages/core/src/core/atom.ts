@@ -13,21 +13,16 @@
 
 import { Result, type SlotBuffer } from '@but212/atom-effect-utils';
 import {
-  ATOM_STATE_FLAGS,
   BRAND,
   BrandFlags,
   DEFAULT_EQUAL,
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
+  FLAGS,
   IS_DEV,
   SCHEDULER_CONFIG,
 } from '@/constants';
-import {
-  nodeGetSubscriberCount,
-  nodeNotifySubscribers,
-  nodeSubscribe,
-  trackingContext,
-} from '@/core/base';
+import { nodeNotifySubscribers, nodeSubscribe, trackingContext } from '@/core/base';
 import type {
   AtomOptions,
   DependencyId,
@@ -70,7 +65,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     this.#isEqual = options?.equal ?? DEFAULT_EQUAL;
 
     if (options?.sync) {
-      this.flags |= ATOM_STATE_FLAGS.SYNC;
+      this.flags |= FLAGS.ATOM_SYNC;
     }
 
     if (IS_DEV) debug.attachDebugInfo(this, 'atom', this.id, options?.name);
@@ -82,7 +77,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
   readonly hasError = false;
 
   get isDisposed(): boolean {
-    return (this.flags & ATOM_STATE_FLAGS.DISPOSED) !== 0;
+    return (this.flags & FLAGS.DISPOSED) !== 0;
   }
 
   /**
@@ -132,7 +127,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * @returns The number of active subscribers currently tracking this atom.
    */
   subscriberCount(): number {
-    return nodeGetSubscriberCount(this);
+    return this._subscriberSlots?.size ?? 0;
   }
 
   /**
@@ -141,7 +136,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * or defer to the global scheduler (batched mode).
    */
   #scheduleNotification(oldValue: T): void {
-    const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    const SCHED = FLAGS.ATOM_NOTIFICATION_SCHEDULED;
     const slots = this._subscriberSlots;
 
     if (!slots || slots.length === 0) return;
@@ -157,7 +152,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
     this.#pendingPreviousValue = oldValue;
     this.flags |= SCHED;
 
-    if ((this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching) {
+    if ((this.flags & FLAGS.ATOM_SYNC) !== 0 && !scheduler.isBatching) {
       if (!slots.isLocked) this.#flushNotifications();
     } else {
       Result.unwrap(scheduler.schedule(this));
@@ -171,7 +166,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
 
   /** @internal - The scheduler discarded this atom's queued notification; allow re-arming. */
   _onDrop(): void {
-    this.flags &= ~ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
+    this.flags &= ~FLAGS.ATOM_NOTIFICATION_SCHEDULED;
     this.#pendingPreviousValue = NO_VALUE;
   }
 
@@ -184,9 +179,9 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    * Must not proceed if the atom has been disposed between scheduling and flushing.
    */
   #flushNotifications(): void {
-    const SCHED = ATOM_STATE_FLAGS.NOTIFICATION_SCHEDULED;
-    const MASK = SCHED | ATOM_STATE_FLAGS.DISPOSED;
-    const isSyncActive = (this.flags & ATOM_STATE_FLAGS.SYNC) !== 0 && !scheduler.isBatching;
+    const SCHED = FLAGS.ATOM_NOTIFICATION_SCHEDULED;
+    const MASK = SCHED | FLAGS.DISPOSED;
+    const isSyncActive = (this.flags & FLAGS.ATOM_SYNC) !== 0 && !scheduler.isBatching;
 
     // SAFETY: this method never re-enters itself. {@link nodeNotifySubscribers} holds
     // `slots.lock()`, so a write-back from inside a subscriber finds `slots.isLocked === true` and
@@ -247,7 +242,7 @@ class AtomImpl<T> implements WritableAtom<T>, ReactiveNode<T> {
    */
   dispose(): void {
     const flags = this.flags;
-    const DISP = ATOM_STATE_FLAGS.DISPOSED;
+    const DISP = FLAGS.DISPOSED;
     if ((flags & DISP) !== 0) return;
 
     this.flags |= DISP;

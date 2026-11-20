@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { disablejQueryOverrides, enablejQueryOverrides } from '@/core/jquery-patch';
-import { disableAutoCleanup } from '@/core/registry';
 import $ from '@/index';
 import { castTo } from '../utils/test-helpers';
 
@@ -28,6 +27,168 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
       atom.value = 'removed';
       await $.nextTick();
       expect($target.text()).not.toBe('removed');
+    });
+
+    it('visits subsequent indices even when a disconnected callback changes collection length', () => {
+      const first = document.body.appendChild(document.createElement('aej-shrink-detach-targets'));
+      const second = document.body.appendChild(document.createElement('span'));
+      const targets = $([first, second]);
+      customElements.define(
+        'aej-shrink-detach-targets',
+        class extends HTMLElement {
+          disconnectedCallback(): void {
+            targets.length = 1;
+          }
+        }
+      );
+
+      expect(targets.detach()).toBe(targets);
+      expect(first.isConnected).toBe(false);
+      expect(second.isConnected).toBe(false);
+    });
+
+    it('cleans subsequent removal targets even if an earlier teardown changes collection length', async () => {
+      const first = document.body.appendChild(document.createElement('div'));
+      const second = document.body.appendChild(document.createElement('span'));
+      const targets = $([first, second]);
+      const source = $.atom('active');
+      $(second).atomText(source);
+      $(first).atomMount(() => () => {
+        targets.length = 1;
+      });
+      await $.nextTick();
+
+      targets.remove();
+      expect(second.isConnected).toBe(false);
+      expect(source.subscriberCount()).toBe(0);
+    });
+
+    it('unbinds every removal target before disconnecting the first', () => {
+      const second = document.body.appendChild(document.createElement('button'));
+      let handlerCalls = 0;
+      const $second = $(second).atomOn('custom', () => {
+        handlerCalls++;
+      });
+      customElements.define(
+        'aej-observe-bulk-removal',
+        class extends HTMLElement {
+          disconnectedCallback(): void {
+            $second.trigger('custom');
+          }
+        }
+      );
+      const first = document.body.appendChild(document.createElement('aej-observe-bulk-removal'));
+
+      $([first, second]).remove();
+      expect(first.isConnected).toBe(false);
+      expect(second.isConnected).toBe(false);
+      expect(handlerCalls).toBe(0);
+    });
+
+    it('cleans bindings created on a later removal target by a disconnected callback', async () => {
+      const second = document.body.appendChild(document.createElement('span'));
+      const source = $.atom('active');
+      customElements.define(
+        'aej-rebind-later-removal-target',
+        class extends HTMLElement {
+          disconnectedCallback(): void {
+            $(second).atomText(source);
+          }
+        }
+      );
+      const first = document.body.appendChild(
+        document.createElement('aej-rebind-later-removal-target')
+      );
+
+      try {
+        $([first, second]).remove();
+        await $.nextTick();
+        expect(second.isConnected).toBe(false);
+        expect(source.subscriberCount()).toBe(0);
+      } finally {
+        $(second).atomUnbind();
+      }
+    });
+
+    it('does not create bindings by rewriting an unchanged class during bulk cleanup', async () => {
+      const original = $.atom('original');
+      const rebound = $.atom('rebound');
+      customElements.define(
+        'aej-bulk-cleanup-class',
+        class extends HTMLElement {
+          static observedAttributes = ['class'];
+
+          attributeChangedCallback(_name: string, previous: string, current: string): void {
+            if (previous === '' && current === '') $(this).atomText(rebound);
+          }
+        }
+      );
+      const first = document.body.appendChild(document.createElement('aej-bulk-cleanup-class'));
+      const second = document.body.appendChild(document.createElement('span'));
+      const $targets = $([first, second]).atomText(original);
+
+      try {
+        $targets.remove();
+        await $.nextTick();
+        expect(first.isConnected).toBe(false);
+        expect(original.subscriberCount()).toBe(0);
+        expect(rebound.subscriberCount()).toBe(0);
+      } finally {
+        $targets.atomUnbind();
+      }
+    });
+
+    it('does not detach elements inside a nested jQuery collection', async () => {
+      const child = document.body.appendChild(document.createElement('span'));
+      const source = $.atom('active');
+      const $child = $(child).atomText(source);
+
+      try {
+        $([$child]).detach();
+        await Promise.resolve();
+
+        expect(child.isConnected).toBe(true);
+        expect(source.subscriberCount()).toBe(1);
+      } finally {
+        $child.remove();
+      }
+    });
+
+    it('preserves form bindings on .detach() after native removal when a named control clobbers parentNode', async () => {
+      const form = document.body.appendChild(document.createElement('form'));
+      const input = form.appendChild(document.createElement('input'));
+      input.name = 'parentNode';
+      const model = $.atom({ parentNode: 'initial' });
+      $(form).atomForm(model);
+      await $.nextTick();
+
+      disablejQueryOverrides();
+      const originalDetach = $.fn.detach;
+      $.fn.detach = function (this: JQuery) {
+        return this;
+      };
+      enablejQueryOverrides();
+
+      try {
+        form.remove();
+        $(form).detach();
+        await Promise.resolve();
+        expect(model.subscriberCount()).toBe(1);
+
+        model.value = { parentNode: 'updated' };
+        await $.nextTick();
+        expect(input.value).toBe('updated');
+
+        document.body.appendChild(form);
+        form.remove();
+        await Promise.resolve();
+        expect(model.subscriberCount()).toBe(0);
+      } finally {
+        $(form).atomUnbind();
+        disablejQueryOverrides();
+        $.fn.detach = originalDetach;
+        enablejQueryOverrides();
+      }
     });
 
     it('should support remove and detach with custom jQuery selector arguments', async () => {
@@ -174,7 +335,6 @@ describe('jQuery Patch (Lifecycle & Events)', () => {
     it('should handle lifecycle = false options gracefully without override', async () => {
       // Re-initialize AEJ with patch lifecycle disabled and autoCleanup disabled
       disablejQueryOverrides();
-      disableAutoCleanup();
 
       $.initAEJ({
         patch: { lifecycle: false },

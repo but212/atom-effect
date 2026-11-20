@@ -17,9 +17,9 @@ import {
   BRAND,
   BrandFlags,
   DEBUG_CONFIG,
-  EFFECT_STATE_FLAGS,
   EPOCH_CONSTANTS,
   ERROR_MESSAGES,
+  FLAGS,
   IS_DEV,
   SCHEDULER_CONFIG,
 } from '@/constants';
@@ -27,7 +27,7 @@ import { runInTrackingContext } from '@/core/base';
 import type { Dependency, EffectFunction, EffectObject, EffectOptions, Subscriber } from '@/types';
 import { debug, EffectError, wrapError } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { isAggregateExecutionLimitError, runInFlushScope, scheduler } from './scheduler';
+import { AggregateExecutionLimitError, runInFlushScope, scheduler } from './scheduler';
 import { ReactiveTracker } from './tracker';
 
 const EMPTY_EFFECT: EffectFunction = () => undefined;
@@ -70,7 +70,7 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
             const executionResult = runInFlushScope(() => this.execute());
             if (
               Result.isErr(executionResult) &&
-              !isAggregateExecutionLimitError(executionResult.error)
+              !(executionResult.error instanceof AggregateExecutionLimitError)
             ) {
               console.error(executionResult.error);
             }
@@ -94,10 +94,10 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
    */
   dispose(): void {
     if (this.isDisposed) return;
-    this.flags |= EFFECT_STATE_FLAGS.DISPOSED;
+    this.flags |= FLAGS.DISPOSED;
 
     this.#execCleanup();
-    this.disposeDeps();
+    this.truncateDepsFrom(0);
     if (!this.isExecuting) this.#releaseCallbacks();
   }
 
@@ -108,12 +108,12 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
 
   /** Returns true if the effect is currently executing its function. */
   get isExecuting(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.EXECUTING) !== 0;
+    return (this.flags & FLAGS.EFFECT_EXECUTING) !== 0;
   }
 
   /** Returns true if the effect has been permanently stopped. */
   get isDisposed(): boolean {
-    return (this.flags & EFFECT_STATE_FLAGS.DISPOSED) !== 0;
+    return (this.flags & FLAGS.DISPOSED) !== 0;
   }
 
   /**
@@ -122,11 +122,11 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
    */
   execute(force = false): Result<void, Error> {
     const flags = this.flags;
-    if ((flags & (EFFECT_STATE_FLAGS.DISPOSED | EFFECT_STATE_FLAGS.EXECUTING)) !== 0) {
+    if ((flags & (FLAGS.DISPOSED | FLAGS.EFFECT_EXECUTING)) !== 0) {
       return Result.ok(undefined);
     }
 
-    if (!(force || this._depSlots.size === 0 || this.hasDirtyDeps())) {
+    if (!(force || this._depSlots.size === 0 || this.isDepsDirty(true))) {
       return Result.ok(undefined);
     }
 
@@ -134,7 +134,7 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
     if (Result.isErr(budgetValidationResult)) return budgetValidationResult;
     if (IS_DEV) debug.trackUpdate(this.id, debug.getDebugName(this));
 
-    this.flags |= EFFECT_STATE_FLAGS.EXECUTING;
+    this.flags |= FLAGS.EFFECT_EXECUTING;
     this.#execCleanup();
     const sessionId = ++this.#trackSessionId;
 
@@ -142,12 +142,12 @@ class EffectImpl extends ReactiveTracker implements EffectObject, Subscriber {
 
     try {
       const executionResult = runInTrackingContext(this, this.#effectCallback);
-      this.commitDeps();
+      this.truncateDepsFrom(this._trackCount);
       this.#handleResult(executionResult, sessionId);
     } catch (executionError) {
       this.#handleExecutionError(executionError);
     } finally {
-      this.flags &= ~EFFECT_STATE_FLAGS.EXECUTING;
+      this.flags &= ~FLAGS.EFFECT_EXECUTING;
       if (this.isDisposed) this.#releaseCallbacks();
     }
 

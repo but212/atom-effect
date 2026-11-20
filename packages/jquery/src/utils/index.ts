@@ -86,3 +86,30 @@ export class FIFOCache<K, V> extends Map<K, V> {
     return super.set(key, value);
   }
 }
+
+const nodeTypeGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'nodeType')?.get as
+  | ((this: Node) => number)
+  | undefined;
+
+function getNodeType(node: Node): number {
+  try {
+    return nodeTypeGetter ? nodeTypeGetter.call(node) : node.nodeType;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * Element-only iteration for jQuery collections.
+ * @internal
+ */
+export function atomEachElement(
+  jqueryCollection: JQuery,
+  callback: (element: HTMLElement) => void
+): JQuery {
+  for (let i = 0, len = jqueryCollection.length; i < len; i++) {
+    const node = jqueryCollection[i];
+    if (node && getNodeType(node) === Node.ELEMENT_NODE) callback(node as HTMLElement);
+  }
+  return jqueryCollection;
+}

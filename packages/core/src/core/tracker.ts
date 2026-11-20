@@ -11,26 +11,27 @@
  */
 
 import { SlotBuffer } from '@but212/atom-effect-utils';
+import { FLAGS, IS_DEV, LOG_PREFIX } from '@/constants';
 import type {
   Dependency,
   DependencyId,
   DependencyLink,
   DependencySubscriber,
-  ReactiveDependencyTracker,
   SubscriberTarget,
 } from '@/types';
 import { generateId, nextSmi } from '@/utils';
-import {
-  BUFFER_FLAGS,
-  claimExisting,
-  depBufferTruncateFrom,
-  insertNew,
-  isBufferDirty,
-} from './buffers';
+import { debug } from '@/utils/debug';
+import { trackingContext, untracked } from './base';
+
+/** @internal */
+export const BUFFER_FLAGS = {
+  NONE: 0,
+  HAS_COMPUTEDS: 1 << 0,
+} as const;
 
 let trackingSessionEpoch = 0;
 
-export abstract class ReactiveTracker implements ReactiveDependencyTracker, DependencySubscriber {
+export abstract class ReactiveTracker implements DependencySubscriber {
   flags: number = 0;
   readonly id: DependencyId = generateId();
 
@@ -55,14 +56,6 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
   }
 
   /**
-   * Finalizes tracking by pruning inactive dependencies from the SlotBuffer
-   * and refreshing buffer flags.
-   */
-  commitDeps(): void {
-    depBufferTruncateFrom(this, this._trackCount);
-  }
-
-  /**
    * Registers a dependency during an active tracking session.
    * Uses session-level versioning via `_lastSeenEpoch` for deduplication.
    */
@@ -84,13 +77,15 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
 
     const trackIndex = this._trackCount++;
 
-    if (!claimExisting(this, dependency, trackIndex)) {
+    if (!this.#claimExisting(dependency, trackIndex)) {
       const unsubscribe = dependency.subscribe(notifyCallback);
-      insertNew(this, trackIndex, {
+      const occupant = this._depSlots.at(trackIndex);
+      this._depSlots.setAt(trackIndex, {
         node: dependency,
         version: dependency.version,
         unsubscribeCallback: unsubscribe,
       });
+      if (occupant !== null) this._depSlots.push(occupant);
     }
 
     if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) && dependency.isComputed) {
@@ -99,16 +94,104 @@ export abstract class ReactiveTracker implements ReactiveDependencyTracker, Depe
   }
 
   /**
-   * Disposes of all dependency links and resets dependency flags.
+   * Attempts to reuse an existing subscription for a dependency during re-evaluation.
    */
-  disposeDeps(): void {
-    depBufferTruncateFrom(this, 0);
+  #claimExisting(dependency: Dependency, trackIndex: number): boolean {
+    const slots = this._depSlots;
+    if (slots.length <= trackIndex) return false;
+
+    const current = slots.at(trackIndex);
+    if (current?.node === dependency) {
+      current.version = dependency.version;
+      return true;
+    }
+
+    for (let i = trackIndex + 1, slotsLength = slots.length; i < slotsLength; i++) {
+      const link = slots.at(i);
+      if (link?.node !== dependency) continue;
+      link.version = dependency.version;
+
+      const swappedLink = slots.at(trackIndex);
+      slots.setAt(trackIndex, link);
+      slots.setAt(i, swappedLink);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Cleans up subscriptions and state for all slots from the given index onwards.
+   */
+  truncateDepsFrom(index: number): void {
+    const slots = this._depSlots;
+    const slotsLength = slots.length;
+    if (index < slotsLength) {
+      for (let i = index; i < slotsLength; i++) {
+        const link = slots.at(i);
+        if (link) {
+          try {
+            link.unsubscribeCallback();
+          } catch (unsubscribeError) {
+            if (IS_DEV) console.error(`${LOG_PREFIX} Unsubscribe failed:`, unsubscribeError);
+          }
+        }
+      }
+      slots.truncateFrom(index);
+    }
+
+    if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
+      return;
+    }
+
+    let flags = this._depFlags & ~BUFFER_FLAGS.HAS_COMPUTEDS;
+    for (let i = 0, len = slots.length; i < len; i++) {
+      const link = slots.at(i);
+      if (link?.node.isComputed) {
+        flags |= BUFFER_FLAGS.HAS_COMPUTEDS;
+        break;
+      }
+    }
+    this._depFlags = flags;
   }
 
   /**
    * Checks whether any upstream dependency has changed or is dirty.
+   * When `deep` is true, reading computed dependencies forces re-evaluation.
    */
-  hasDirtyDeps(): boolean {
-    return isBufferDirty(this);
+  isDepsDirty(deep = true): boolean {
+    const slots = this._depSlots;
+    const slotsLength = slots.length;
+    if (slotsLength === 0) return false;
+
+    for (let i = 0; i < slotsLength; i++) {
+      const link = slots.at(i);
+      if (!link) continue;
+
+      const dependency = link.node;
+
+      if (deep && dependency.isComputed) {
+        try {
+          if (trackingContext.current) {
+            untracked(() => dependency.value);
+          } else {
+            dependency.value;
+          }
+        } catch (error) {
+          debug.trackEvaluationFailure(dependency.id);
+          if (
+            error instanceof RangeError ||
+            error instanceof ReferenceError ||
+            error instanceof SyntaxError
+          ) {
+            throw error;
+          }
+          return true;
+        }
+      }
+
+      if (dependency.version !== link.version) return true;
+      if (!deep && (dependency.flags & FLAGS.DIRTY) !== 0) return true;
+    }
+    return false;
   }
 }

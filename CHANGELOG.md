@@ -3,7 +3,7 @@
 > [!NOTE]
 > Releases 0.1.0 – 0.29.0 are archived in [docs/archive/changelog](./docs/archive/changelog/).
 
-## [0.35.1]
+## [Unreleased]
 
 ### Core
 
@@ -17,23 +17,40 @@
 
 #### Changed
 
-- Removed obsolete tracking helpers in `base.ts`.
+- **Tracker**: Consolidated `buffers.ts` (`BUFFER_FLAGS`, `claimExisting`, `depBufferTruncateFrom`, `isBufferDirty`, `isBufferShallowDirty`) into `ReactiveTracker` (`truncateDepsFrom`, `isDepsDirty`).
+- **Constants**: Collapsed `STATE_FLAGS`, `EFFECT_STATE_FLAGS`, `COMPUTED_STATE_FLAGS`, and `ATOM_STATE_FLAGS` into `FLAGS`.
+- Removed obsolete tracking helpers in `base.ts` and redundant internal wrappers (`nodeGetSubscriberCount`, `isAggregateExecutionLimitError`, `ReactiveDependencyTracker`, `SchedulerConfig`).
 - Exported `Subscriber` and `SubscriberTarget` types from the public entry point.
 
 ### jQuery
+
+#### Added
+
+- **atomForm**: Exported `refreshFormBinding(form)` to reconcile bound forms moved into unobserved shadow roots or shadow hosts.
+- **atomOn**: Supported `false` as a handler in `.atomOn(event, false)` to prevent default and stop propagation.
 
 #### Fixed
 
 - **atomList**: Sparing and reconnect operations reset `isKept` flags to prevent detached node memory leaks.
 - **atomList**: Keyed reconciliation guards head indices when duplicate keys are encountered.
 - **atomList**: `DocumentFragment` empty placeholders are cloned on insertion; non-element nodes are ignored.
+- **atomList**: `commitRemoval` removes child nodes still owned by a detached list container.
 - **atomForm**: Bound controls are tracked so child bindings are properly cleaned up on form rebind, and the unbind cache is cleared.
 - **atomForm**: `MultiSourceField` detaches source listeners upon disposal, and safely guards callback execution and object subscriber `.execute` calls.
 - **atomForm**: Two-way input bindings are torn down when the control's `name` attribute is removed.
+- **atomForm**: Field ownership, debounced commits, and `transform`/`format`/`validation` callbacks verify current form and field association before applying writes; suspended detached fields resume or replay on reconnection.
+- **atomForm**: Explicit `.atomUnbind()` keeps controls unbound until their form owner or field name changes, or the form is explicitly refreshed or rebound.
+- **atomForm**: Validation teardown clears binding-owned custom errors synchronously when eligible, defers cleanup via `MutationObserver` when barred, and preserves external `setCustomValidity` messages.
 - **Lifecycle**: `$.fn.remove` defers `markIgnored` until after `cleanupTree` finishes, allowing same-tick rebinds.
+- **Lifecycle**: Scoped `.detach()` and `.remove()` suppression to `MutationRecord` deliveries so later native removals still clean up and replacement bindings are preserved.
 - **Lifecycle**: Auto-cleanup supports non-HTML `Element` nodes (e.g. SVG elements).
 - **Security**: `sanitizeHtml` detects spaced `expression(...)` patterns and blocks multi-URL declarations in CSS; SVG `attributeName` casing is normalized.
 - **Unified**: Removed redundant `change` event listener registration in `bindChecked`.
+
+#### Changed
+
+- **Lifecycle**: Folded `AutoCleanup` into `BindingRegistry`, moved `atomEachElement` to `utils`, and merged `bindEvents` into `bindOn`.
+- **atomForm**: Replaced `DelegatingAtom`/`InterceptedLens` with direct `transform`/`onChange` handling in `bindForm` and `createInputBinding`.
 
 #### Deprecated
 
@@ -44,6 +61,10 @@
 #### Fixed
 
 - **SlotBuffer**: Indices in `at()`, `setAt()`, and `truncateFrom()` are clamped to `0` when negative values are passed.
+
+### Documentation
+
+- Synced `docs/spec/core.md`, `docs/spec/jquery.md`, and `docs/conventions/naming_conventions.md` with tracker consolidation, form ownership/validation invariants, and `.detach()` lifecycle behavior.
 
 ## [0.35.0]
 

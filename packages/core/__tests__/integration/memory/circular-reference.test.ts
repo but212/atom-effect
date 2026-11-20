@@ -4,37 +4,18 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import {
-  aeNextTick,
-  atom,
-  type ComputedAtom,
-  ComputedError,
-  computed,
-  effect,
-  SchedulerError,
-} from '@/index';
+import { aeNextTick, atom, ComputedError, computed, effect, SchedulerError } from '@/index';
 
 describe('Dependency Graph Safety', () => {
   describe('Cycle Detection', () => {
-    it('throws ComputedError with circular dependency message on direct cycle', () => {
+    it('throws ComputedError for a cycle between two computed nodes', () => {
       let computed1: ReturnType<typeof computed<number>>;
       let computed2: ReturnType<typeof computed<number>>;
-
-      computed1 = computed(() => (computed2 ? computed2.value : 0) + 1);
-      computed2 = computed(() => computed1.value + 1);
-
-      expect(() => computed1.value).toThrow(ComputedError);
-      expect(() => computed1.value).toThrow('Circular');
-    });
-
-    it('should successfully detect and throw on circular dependencies', () => {
-      let computed1: ComputedAtom<number>;
-      let computed2: ComputedAtom<number>;
       computed1 = computed(() => computed2.value + 1);
       computed2 = computed(() => computed1.value + 1);
 
-      // Best Practice: Assert that evaluating a circular dependency throws a circular dependency error
-      expect(() => computed1.value).toThrow('Circular dependency detected');
+      expect(() => computed1.value).toThrow(ComputedError);
+      expect(() => computed1.value).toThrow(/circular dependency/i);
     });
 
     it('does not throw when a cyclic node has defaultValue — uses it as recursive base case', () => {

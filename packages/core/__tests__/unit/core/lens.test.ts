@@ -227,7 +227,7 @@ describe('Lens System', () => {
   });
 
   describe('composeLens()', () => {
-    it('should support multi-tier composition', async () => {
+    it('should support multi-tier composition', () => {
       const store = atom({ a: { b: { c: 1 } } });
       const ab = atomLens(store, 'a.b');
       const abc = composeLens(ab, 'c');

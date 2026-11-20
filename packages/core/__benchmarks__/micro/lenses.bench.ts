@@ -4,14 +4,13 @@
  */
 
 import { describe, test } from 'vitest';
-import { atom, atomLens, composeLens, computed } from '../../dist';
+import { atom, atomLens, computed } from '../../dist';
 import { keep, microBenchOptions, REPEATS } from '../utils/setup.js';
 
 const repeats = REPEATS;
 const _keep = keep;
 const _atom = atom;
 const _atomLens = atomLens;
-const _composeLens = composeLens;
 const _computed = computed;
 
 describe('Lenses: Structural Access', () => {
@@ -92,7 +91,7 @@ describe('Lenses: Structural Access', () => {
   test('composition and scaling', async ({ bench }) => {
     const sharedSource = _atom({ x: { y: 1 } });
     const parentLens = _atomLens(sharedSource, 'x');
-    const composed = _composeLens(parentLens, 'y');
+    const composed = _atomLens(parentLens, 'y');
     let manyLensesUnsub: (() => void)[] = [];
     let value = 0;
 

@@ -19,14 +19,6 @@ import { type ListContext, removeNode } from './context';
 import { ItemState, type PreparedDiff } from './types';
 import { injectKeyToHtml, replaceDomNodes } from './utils';
 
-function isJQuery(obj: unknown): obj is JQuery {
-  return obj instanceof $;
-}
-
-function isStringArray(array: unknown[]): array is string[] {
-  return array.every((element) => typeof element === 'string');
-}
-
 /**
  * Extracts raw Nodes from a render result.
  * Performance: Bypasses jQuery wrapper allocation.
@@ -35,8 +27,8 @@ function getElements(elementSource: unknown): Node[] {
   if (typeof elementSource === 'string') {
     return $.parseHTML(elementSource) || [];
   }
-  if (isJQuery(elementSource)) {
-    return elementSource.get();
+  if (elementSource instanceof $) {
+    return (elementSource as JQuery).get();
   }
   if (elementSource instanceof DocumentFragment) {
     return Array.from(elementSource.childNodes);
@@ -140,7 +132,7 @@ export function renderItems<T>(
       })
     : results;
 
-  if (isInitial && isStringArray(sanitized) && !options.events) {
+  if (isInitial && sanitized.every((element) => typeof element === 'string') && !options.events) {
     const allNodes = $.parseHTML(sanitized.join(''));
     if (
       allNodes &&

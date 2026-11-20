@@ -1,5 +1,6 @@
 import $ from 'jquery';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { bindOn } from '@/bindings/unified';
 import { setupDOMCleanup } from '../utils/test-helpers';
 import '@/index';
 
@@ -377,6 +378,65 @@ describe('Chainable Methods', () => {
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
+    it('atomOn: supports the false handler and removes only that binding on atomUnbind', () => {
+      const $element = appendToBody('<button>');
+      const otherHandler = vi.fn();
+      $element.on('custom', otherHandler);
+      $element.atomOn('custom', false);
+
+      const beforeUnbind = $.Event('custom');
+      $element.trigger(beforeUnbind);
+      expect(beforeUnbind.isDefaultPrevented()).toBe(true);
+      expect(beforeUnbind.isPropagationStopped()).toBe(true);
+
+      $element.atomUnbind();
+      const afterUnbind = $.Event('custom');
+      $element.trigger(afterUnbind);
+      expect(afterUnbind.isDefaultPrevented()).toBe(false);
+      expect(afterUnbind.isPropagationStopped()).toBe(false);
+      expect(otherHandler).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      { bindPatched: false, unbindPatched: false },
+      { bindPatched: true, unbindPatched: true },
+      { bindPatched: true, unbindPatched: false },
+    ])(
+      'atomOn: preserves native false listeners (bind patched: $bindPatched, unbind patched: $unbindPatched)',
+      ({ bindPatched, unbindPatched }) => {
+        $.initAEJ({ patch: { events: bindPatched } });
+        try {
+          const $element = appendToBody('<button>');
+          $element.on('custom', false).atomOn('custom', false);
+
+          if (bindPatched !== unbindPatched) $.initAEJ({ patch: { events: unbindPatched } });
+          $element.atomUnbind();
+
+          const withNativeListener = $.Event('custom');
+          $element.trigger(withNativeListener);
+          expect(withNativeListener.isDefaultPrevented()).toBe(true);
+          expect(withNativeListener.isPropagationStopped()).toBe(true);
+
+          $element.off('custom', false);
+          const withoutListeners = $.Event('custom');
+          $element.trigger(withoutListeners);
+          expect(withoutListeners.isDefaultPrevented()).toBe(false);
+          expect(withoutListeners.isPropagationStopped()).toBe(false);
+        } finally {
+          $.initAEJ();
+        }
+      }
+    );
+
+    it('bindOn: requires a handler for an event name and rejects it for an event map', () => {
+      expectTypeOf((element: HTMLElement, handler: (event: JQuery.Event) => void) => {
+        // @ts-expect-error An event name requires a handler.
+        bindOn(element, 'custom');
+        // @ts-expect-error An event map cannot take an additional handler.
+        bindOn(element, { custom: handler }, handler);
+      }).returns.toBeVoid();
+    });
+
     it('unpacking handles null or undefined as second argument without crashing', async () => {
       const element = document.createElement('div');
       const val = $.atom(10);
@@ -392,6 +452,46 @@ describe('Chainable Methods', () => {
           val: [val, undefined],
         });
       }).not.toThrow();
+    });
+
+    it('unpacking handles null options on input val binding without crashing and syncs value', async () => {
+      const val = $.atom('a');
+      const $input = $('<input>');
+
+      expect(() => {
+        $input.atomBind({
+          val: [val, null],
+        });
+      }).not.toThrow();
+
+      await $.nextTick();
+      expect($input.val()).toBe('a');
+
+      val.value = 'b';
+      await $.nextTick();
+      expect($input.val()).toBe('b');
+
+      $input.atomUnbind();
+    });
+
+    it('unpacking handles null options on form binding without crashing and syncs control value', async () => {
+      const formAtom = $.atom({ x: 'a' });
+      const $form = $('<form><input name="x"></form>');
+
+      expect(() => {
+        $form.atomBind({
+          form: [formAtom, null],
+        });
+      }).not.toThrow();
+
+      await $.nextTick();
+      expect($form.find('input[name="x"]').val()).toBe('a');
+
+      formAtom.value = { x: 'b' };
+      await $.nextTick();
+      expect($form.find('input[name="x"]').val()).toBe('b');
+
+      $form.atomUnbind();
     });
 
     it('atomUnbind: recursively stops reactivity for root and descendants', async () => {

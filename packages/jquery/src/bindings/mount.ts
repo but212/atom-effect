@@ -8,9 +8,9 @@
 
 import { batch, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
-import { atomEachElement } from '@/core/dom';
 import { registry } from '@/core/registry';
 import type { ComponentFn } from '@/types';
+import { atomEachElement } from '@/utils';
 
 /** Shared read-only default props to prevent redundant allocations across components */
 const EMPTY_PROPS = Object.freeze({});
