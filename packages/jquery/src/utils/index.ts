@@ -91,7 +91,8 @@ const nodeTypeGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'nodeType
   | ((this: Node) => number)
   | undefined;
 
-function getNodeType(node: Node): number {
+/** Reads the native node type even when an element shadows the instance property. @internal */
+export function getNodeType(node: Node): number {
   try {
     return nodeTypeGetter ? nodeTypeGetter.call(node) : node.nodeType;
   } catch {

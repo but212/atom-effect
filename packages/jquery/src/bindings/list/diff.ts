@@ -14,7 +14,7 @@ import { shallowEqual } from '@but212/atom-effect-utils';
 import { SYSTEM_LIST } from '@/constants';
 import type { ListKey, ListKeyFn, ListOptions } from '@/types';
 import { debug } from '@/utils/debug';
-import { isNodeRemoving, type ListSnapshot, type RemovingEntries } from './context';
+import type { ListSnapshot } from './context';
 import { type DiffSlot, ItemState, type PreparedDiff } from './types';
 
 /**
@@ -28,7 +28,7 @@ import { type DiffSlot, ItemState, type PreparedDiff } from './types';
  * append/prepend operations.
  *
  * @param snapshots Sequential snapshot of the previous render state.
- * @param removingEntries Node-identity map of items undergoing asynchronous exit animations.
+ * @param removingNodes Rendered node groups undergoing asynchronous exit animations.
  * @param oldIndexMap Inverse lookup for O(1) index retrieval from a key.
  * @param items The new data array from the source atom.
  *
@@ -36,7 +36,7 @@ import { type DiffSlot, ItemState, type PreparedDiff } from './types';
  */
 export function buildIndices<T>(
   snapshots: ListSnapshot<T>[],
-  removingEntries: RemovingEntries,
+  removingNodes: ReadonlySet<Node[]>,
   oldIndexMap: Map<ListKey, number>,
   items: T[],
   itemCount: number,
@@ -107,7 +107,7 @@ export function buildIndices<T>(
   }
 
   // Logic: PASS 3 — Middle-Range Reconciliation
-  const hasRemoving = removingEntries.size > 0;
+  const hasRemoving = removingNodes.size > 0;
   for (let i = startIndex; i <= newEndIndex; i++) {
     const item = items[i];
     if (item === undefined) continue;
@@ -132,16 +132,13 @@ export function buildIndices<T>(
 
     newIndexMap.set(itemKey, i);
 
-    const foundIndex = oldIndexMap.get(itemKey);
-    // Skip reuse only when the exact previous nodes for this key are pending
-    // removal — a live sibling sharing a duplicate key must keep its identity.
-    const pendingRemoval =
-      hasRemoving &&
-      foundIndex !== undefined &&
-      isNodeRemoving(removingEntries, itemKey, snapshots[foundIndex]?.node);
-    const previousIndex = foundIndex !== undefined && !pendingRemoval ? foundIndex : -1;
-
-    if (previousIndex === -1) {
+    const previousIndex = oldIndexMap.get(itemKey);
+    const previousSnapshot = previousIndex === undefined ? undefined : snapshots[previousIndex];
+    // A live sibling sharing a key with pending nodes can still be reused.
+    if (
+      previousIndex === undefined ||
+      (hasRemoving && previousSnapshot && removingNodes.has(previousSnapshot.node))
+    ) {
       const slot: DiffSlot<T> = {
         key: itemKey,
         item,
@@ -153,7 +150,6 @@ export function buildIndices<T>(
       slots[i] = slot;
       toRender.push(slot);
     } else {
-      const previousSnapshot = snapshots[previousIndex];
       if (!previousSnapshot) continue;
       const shouldForceReplace = !update && !isEqualFunction(previousSnapshot.item, item);
       const slot: DiffSlot<T> = {

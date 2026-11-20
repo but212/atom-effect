@@ -15,15 +15,6 @@ import type { ListKey } from '@/types';
 import { cleanupNodes, setAtomKey } from './utils';
 
 /**
- * Node-identity tracking of items undergoing asynchronous exit animations.
- *
- * Reason: duplicate keys can leave a live item and a torn-down occurrence
- * sharing the same key; tracking by node identity prevents a pending removal
- * from forcing re-renders of the live sibling.
- */
-export type RemovingEntries = Map<ListKey, Set<Node[]>>;
-
-/**
  * Represents the state of a single list item at a point in time.
  * Used by the reconciler to calculate moves, updates, and removals.
  */
@@ -46,8 +37,8 @@ export interface ListSnapshot<T> {
 export interface ListContext<T> {
   /** Sequential snapshot of the previous render state. */
   snapshots: ListSnapshot<T>[];
-  /** Items (by node identity) currently undergoing asynchronous exit animations. */
-  readonly removingKeys: RemovingEntries;
+  /** Pending exit animations keyed by the rendered node group, not the item key. */
+  readonly removingNodes: Set<Node[]>;
   /** Inverse lookup for O(1) index retrieval from a key. */
   keyToIndex: Map<ListKey, number>;
   /** Cached reference to the placeholder element shown when the list is empty. */
@@ -69,23 +60,13 @@ export function createListContext<T>(
 ): ListContext<T> {
   return {
     snapshots: [],
-    removingKeys: new Map<ListKey, Set<Node[]>>(),
+    removingNodes: new Set<Node[]>(),
     keyToIndex: new Map<ListKey, number>(),
     $emptyElement: null,
     reactiveEffect: undefined,
     $container,
     onRemove,
   };
-}
-
-/** Checks whether specific nodes for a key are pending asynchronous removal. */
-export function isNodeRemoving(
-  removingEntries: RemovingEntries,
-  itemKey: ListKey,
-  nodes: Node[] | undefined
-): boolean {
-  if (!nodes) return false;
-  return removingEntries.get(itemKey)?.has(nodes) ?? false;
 }
 
 /**
@@ -101,40 +82,24 @@ function getIndex<T>(listContext: ListContext<T>, key: string): number | undefin
 /**
  * Marks an item's nodes as "in transit" and starts the removal lifecycle.
  */
-export function removeNode<T>(listContext: ListContext<T>, itemKey: ListKey, nodes: Node[]): void {
+export function removeNode<T>(listContext: ListContext<T>, nodes: Node[]): void {
   setAtomKey(nodes, null);
-  let pendingNodes = listContext.removingKeys.get(itemKey);
-  if (!pendingNodes) {
-    pendingNodes = new Set<Node[]>();
-    listContext.removingKeys.set(itemKey, pendingNodes);
-  }
-  pendingNodes.add(nodes);
-  scheduleRemoval(listContext, itemKey, nodes);
-}
-
-/**
- * Initiates the physical removal of an element.
- */
-function scheduleRemoval<T>(listContext: ListContext<T>, itemKey: ListKey, nodes: Node[]): void {
+  listContext.removingNodes.add(nodes);
   const $element = $(nodes as HTMLElement[]);
   const removalResult = listContext.onRemove?.($element);
 
   if (removalResult instanceof Promise) {
-    const commit = () => commitRemoval(listContext, itemKey, nodes);
+    const commit = () => commitRemoval(listContext, nodes);
     removalResult.then(commit, commit);
   } else {
-    commitRemoval(listContext, itemKey, nodes);
+    commitRemoval(listContext, nodes);
   }
 }
 
 /**
  * Finalizes DOM removal and state cleanup.
  */
-export function commitRemoval<T>(
-  listContext: ListContext<T>,
-  itemKey: ListKey,
-  nodes: Node[]
-): void {
+export function commitRemoval<T>(listContext: ListContext<T>, nodes: Node[]): void {
   try {
     if (listContext.reactiveEffect?.isDisposed) return;
 
@@ -154,11 +119,7 @@ export function commitRemoval<T>(
       if (parent && (parent === container || node.isConnected)) parent.removeChild(node);
     }
   } finally {
-    const pendingNodes = listContext.removingKeys.get(itemKey);
-    if (pendingNodes) {
-      pendingNodes.delete(nodes);
-      if (pendingNodes.size === 0) listContext.removingKeys.delete(itemKey);
-    }
+    listContext.removingNodes.delete(nodes);
   }
 }
 
@@ -192,13 +153,13 @@ export function resolveEventTarget<T>(
  * Full cleanup of state and DOM references.
  */
 export function disposeContext<T>(listContext: ListContext<T>): void {
+  listContext.reactiveEffect?.dispose();
+
   const nodes = new Set<Node[]>();
   for (const snapshot of listContext.snapshots) {
     if (snapshot.node) nodes.add(snapshot.node);
   }
-  for (const pendingNodes of listContext.removingKeys.values()) {
-    for (const pending of pendingNodes) nodes.add(pending);
-  }
+  for (const pending of listContext.removingNodes) nodes.add(pending);
 
   for (const itemNodes of nodes) {
     cleanupNodes(itemNodes);
@@ -207,7 +168,7 @@ export function disposeContext<T>(listContext: ListContext<T>): void {
     }
   }
 
-  listContext.removingKeys.clear();
+  listContext.removingNodes.clear();
   listContext.snapshots = [];
   listContext.keyToIndex.clear();
   listContext.$emptyElement?.remove();

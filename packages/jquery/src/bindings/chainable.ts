@@ -115,10 +115,10 @@ $.fn.atomHtml = function (source: AsyncReactiveValue<string>): JQuery {
  * @param errorMessage Error message to display if arguments are invalid.
  * @internal
  */
-function createChainableMethod<V, O = V>(
-  binder: (element: HTMLElement, map: Record<string, O>) => void,
+function createChainableMethod<V>(
+  binder: (element: HTMLElement, map: Record<string, V>) => void,
   errorMessage: string,
-  transformValue?: (inputValue: V, extra?: unknown) => O
+  transformValue?: (inputValue: V, extra?: unknown) => V
 ) {
   return function (
     this: JQuery,
@@ -127,8 +127,8 @@ function createChainableMethod<V, O = V>(
     extra?: unknown
   ): JQuery {
     const resolvedValue =
-      transformValue && value !== undefined ? transformValue(value, extra) : (value as O);
-    const map = resolveArgs<O>(keyOrMap as string | Record<string, O>, resolvedValue);
+      transformValue && value !== undefined ? transformValue(value, extra) : value;
+    const map = resolveArgs(keyOrMap, resolvedValue);
     if (!map) {
       debug.warn(SYSTEM_BINDING.PREFIX, errorMessage);
       return this;
@@ -199,7 +199,7 @@ $.fn.atomProp = createChainableMethod(bindProp, SYSTEM_BINDING.ERRORS.MISSING_SO
  * $('.box').atomCss('width', widthAtom, 'px');
  * ```
  */
-$.fn.atomCss = createChainableMethod<CssValue, CssValue>(
+$.fn.atomCss = createChainableMethod<CssValue>(
   bindCss,
   SYSTEM_BINDING.ERRORS.MISSING_SOURCE('atomCss'),
   (source, unit) =>

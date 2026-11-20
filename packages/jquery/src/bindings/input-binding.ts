@@ -106,7 +106,7 @@ export type FieldAccess = 'owned' | 'suspended' | 'blocked';
  */
 export function createInputBinding<T>(
   target: HTMLElement,
-  atom: WritableAtom<T>,
+  atom: Pick<WritableAtom<T>, 'value' | 'peek'>,
   options: ValOptions<T>,
   formField?: { getAccess(): FieldAccess; commit(value: T): void }
 ): { start(): void; replay(force?: boolean): void; dispose(): void } | undefined {

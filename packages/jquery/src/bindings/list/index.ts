@@ -10,7 +10,7 @@
  * while maintaining memory safety via automated lifecycle cleanup.
  */
 
-import { type EffectObject, effect, untracked } from '@but212/atom-effect';
+import { effect, untracked } from '@but212/atom-effect';
 import $ from 'jquery';
 import { registry } from '@/core/registry';
 import type { ListKeyFn, ListOptions, ReadonlyAtom } from '@/types';
@@ -18,7 +18,6 @@ import { atomEachElement } from '@/utils';
 import {
   createListContext,
   disposeContext,
-  isNodeRemoving,
   type ListContext,
   removeNode,
   resolveEventTarget,
@@ -27,24 +26,8 @@ import { buildIndices } from './diff';
 import { handleEmpty, placeItems, renderItems } from './dom';
 import type { EventBinding } from './types';
 
-/**
- * Role: Registry for active list instances.
- *
- * Why: Enables external tools and the core registry to access reactive context
- * without polluting DOM nodes with internal properties.
- */
-const instances = new WeakMap<
-  Element,
-  { reactiveEffect: EffectObject; ctx: ListContext<unknown> }
->();
-
-function disposeInstance(instance: {
-  reactiveEffect: EffectObject;
-  ctx: ListContext<unknown>;
-}): void {
-  instance.reactiveEffect.dispose();
-  disposeContext(instance.ctx);
-}
+/** Stores the active list context for cleanup and replacement. */
+const instances = new WeakMap<Element, ListContext<unknown>>();
 
 /**
  * Role: List Reconciliation Engine
@@ -60,20 +43,20 @@ export function applyListBinding<T>(
   element: HTMLElement,
   source: ReadonlyAtom<T[]>,
   options: ListOptions<T>
-): { reactiveEffect: EffectObject; ctx: ListContext<T> } {
+): ListContext<T> {
   const { key, update, isEqual, empty, events, onRemove } = options;
   const containerElement = $(element);
 
   // 1. Lifecycle: Enforce single-binding per element by disposing old instances.
   const previousInstance = instances.get(element);
   if (previousInstance) {
-    disposeInstance(previousInstance);
+    disposeContext(previousInstance);
   } else {
     // Register once per element lifecycle to avoid zombie cleanup accumulation
     registry.onCleanup(element, () => {
       const active = instances.get(element);
       if (active) {
-        disposeInstance(active);
+        disposeContext(active);
         instances.delete(element);
       }
     });
@@ -95,7 +78,7 @@ export function applyListBinding<T>(
 
   let prevItems: T[] | undefined;
 
-  const reactiveEffect = effect(() => {
+  ctx.reactiveEffect = effect(() => {
     // Accessing .value establishes the reactive dependency.
     const items = source.value;
     const count = items.length;
@@ -107,12 +90,12 @@ export function applyListBinding<T>(
       handleEmpty(ctx, count, containerElement, empty);
       if (count === 0) return;
 
-      const isInitial = ctx.snapshots.length === 0 && ctx.removingKeys.size === 0;
+      const isInitial = ctx.snapshots.length === 0 && ctx.removingNodes.size === 0;
 
       // Pipeline: Diff -> Render -> Cleanup -> Place
       const diff = buildIndices(
         ctx.snapshots,
-        ctx.removingKeys,
+        ctx.removingNodes,
         ctx.keyToIndex,
         items,
         count,
@@ -133,12 +116,8 @@ export function applyListBinding<T>(
       }
       for (let i = 0; i < ctx.snapshots.length; i++) {
         const snapshot = ctx.snapshots[i];
-        if (
-          snapshot &&
-          !claimedOldIndices.has(i) &&
-          !isNodeRemoving(ctx.removingKeys, snapshot.key, snapshot.node)
-        ) {
-          removeNode(ctx, snapshot.key, snapshot.node);
+        if (snapshot && !claimedOldIndices.has(i) && !ctx.removingNodes.has(snapshot.node)) {
+          removeNode(ctx, snapshot.node);
         }
       }
       placeItems(ctx, diff, element, options, fragment);
@@ -153,15 +132,12 @@ export function applyListBinding<T>(
     });
   });
 
-  ctx.reactiveEffect = reactiveEffect;
-
   if (eventBindings.length > 0) {
     setupEvents(ctx, containerElement, eventBindings, element);
   }
 
-  instances.set(element, { reactiveEffect: reactiveEffect, ctx });
-
-  return { reactiveEffect: reactiveEffect, ctx };
+  instances.set(element, ctx);
+  return ctx;
 }
 
 /**

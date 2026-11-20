@@ -78,7 +78,7 @@ export function handleEmpty<T>(
 
   if (onRemove) {
     for (const listSnapshot of snapshots) {
-      removeNode(ctx, listSnapshot.key, listSnapshot.node);
+      removeNode(ctx, listSnapshot.node);
     }
   } else {
     $container.empty();
@@ -226,7 +226,7 @@ export function placeItems<T>(
     }
   }
 
-  if (ctx.snapshots.length === 0 && ctx.removingKeys.size === 0) {
+  if (ctx.snapshots.length === 0 && ctx.removingNodes.size === 0) {
     const documentFragment = document.createDocumentFragment();
     for (const slot of slots) {
       if (slot?.nodes) {

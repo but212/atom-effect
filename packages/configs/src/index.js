@@ -71,6 +71,10 @@ export const getResolveConfig = (packageDir) => ({
     '@': `${packageDir.replace(/\\/g, '/')}/src`,
   },
 });
+
+/** @param {BaseViteConfigOptions} options */
+const resolveBuildTarget = (options) => options.buildTarget ?? process.env.BUILD_TARGET;
+
 /**
  * Generates a base Vite configuration for building libraries and bundles.
  *
@@ -86,8 +90,15 @@ export const getResolveConfig = (packageDir) => ({
  *   name: 'MyPackage',
  * });
  */
-export const getBaseViteConfig = (options) => {
-  const activeTarget = options.buildTarget ?? process.env.BUILD_TARGET;
+export const getBaseViteConfig = (options) =>
+  createBaseViteConfig(options, resolveBuildTarget(options));
+
+/**
+ * @param {BaseViteConfigOptions} options
+ * @param {string | undefined} activeTarget
+ * @returns {UserConfig}
+ */
+function createBaseViteConfig(options, activeTarget) {
   const isTargetTypes = activeTarget === 'types';
   const isTargetBundle = activeTarget === 'bundle';
   const isTargetLibrary = activeTarget === 'lib';
@@ -138,7 +149,7 @@ export const getBaseViteConfig = (options) => {
           }),
         ],
   };
-};
+}
 /**
  * Defines a Vite configuration by merging a base configuration with user-provided overrides.
  *
@@ -157,7 +168,7 @@ export const getBaseViteConfig = (options) => {
  */
 export const defineViteConfig = (baseOptions, overrides = {}) =>
   defineVite(() => {
-    const activeTarget = baseOptions.buildTarget ?? process.env.BUILD_TARGET;
+    const activeTarget = resolveBuildTarget(baseOptions);
     const resolvedOverrides =
       typeof overrides === 'function'
         ? overrides({
@@ -167,7 +178,7 @@ export const defineViteConfig = (baseOptions, overrides = {}) =>
           })
         : overrides;
 
-    return mergeConfig(getBaseViteConfig(baseOptions), resolvedOverrides);
+    return mergeConfig(createBaseViteConfig(baseOptions, activeTarget), resolvedOverrides);
   });
 /**
  * Base coverage exclusion patterns for Vitest.

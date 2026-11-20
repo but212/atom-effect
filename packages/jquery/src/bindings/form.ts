@@ -24,6 +24,8 @@ import { debug } from '@/utils/debug';
 import { MultiSourceField, type NonEmptySources } from './form-field-atoms';
 import { createInputBinding, type FieldAccess } from './input-binding';
 
+type FieldAtom = Pick<WritableAtom<unknown>, 'value' | 'peek' | 'dispose'>;
+
 /**
  * Role: Internal registry entry for form fields.
  *
@@ -35,8 +37,8 @@ import { createInputBinding, type FieldAccess } from './input-binding';
  * @internal
  */
 interface FieldEntry {
-  /** The reactive lens atom providing access to a specific nested property. */
-  atom: WritableAtom<unknown>;
+  /** The reactive model for a specific nested property. */
+  atom: FieldAtom;
   /** Reference count for lifecycle management. */
   refCount: number;
 }
@@ -611,7 +613,7 @@ function createValidationChannel(field: HTMLInputElement) {
 /** Prepares validation so the binding owns its teardown before the first effect run. */
 function createValidationEffect(
   binding: ControlBinding,
-  atom: WritableAtom<unknown>,
+  atom: FieldAtom,
   validate: (v: unknown) => string | boolean | undefined
 ) {
   const field = binding.element as HTMLInputElement;
@@ -880,10 +882,10 @@ export function bindForm<T extends object, U = unknown>(
     if (!Array.isArray(atom)) {
       const createLens = lensFor(atom as WritableAtom<object>);
       // Field paths are supplied by the DOM, not known at compile time.
-      return (path: string): WritableAtom<unknown> => createLens(path as never);
+      return (path: string): FieldAtom => createLens(path as never);
     }
     const sources = snapshotSources(atom);
-    return (path: string): WritableAtom<unknown> => new MultiSourceField(sources, path);
+    return (path: string): FieldAtom => new MultiSourceField(sources, path);
   })();
   registry.cleanup(form);
   // Teardown (e.g. clearing custom validity) can synchronously bind a newer model.
@@ -906,7 +908,7 @@ export function bindForm<T extends object, U = unknown>(
 
   const bindToggle = (
     element: HTMLInputElement,
-    atom: WritableAtom<unknown>,
+    atom: FieldAtom,
     value: string,
     isCheck: boolean,
     getAccess: () => FieldAccess,

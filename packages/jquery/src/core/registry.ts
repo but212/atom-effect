@@ -10,7 +10,7 @@
 import type { EffectObject } from '@but212/atom-effect';
 import { SlotBuffer } from '@but212/atom-effect-utils';
 import { SYSTEM_BINDING, SYSTEM_CORE, SYSTEM_MOUNT } from '@/constants';
-import { getSelector } from '@/utils';
+import { getNodeType, getSelector } from '@/utils';
 import { debug } from '@/utils/debug';
 import { getOrCreateRootObserver, type RootObserver, rootObserversMap } from './observer';
 
@@ -40,9 +40,6 @@ const SHADOW_HOST_TAGS = new Set([
   'span',
 ]);
 
-const nodeTypeGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'nodeType')?.get as
-  | ((this: Node) => number)
-  | undefined;
 const parentNodeGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'parentNode')?.get as
   | ((this: Node) => Node | null)
   | undefined;
@@ -52,14 +49,6 @@ const isConnectedGetter = Object.getOwnPropertyDescriptor(Node.prototype, 'isCon
 const localNameGetter = Object.getOwnPropertyDescriptor(Element.prototype, 'localName')?.get as
   | ((this: Element) => string)
   | undefined;
-
-function getNodeType(node: Node): number {
-  try {
-    return nodeTypeGetter ? nodeTypeGetter.call(node) : node.nodeType;
-  } catch {
-    return -1;
-  }
-}
 
 /** @internal */
 export function getParentNode(node: Node): Node | null {

@@ -6,8 +6,6 @@
  */
 
 import {
-  BRAND,
-  BrandFlags,
   getPathValue,
   type SubscriberTarget,
   setDeepValue,
@@ -38,11 +36,6 @@ function resolveOwner(sources: NonEmptySources, parts: string[]): WritableAtom<o
   return sources[0] as WritableAtom<object>;
 }
 
-/** Bitwise flag indicating disposed state across all reactive nodes. @internal */
-const DISPOSED_FLAG = 1 << 0;
-
-let nextMultiSourceFieldId = 1;
-
 /**
  * Role: Multi-Source Field Atom
  *
@@ -54,13 +47,11 @@ let nextMultiSourceFieldId = 1;
  *
  * @internal
  */
-export class MultiSourceField implements WritableAtom<unknown> {
+export class MultiSourceField {
   readonly #sources: NonEmptySources;
   readonly #parts: string[];
   readonly #activeUnsubs = new Set<() => void>();
-  readonly id: number = ++nextMultiSourceFieldId;
-  flags: number = 0;
-  _lastSeenEpoch: number = -1;
+  #disposed = false;
 
   constructor(sources: NonEmptySources, dotPath: string) {
     this.#sources = sources;
@@ -68,12 +59,12 @@ export class MultiSourceField implements WritableAtom<unknown> {
   }
 
   get isDisposed(): boolean {
-    return (this.flags & DISPOSED_FLAG) !== 0;
+    return this.#disposed;
   }
 
   dispose(): void {
     if (this.isDisposed) return;
-    this.flags |= DISPOSED_FLAG;
+    this.#disposed = true;
     const active = Array.from(this.#activeUnsubs);
     this.#activeUnsubs.clear();
     for (let i = 0; i < active.length; i++) {
@@ -142,26 +133,5 @@ export class MultiSourceField implements WritableAtom<unknown> {
 
   subscriberCount(): number {
     return this.#activeUnsubs.size;
-  }
-
-  get version(): number {
-    let max = 0;
-    for (let i = 0; i < this.#sources.length; i++) {
-      const v = this.#sources[i]?.version ?? 0;
-      if (v > max) max = v;
-    }
-    return max;
-  }
-  get isComputed(): boolean {
-    return false;
-  }
-  get isRejected(): boolean {
-    return false;
-  }
-  get hasError(): boolean {
-    return false;
-  }
-  get [BRAND](): number {
-    return (BrandFlags.Atom | BrandFlags.Writable) as number;
   }
 }

@@ -238,6 +238,27 @@ describe('packages/configs', () => {
         expect(viteConfig.build?.minify).toBe(true);
       });
 
+      it.each([
+        { target: 'bundle', formats: ['umd'] },
+        { target: undefined, formats: ['es'] },
+      ])('shares one build target ($target)', async ({ target, formats }) => {
+        const options = { packageDir: TEST_DIRECTORY_PATH, name: TEST_PACKAGE_NAME };
+        vi.stubEnv('BUILD_TARGET', target);
+        try {
+          const viteConfig = await runFactory<UserConfig>(
+            defineViteConfig(options, ({ isBundle }) => {
+              vi.stubEnv('BUILD_TARGET', 'lib');
+              return { build: { minify: isBundle } };
+            })
+          );
+
+          expect(viteConfig.build?.minify).toBe(target === 'bundle');
+          expect(viteConfig.build?.lib).toMatchObject({ formats });
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
+
       it('should construct the base configuration after the override factory runs', async () => {
         const baseOptions = {
           packageDir: TEST_DIRECTORY_PATH,

@@ -1,8 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   commitRemoval,
   createListContext,
-  isNodeRemoving,
   removeNode,
   resolveEventTarget,
 } from '@/bindings/list/context';
@@ -745,7 +744,7 @@ describe('$.atomList (Integration)', () => {
       $container.append(nodes);
 
       // Seal ownership: node enters the removal lifecycle (key stripped).
-      removeNode(ctx, '1', nodes);
+      removeNode(ctx, nodes);
 
       // Simulate the node being re-bound live (re-carrying its atom key)
       // while its async removal is still pending.
@@ -1108,14 +1107,17 @@ describe('$.atomList (Integration)', () => {
         resolveRemovePromise = resolve;
       });
 
-      const { reactiveEffect: fx, ctx } = applyListBinding($container[0] as HTMLElement, list, {
+      const ctx = applyListBinding($container[0] as HTMLElement, list, {
         key: (item: string) => item,
         render: (item) => `<span>${item}</span>`,
         onRemove: () => removePromise,
       });
+      const fx = ctx.reactiveEffect;
+      assert.isDefined(fx);
 
       await $.nextTick();
       expect($container.find('span').length).toBe(1);
+      const item = $container.find('span').get(0);
 
       // Trigger removal of item1
       list.value = [];
@@ -1123,7 +1125,8 @@ describe('$.atomList (Integration)', () => {
 
       // Elements should still be in the DOM because the removePromise hasn't resolved
       expect($container.find('span').length).toBe(1);
-      expect(ctx.removingKeys.has('item1')).toBe(true);
+      expect(ctx.removingNodes.size).toBe(1);
+      expect(ctx.removingNodes.values().next().value?.[0]).toBe(item);
 
       // Now dispose the list binding
       fx.dispose();
@@ -1135,6 +1138,7 @@ describe('$.atomList (Integration)', () => {
 
       // Since the binding was disposed, commitRemoval should have returned early
       expect($container.find('span').length).toBe(1);
+      expect(ctx.removingNodes.size).toBe(0);
     });
 
     it('should correctly replace element on ForceReplace state using native DOM', async () => {
@@ -1196,20 +1200,19 @@ describe('$.atomList (Integration)', () => {
       expect(registry.hasBind(itemEl)).toBe(false);
     });
 
-    it('should delete nodes from removingKeys in commitRemoval even when re-bound backstop triggers', () => {
+    it('should clear pending removal even when the re-bind backstop triggers', () => {
       const ctx = createListContext($container, undefined);
       const el = document.createElement('div');
       el.setAttribute('data-atom-key', '1');
       const nodes = [el];
-      const pending = new Set<Node[]>([nodes]);
-      ctx.removingKeys.set(1, pending);
+      ctx.removingNodes.add(nodes);
 
-      expect(isNodeRemoving(ctx.removingKeys, 1, nodes)).toBe(true);
+      expect(ctx.removingNodes.has(nodes)).toBe(true);
 
-      commitRemoval(ctx, 1, nodes);
+      commitRemoval(ctx, nodes);
 
-      expect(isNodeRemoving(ctx.removingKeys, 1, nodes)).toBe(false);
-      expect(ctx.removingKeys.has(1)).toBe(false);
+      expect(ctx.removingNodes.has(nodes)).toBe(false);
+      expect(ctx.removingNodes.size).toBe(0);
     });
   });
 });
