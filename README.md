@@ -75,8 +75,8 @@ pnpm clean
 
 ## Documentation & Resources
 
-- **Core Primitives**: [Specification](./docs/spec/core.md) | [Onboarding](./packages/core/docs/ONBOARDING.md)
-- **jQuery Adapter**: [Specification](./docs/spec/jquery.md) | [Patterns](./packages/jquery/docs/PATTERNS.md)
+- **Core Primitives**: [Onboarding](./packages/core/docs/ONBOARDING.md)
+- **jQuery Adapter**: [Patterns](./packages/jquery/docs/PATTERNS.md)
 - **Contribution**: [Development Guidelines](./CONTRIBUTING.md)
 - **Release History**: [Changelog](./CHANGELOG.md)
 

@@ -48,7 +48,6 @@ handle.dispose();
 ## Documentation
 
 - [**Onboarding Guide**](./docs/ONBOARDING.md): Core concepts, mental model, and best practices.
-- [**Specification**](../../docs/spec/core.md): Authoritative contracts for `atom`, `computed`, `effect`, `batch`, lenses, and the scheduler.
 
 ## License
 

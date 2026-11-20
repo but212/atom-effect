@@ -88,7 +88,7 @@ Active only during explicit review tasks or final diff audits, not during implem
 
 ## 11. Documentation Index
 
-- **Specifications (authoritative contracts/invariants/security)**: [docs/spec/](./docs/spec/README.md) — `core.md`, `jquery.md`, `utils.md`
-- **jQuery Security**: [docs/spec/jquery.md](./docs/spec/jquery.md) (normative)
+- **Project Context (architecture, mental model, runtime behavior)**: [context.md](./context.md) — Core, jQuery, Utils
+- **jQuery Security Architecture**: [context.md §3.5](./context.md#35-security--sanitization-architecture)
 - **Coding Patterns**: [packages/jquery/docs/PATTERNS.md](./packages/jquery/docs/PATTERNS.md)
 - **Conventions**: [docs/conventions/](./docs/conventions/) — `code_documentation_conventions.md`, `git_conventions.md`, `markdown_conventions.md`, `naming_conventions.md`

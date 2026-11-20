@@ -1,8 +1,5 @@
 # Common Patterns
 
-> [!TIP]
-> **See also**: [jQuery Specification](../../../docs/spec/jquery.md)
-
 This document outlines standard architectural patterns for implementing `@but212/atom-effect-jquery` within applications.
 
 ---
@@ -196,7 +193,7 @@ $('ul').atomList(users, {
 
 ### Duplicate Keys
 
-Duplicate keys are logged and rendered as separate nodes; the exact reconciliation and async-removal rules are in the [jQuery Specification](../../../docs/spec/jquery.md#2-atomlist-reconciliation).
+Duplicate keys are logged and rendered as separate nodes.
 
 > Prefer keys that are unique and stable (e.g. database IDs). Duplicate keys defeat node reuse and force full re-renders of the affected items.
 

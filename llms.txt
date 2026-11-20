@@ -1,66 +1,41 @@
 # atom-effect
 
-atom-effect is a high-performance reactive state management library designed for ES2022+ environments. It features a decentralized, epoch-based propagation engine with first-class support for asynchronous computations and automatic memory management.
+> High-performance reactive state management monorepo for ES2022+. See [README](README.md) and [Project Context](context.md) for full details.
 
-## Packages
+## Overview
 
-- `@but212/atom-effect`: The core reactive engine. Provides primitives like `atom`, `computed`, and `effect`.
-- `@but212/atom-effect-jquery`: Reactive bindings for jQuery. Enables declarative UI synchronization, two-way form binding, high-performance list rendering, and component mounting.
+- [Project Overview](README.md#overview)
+- [System Overview & Package Map](context.md#1-system-overview--package-map)
+- [Monorepo Development & Commands](README.md#monorepo-development)
+- [Agent Operating Guide](AGENTS.md)
 
-## Core Features (@but212/atom-effect)
+## Core (`@but212/atom-effect`)
 
-- **Reactive Primitives**:
-  - `atom(value)`: Mutable state container.
-  - `computed(computationCallback)`: Derived state with lazy evaluation, caching, and native `async/await` support.
-  - `effect(effectCallback)`: Immediate and reactive side effects with automatic dependency tracking.
-- **Engine Architecture**:
-  - **Epoch-based Propagation**: Uses a global epoch and local versions to ensure glitch-free updates and avoid unnecessary re-calculations.
-  - **V8 Monomorphism**: Optimized internal `ReactiveNode` base class for near-native property access speeds.
-  - **Async Integrity**: DJB2-based version snapshots prevent race conditions and "dependency drift" in async computed nodes.
-  - **Memory Efficiency**: Employs `SlotBuffer` with hybrid O(1) Map fallback and internal array pooling for zero-allocation dependency tracking.
-  - **Safety**: Built-in infinite loop detection and circular dependency guards.
+- [Core Package README](packages/core/README.md)
+- [Core Engine Architecture & Internals](context.md#2-core-engine--but212atom-effect)
+- [Core Onboarding Guide](packages/core/docs/ONBOARDING.md)
+- [Core Design Patterns](packages/core/docs/PATTERNS.md)
+- [Core Benchmarks](packages/core/docs/BENCHMARKS.md)
 
-## jQuery Bindings (@but212/atom-effect-jquery)
+## jQuery Bindings (`@but212/atom-effect-jquery`)
 
-- **Declarative UI**: `atomBind`, `atomText`, `atomHtml`, `atomClass`, `atomCss`, `atomAttr`, `atomProp`, `atomShow`, `atomHide`.
-- **Two-way Form Binding**: `atomVal` (supports CJK IME, debouncing, and cursor preservation) and `atomChecked`.
-- **List Rendering (`atomList`)**: High-performance 1D flat buffer reconciliation with memory pooling and delegated event listeners.
-- **Component Lifecycle**: `atomMount` and `atomUnmount` for functional component orchestration.
-- **Reliability**: 
-  - **Auto-cleanup**: Uses `MutationObserver` to automatically dispose of reactive bindings when DOM elements are removed.
-  - **Security**: Built-in regex-based sanitization for HTML, attributes, and CSS to prevent XSS.
+- [jQuery Package README](packages/jquery/README.md)
+- [jQuery Bindings & Security Architecture](context.md#3-jquery-bindings--but212atom-effect-jquery)
+- [jQuery Onboarding Guide](packages/jquery/docs/ONBOARDING.md)
+- [jQuery Common Patterns](packages/jquery/docs/PATTERNS.md)
+- [jQuery Benchmarks](packages/jquery/docs/BENCHMARKS.md)
 
-## Quick Start (Core)
+## Utilities (`@but212/atom-effect-utils`)
 
-```typescript
-import { atom, computed, effect } from '@but212/atom-effect';
+- [Utilities Context & Primitives](context.md#4-utilities--but212atom-effect-utils)
+- [Utilities Benchmarks](packages/utils/docs/BENCHMARKS.md)
 
-const count = atom(0);
-const double = computed(() => count.value * 2);
+## Conventions & Project Docs
 
-effect(() => {
-  console.log(`Count: ${count.value}, Double: ${double.value}`);
-});
-
-count.value++; // Auto-triggers effect
-```
-
-## Quick Start (jQuery)
-
-```javascript
-import $ from '@but212/atom-effect-jquery';
-
-const timer = $.atom(0);
-setInterval(() => timer.value++, 1000);
-
-$('#display').atomText(timer, t => `Elapsed: ${t}s`);
-$('#reset').on('click', () => timer.value = 0);
-```
-
-## Documentation
-
-- **Core**:
-  - [Specification](docs/spec/core.md)
-  - [Onboarding](packages/core/docs/ONBOARDING.md)
-- **jQuery**:
-  - [Specification](docs/spec/jquery.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Migration Guide](MIGRATION.md)
+- [Changelog](CHANGELOG.md)
+- [Code Documentation Conventions](docs/conventions/code_documentation_conventions.md)
+- [Git Conventions](docs/conventions/git_conventions.md)
+- [Markdown Conventions](docs/conventions/markdown_conventions.md)
+- [Naming Conventions](docs/conventions/naming_conventions.md)
