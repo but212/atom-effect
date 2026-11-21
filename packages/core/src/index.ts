@@ -11,24 +11,14 @@
  */
 
 export { AsyncState, BRAND, BrandFlags, IS_DEV, SCHEDULER_CONFIG } from '@/constants';
-export type { LensCloneable, Paths, PathValue } from '@/core';
-export {
-  aeNextTick,
-  atom,
-  atomLens,
-  batch,
-  composeLens,
-  computed,
-  effect,
-  getPathValue,
-  LENS_CLONE,
-  lensFor,
-  mergeAtoms,
-  mergeLenses,
-  scheduler as globalScheduler,
-  setDeepValue,
-  untracked,
-} from '@/core';
+export { atom } from '@/core/atom';
+export { untracked } from '@/core/base';
+export { computed, mergeAtoms } from '@/core/computed';
+export { effect } from '@/core/effect';
+export { atomLens, composeLens, lensFor, mergeLenses } from '@/core/lens';
+export type { LensCloneable, Paths, PathValue } from '@/core/lens-path';
+export { getPathValue, LENS_CLONE, setDeepValue } from '@/core/lens-path';
+export { aeNextTick, batch, scheduler as globalScheduler } from '@/core/scheduler';
 export type {
   AsyncStateType,
   AtomErrorJSON,

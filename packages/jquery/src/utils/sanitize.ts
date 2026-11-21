@@ -15,7 +15,6 @@
  */
 
 import { SYSTEM_SECURITY } from '@/constants';
-import { FIFOCache } from '@/utils';
 
 /**
  * Configuration for the HTML sanitization engine.
@@ -569,7 +568,12 @@ function walkTree(root: Node, policy: SanitizationPolicy): void {
   }
 }
 
-export const sanitizeCache = new FIFOCache<string, string>();
+const SANITIZE_CACHE_LIMIT = 1000;
+const defaultPolicyCache = new Map<string, string>();
+
+/** @internal Cache inspection and reset for tests; writes go through sanitizeHtml. */
+export const sanitizeCache: Pick<typeof defaultPolicyCache, 'clear' | 'has' | 'size'> =
+  defaultPolicyCache;
 
 /**
  * Sanitizes an HTML string based on a security policy.
@@ -599,11 +603,15 @@ export function sanitizeHtml(
   const rawHtml = String(html);
   if (policy !== DEFAULT_POLICY) return _sanitize(rawHtml, policy);
 
-  let sanitized = sanitizeCache.get(rawHtml);
-  if (sanitized === undefined) {
-    sanitized = _sanitize(rawHtml, policy);
-    sanitizeCache.set(rawHtml, sanitized);
+  const cached = defaultPolicyCache.get(rawHtml);
+  if (cached !== undefined) return cached;
+
+  const sanitized = _sanitize(rawHtml, policy);
+  if (defaultPolicyCache.size >= SANITIZE_CACHE_LIMIT && !defaultPolicyCache.has(rawHtml)) {
+    const oldestKey = defaultPolicyCache.keys().next().value;
+    if (oldestKey !== undefined) defaultPolicyCache.delete(oldestKey);
   }
+  defaultPolicyCache.set(rawHtml, sanitized);
   return sanitized;
 }
 

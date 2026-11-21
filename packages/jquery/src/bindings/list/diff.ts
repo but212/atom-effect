@@ -113,26 +113,15 @@ export function buildIndices<T>(
     if (item === undefined) continue;
     const itemKey = getKey(item, i);
 
+    // A duplicate renders fresh without claiming the key or a previous snapshot.
+    let previousIndex: number | undefined;
     if (newIndexMap.has(itemKey)) {
       debug.warn(SYSTEM_LIST.PREFIX, SYSTEM_LIST.ERRORS.DUPLICATE_KEY(itemKey, i));
-      // Render the duplicate as a fresh item instead of leaving an unrenderable
-      // `nodes: undefined` hole that poisons future reconciliation snapshots.
-      const duplicateSlot: DiffSlot<T> = {
-        key: itemKey,
-        item,
-        state: ItemState.New,
-        oldIndex: -1,
-        targetIndex: i,
-        nodes: undefined,
-      };
-      slots[i] = duplicateSlot;
-      toRender.push(duplicateSlot);
-      continue;
+    } else {
+      newIndexMap.set(itemKey, i);
+      previousIndex = oldIndexMap.get(itemKey);
     }
 
-    newIndexMap.set(itemKey, i);
-
-    const previousIndex = oldIndexMap.get(itemKey);
     const previousSnapshot = previousIndex === undefined ? undefined : snapshots[previousIndex];
     // A live sibling sharing a key with pending nodes can still be reused.
     if (

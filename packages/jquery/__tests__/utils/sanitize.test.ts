@@ -408,7 +408,19 @@ describe('Atom-Effect: Security Specification', () => {
   });
 
   describe('sanitizeCache FIFO eviction strategy', () => {
-    it('should evict the oldest cache entry and store new entries when size exceeds 1000', () => {
+    it('keeps custom policies separate from the default cache', () => {
+      sanitizeCache.clear();
+      const html = '<b>text</b>';
+      const customPolicy: SanitizationPolicy = { urlAttributes: [], blacklistedTags: ['b'] };
+
+      expect(sanitizeHtml(html, customPolicy)).toBe('<span>text</span>');
+      expect(sanitizeCache.has(html)).toBe(false);
+      expect(sanitizeHtml(html)).toBe(html);
+      expect(sanitizeHtml(html, customPolicy)).toBe('<span>text</span>');
+      expect(sanitizeHtml(html)).toBe(html);
+    });
+
+    it('evicts the oldest insertion even if it was recently read', () => {
       // Clear cache first to have a clean state
       sanitizeCache.clear();
 
@@ -418,6 +430,7 @@ describe('Atom-Effect: Security Specification', () => {
       }
       expect(sanitizeCache.size).toBe(1000);
       expect(sanitizeCache.has('<div>Template 0</div>')).toBe(true);
+      expect(sanitizeHtml('<div>Template 0</div>')).toBe('<div>Template 0</div>');
 
       // Add one more entry (1001st) to trigger eviction
       sanitizeHtml('<div>Template 1000</div>');

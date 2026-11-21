@@ -23,12 +23,6 @@ import { generateId, nextSmi } from '@/utils';
 import { debug } from '@/utils/debug';
 import { trackingContext, untracked } from './base';
 
-/** @internal */
-export const BUFFER_FLAGS = {
-  NONE: 0,
-  HAS_COMPUTEDS: 1 << 0,
-} as const;
-
 let trackingSessionEpoch = 0;
 
 export abstract class ReactiveTracker implements DependencySubscriber {
@@ -36,7 +30,7 @@ export abstract class ReactiveTracker implements DependencySubscriber {
   readonly id: DependencyId = generateId();
 
   _depSlots: SlotBuffer<DependencyLink> = new SlotBuffer<DependencyLink>();
-  _depFlags: number = BUFFER_FLAGS.NONE;
+  _hasComputedDeps = false;
   _trackEpoch: number = 0;
   _trackCount: number = 0;
   _nextEpoch: number | undefined = undefined;
@@ -88,8 +82,8 @@ export abstract class ReactiveTracker implements DependencySubscriber {
       if (occupant !== null) this._depSlots.push(occupant);
     }
 
-    if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) && dependency.isComputed) {
-      this._depFlags |= BUFFER_FLAGS.HAS_COMPUTEDS;
+    if (!this._hasComputedDeps && dependency.isComputed) {
+      this._hasComputedDeps = true;
     }
   }
 
@@ -139,19 +133,17 @@ export abstract class ReactiveTracker implements DependencySubscriber {
       slots.truncateFrom(index);
     }
 
-    if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
-      return;
-    }
+    if (!this._hasComputedDeps) return;
 
-    let flags = this._depFlags & ~BUFFER_FLAGS.HAS_COMPUTEDS;
+    let hasComputedDeps = false;
     for (let i = 0, len = slots.length; i < len; i++) {
       const link = slots.at(i);
       if (link?.node.isComputed) {
-        flags |= BUFFER_FLAGS.HAS_COMPUTEDS;
+        hasComputedDeps = true;
         break;
       }
     }
-    this._depFlags = flags;
+    this._hasComputedDeps = hasComputedDeps;
   }
 
   /**

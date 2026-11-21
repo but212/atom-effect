@@ -50,7 +50,7 @@ import {
   wrapError,
 } from '@/utils';
 import { isPromise } from '@/utils/type-guards';
-import { BUFFER_FLAGS, ReactiveTracker } from './tracker';
+import { ReactiveTracker } from './tracker';
 
 /**
  * Logic: Re-computation Heuristics
@@ -237,7 +237,7 @@ class ComputedAtomImpl<T>
     trackingContext.current?.addDependency(this);
 
     if (this._error) return true;
-    if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) return false;
+    if (!this._hasComputedDeps) return false;
 
     return untracked(() => collectErrorsRecursive(this, true).length > 0);
   }
@@ -252,7 +252,7 @@ class ComputedAtomImpl<T>
   get errors(): readonly Error[] {
     trackingContext.current?.addDependency(this);
 
-    if (!(this._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS)) {
+    if (!this._hasComputedDeps) {
       return this._error ? Object.freeze([this._error]) : EMPTY_ERROR_ARRAY;
     }
 
@@ -480,7 +480,7 @@ function collectErrorsRecursive(startNode: ErrorBearingTracker, stopOnFirst: boo
       if (stopOnFirst) return true;
     }
 
-    if ((node._depFlags & BUFFER_FLAGS.HAS_COMPUTEDS) !== 0) {
+    if (node._hasComputedDeps) {
       const slots = node._depSlots;
       const slotsLength = slots.length;
       for (let i = 0; i < slotsLength; i++) {

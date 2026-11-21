@@ -546,6 +546,30 @@ describe('Computed', () => {
       consoleError.mockRestore();
     });
 
+    it('tracks upstream errors only while the failing computed is a dependency', () => {
+      const useUpstream = atom(false);
+      const upstream = computed(
+        () => {
+          throw new Error('upstream failure');
+        },
+        { defaultValue: 1, onError: () => {} }
+      );
+      const downstream = computed(() => (useUpstream.value ? upstream.value : 0));
+
+      expect(downstream.value).toBe(0);
+      expect(downstream.hasError).toBe(false);
+
+      useUpstream.value = true;
+      expect(downstream.value).toBe(1);
+      expect(downstream.hasError).toBe(true);
+      expect(downstream.errors).toEqual([upstream.lastError]);
+
+      useUpstream.value = false;
+      expect(downstream.value).toBe(0);
+      expect(downstream.hasError).toBe(false);
+      expect(downstream.errors).toHaveLength(0);
+    });
+
     it('should transition to REJECTED and return defaultValue on circular reference', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       let cyclicComputed!: ReturnType<typeof computed<number>>;
