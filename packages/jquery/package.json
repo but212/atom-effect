@@ -70,7 +70,7 @@
     "@vitest/browser-playwright": "catalog:test",
     "@vitest/coverage-v8": "catalog:test",
     "cross-env": "catalog:build",
-    "jquery": "^4.0.0",
+    "jquery": "^4.1.0",
     "rimraf": "catalog:",
     "typescript": "catalog:build",
     "vite": "catalog:build",
